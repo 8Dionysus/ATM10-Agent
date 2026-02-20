@@ -7,7 +7,7 @@
 ## Status (as of 2026-02-20)
 
 * M0 и M1 завершены.
-* Текущий baseline: `python -m pytest` проходит (`12 passed`).
+* Текущий baseline: `python -m pytest` проходит (`13 passed`).
 * `scripts/phase_a_smoke.py` выполняется и пишет artifacts в `runs/<timestamp>/`.
 * Phase B baseline (normalize -> ingest -> retrieve) validated на локальном ATM10 + Qdrant.
 
@@ -51,11 +51,16 @@
 
 ## Next (актуальные шаги)
 
+### Sprint focus (approved)
+
+* [ ] Focus #1: повысить релевантность retrieval внутри `chapters/*` через stage-2 reranker.
+* [ ] Focus #3: зафиксировать и применить LF/CRLF политику через `.gitattributes`.
+
 ### Project/repo operations
 
-* [ ] Добавить `origin` и сделать первый push в GitHub (если ещё не сделано).
-* [ ] Добавить GitHub Actions: `pytest` on push.
-* [ ] Зафиксировать LF/CRLF политику через `.gitattributes`.
+* [x] Добавить `origin` и сделать push в GitHub.
+* [x] Добавить GitHub Actions: `pytest` on push.
+* [ ] Зафиксировать LF/CRLF политику через `.gitattributes` и проверить, что нет неожиданного массового diff.
 
 ### Dependencies/tooling
 
@@ -63,7 +68,12 @@
 
 ### Phase B completion
 
-* [ ] Повысить релевантность retrieval внутри `chapters/*` (lightweight rerank / richer SNBT extraction).
+* [ ] Реализовать двухэтапный retrieval: first-stage top candidates + second-stage rerank.
+* [ ] Добавить специализированный reranker из семейства `Qwen3-Reranker` (старт: `Qwen3-Reranker-0.6B`).
+* [ ] Добавить CLI-параметры (`--reranker`, `--candidate-k`) в retrieval demo.
+* [ ] Сохранить fallback `--reranker none`, чтобы baseline работал без модели.
+* [ ] Добавить tests на rerank ordering и fallback.
+* [ ] Улучшить SNBT signal extraction внутри `chapters/*` для повышения recall перед rerank.
 
 ### VLM integration
 

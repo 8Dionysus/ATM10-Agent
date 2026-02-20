@@ -5,10 +5,12 @@
 ## Status (as of 2026-02-20)
 
 * M0 + M1 completed.
-* `python -m pytest` green (`12 passed`).
+* `python -m pytest` green (`13 passed`).
 * `scripts/phase_a_smoke.py` выполняется и создаёт run artifacts.
 * Контракт fixture: `tests/fixtures/rag_docs_sample.jsonl` — строгий JSONL без пустых строк.
 * Phase B baseline validated e2e on local ATM10 data + local Qdrant.
+* GitHub `origin` настроен, `master` запушен.
+* CI workflow `pytest` on push/pull_request добавлен.
 
 ---
 
@@ -99,6 +101,30 @@ DoD:
 Current gap:
 
 * [ ] Improve retrieval relevance inside `chapters/*` (lightweight reranking / better SNBT signal extraction)
+* [ ] Integrate specialized stage-2 reranking via `Qwen3-Reranker` family (start with `Qwen3-Reranker-0.6B`)
+
+Approved direction (2026-02-20):
+
+* [x] Для улучшения качества retrieval выбран двухэтапный pipeline: first-stage candidate retrieval + second-stage reranking.
+* [x] Для second-stage принят специализированный reranker из семейства `Qwen3-Reranker`; первый rollout: `Qwen3-Reranker-0.6B`.
+* [ ] Добавить CLI-параметры (`--reranker`, `--candidate-k`) и fallback `--reranker none`.
+* [ ] Добавить tests на rerank ordering и fallback behavior.
+
+### M2.1 — Repo hygiene: LF/CRLF policy (approved focus)
+
+Цель: убрать шумные line-ending warnings и стабилизировать diffs на Windows.
+
+Tasks:
+
+* [ ] Добавить `.gitattributes` с явной политикой EOL для source/docs/config.
+* [ ] Зафиксировать Windows-ориентированные исключения (`*.ps1`, `*.bat`, `*.cmd`) с `crlf`.
+* [ ] Проверить, что после политики нет неожиданных массовых изменений в tracked-файлах.
+* [ ] Зафиксировать решение в `docs/DECISIONS.md`.
+
+DoD:
+
+* При типичных командах git нет повторяющегося шума про LF/CRLF для основных файлов проекта.
+* Политика EOL воспроизводима для новых contributors на Windows.
 
 ### M3 — Phase C: Voice (ASR + TTS) как опциональный слой
 
@@ -123,7 +149,7 @@ DoD:
 * [ ] HUD assistance (OCR baseline / mod hook)
 * [ ] Graph/KAG via Neo4j (только после measurable value в Phase B)
 * [ ] Automation (hotkeys/mouse) строго локально, default dry-run
-* [ ] CI: GitHub Actions `pytest` on push (без Docker dependency)
+* [ ] CI hardening: добавить smoke jobs для runnable scripts помимо `pytest`
 
 ---
 
