@@ -13,6 +13,11 @@ from src.rag.doc_contract import ensure_valid_doc
 _TOKEN_RE = re.compile(r"[A-Za-z0-9_]+")
 _ALLOWED_RERANKERS = {"none", "qwen3"}
 _DEFAULT_QWEN3_RERANKER = "Qwen/Qwen3-Reranker-0.6B"
+_QWEN3_SYSTEM_PROMPT = (
+    "Judge whether the Document meets the requirements based on the Query and the Instruct provided. "
+    'Note that the answer can only be "yes" or "no".'
+)
+_QWEN3_INSTRUCT = "Given a web search query, retrieve relevant passages that answer the query"
 
 
 def _tokenize(value: str) -> set[str]:
@@ -179,20 +184,43 @@ def _result_from_doc(*, doc: Mapping[str, Any], score: float) -> dict[str, Any]:
 
 
 @lru_cache(maxsize=2)
-def _load_qwen3_reranker(model_id: str) -> tuple[Any, Any, Any]:
+def _load_qwen3_reranker(model_id: str) -> tuple[Any, Any, Any, int, int]:
     try:
         import torch
-        from transformers import AutoModelForSequenceClassification, AutoTokenizer
+        from transformers import AutoModelForCausalLM, AutoTokenizer
     except ImportError as exc:
         raise RuntimeError(
             "reranker=qwen3 requires optional dependencies. "
             "Install them manually, for example: pip install transformers torch"
         ) from exc
 
-    tokenizer = AutoTokenizer.from_pretrained(model_id, trust_remote_code=True)
-    model = AutoModelForSequenceClassification.from_pretrained(model_id, trust_remote_code=True)
+    tokenizer = AutoTokenizer.from_pretrained(model_id, trust_remote_code=True, padding_side="left")
+    if getattr(tokenizer, "pad_token_id", None) is None:
+        if getattr(tokenizer, "eos_token", None) is not None:
+            tokenizer.pad_token = tokenizer.eos_token
+        elif getattr(tokenizer, "unk_token", None) is not None:
+            tokenizer.pad_token = tokenizer.unk_token
+        else:
+            raise RuntimeError("Tokenizer has no pad_token/eos_token/unk_token for batched reranking.")
+    model = AutoModelForCausalLM.from_pretrained(model_id, trust_remote_code=True)
+    if getattr(model.config, "pad_token_id", None) is None:
+        model.config.pad_token_id = tokenizer.pad_token_id
+
+    token_true_id = tokenizer("yes", add_special_tokens=False).input_ids[0]
+    token_false_id = tokenizer("no", add_special_tokens=False).input_ids[0]
     model.eval()
-    return tokenizer, model, torch
+    return tokenizer, model, torch, token_true_id, token_false_id
+
+
+def _format_qwen3_pair(query: str, document_text: str) -> str:
+    return (
+        f"<|im_start|>system\n{_QWEN3_SYSTEM_PROMPT}<|im_end|>\n"
+        "<|im_start|>user\n"
+        f"Instruct: {_QWEN3_INSTRUCT}\n"
+        f"Query: {query}\n"
+        f"Document: {document_text}<|im_end|>\n"
+        "<|im_start|>assistant\n<think>\n\n</think>\n\n"
+    )
 
 
 def _rerank_candidates_qwen3(
@@ -207,7 +235,7 @@ def _rerank_candidates_qwen3(
     if max_length <= 0:
         raise ValueError("reranker_max_length must be positive.")
 
-    tokenizer, model, torch = _load_qwen3_reranker(model_id)
+    tokenizer, model, torch, token_true_id, token_false_id = _load_qwen3_reranker(model_id)
     passages = [
         "\n".join(
             part
@@ -219,22 +247,27 @@ def _rerank_candidates_qwen3(
         )
         for doc in candidate_docs
     ]
-    queries = [query] * len(passages)
+    pairs = [_format_qwen3_pair(query, passage) for passage in passages]
 
     inputs = tokenizer(
-        queries,
-        passages,
+        pairs,
         padding=True,
         truncation=True,
         max_length=max_length,
         return_tensors="pt",
     )
+    device = getattr(model, "device", None)
+    if device is not None:
+        for key in inputs:
+            inputs[key] = inputs[key].to(device)
+
     with torch.no_grad():
         outputs = model(**inputs)
 
-    logits = outputs.logits
-    dim = logits.dim() if hasattr(logits, "dim") else 1
-    score_tensor = logits[:, 0] if dim == 2 else logits
+    logits = outputs.logits[:, -1, :]
+    true_logits = logits[:, token_true_id]
+    false_logits = logits[:, token_false_id]
+    score_tensor = torch.nn.functional.log_softmax(torch.stack([false_logits, true_logits], dim=1), dim=1)[:, 1].exp()
     scores = [float(value) for value in score_tensor.detach().cpu().tolist()]
 
     ranked = sorted(zip(scores, candidate_docs), key=lambda pair: pair[0], reverse=True)
