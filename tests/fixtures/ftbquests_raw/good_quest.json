@@ -1,0 +1,11 @@
+{
+  "title": "Iron Progression",
+  "description": "Craft iron tools and smelt first ingots.",
+  "chapter": "getting_started",
+  "tasks": [
+    "mine iron ore",
+    "smelt ore",
+    "craft pickaxe"
+  ]
+}
+

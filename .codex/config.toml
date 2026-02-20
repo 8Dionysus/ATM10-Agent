@@ -1,0 +1,20 @@
+# .codex/config.toml — project defaults (requires trusted project)
+
+# Model: for most coding tasks in Codex, gpt-5.3-codex is the go-to model.
+model = "gpt-5.3-codex"
+
+# Safety / control
+approval_policy = "on-request"
+sandbox_mode = "workspace-write"
+
+# Reduce prompt-injection surface for local dev
+web_search = "cached"
+
+# Optional: keep logs inside repo (easy to inspect/share)
+log_dir = ".codex/logs"
+
+# Useful defaults on Windows + PS
+[features]
+powershell_utf8 = true
+shell_snapshot = true
+unified_exec = true

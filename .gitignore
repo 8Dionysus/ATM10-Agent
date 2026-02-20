@@ -1,0 +1,8 @@
+models/
+data/
+runs/
+.codex/logs/
+__pycache__/
+.venv/
+*.pyc
+
