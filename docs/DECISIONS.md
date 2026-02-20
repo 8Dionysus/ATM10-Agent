@@ -20,3 +20,4 @@
 * Для повышения retrieval relevance принят двухэтапный поиск: first-stage candidate retrieval + second-stage rerank; в CLI добавлены `--candidate-k` и `--reranker` (`none|qwen3`) с baseline по умолчанию `none`.
 * Специализированный rerank выбран через семейство `Qwen3-Reranker`; стартовая целевая модель для rollout — `Qwen/Qwen3-Reranker-0.6B` (опционально, без обязательного добавления heavy deps в baseline).
 * Зафиксирована EOL-политика через `.gitattributes`: source/docs/config по LF, Windows scripts (`*.ps1`, `*.bat`, `*.cmd`) по CRLF для стабильных diff и меньшего шума.
+* Для настройки retrieval defaults добавлен reproducible benchmark `scripts/eval_retrieval.py` (Recall@k, MRR@k, hit-rate) с артефактами в `runs/<timestamp>/`; подбор `topk/candidate_k/reranker` теперь делается по метрикам, а не по ручным примерам.

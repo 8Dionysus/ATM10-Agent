@@ -115,6 +115,26 @@ python scripts/retrieve_demo.py --in data/ftbquests_norm --query "steel tools" -
 
 Примечание: `--reranker qwen3` требует дополнительных зависимостей (`transformers`, `torch`) и загрузки модели; по умолчанию baseline использует `--reranker none`.
 
+## M2: Retrieval eval benchmark (Recall@k / MRR@k)
+
+```powershell
+cd D:\atm10-agent
+.\.venv\Scripts\Activate.ps1
+python scripts/eval_retrieval.py --docs tests/fixtures/retrieval_docs_sample.jsonl --eval tests/fixtures/retrieval_eval_sample.jsonl --topk 3 --candidate-k 50 --reranker none
+```
+
+Ожидаемый результат:
+
+* Создается `runs/<timestamp>/`.
+* Внутри есть `run.json` и `eval_results.json`.
+* В консоли печатаются агрегированные метрики (`recall_at_k`, `mrr_at_k`, `hit_rate_at_k`).
+
+Опционально можно сравнить с rerank:
+
+```powershell
+python scripts/eval_retrieval.py --docs tests/fixtures/retrieval_docs_sample.jsonl --eval tests/fixtures/retrieval_eval_sample.jsonl --topk 3 --candidate-k 50 --reranker qwen3 --reranker-model "Qwen/Qwen3-Reranker-0.6B"
+```
+
 ## M2: Qdrant ingest (optional backend)
 
 Поднять локальный Qdrant (пример):
