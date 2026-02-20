@@ -55,6 +55,7 @@ def test_ingest_ftbquests_writes_jsonl_and_errors(tmp_path: Path) -> None:
 
     assert summary["docs_written"] == 1
     assert summary["errors_logged"] == 2
+    assert summary["skipped_filtered"] == 0
     assert output_jsonl.exists()
     assert errors_jsonl.exists()
 
@@ -72,3 +73,76 @@ def test_ingest_ftbquests_writes_jsonl_and_errors(tmp_path: Path) -> None:
     error_types = {entry["error"] for entry in errors}
     assert error_types == {"parse_error", "unsupported_extension"}
 
+
+def test_ingest_ftbquests_accepts_snbt_files(tmp_path: Path) -> None:
+    quests_dir = tmp_path / "quests"
+    quests_dir.mkdir(parents=True, exist_ok=True)
+    (quests_dir / "allthemodium.snbt").write_text(
+        '{ id: "4293754F9B2D05F0" filename: "allthemodium" tasks: [{ type: "item" item: { id: "minecraft:iron_ingot" } }] }',
+        encoding="utf-8",
+    )
+    (quests_dir / "readme.txt").write_text("unsupported", encoding="utf-8")
+
+    output_jsonl = tmp_path / "data" / "ftbquests_norm" / "quests.jsonl"
+    errors_jsonl = tmp_path / "runs" / "20260220_010000" / "ingest_errors.jsonl"
+    now = datetime(2026, 2, 20, 1, 0, 0, tzinfo=timezone.utc)
+
+    summary = ingest_ftbquests_dir(
+        quests_dir=quests_dir,
+        output_jsonl=output_jsonl,
+        errors_jsonl=errors_jsonl,
+        now=now,
+    )
+
+    assert summary["docs_written"] == 1
+    assert summary["errors_logged"] == 1
+    assert summary["skipped_filtered"] == 0
+
+    docs = [json.loads(line) for line in output_jsonl.read_text(encoding="utf-8").splitlines()]
+    assert len(docs) == 1
+    doc = docs[0]
+    assert doc["id"] == "ftbquests:allthemodium.snbt"
+    assert doc["title"] == "allthemodium"
+    assert "filename:allthemodium" in doc["text"]
+    assert "id:minecraft:iron_ingot" in doc["text"]
+    assert "snbt" in doc["tags"]
+    assert doc["created_at"] == "2026-02-20T01:00:00+00:00"
+
+
+def test_ingest_ftbquests_skips_lang_and_reward_tables_by_default(tmp_path: Path) -> None:
+    quests_dir = tmp_path / "quests"
+    (quests_dir / "chapters").mkdir(parents=True, exist_ok=True)
+    (quests_dir / "lang" / "en_us" / "chapters").mkdir(parents=True, exist_ok=True)
+    (quests_dir / "reward_tables").mkdir(parents=True, exist_ok=True)
+
+    (quests_dir / "chapters" / "main.snbt").write_text(
+        '{ id: "AAA" filename: "main" tasks: [{ type: "item" item: { id: "minecraft:iron_ingot" } }] }',
+        encoding="utf-8",
+    )
+    (quests_dir / "lang" / "en_us" / "chapters" / "main.snbt").write_text(
+        '{ id: "BBB" filename: "main_localized" }',
+        encoding="utf-8",
+    )
+    (quests_dir / "reward_tables" / "basic.snbt").write_text(
+        '{ id: "CCC" filename: "basic_rewards" }',
+        encoding="utf-8",
+    )
+
+    output_jsonl = tmp_path / "data" / "ftbquests_norm" / "quests.jsonl"
+    errors_jsonl = tmp_path / "runs" / "20260220_020000" / "ingest_errors.jsonl"
+    now = datetime(2026, 2, 20, 2, 0, 0, tzinfo=timezone.utc)
+
+    summary = ingest_ftbquests_dir(
+        quests_dir=quests_dir,
+        output_jsonl=output_jsonl,
+        errors_jsonl=errors_jsonl,
+        now=now,
+    )
+
+    assert summary["docs_written"] == 1
+    assert summary["errors_logged"] == 0
+    assert summary["skipped_filtered"] == 2
+
+    docs = [json.loads(line) for line in output_jsonl.read_text(encoding="utf-8").splitlines()]
+    assert len(docs) == 1
+    assert docs[0]["id"] == "ftbquests:chapters/main.snbt"

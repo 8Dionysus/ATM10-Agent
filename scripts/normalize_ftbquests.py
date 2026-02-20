@@ -128,7 +128,12 @@ def main() -> int:
     print(f"[normalize_ftbquests] paths_artifact: {paths_artifact}")
     print(f"[normalize_ftbquests] output_jsonl: {summary['output_jsonl']}")
     print(f"[normalize_ftbquests] errors_jsonl: {summary['errors_jsonl']}")
-    print(f"[normalize_ftbquests] docs_written={summary['docs_written']}, errors_logged={summary['errors_logged']}")
+    print(
+        "[normalize_ftbquests] "
+        f"docs_written={summary['docs_written']}, "
+        f"errors_logged={summary['errors_logged']}, "
+        f"skipped_filtered={summary['skipped_filtered']}"
+    )
     return 0
 
 
