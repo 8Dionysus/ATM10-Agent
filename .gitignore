@@ -2,6 +2,7 @@ models/
 data/
 runs/
 .codex/logs/
+.codex/.codex/logs/
 __pycache__/
 .venv/
 *.pyc
