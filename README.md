@@ -9,6 +9,7 @@
 * `TODO.md` — боевой backlog.
 * `PLANS.md` — milestones и общий план.
 * `docs/RUNBOOK.md` и `docs/DECISIONS.md` — reference docs по запуску и архитектурным решениям.
+* `docs/SESSION_2026-02-20.md` — краткий session snapshot по ключевым результатам.
 
 ---
 
@@ -47,7 +48,7 @@ python -m pytest
 
 ## Current status (2026-02-20)
 
-* `python -m pytest` green (`17 passed`).
+* `python -m pytest` green (`25 passed`).
 * Phase A smoke работает и пишет run artifacts.
 * Phase B baseline работает end-to-end:
   * нормализация FTB Quests (`.json` + `.snbt`) в `data/ftbquests_norm/quests.jsonl`
@@ -55,6 +56,16 @@ python -m pytest
   * retrieval с top-k + citations
   * staged retrieval (`candidate-k` + optional `Qwen3-Reranker-0.6B`)
   * eval benchmark (`scripts/eval_retrieval.py`) с метриками Recall@k / MRR@k
+* По grid-eval на реальном ATM10 (`runs/20260220_m2_calibration_none/`) зафиксированы defaults:
+  `topk=5`, `candidate_k=50`, `reranker=none`.
+* Для `chapters/*` усилен ingest и ranking:
+  * SNBT extraction поддерживает quoted + unquoted значения (`id/type/dimension/structure/filename/...`)
+  * first-stage scoring стал field-weighted (`title/text/tags`) + stopword filtering
+  * на eval-наборе `runs/20260220_m2_baseline/eval_cases_atm10_chapters.jsonl`
+    достигнуто `Recall@5=1.0000`, `MRR@5=1.0000`, `hit-rate@5=1.0000`
+    (artifact: `runs/20260220_132946/`).
+* `qwen3` можно запускать через `torch` или `openvino` runtime (`--reranker-runtime`, `--reranker-device`);
+  для Windows добавлен wrapper `scripts/run_qwen3_openvino.ps1`.
 * Для снижения шума по умолчанию из индекса исключаются `lang/**` и `reward_tables/**`.
 * EOL policy зафиксирована в `.gitattributes` (LF для code/docs, CRLF для Windows scripts).
 

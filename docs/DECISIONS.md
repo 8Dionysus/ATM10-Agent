@@ -22,3 +22,9 @@
 * Зафиксирована EOL-политика через `.gitattributes`: source/docs/config по LF, Windows scripts (`*.ps1`, `*.bat`, `*.cmd`) по CRLF для стабильных diff и меньшего шума.
 * Для настройки retrieval defaults добавлен reproducible benchmark `scripts/eval_retrieval.py` (Recall@k, MRR@k, hit-rate) с артефактами в `runs/<timestamp>/`; подбор `topk/candidate_k/reranker` теперь делается по метрикам, а не по ручным примерам.
 * Интеграция `Qwen3-Reranker` выровнена с официальным scoring-flow (yes/no logits через CausalLM prompt), чтобы избежать некорректного режима `SequenceClassification` и получать валидный rerank score.
+* В first-stage tokenization добавлен split по `_` (с сохранением исходного токена), чтобы запросы вида `metallurgic infuser` корректно матчились с `metallurgic_infuser`.
+* По grid-eval на реальном ATM10 `chapters/*` (`runs/20260220_m2_calibration_none/`) зафиксированы production defaults:
+  `topk=5`, `candidate_k=50`, `reranker=none`; для `topk>=3` метрики совпали, `topk=1` хуже по Recall/hit-rate.
+* Для `qwen3` добавлен runtime-переключатель `torch|openvino` и device-параметр (`AUTO|CPU|GPU|NPU`) в retrieval/eval CLI, чтобы ускорять rerank на Intel GPU/NPU через `torch.compile(..., backend="openvino")` без изменения baseline `reranker=none`.
+* SNBT signal extraction для Phase B улучшен: в ingestion учитываются не только quoted, но и unquoted значения ключей (`id/type/dimension/structure/filename/...`), что повышает recall по квестам в `chapters/*`.
+* Для first-stage retrieval в `chapters/*` принят field-weighted scoring (`title/text/tags`) + stopword filtering: это снижает ложные совпадения по служебным словам (`and/the/...`) и поднимает релевантную главу при запросах по модам (например, `ars nouveau`).

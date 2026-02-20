@@ -172,10 +172,12 @@ def test_retrieve_top_k_qdrant_applies_qwen3_second_stage(monkeypatch) -> None:
             ],
         }
 
-    def _fake_rerank_candidates_qwen3(query, candidate_docs, *, model_id: str, max_length: int):
+    def _fake_rerank_candidates_qwen3(query, candidate_docs, *, model_id: str, max_length: int, runtime: str, device: str):
         assert query == "steel tools"
         assert model_id == "Qwen/Qwen3-Reranker-0.6B"
         assert max_length == 1024
+        assert runtime == "torch"
+        assert device == "AUTO"
         return [(0.88, candidate_docs[1]), (0.12, candidate_docs[0])]
 
     monkeypatch.setattr(retrieval, "_qdrant_request", _fake_qdrant_request)

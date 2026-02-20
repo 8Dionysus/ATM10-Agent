@@ -113,7 +113,23 @@ python scripts/retrieve_demo.py --in data/ftbquests_norm --query "steel tools" -
 python scripts/retrieve_demo.py --in data/ftbquests_norm --query "steel tools" --topk 5 --candidate-k 50 --reranker qwen3 --reranker-model "Qwen/Qwen3-Reranker-0.6B"
 ```
 
+Опционально: тот же `qwen3` через OpenVINO runtime (рекомендуется на Intel iGPU/NPU):
+
+```powershell
+python scripts/retrieve_demo.py --in data/ftbquests_norm --query "steel tools" --topk 5 --candidate-k 10 --reranker qwen3 --reranker-runtime openvino --reranker-device GPU --reranker-model "Qwen/Qwen3-Reranker-0.6B" --reranker-max-length 512
+```
+
+Быстрый wrapper (автоматически подтягивает `VsDevCmd` + UTF-8 env):
+
+```powershell
+.\scripts\run_qwen3_openvino.ps1 -Mode retrieve -Query "steel tools" -InputPath "data/ftbquests_norm/quests.jsonl" -Device GPU -TopK 5 -CandidateK 10 -RerankerMaxLength 512
+```
+
 Примечание: `--reranker qwen3` требует дополнительных зависимостей (`transformers`, `torch`) и загрузки модели; по умолчанию baseline использует `--reranker none`.
+Для OpenVINO-ускорения qwen3 добавь `--reranker-runtime openvino` и выбери `--reranker-device` (`AUTO|CPU|GPU|NPU`).
+Если получаешь ошибку про `cl.exe`, установи Visual Studio Build Tools (C++ workload) и запусти команду из Developer PowerShell.
+Для стабильного запуска на Windows также рекомендуем UTF-8 окружение:
+`$env:PYTHONUTF8=\"1\"; $env:PYTHONIOENCODING=\"utf-8\"`.
 
 Установка optional deps для `qwen3`:
 
@@ -147,6 +163,48 @@ python scripts/eval_retrieval.py --docs tests/fixtures/retrieval_docs_sample.jso
 ```powershell
 python scripts/eval_retrieval.py --docs tests/fixtures/retrieval_docs_sample.jsonl --eval tests/fixtures/retrieval_eval_sample.jsonl --topk 3 --candidate-k 50 --reranker qwen3 --reranker-model "Qwen/Qwen3-Reranker-0.6B"
 ```
+
+Опционально: eval с OpenVINO runtime:
+
+```powershell
+python scripts/eval_retrieval.py --docs tests/fixtures/retrieval_docs_sample.jsonl --eval tests/fixtures/retrieval_eval_sample.jsonl --topk 3 --candidate-k 10 --reranker qwen3 --reranker-runtime openvino --reranker-device GPU --reranker-model "Qwen/Qwen3-Reranker-0.6B" --reranker-max-length 512
+```
+
+Тот же eval через wrapper:
+
+```powershell
+.\scripts\run_qwen3_openvino.ps1 -Mode eval -EvalDocsPath "tests/fixtures/retrieval_docs_sample.jsonl" -EvalCasesPath "tests/fixtures/retrieval_eval_sample.jsonl" -Device GPU -TopK 3 -CandidateK 10 -RerankerMaxLength 512
+```
+
+### M2: Calibration на реальном ATM10 corpus (`chapters/*`)
+
+Пример локального grid-eval (baseline `reranker=none`):
+
+```powershell
+cd D:\atm10-agent
+.\.venv\Scripts\Activate.ps1
+python scripts/eval_retrieval.py --backend in_memory --docs data/ftbquests_norm/quests.jsonl --eval runs/20260220_m2_baseline/eval_cases_atm10_chapters.jsonl --topk 1 --candidate-k 5 --reranker none
+python scripts/eval_retrieval.py --backend in_memory --docs data/ftbquests_norm/quests.jsonl --eval runs/20260220_m2_baseline/eval_cases_atm10_chapters.jsonl --topk 3 --candidate-k 50 --reranker none
+python scripts/eval_retrieval.py --backend in_memory --docs data/ftbquests_norm/quests.jsonl --eval runs/20260220_m2_baseline/eval_cases_atm10_chapters.jsonl --topk 5 --candidate-k 50 --reranker none
+```
+
+Зафиксированный результат калибровки (2026-02-20, `runs/20260220_m2_calibration_none/`):
+
+* Production defaults: `topk=5`, `candidate_k=50`, `reranker=none`.
+* На этом наборе `topk>=3` даёт одинаковые метрики (`recall_at_k=1.0`, `mrr_at_k=0.9333`, `hit_rate_at_k=1.0`) до quality-tuning первого этапа.
+* `topk=1` уступает по `recall/hit-rate` (`0.9`).
+
+После quality-tuning `chapters/*` (field-weighted first-stage scoring + stopword filtering):
+
+```powershell
+python scripts/eval_retrieval.py --backend in_memory --docs data/ftbquests_norm/quests.jsonl --eval runs/20260220_m2_baseline/eval_cases_atm10_chapters.jsonl --topk 5 --candidate-k 50 --reranker none
+```
+
+Результат (2026-02-20, `runs/20260220_132946/`):
+
+* `recall_at_k=1.0000`
+* `mrr_at_k=1.0000`
+* `hit_rate_at_k=1.0000`
 
 ## M2: Qdrant ingest (optional backend)
 

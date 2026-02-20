@@ -146,3 +146,35 @@ def test_ingest_ftbquests_skips_lang_and_reward_tables_by_default(tmp_path: Path
     docs = [json.loads(line) for line in output_jsonl.read_text(encoding="utf-8").splitlines()]
     assert len(docs) == 1
     assert docs[0]["id"] == "ftbquests:chapters/main.snbt"
+
+
+def test_ingest_ftbquests_extracts_unquoted_snbt_signals(tmp_path: Path) -> None:
+    quests_dir = tmp_path / "quests"
+    quests_dir.mkdir(parents=True, exist_ok=True)
+    (quests_dir / "chapters").mkdir(parents=True, exist_ok=True)
+    (quests_dir / "chapters" / "mekanism.snbt").write_text(
+        "{ filename: mekanism tasks:[{ type:item item:{ id:mekanism:steel_casing } }] dimension:allthemodium:the_other }",
+        encoding="utf-8",
+    )
+
+    output_jsonl = tmp_path / "data" / "ftbquests_norm" / "quests.jsonl"
+    errors_jsonl = tmp_path / "runs" / "20260220_030000" / "ingest_errors.jsonl"
+    now = datetime(2026, 2, 20, 3, 0, 0, tzinfo=timezone.utc)
+
+    summary = ingest_ftbquests_dir(
+        quests_dir=quests_dir,
+        output_jsonl=output_jsonl,
+        errors_jsonl=errors_jsonl,
+        now=now,
+    )
+
+    assert summary["docs_written"] == 1
+    assert summary["errors_logged"] == 0
+
+    docs = [json.loads(line) for line in output_jsonl.read_text(encoding="utf-8").splitlines()]
+    assert len(docs) == 1
+    text = docs[0]["text"]
+    assert "filename:mekanism" in text
+    assert "type:item" in text
+    assert "id:mekanism:steel_casing" in text
+    assert "dimension:allthemodium:the_other" in text

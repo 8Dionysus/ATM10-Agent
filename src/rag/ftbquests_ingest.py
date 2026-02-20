@@ -9,7 +9,8 @@ from typing import Any, Iterable, Mapping
 from src.rag.doc_contract import normalize_doc
 
 _SNBT_KV_RE = re.compile(
-    r'\b(id|type|dimension|structure|filename|group|title|subtitle|description):\s*"([^"]*)"',
+    r"\b(id|type|dimension|structure|filename|group|title|subtitle|description):\s*"
+    r'(?:\"([^\"]*)\"|\'([^\']*)\'|([A-Za-z0-9_./:-]+))',
     flags=re.IGNORECASE,
 )
 _MAX_SNBT_HINTS = 256
@@ -77,7 +78,7 @@ def _extract_snbt_text(raw: str) -> str:
     hints: list[str] = []
     for match in _SNBT_KV_RE.finditer(raw):
         key = match.group(1).lower()
-        value = match.group(2).strip()
+        value = next((part.strip() for part in match.groups()[1:] if part and part.strip()), "")
         if value:
             hints.append(f"{key}:{value}")
         if len(hints) >= _MAX_SNBT_HINTS:

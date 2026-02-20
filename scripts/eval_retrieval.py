@@ -101,6 +101,8 @@ def run_eval_retrieval(
     candidate_k: int = 50,
     reranker: str = "none",
     reranker_model: str = "Qwen/Qwen3-Reranker-0.6B",
+    reranker_runtime: str = "torch",
+    reranker_device: str = "AUTO",
     reranker_max_length: int = 1024,
     collection: str = "atm10",
     host: str = "127.0.0.1",
@@ -127,6 +129,8 @@ def run_eval_retrieval(
             "candidate_k": candidate_k,
             "reranker": reranker,
             "reranker_model": reranker_model if reranker == "qwen3" else None,
+            "reranker_runtime": reranker_runtime if reranker == "qwen3" else None,
+            "reranker_device": reranker_device if reranker == "qwen3" else None,
             "reranker_max_length": reranker_max_length if reranker == "qwen3" else None,
             "collection": collection if backend == "qdrant" else None,
             "host": host if backend == "qdrant" else None,
@@ -159,6 +163,8 @@ def run_eval_retrieval(
                     reranker=reranker,
                     reranker_model=reranker_model,
                     reranker_max_length=reranker_max_length,
+                    reranker_runtime=reranker_runtime,
+                    reranker_device=reranker_device,
                 )
             else:
                 results = retrieve_top_k_qdrant(
@@ -169,6 +175,8 @@ def run_eval_retrieval(
                     reranker=reranker,
                     reranker_model=reranker_model,
                     reranker_max_length=reranker_max_length,
+                    reranker_runtime=reranker_runtime,
+                    reranker_device=reranker_device,
                     host=host,
                     port=port,
                     vector_size=vector_size,
@@ -262,6 +270,17 @@ def parse_args() -> argparse.Namespace:
         help="Reranker model id for --reranker qwen3.",
     )
     parser.add_argument(
+        "--reranker-runtime",
+        choices=("torch", "openvino"),
+        default="torch",
+        help="Runtime for qwen3 reranker: torch (default) or openvino.",
+    )
+    parser.add_argument(
+        "--reranker-device",
+        default="AUTO",
+        help="Device for openvino runtime: AUTO (default), CPU, GPU, or NPU.",
+    )
+    parser.add_argument(
         "--reranker-max-length",
         type=int,
         default=1024,
@@ -291,6 +310,8 @@ def main() -> int:
         candidate_k=args.candidate_k,
         reranker=args.reranker,
         reranker_model=args.reranker_model,
+        reranker_runtime=args.reranker_runtime,
+        reranker_device=args.reranker_device,
         reranker_max_length=args.reranker_max_length,
         collection=args.collection,
         host=args.host,

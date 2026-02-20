@@ -7,7 +7,7 @@
 ## Status (as of 2026-02-20)
 
 * M0 и M1 завершены.
-* Текущий baseline: `python -m pytest` проходит (`17 passed`).
+* Текущий baseline: `python -m pytest` проходит (`25 passed`).
 * `scripts/phase_a_smoke.py` выполняется и пишет artifacts в `runs/<timestamp>/`.
 * Phase B baseline (normalize -> ingest -> retrieve) validated на локальном ATM10 + Qdrant.
 
@@ -20,6 +20,7 @@
 * [x] `.gitignore` добавлен и обновлён.
 * [x] `requirements.txt` добавлен.
 * [x] `tests/` harness на `pytest` добавлен.
+* [x] Добавлен session snapshot `docs/SESSION_2026-02-20.md` с ключевыми артефактами/метриками.
 
 ### Instance discovery
 
@@ -49,6 +50,7 @@
 * [x] Добавлен двухэтапный retrieval (`candidate-k` + optional reranker `none|qwen3`).
 * [x] Добавлен benchmark `scripts/eval_retrieval.py` (Recall@k / MRR@k / hit-rate).
 * [x] Добавлены тесты на rerank ordering/fallback и benchmark artifacts.
+* [x] Добавлен OpenVINO runtime для `qwen3` reranker (`--reranker-runtime openvino`, `--reranker-device AUTO|CPU|GPU|NPU`) для ускорения на Intel GPU/NPU.
 
 ---
 
@@ -56,7 +58,10 @@
 
 ### Sprint focus (approved)
 
-* [ ] Focus #1: донастроить relevance в `chapters/*` (quality tuning по benchmark на реальных ATM10 данных).
+* [x] Focus #1: донастроить relevance в `chapters/*` (quality tuning по benchmark на реальных ATM10 данных).
+  Реализовано: first-stage scoring учитывает field-weights (`title/text/tags`) + stopword filtering.
+  Результат на `runs/20260220_m2_baseline/eval_cases_atm10_chapters.jsonl`:
+  Recall@5=1.0000, MRR@5=1.0000, hit-rate@5=1.0000 (`runs/20260220_132946/`).
 * [x] Focus #3: LF/CRLF политика зафиксирована и применена через `.gitattributes`.
 
 ### Project/repo operations
@@ -77,8 +82,12 @@
 * [x] Сохранить fallback `--reranker none`, чтобы baseline работал без модели.
 * [x] Добавить tests на rerank ordering и fallback.
 * [x] Добавить benchmark (`eval_retrieval.py`) для metric-driven выбора defaults.
-* [ ] Выбрать production defaults (`topk`, `candidate_k`, `reranker`) по eval на реальном ATM10 корпусе.
-* [ ] Улучшить SNBT signal extraction внутри `chapters/*` для повышения recall перед rerank.
+* [x] Выбрать production defaults (`topk`, `candidate_k`, `reranker`) по eval на реальном ATM10 корпусе.
+  Зафиксировано по grid-eval (`runs/20260220_m2_calibration_none/`):
+  `topk=5`, `candidate_k=50`, `reranker=none`.
+* [x] Улучшить SNBT signal extraction внутри `chapters/*` для повышения recall перед rerank.
+  Реализовано: extraction поддерживает как quoted, так и unquoted SNBT значения
+  (`id/type/dimension/structure/filename/...`), добавлен pytest на unquoted кейс.
 
 ### VLM integration
 

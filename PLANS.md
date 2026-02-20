@@ -5,13 +5,15 @@
 ## Status (as of 2026-02-20)
 
 * M0 + M1 completed.
-* `python -m pytest` green (`17 passed`).
+* `python -m pytest` green (`25 passed`).
 * `scripts/phase_a_smoke.py` выполняется и создаёт run artifacts.
 * Контракт fixture: `tests/fixtures/rag_docs_sample.jsonl` — строгий JSONL без пустых строк.
 * Phase B baseline validated e2e on local ATM10 data + local Qdrant.
 * GitHub `origin` настроен, `master` запушен.
 * CI workflow `pytest` on push/pull_request добавлен.
 * В M2 добавлены staged retrieval (`candidate-k + reranker`) и benchmark `eval_retrieval.py`.
+* В M2 добавлен runtime switch для qwen3 reranker: `torch|openvino` + device (`AUTO|CPU|GPU|NPU`).
+* Session snapshot зафиксирован в `docs/SESSION_2026-02-20.md`.
 
 ---
 
@@ -101,8 +103,16 @@ DoD:
 
 Current gap:
 
-* [ ] Improve retrieval relevance inside `chapters/*` (better SNBT signal extraction + richer chapter signals)
-* [ ] Calibrate `topk/candidate_k/reranker` defaults on real ATM10 corpus via benchmark metrics
+* [x] Improve retrieval relevance inside `chapters/*` (better SNBT signal extraction + richer chapter signals)
+  Done: SNBT ingestion now extracts both quoted and unquoted key-value signals
+  (`id/type/dimension/structure/filename/...`) with test coverage.
+* [x] Calibrate first-stage ranking for `chapters/*` queries (field-weighted scoring + stopword filtering).
+  Done: in-memory first-stage теперь приоритизирует `title`-signal над sparse mentions в длинном SNBT text;
+  benchmark на `runs/20260220_m2_baseline/eval_cases_atm10_chapters.jsonl` дал
+  Recall@5=1.0000, MRR@5=1.0000, hit-rate@5=1.0000 (`runs/20260220_132946/`).
+* [x] Calibrate `topk/candidate_k/reranker` defaults on real ATM10 corpus via benchmark metrics
+  (`runs/20260220_m2_calibration_none/`): production defaults confirmed as
+  `topk=5`, `candidate_k=50`, `reranker=none`.
 
 Approved direction (2026-02-20):
 

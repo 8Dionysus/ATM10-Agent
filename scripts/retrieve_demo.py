@@ -70,6 +70,17 @@ def parse_args() -> argparse.Namespace:
         help="Reranker model id for --reranker qwen3.",
     )
     parser.add_argument(
+        "--reranker-runtime",
+        choices=("torch", "openvino"),
+        default="torch",
+        help="Runtime for qwen3 reranker: torch (default) or openvino.",
+    )
+    parser.add_argument(
+        "--reranker-device",
+        default="AUTO",
+        help="Device for openvino runtime: AUTO (default), CPU, GPU, or NPU.",
+    )
+    parser.add_argument(
         "--reranker-max-length",
         type=int,
         default=1024,
@@ -107,6 +118,8 @@ def main() -> int:
                 reranker=args.reranker,
                 reranker_model=args.reranker_model,
                 reranker_max_length=args.reranker_max_length,
+                reranker_runtime=args.reranker_runtime,
+                reranker_device=args.reranker_device,
             )
         else:
             results = retrieve_top_k_qdrant(
@@ -117,6 +130,8 @@ def main() -> int:
                 reranker=args.reranker,
                 reranker_model=args.reranker_model,
                 reranker_max_length=args.reranker_max_length,
+                reranker_runtime=args.reranker_runtime,
+                reranker_device=args.reranker_device,
                 host=args.host,
                 port=args.port,
                 vector_size=args.vector_size,
@@ -136,6 +151,8 @@ def main() -> int:
         "reranker": {
             "name": args.reranker,
             "model": args.reranker_model if args.reranker == "qwen3" else None,
+            "runtime": args.reranker_runtime if args.reranker == "qwen3" else None,
+            "device": args.reranker_device if args.reranker == "qwen3" else None,
             "max_length": args.reranker_max_length if args.reranker == "qwen3" else None,
         },
         "paths": {
