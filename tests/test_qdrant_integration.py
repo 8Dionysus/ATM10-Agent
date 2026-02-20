@@ -139,3 +139,62 @@ def test_retrieve_top_k_qdrant_maps_payload_to_citations(monkeypatch) -> None:
     assert calls[0]["url"].endswith("/collections/atm10/points/search")
     assert calls[0]["payload"]["limit"] == 3
     assert len(calls[0]["payload"]["vector"]) == 8
+
+
+def test_retrieve_top_k_qdrant_applies_qwen3_second_stage(monkeypatch) -> None:
+    calls: list[dict[str, Any]] = []
+
+    def _fake_qdrant_request(*, method: str, url: str, payload: dict[str, Any] | None, timeout_sec: float) -> dict[str, Any]:
+        calls.append({"method": method, "url": url, "payload": payload, "timeout_sec": timeout_sec})
+        return {
+            "status": "ok",
+            "result": [
+                {
+                    "score": 0.95,
+                    "payload": {
+                        "id": "quest:first_stage_first",
+                        "source": "ftbquests",
+                        "title": "First",
+                        "text": "steel tools baseline",
+                        "path": "data/ftbquests_norm/quests.jsonl",
+                    },
+                },
+                {
+                    "score": 0.65,
+                    "payload": {
+                        "id": "quest:reranked_first",
+                        "source": "ftbquests",
+                        "title": "Second",
+                        "text": "steel tools optimized",
+                        "path": "data/ftbquests_norm/quests.jsonl",
+                    },
+                },
+            ],
+        }
+
+    def _fake_rerank_candidates_qwen3(query, candidate_docs, *, model_id: str, max_length: int):
+        assert query == "steel tools"
+        assert model_id == "Qwen/Qwen3-Reranker-0.6B"
+        assert max_length == 1024
+        return [(0.88, candidate_docs[1]), (0.12, candidate_docs[0])]
+
+    monkeypatch.setattr(retrieval, "_qdrant_request", _fake_qdrant_request)
+    monkeypatch.setattr(retrieval, "_rerank_candidates_qwen3", _fake_rerank_candidates_qwen3)
+
+    results = retrieval.retrieve_top_k_qdrant(
+        "steel tools",
+        collection="atm10",
+        topk=1,
+        candidate_k=5,
+        reranker="qwen3",
+        host="localhost",
+        port=6333,
+        vector_size=8,
+        timeout_sec=3.0,
+    )
+
+    assert len(results) == 1
+    assert results[0]["id"] == "quest:reranked_first"
+    assert results[0]["score"] == 0.88
+    assert len(calls) == 1
+    assert calls[0]["payload"]["limit"] == 5

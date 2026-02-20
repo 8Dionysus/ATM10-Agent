@@ -17,3 +17,6 @@
 * Для снижения retrieval-noise в baseline ingestion по умолчанию исключает `lang/**` и `reward_tables/**` из индекса; основной фокус индекса — квестовые главы/структуры, а не локализации и reward tables.
 * Phase B baseline validated e2e на локальном ATM10 + Qdrant (`normalize -> ingest -> retrieve`) с рабочими top-k + citations.
 * Для hardware-accelerated inference baseline добавлен OpenVINO (`openvino==2025.4.1`) и зафиксирован диагностический workflow в `docs/RUNBOOK.md` с artifact-отчетом в `runs/<timestamp>-openvino/`.
+* Для повышения retrieval relevance принят двухэтапный поиск: first-stage candidate retrieval + second-stage rerank; в CLI добавлены `--candidate-k` и `--reranker` (`none|qwen3`) с baseline по умолчанию `none`.
+* Специализированный rerank выбран через семейство `Qwen3-Reranker`; стартовая целевая модель для rollout — `Qwen/Qwen3-Reranker-0.6B` (опционально, без обязательного добавления heavy deps в baseline).
+* Зафиксирована EOL-политика через `.gitattributes`: source/docs/config по LF, Windows scripts (`*.ps1`, `*.bat`, `*.cmd`) по CRLF для стабильных diff и меньшего шума.

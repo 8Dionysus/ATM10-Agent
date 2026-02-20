@@ -101,6 +101,20 @@ python scripts/retrieve_demo.py --in data/ftbquests_norm --query "steel tools" -
 * Внутри есть `run.json` и `retrieval_results.json`.
 * В консоли печатаются `top-k` результатов с citations (`id/source/path`).
 
+Опционально: двухэтапный retrieval с rerank-кандидатами:
+
+```powershell
+python scripts/retrieve_demo.py --in data/ftbquests_norm --query "steel tools" --topk 5 --candidate-k 50 --reranker none
+```
+
+Опционально: специализированный rerank через `Qwen3-Reranker`:
+
+```powershell
+python scripts/retrieve_demo.py --in data/ftbquests_norm --query "steel tools" --topk 5 --candidate-k 50 --reranker qwen3 --reranker-model "Qwen/Qwen3-Reranker-0.6B"
+```
+
+Примечание: `--reranker qwen3` требует дополнительных зависимостей (`transformers`, `torch`) и загрузки модели; по умолчанию baseline использует `--reranker none`.
+
 ## M2: Qdrant ingest (optional backend)
 
 Поднять локальный Qdrant (пример):

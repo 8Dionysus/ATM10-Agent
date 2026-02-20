@@ -52,6 +52,29 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--query", required=True, help="User query for retrieval.")
     parser.add_argument("--topk", type=int, default=5, help="Number of retrieval results (default: 5).")
+    parser.add_argument(
+        "--candidate-k",
+        type=int,
+        default=50,
+        help="First-stage candidate pool size before reranking (default: 50).",
+    )
+    parser.add_argument(
+        "--reranker",
+        choices=("none", "qwen3"),
+        default="none",
+        help="Second-stage reranker: none (default) or qwen3.",
+    )
+    parser.add_argument(
+        "--reranker-model",
+        default="Qwen/Qwen3-Reranker-0.6B",
+        help="Reranker model id for --reranker qwen3.",
+    )
+    parser.add_argument(
+        "--reranker-max-length",
+        type=int,
+        default=1024,
+        help="Max tokenized length for reranker input (default: 1024).",
+    )
     parser.add_argument("--collection", default="atm10", help="Qdrant collection name (default: atm10).")
     parser.add_argument("--host", default="127.0.0.1", help="Qdrant host (default: 127.0.0.1).")
     parser.add_argument("--port", type=int, default=6333, help="Qdrant port (default: 6333).")
@@ -76,18 +99,30 @@ def main() -> int:
     try:
         if args.backend == "in_memory":
             docs = load_docs(args.input_path)
-            results = retrieve_top_k(args.query, docs, topk=args.topk)
+            results = retrieve_top_k(
+                args.query,
+                docs,
+                topk=args.topk,
+                candidate_k=args.candidate_k,
+                reranker=args.reranker,
+                reranker_model=args.reranker_model,
+                reranker_max_length=args.reranker_max_length,
+            )
         else:
             results = retrieve_top_k_qdrant(
                 args.query,
                 collection=args.collection,
                 topk=args.topk,
+                candidate_k=args.candidate_k,
+                reranker=args.reranker,
+                reranker_model=args.reranker_model,
+                reranker_max_length=args.reranker_max_length,
                 host=args.host,
                 port=args.port,
                 vector_size=args.vector_size,
                 timeout_sec=args.timeout_sec,
             )
-    except RuntimeError as exc:
+    except (RuntimeError, ValueError, FileNotFoundError) as exc:
         print(f"[retrieve_demo] backend_error: {exc}")
         return 2
 
@@ -97,6 +132,12 @@ def main() -> int:
         "backend": args.backend,
         "query": args.query,
         "topk": args.topk,
+        "candidate_k": args.candidate_k,
+        "reranker": {
+            "name": args.reranker,
+            "model": args.reranker_model if args.reranker == "qwen3" else None,
+            "max_length": args.reranker_max_length if args.reranker == "qwen3" else None,
+        },
         "paths": {
             "input": str(args.input_path) if args.backend == "in_memory" else None,
             "run_dir": str(run_dir),
@@ -116,6 +157,8 @@ def main() -> int:
 
     print(f"[retrieve_demo] run_dir: {run_dir}")
     print(f"[retrieve_demo] backend: {args.backend}")
+    print(f"[retrieve_demo] reranker: {args.reranker}")
+    print(f"[retrieve_demo] candidate_k: {args.candidate_k}")
     if args.backend == "in_memory":
         print(f"[retrieve_demo] input: {args.input_path}")
     else:

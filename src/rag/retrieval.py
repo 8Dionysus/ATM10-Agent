@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+from functools import lru_cache
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 from urllib import error, request
@@ -10,10 +11,30 @@ from urllib import error, request
 from src.rag.doc_contract import ensure_valid_doc
 
 _TOKEN_RE = re.compile(r"[A-Za-z0-9_]+")
+_ALLOWED_RERANKERS = {"none", "qwen3"}
+_DEFAULT_QWEN3_RERANKER = "Qwen/Qwen3-Reranker-0.6B"
 
 
 def _tokenize(value: str) -> set[str]:
     return {token.lower() for token in _TOKEN_RE.findall(value)}
+
+
+def _normalize_reranker(reranker: str) -> str:
+    normalized = reranker.strip().lower()
+    if normalized not in _ALLOWED_RERANKERS:
+        raise ValueError(f"Unsupported reranker: {reranker!r}. Expected one of {_ALLOWED_RERANKERS}.")
+    return normalized
+
+
+def _resolve_candidate_k(*, topk: int, candidate_k: int | None) -> int:
+    required = max(topk, 0)
+    if required == 0:
+        return 0
+    if candidate_k is None:
+        return required
+    if candidate_k <= 0:
+        raise ValueError("candidate_k must be positive.")
+    return candidate_k
 
 
 def _vectorize_text(value: str, *, size: int) -> list[float]:
@@ -124,6 +145,23 @@ def _searchable_text(doc: Mapping[str, Any]) -> str:
     )
 
 
+def _first_stage_rank(
+    query: str,
+    docs: Sequence[Mapping[str, Any]],
+) -> list[tuple[float, Mapping[str, Any]]]:
+    query_tokens = _tokenize(query)
+    scored: list[tuple[int, int, Mapping[str, Any]]] = []
+
+    for index, doc in enumerate(docs):
+        searchable = _searchable_text(doc)
+        score = len(query_tokens & _tokenize(searchable)) if query_tokens else 0
+        if score > 0:
+            scored.append((score, -index, doc))
+
+    scored.sort(reverse=True)
+    return [(float(score), doc) for score, _, doc in scored]
+
+
 def _result_from_doc(*, doc: Mapping[str, Any], score: float) -> dict[str, Any]:
     citation_path = str(doc.get("path") or doc.get("__path") or "")
     return {
@@ -140,21 +178,100 @@ def _result_from_doc(*, doc: Mapping[str, Any], score: float) -> dict[str, Any]:
     }
 
 
-def retrieve_top_k(query: str, docs: Sequence[Mapping[str, Any]], *, topk: int = 5) -> list[dict[str, Any]]:
-    query_tokens = _tokenize(query)
-    scored: list[tuple[int, int, Mapping[str, Any]]] = []
+@lru_cache(maxsize=2)
+def _load_qwen3_reranker(model_id: str) -> tuple[Any, Any, Any]:
+    try:
+        import torch
+        from transformers import AutoModelForSequenceClassification, AutoTokenizer
+    except ImportError as exc:
+        raise RuntimeError(
+            "reranker=qwen3 requires optional dependencies. "
+            "Install them manually, for example: pip install transformers torch"
+        ) from exc
 
-    for index, doc in enumerate(docs):
-        searchable = _searchable_text(doc)
-        score = len(query_tokens & _tokenize(searchable)) if query_tokens else 0
-        if score > 0:
-            scored.append((score, -index, doc))
+    tokenizer = AutoTokenizer.from_pretrained(model_id, trust_remote_code=True)
+    model = AutoModelForSequenceClassification.from_pretrained(model_id, trust_remote_code=True)
+    model.eval()
+    return tokenizer, model, torch
 
-    scored.sort(reverse=True)
-    results: list[dict[str, Any]] = []
-    for score, _, doc in scored[: max(topk, 0)]:
-        results.append(_result_from_doc(doc=doc, score=float(score)))
-    return results
+
+def _rerank_candidates_qwen3(
+    query: str,
+    candidate_docs: Sequence[Mapping[str, Any]],
+    *,
+    model_id: str,
+    max_length: int,
+) -> list[tuple[float, Mapping[str, Any]]]:
+    if not candidate_docs:
+        return []
+    if max_length <= 0:
+        raise ValueError("reranker_max_length must be positive.")
+
+    tokenizer, model, torch = _load_qwen3_reranker(model_id)
+    passages = [
+        "\n".join(
+            part
+            for part in (
+                str(doc.get("title", "")).strip(),
+                str(doc.get("text", "")).strip(),
+            )
+            if part
+        )
+        for doc in candidate_docs
+    ]
+    queries = [query] * len(passages)
+
+    inputs = tokenizer(
+        queries,
+        passages,
+        padding=True,
+        truncation=True,
+        max_length=max_length,
+        return_tensors="pt",
+    )
+    with torch.no_grad():
+        outputs = model(**inputs)
+
+    logits = outputs.logits
+    dim = logits.dim() if hasattr(logits, "dim") else 1
+    score_tensor = logits[:, 0] if dim == 2 else logits
+    scores = [float(value) for value in score_tensor.detach().cpu().tolist()]
+
+    ranked = sorted(zip(scores, candidate_docs), key=lambda pair: pair[0], reverse=True)
+    return ranked
+
+
+def retrieve_top_k(
+    query: str,
+    docs: Sequence[Mapping[str, Any]],
+    *,
+    topk: int = 5,
+    candidate_k: int | None = None,
+    reranker: str = "none",
+    reranker_model: str = _DEFAULT_QWEN3_RERANKER,
+    reranker_max_length: int = 1024,
+) -> list[dict[str, Any]]:
+    topk_limit = max(topk, 0)
+    if topk_limit == 0:
+        return []
+
+    reranker_name = _normalize_reranker(reranker)
+    candidate_limit = _resolve_candidate_k(topk=topk_limit, candidate_k=candidate_k)
+    ranked_first_stage = _first_stage_rank(query, docs)
+    if not ranked_first_stage:
+        return []
+
+    candidate_pool = ranked_first_stage[:candidate_limit]
+    if reranker_name == "none":
+        return [_result_from_doc(doc=doc, score=score) for score, doc in candidate_pool[:topk_limit]]
+
+    reranked = _rerank_candidates_qwen3(
+        query,
+        [doc for _, doc in candidate_pool],
+        model_id=reranker_model,
+        max_length=reranker_max_length,
+    )
+    return [_result_from_doc(doc=doc, score=score) for score, doc in reranked[:topk_limit]]
 
 
 def _build_qdrant_point(doc: Mapping[str, Any], *, vector_size: int) -> dict[str, Any]:
@@ -233,15 +350,22 @@ def retrieve_top_k_qdrant(
     *,
     collection: str,
     topk: int = 5,
+    candidate_k: int | None = None,
+    reranker: str = "none",
+    reranker_model: str = _DEFAULT_QWEN3_RERANKER,
+    reranker_max_length: int = 1024,
     host: str = "127.0.0.1",
     port: int = 6333,
     vector_size: int = 64,
     timeout_sec: float = 10.0,
 ) -> list[dict[str, Any]]:
-    if max(topk, 0) == 0:
+    topk_limit = max(topk, 0)
+    if topk_limit == 0:
         return []
     if not collection.strip():
         raise ValueError("Collection name must be non-empty.")
+    reranker_name = _normalize_reranker(reranker)
+    candidate_limit = _resolve_candidate_k(topk=topk_limit, candidate_k=candidate_k)
 
     vector = _vectorize_text(query, size=vector_size)
     base = _qdrant_base_url(host=host, port=port)
@@ -250,7 +374,7 @@ def retrieve_top_k_qdrant(
         url=f"{base}/collections/{collection}/points/search",
         payload={
             "vector": vector,
-            "limit": max(topk, 0),
+            "limit": candidate_limit,
             "with_payload": True,
         },
         timeout_sec=timeout_sec,
@@ -259,7 +383,7 @@ def retrieve_top_k_qdrant(
     if not isinstance(raw_hits, list):
         raise RuntimeError("Unexpected Qdrant search response: missing result list.")
 
-    results: list[dict[str, Any]] = []
+    first_stage_results: list[dict[str, Any]] = []
     for raw_hit in raw_hits:
         if not isinstance(raw_hit, Mapping):
             continue
@@ -271,5 +395,26 @@ def retrieve_top_k_qdrant(
         if not payload.get("title") or not payload.get("text"):
             continue
         score = float(raw_hit.get("score", 0.0))
-        results.append(_result_from_doc(doc=payload, score=score))
-    return results
+        first_stage_results.append(_result_from_doc(doc=payload, score=score))
+
+    if reranker_name == "none":
+        return first_stage_results[:topk_limit]
+
+    candidate_docs: list[dict[str, Any]] = []
+    for item in first_stage_results:
+        candidate_docs.append(
+            {
+                "id": item["id"],
+                "source": item["source"],
+                "title": item["title"],
+                "text": item["text"],
+                "path": item["citation"]["path"],
+            }
+        )
+    reranked = _rerank_candidates_qwen3(
+        query,
+        candidate_docs,
+        model_id=reranker_model,
+        max_length=reranker_max_length,
+    )
+    return [_result_from_doc(doc=doc, score=score) for score, doc in reranked[:topk_limit]]
