@@ -7,11 +7,11 @@
 * Проект: `atm10-agent`
 * Target platform: Windows 11 + PowerShell 7
 * Target Python: 3.11+ (проверено на 3.12.10)
-* Текущий статус tests: `25 passed` (`python -m pytest`)
+* Текущий статус tests: `68 passed` (`python -m pytest`)
 * Статус по фазам:
   * Phase A baseline: done
   * Phase B baseline: done (`normalize -> ingest -> retrieve`)
-  * Phase C: not started
+  * Phase C: active ASR runtime demos + long-lived service/client implemented
 
 ## Что работает сейчас
 
@@ -39,18 +39,33 @@
   `Recall@5=1.0000`, `MRR@5=1.0000`, `hit-rate@5=1.0000` (`runs/20260220_132946/`).
 * Production defaults retrieval по калибровке: `topk=5`, `candidate_k=50`, `reranker=none`.
 * EOL policy зафиксирована в `.gitattributes` (LF для source/docs/config, CRLF для `*.ps1/*.bat/*.cmd`).
+* Зафиксирован model stack: `Qwen3` family only, policy `OpenVINO-first` (см. `docs/QWEN3_MODEL_STACK.md`).
+* `Qwen3-VL-4B-Instruct` успешно конвертирован в OpenVINO IR через custom pipeline
+  (`runs/20260220_150028-qwen3-custom-export/`, output: `models/qwen3-vl-4b-instruct-ov-custom`).
+* Voice runtime path (active) реализован через native Qwen packages:
+  * `scripts/asr_demo.py` (audio file/microphone -> `transcription.json`)
+  * `scripts/voice_runtime_service.py` + `scripts/voice_runtime_client.py` (long-lived runtime, ASR path)
+  * shared runtime layer: `src/agent_core/io_voice.py`
+* Voice latency benchmark (2026-02-20):
+  * `runs/20260220_211505-voice-latency-bench/latency_summary.json`
+  * `runs/20260220_211708-voice-latency-oneshot-bench/latency_oneshot_summary.json`
+  * вывод: SLA `<=2s` на текущем CPU runtime выполняется для ASR; `Qwen3-TTS` path archived/deactivated.
 
 ## Структура репозитория
 
 * `src/agent_core/`
   * `vlm.py`: VLM interface contract
   * `vlm_stub.py`: deterministic stub provider
+  * `io_voice.py`: voice runtime wrappers + audio IO helpers (active ASR path)
 * `src/rag/`
   * `doc_contract.py`: JSONL contract + validation
   * `ftbquests_ingest.py`: discovery и normalization квестов
   * `retrieval.py`: in-memory retrieval + Qdrant REST integration
 * `scripts/`
   * `discover_instance.py`
+  * `asr_demo.py`
+  * `export_qwen3_custom_openvino.py`
+  * `export_qwen3_openvino.py`
   * `phase_a_smoke.py`
   * `openvino_diag.py`
   * `normalize_ftbquests.py`
@@ -58,15 +73,24 @@
   * `retrieve_demo.py`
   * `eval_retrieval.py`
   * `run_qwen3_openvino.ps1`
+  * `voice_runtime_service.py`
+  * `voice_runtime_client.py`
+  * `tts_demo.py` (archived)
 * `tests/`
   * `test_discover_instance.py`
+  * `test_asr_demo.py`
+  * `test_export_qwen3_openvino.py`
+  * `test_export_qwen3_custom_openvino.py`
   * `test_phase_a_smoke.py`
   * `test_openvino_diag.py`
   * `test_rag_doc_contract.py`
   * `test_ftbquests_ingest.py`
   * `test_retrieval_demo.py`
+  * `test_voice_runtime_service.py`
+  * `test_voice_runtime_client.py`
   * `test_qdrant_integration.py`
   * `test_eval_retrieval.py`
+  * `test_tts_demo.py` (archived)
 
 ## Runtime artifacts
 
@@ -79,6 +103,7 @@
   * qdrant ingest: `run.json`, `ingest_summary.json`
   * retrieval: `run.json`, `retrieval_results.json`
   * retrieval eval: `run.json`, `eval_results.json`
+  * ASR demo: `run.json`, `transcription.json`
 
 ## Основные команды
 
@@ -108,8 +133,8 @@
 
 ## Текущий known gap
 
-* Заменить `deterministic_stub_v1` на real VLM provider через текущий интерфейс без поломки Phase A loop.
 * Решить политику `requirements-dev.txt` (разделение runtime/dev зависимостей).
+* Подготовить рабочий self-conversion path для `Qwen3-ASR-0.6B` (текущий блокер: `qwen3_asr` в `transformers` export flow).
 
 ## Ключевые документы
 
@@ -118,4 +143,5 @@
 * `TODO.md`: actionable backlog
 * `docs/RUNBOOK.md`: runnable commands
 * `docs/DECISIONS.md`: architecture decisions log
+* `docs/QWEN3_MODEL_STACK.md`: approved Qwen3 stack + OpenVINO readiness/conversion map
 * `docs/SESSION_2026-02-20.md`: session snapshot (ключевые результаты и метрики)

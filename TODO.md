@@ -7,7 +7,7 @@
 ## Status (as of 2026-02-20)
 
 * M0 и M1 завершены.
-* Текущий baseline: `python -m pytest` проходит (`25 passed`).
+* Текущий baseline: `python -m pytest` проходит (`68 passed`).
 * `scripts/phase_a_smoke.py` выполняется и пишет artifacts в `runs/<timestamp>/`.
 * Phase B baseline (normalize -> ingest -> retrieve) validated на локальном ATM10 + Qdrant.
 
@@ -74,6 +74,31 @@
 
 * [ ] Решить, нужен ли `requirements-dev.txt` (разделить runtime/dev).
 
+### Qwen3 model stack (fixed)
+
+* [x] Зафиксировать стек: `Qwen3-8B`, `Qwen3-VL-4B-Instruct`, `Qwen3-Embedding-0.6B`,
+  `Qwen3-Reranker-0.6B`, `Qwen3-ASR-0.6B`.
+* [x] Зафиксировать политику: `OpenVINO-first`; где нет готового OV-репозитория — self-conversion.
+* [x] Зафиксировать ограничение: без замены на `Qwen2.5*`.
+* [x] Добавить единый entrypoint для self-conversion с dry-run артефактами:
+  `scripts/export_qwen3_openvino.py` (`--preset qwen3-vl-4b|qwen3-asr-0.6b`).
+* [x] Подготовить и проверить self-conversion для `Qwen3-VL-4B-Instruct` -> OpenVINO IR.
+  Done: через custom pipeline `scripts/export_qwen3_custom_openvino.py`
+  с `--model-source` (artifact: `runs/20260220_150028-qwen3-custom-export/`,
+  output: `models/qwen3-vl-4b-instruct-ov-custom`).
+* [ ] Подготовить и проверить self-conversion для `Qwen3-ASR-0.6B` -> OpenVINO IR.
+  Текущий блокер (2026-02-20): `transformers` не распознаёт `qwen3_asr`
+  в export flow (artifact: `runs/20260220_141602-qwen3-export/`).
+  Progress: в `scripts/export_qwen3_custom_openvino.py` добавлен execute-path для
+  `qwen3-asr-0.6b` + unified support probe/status (`supported|blocked_upstream|import_error|runtime_error`)
+  в `export_plan.json`; нужен валидированный успешный run на целевом окружении.
+  Nightly-check (artifact: `runs/20260220_190319-qwen3-exp-venv-probe/`) пока не снял блокер.
+* [x] `Qwen3-TTS` ветка переведена в archived/deactivated status.
+  Исторические артефакты и результаты бенчмарков сохранены в `runs/*qwen3-tts*`,
+  но `Qwen3-TTS` исключен из active roadmap и production планирования.
+* [x] Добавить единый voice probe + nightly matrix-runner для upstream-check:
+  `scripts/probe_qwen3_voice_support.py`, `scripts/qwen3_voice_probe_matrix.py`.
+
 ### Phase B completion
 
 * [x] Реализовать двухэтапный retrieval: first-stage top candidates + second-stage rerank.
@@ -91,13 +116,19 @@
 
 ### VLM integration
 
-* [ ] Заменить `deterministic_stub_v1` на real provider через текущий интерфейс (без ломки Phase A loop).
+* [x] Добавить real provider через текущий интерфейс (`openai` via Responses API) без ломки Phase A loop.
+  Реализовано: `scripts/phase_a_smoke.py` поддерживает `--vlm-provider auto|stub|openai`,
+  сохраняет `vlm` metadata в `run.json`, и fallback-ит в `deterministic_stub_v1` при ошибках
+  (если не включен `--strict-vlm`).
 
 ### Phase C (optional)
 
-* [ ] `scripts/asr_demo.py` + graceful no-device error.
-* [ ] `scripts/tts_demo.py --text "..."` + artifact output.
-* [ ] Tests: CLI help + no-crash import checks.
+* [x] `scripts/asr_demo.py` + graceful no-device error.
+* [x] `scripts/tts_demo.py` оставлен как historical reference (archived).
+* [x] Runtime layer `src/agent_core/io_voice.py` (active: `QwenASRClient` + audio IO; TTS path archived).
+* [x] Tests: CLI help + no-crash import checks.
+* [x] Long-lived runtime path: `scripts/voice_runtime_service.py` + `scripts/voice_runtime_client.py` (active ASR path).
+* [ ] In-game SLA `<=2s`: добавить отдельный fast-fallback TTS path (не `Qwen3-TTS`).
 
 ---
 

@@ -5,7 +5,7 @@
 ## Status (as of 2026-02-20)
 
 * M0 + M1 completed.
-* `python -m pytest` green (`25 passed`).
+* `python -m pytest` green (`68 passed`).
 * `scripts/phase_a_smoke.py` выполняется и создаёт run artifacts.
 * Контракт fixture: `tests/fixtures/rag_docs_sample.jsonl` — строгий JSONL без пустых строк.
 * Phase B baseline validated e2e on local ATM10 data + local Qdrant.
@@ -13,6 +13,8 @@
 * CI workflow `pytest` on push/pull_request добавлен.
 * В M2 добавлены staged retrieval (`candidate-k + reranker`) и benchmark `eval_retrieval.py`.
 * В M2 добавлен runtime switch для qwen3 reranker: `torch|openvino` + device (`AUTO|CPU|GPU|NPU`).
+* Для M3 добавлен long-lived voice runtime (`voice_runtime_service` + `voice_runtime_client`).
+* По voice SLA check: ASR warm <1s; `Qwen3-TTS` path переведен в archived/deactivated.
 * Session snapshot зафиксирован в `docs/SESSION_2026-02-20.md`.
 
 ---
@@ -35,7 +37,7 @@
 
 * Phase A: vision loop (screenshot -> VLM interface -> structured output + artifacts)
 * Phase B: memory (RAG поверх квестов/гайдов/рецептов)
-* Phase C: voice (ASR + TTS как опция)
+* Phase C: voice (active ASR path; TTS archived)
 
 ---
 
@@ -53,6 +55,8 @@
 * Dev loop: small, reviewable diffs; reproducible commands; обязательные tests/smoke.
 * Paths: только `pathlib`, никаких хардкодов.
 * Data hygiene: модели/дампы/артефакты не коммитим.
+* Model policy: core stack фиксирован на `Qwen3`; `Qwen2.5*` не используем как замену.
+* Runtime policy: `OpenVINO-first`; если нет готового OV-моделя, делаем self-conversion.
 
 ---
 
@@ -113,6 +117,9 @@ Current gap:
 * [x] Calibrate `topk/candidate_k/reranker` defaults on real ATM10 corpus via benchmark metrics
   (`runs/20260220_m2_calibration_none/`): production defaults confirmed as
   `topk=5`, `candidate_k=50`, `reranker=none`.
+* [x] Replace deterministic Phase A VLM stub with real provider integration behind interface boundary.
+  Done: `scripts/phase_a_smoke.py` now supports `auto|stub|openai`, with stable stub fallback and
+  VLM metadata in `run.json`.
 
 Approved direction (2026-02-20):
 
@@ -138,20 +145,44 @@ DoD:
 * При типичных командах git нет повторяющегося шума про LF/CRLF для основных файлов проекта.
 * Политика EOL воспроизводима для новых contributors на Windows.
 
-### M3 — Phase C: Voice (ASR + TTS) как опциональный слой
+### M3 — Phase C: Voice (active path = ASR)
 
 Цель: voice не ломает core, а подключается как модуль.
 
 Tasks:
 
-* [ ] `scripts/asr_demo.py` (record short clip -> text)
-* [ ] `scripts/tts_demo.py --text "..."` -> audio artifact
-* [ ] Optional integration into loop: `src/agent_core/io_voice.py`
-* [ ] Graceful degradation: если нет audio device — понятная ошибка
+* [x] `scripts/asr_demo.py` (record short clip -> text)
+* [x] `scripts/tts_demo.py` сохранен как historical reference (archived)
+* [x] Optional integration into loop: `src/agent_core/io_voice.py`
+* [x] Graceful degradation: если нет audio device — понятная ошибка
+* [x] Long-lived runtime for lower steady-state latency: `scripts/voice_runtime_service.py` + `scripts/voice_runtime_client.py` (active ASR path)
+* [ ] Add fast-fallback TTS mode for in-game SLA `<=2s` (separate stack, not `Qwen3-TTS`)
+* [ ] Qwen3 voice target (active):
+  * ASR: `Qwen3-ASR-0.6B` (OpenVINO runtime or self-converted IR)
+
+### M3.1 — OpenVINO model rollout for Qwen3 stack
+
+Цель: унифицировать inference runtime под `OpenVINO` для text/vl/retrieval/voice.
+
+Tasks:
+
+* [ ] Поднять text core на готовом OV-репозитории (`Qwen3-8B`, int4/int8 профиль).
+* [ ] Зафиксировать retrieval на OV-моделях (`Embedding 0.6B`, `Reranker 0.6B`) как production default.
+* [x] Добавить self-conversion pipeline для `Qwen3-VL-4B-Instruct` -> OV IR.
+  Done: custom path `scripts/export_qwen3_custom_openvino.py --preset qwen3-vl-4b --execute --model-source ...`,
+  artifact: `runs/20260220_150028-qwen3-custom-export/`,
+  output: `models/qwen3-vl-4b-instruct-ov-custom`.
+* [ ] Добавить self-conversion pipeline для `Qwen3-ASR-0.6B` -> OV IR.
+* [x] `Qwen3-TTS` export/benchmark ветка переведена в archived/deactivated status;
+  артефакты сохранены как historical reference (`runs/*qwen3-tts*`).
+* [x] Добавить единый probe-слой для voice-архитектур (`qwen3_asr` + archived `qwen3_tts*`)
+  и matrix-runner для nightly-проверок upstream комбинаций (`scripts/probe_qwen3_voice_support.py`,
+  `scripts/qwen3_voice_probe_matrix.py`).
+* [x] Добавить smoke tests на import/CLI/no-crash для voice entrypoints (`asr_demo`, `tts_demo`).
 
 DoD:
 
-* ASR/TTS запускаются отдельно и (опционально) подключаются к агенту
+* Active path: ASR запускается отдельно и (опционально) подключается к агенту
 * Phase A/B работает без voice
 
 ---

@@ -9,6 +9,7 @@
 * `TODO.md` — боевой backlog.
 * `PLANS.md` — milestones и общий план.
 * `docs/RUNBOOK.md` и `docs/DECISIONS.md` — reference docs по запуску и архитектурным решениям.
+* `docs/QWEN3_MODEL_STACK.md` — зафиксированный стек Qwen3 + OpenVINO readiness/conversion policy.
 * `docs/SESSION_2026-02-20.md` — краткий session snapshot по ключевым результатам.
 
 ---
@@ -48,7 +49,7 @@ python -m pytest
 
 ## Current status (2026-02-20)
 
-* `python -m pytest` green (`25 passed`).
+* `python -m pytest` green (`68 passed`).
 * Phase A smoke работает и пишет run artifacts.
 * Phase B baseline работает end-to-end:
   * нормализация FTB Quests (`.json` + `.snbt`) в `data/ftbquests_norm/quests.jsonl`
@@ -66,6 +67,15 @@ python -m pytest
     (artifact: `runs/20260220_132946/`).
 * `qwen3` можно запускать через `torch` или `openvino` runtime (`--reranker-runtime`, `--reranker-device`);
   для Windows добавлен wrapper `scripts/run_qwen3_openvino.ps1`.
+* `Qwen3-VL-4B-Instruct` успешно конвертирован в OpenVINO IR через custom path
+  (`scripts/export_qwen3_custom_openvino.py`, artifact: `runs/20260220_150028-qwen3-custom-export/`).
+* `Qwen3-ASR-0.6B` пока остается в блокере текущего export flow (`qwen3_asr` не распознается в `transformers`).
+* Для Phase C активный runnable path:
+  * `scripts/asr_demo.py` (audio file / microphone -> `transcription.json`)
+  * `scripts/voice_runtime_service.py` (long-lived HTTP service)
+  * `scripts/voice_runtime_client.py` (fast CLI client)
+  * runtime layer: `src/agent_core/io_voice.py`
+* `Qwen3-TTS` деактивирован в active stack (остался только как historical reference в артефактах).
 * Для снижения шума по умолчанию из индекса исключаются `lang/**` и `reward_tables/**`.
 * EOL policy зафиксирована в `.gitattributes` (LF для code/docs, CRLF для Windows scripts).
 
@@ -108,10 +118,18 @@ Definition of Done:
 
 ### Phase C — Voice (опционально)
 
-**ASR (Whisper) + TTS (lightweight)**
+**Активный voice path: ASR на Qwen3**
 
-* push-to-talk → transcribe → answer → speak
-* voice не ломает core (Phase A/B должны работать без него)
+* push-to-talk -> transcribe
+* voice не ломает core (Phase A/B работают без voice)
+* operational path: `qwen-asr` + `voice_runtime_service/client` для low-latency ASR
+* `Qwen3-TTS` path исключен из active roadmap; для озвучки нужен отдельный fast-fallback runtime
+
+Установка voice runtime (дополнительно к `requirements.txt`):
+
+```powershell
+python -m pip install "qwen-asr==0.0.6"
+```
 
 ---
 
@@ -140,7 +158,7 @@ Definition of Done:
 
 На старте важно иметь **baseline**, который гарантированно работает, а затем — спокойно swap-ать engines без переписывания capture/RAG/logging.
 
-Рекомендация: Phase A делаем engine-agnostic (VLM за interface). Конкретную модель/движок фиксируем в RUNBOOK/config позже.
+Рекомендация: Phase A делаем engine-agnostic (VLM за interface). Основной целевой стек зафиксирован на `Qwen3` с политикой `OpenVINO-first` (см. `docs/QWEN3_MODEL_STACK.md`).
 
 ---
 
