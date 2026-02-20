@@ -2,6 +2,16 @@
 
 Русский — основной язык. English terms используем там, где это устоявшиеся термины (Phase, Quickstart, smoke test, RAG, VLM, artifacts, run, tests, boundaries).
 
+## Status (as of 2026-02-20)
+
+* M0 + M1 completed.
+* `python -m pytest` green (`12 passed`).
+* `scripts/phase_a_smoke.py` выполняется и создаёт run artifacts.
+* Контракт fixture: `tests/fixtures/rag_docs_sample.jsonl` — строгий JSONL без пустых строк.
+* Phase B baseline validated e2e on local ATM10 data + local Qdrant.
+
+---
+
 ## Known baseline (already true)
 
 * Repo scaffold (folders/files) создан в `D:\atm10-agent`.
@@ -18,7 +28,7 @@
 
 Сделать local “game companion” агента для ATM10:
 
-* Phase A: vision loop (screenshot → VLM interface → structured output + artifacts)
+* Phase A: vision loop (screenshot -> VLM interface -> structured output + artifacts)
 * Phase B: memory (RAG поверх квестов/гайдов/рецептов)
 * Phase C: voice (ASR + TTS как опция)
 
@@ -41,107 +51,63 @@
 
 ---
 
-# Milestones (с критериями Done)
+## Completed Milestones
 
-## M0 — Instance discovery & repo hygiene (короткая итерация)
+### M0 — Instance discovery & repo hygiene (Completed 2026-02-20)
 
-Цель: получить достоверные пути к данным ATM10 (configs/saves/logs/quests) и обеспечить чистую dev-базу.
+Done:
 
-Tasks:
+* `.gitignore`, `requirements.txt`, `tests/` harness добавлены.
+* Реализован `scripts/discover_instance.py` с env vars + fallback + marker checks.
+* Скрипт пишет `runs/<timestamp>/instance_paths.json` и summary в console.
+* `python -m pytest` проходит после установки dependencies.
 
-* [x] Add `.gitignore` (минимум: `models/`, `data/`, `runs/`, `.codex/logs/`, `__pycache__/`, `.venv/`, `*.pyc`)
-* [x] Add `requirements.txt` (минимальный набор для Phase A + pytest)
-* [x] Add `tests/` harness (pytest) + 1 smoke test на создание run artifacts
-* [x] Add discovery script `scripts/discover_instance.py`:
+### M1 — Phase A: Vision loop (Completed 2026-02-20)
 
-  * вход: env vars (если заданы) `MINECRAFT_DIR`, `ATM10_DIR`
-  * fallback: known defaults (Roaming\.minecraft; versions\ATM10 folder)
-  * verify markers: `mods/`, `config/`, `saves/`, `logs/` (что найдётся)
-  * output: `runs/<timestamp>/instance_paths.json` + console summary
-* [x] Update docs later: команды и переменные окружения описать в `docs/RUNBOOK.md` (когда файл будет готов)
+Done:
 
-DoD:
-
-* `python scripts/discover_instance.py` создаёт `instance_paths.json` и показывает найденные пути
-* `python -m pytest` проходит на чистом окружении после установки requirements
+* Реализован `scripts/phase_a_smoke.py`.
+* Добавлен VLM interface (`src/agent_core/vlm.py`) и deterministic stub (`src/agent_core/vlm_stub.py`).
+* Артефакты: `runs/<timestamp>/screenshot.png`, `run.json`, `response.json`.
+* Тесты на создание run artifacts и минимальную схему проходят.
 
 ---
 
-## M1 — Phase A: Vision loop (vertical slice)
+## Active Milestones
 
-Цель: живой цикл “восприятие → ответ → артефакты”, без зависимости от моделей.
-
-Tasks (core):
-
-* [x] Implement `scripts/phase_a_smoke.py`:
-
-  * создаёт `runs/<timestamp>/`
-  * делает screenshot (monitor/window) → `screenshot.png`
-  * пишет `run.json` (metadata: timestamp, mode, screen source, paths)
-  * вызывает VLM через interface (stubbed provider) → пишет `response.json`
-* [x] Implement VLM interface:
-
-  * `src/agent_core/vlm.py` (protocol/ABC)
-  * `src/agent_core/vlm_stub.py` (детерминированный stub)
-* [x] Implement artifacts layout:
-
-  * `runs/<timestamp>/screenshot.png`
-  * `runs/<timestamp>/run.json`
-  * `runs/<timestamp>/response.json`
-  * `runs/<timestamp>/logs.txt` (optional)
-* [x] Add tests:
-
-  * test creates run folder + `run.json` and `response.json`
-  * test validates minimal schema keys exist
-
-DoD:
-
-* `python scripts/phase_a_smoke.py` делает артефакты и завершается без ошибок
-* `python -m pytest` проходит
-* VLM можно заменить, не трогая capture/logging
-
----
-
-## M2 — Phase B: Memory (RAG) — minimal useful
+### M2 — Phase B: Memory (RAG) — minimal useful
 
 Цель: retrieval-backed ответы по локальным источникам (quests/guides/recipes).
 
 Tasks:
 
 * [x] Define normalized doc contract (JSONL): `id`, `source`, `title`, `text`, `tags`, `created_at`
-* [x] Locate FTB Quests files via discovery:
-
-  * кандидаты: `<GAME_DIR>\config\ftbquests\quests\` и/или instance-specific config folder
-  * записывать найденные пути в artifacts + логировать, если не найдено
-* [x] Implement parser/normalizer:
-
-  * вход: найденный `ftbquests` folder
-  * выход: `data/ftbquests_norm/quests.jsonl`
-  * errors: `runs/<timestamp>/ingest_errors.jsonl`
-* [ ] Bring up vector store:
-
-  * option A: Qdrant in Docker (local)
-  * option B: in-memory stub (for tests)
-* [ ] Implement ingest + retrieve demos:
-
-  * `scripts/ingest_qdrant.py --in data/ftbquests_norm --collection atm10`
-  * `scripts/retrieve_demo.py --query "..." --topk 5`
+* [x] Locate FTB Quests files via discovery
+* [x] Implement parser/normalizer (`data/ftbquests_norm/quests.jsonl` + ingest errors)
+* [x] Add `.snbt` fallback ingestion for ATM10 quest files
+* [x] Reduce retrieval noise via default exclusions (`lang/**`, `reward_tables/**`)
+* [x] Bring up retrieval baseline via in-memory stub (for tests and local demo)
+* [x] Add Qdrant Docker option (`scripts/ingest_qdrant.py --in data/ftbquests_norm --collection atm10`)
+* [x] Implement retrieve demo (`scripts/retrieve_demo.py --query "..." --topk 5`)
+* [x] Validate e2e with real local Qdrant against ATM10 normalized data
 
 DoD:
 
 * По запросу возвращаются top-k chunks + citations (id/source/path)
-* Есть test dataset и tests на нормализацию (минимум)
+* Есть test dataset и tests на retrieval (in-memory + qdrant unit stubs)
 
----
+Current gap:
 
-## M3 — Phase C: Voice (ASR + TTS) как опциональный слой
+* [ ] Improve retrieval relevance inside `chapters/*` (lightweight reranking / better SNBT signal extraction)
+
+### M3 — Phase C: Voice (ASR + TTS) как опциональный слой
 
 Цель: voice не ломает core, а подключается как модуль.
 
 Tasks:
 
-* [ ] `scripts/asr_demo.py` (record short clip → text)
-* [ ] `scripts/tts_demo.py --text "..."` → audio artifact
+* [ ] `scripts/asr_demo.py` (record short clip -> text)
+* [ ] `scripts/tts_demo.py --text "..."` -> audio artifact
 * [ ] Optional integration into loop: `src/agent_core/io_voice.py`
 * [ ] Graceful degradation: если нет audio device — понятная ошибка
 
@@ -152,51 +118,25 @@ DoD:
 
 ---
 
-# Backlog (Later / Optional)
+## Backlog (Later / Optional)
 
-## L1 — HUD assistance (Jade / Probe)
-
-* [ ] Extract block/entity name:
-
-  * вариант 1: OCR over screenshot (noisy)
-  * вариант 2: mod/plugin hook (точнее, сложнее)
-
-## L2 — Graph (KAG) via Neo4j
-
-* [ ] Делать только если Phase B уже даёт measurable value
-
-## L3 — Automation (“hands”) осторожно
-
-* [ ] Hotkeys/mouse automation строго локально и по boundaries
-* [ ] Default: dry-run mode
-
-## L4 — CI (optional)
-
-* [ ] GitHub Actions: run pytest on push (без Docker dependency)
+* [ ] HUD assistance (OCR baseline / mod hook)
+* [ ] Graph/KAG via Neo4j (только после measurable value в Phase B)
+* [ ] Automation (hotkeys/mouse) строго локально, default dry-run
+* [ ] CI: GitHub Actions `pytest` on push (без Docker dependency)
 
 ---
 
-# Risks & mitigations
+## Risks & mitigations
 
 * Risk: застрять на моделях/инференсе вместо product loop
-  Mitigation: Phase A stubbed provider + interface
+  Mitigation: stubbed provider + interface boundaries
 
 * Risk: путаница с gameDir у TLauncher/instances
   Mitigation: discovery script + verification by folder markers
 
 * Risk: нестабильные форматы quests
-  Mitigation: JSONL normalization + error logs + tiny samples in tests
+  Mitigation: JSONL normalization + error logs + tiny fixtures
 
-* Risk: scope creep (RAG+KAG+voice+automation сразу)
-  Mitigation: milestone gates + DoD, “no new infra without Ask first”
-
----
-
-# Task templates (for Codex)
-
-## Implementation task template
-
-* Goal:
-* Context (paths, inputs, outputs):
-* Constraints (no heavy deps, Windows-first, no breaking changes):
-* DoD (commands + expected artifacts/tests):
+* Risk: scope creep (RAG + KAG + voice + automation сразу)
+  Mitigation: milestone gates + DoD + Ask first

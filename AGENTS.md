@@ -12,7 +12,7 @@
 2. Перед правками: короткий **plan** + список файлов, которые тронешь.
 3. После правок: запусти **tests** или добавь хотя бы 1 **smoke test**.
 4. Любые изменения dependencies / tooling — **Ask first**.
-5. Любые важные архитектурные решения — фиксируй в `docs/DECISIONS.md` (когда файл будет готов).
+5. Любые важные архитектурные решения — фиксируй в `docs/DECISIONS.md`.
 
 ---
 
@@ -66,7 +66,7 @@ python -m pytest
 
 * Запусти `python -m pytest`.
 * Если тестов нет — добавь минимум 1 test, который проверяет ключевой результат (artifact file/folder, успешный exit code, базовая нормализация).
-* Если изменились команды или setup — обнови `docs/RUNBOOK.md` (когда файл будет готов). До этого — оставь заметку в TODO или комментарий в PR/commit message.
+* Если изменились команды или setup — обнови `docs/RUNBOOK.md`.
 
 ---
 
@@ -101,7 +101,7 @@ python -m pytest
 * `models/**`
 * `data/**` (дампы/вики/квесты — обсуждается отдельно)
 * `runs/**`
-* `.codex/logs/**`
+* `.codex/**/logs/**`
 * Любые бинарники и большие артефакты
 * Любые секреты/токены
 
@@ -157,17 +157,18 @@ DoD:
 
 ## Coding conventions
 
-* Python 3.11 target.
+* Python >= 3.11 target (tested on 3.12.10).
 * Никаких “магических” глобальных констант путей; всё через env vars / config / discovery.
 * Логи: `logging` module (print допустим в demos/smoke).
 * Структуры данных: JSON serializable (для run artifacts и trace).
+* LF/CRLF warnings на Windows ожидаемы; фиксируй политику через `.gitattributes` и/или git config, решение отражай в `TODO.md`/`docs/DECISIONS.md`.
 
 ---
 
 ## Commit policy (git hygiene)
 
 * Коммиты маленькие и понятные: `phase-a: add smoke runner`, `rag: add ingest stub`.
-* Если решение архитектурное — 1–3 bullets в `docs/DECISIONS.md` (когда файл будет готов).
+* Если решение архитектурное — 1–3 bullets в `docs/DECISIONS.md`.
 
 ---
 

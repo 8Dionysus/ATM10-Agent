@@ -8,7 +8,7 @@
 * `AGENTS.md` — для coding agents: commands, boundaries, стиль, Definition of Done (DoD).
 * `TODO.md` — боевой backlog.
 * `PLANS.md` — milestones и общий план.
-* `docs/RUNBOOK.md` и `docs/DECISIONS.md` — будут заполняться позже (через Codex).
+* `docs/RUNBOOK.md` и `docs/DECISIONS.md` — reference docs по запуску и архитектурным решениям.
 
 ---
 
@@ -16,11 +16,11 @@
 
 Цель: доказать, что dev loop работает end-to-end **без** скачивания тяжёлых моделей.
 
-1. Создай venv (Python 3.11 рекомендован):
+1. Создай venv (Python >= 3.11, проверено на 3.12.10):
 
 ```powershell
 cd D:\atm10-agent
-py -3.11 -m venv .venv
+py -3.12 -m venv .venv
 .\.venv\Scripts\Activate.ps1
 python -m pip install -U pip
 ```
@@ -43,7 +43,17 @@ python scripts/phase_a_smoke.py
 python -m pytest
 ```
 
-Примечание: если `requirements.txt` или `scripts/phase_a_smoke.py` ещё не созданы — см. `TODO.md` (P0/P1) и `PLANS.md` (M0/M1).
+---
+
+## Current status (2026-02-20)
+
+* `python -m pytest` green (`12 passed`).
+* Phase A smoke работает и пишет run artifacts.
+* Phase B baseline работает end-to-end:
+  * нормализация FTB Quests (`.json` + `.snbt`) в `data/ftbquests_norm/quests.jsonl`
+  * ingest в Qdrant
+  * retrieval с top-k + citations
+* Для снижения шума по умолчанию из индекса исключаются `lang/**` и `reward_tables/**`.
 
 ---
 
@@ -65,7 +75,7 @@ $env:ATM10_DIR="C:\Users\Admin\AppData\Roaming\.minecraft\versions\All the Mods 
 
 ## Roadmap
 
-### Phase A — Vision loop (сейчас)
+### Phase A — Vision loop (done baseline)
 
 **Screenshot → VLM interface (stub) → console output + artifacts**
 
@@ -104,11 +114,10 @@ Definition of Done:
 ## Repo map
 
 * `src/agent_core/` — agent loop orchestration (perception→reason→act)
-* `src/minecraft_io/` — screen capture, hotkeys, UI helpers
 * `src/rag/` — ingestion, normalization, vector store adapters
 * `scripts/` — runnable entry points (smoke runs, ingest jobs)
 * `tests/` — pytest suite
-* `docs/` — RUNBOOK/DECISIONS (будут заполнены позже)
+* `docs/` — RUNBOOK/DECISIONS
 * `.codex/` — Codex project config и logs (локально)
 
 ---
