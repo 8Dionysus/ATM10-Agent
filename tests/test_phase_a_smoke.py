@@ -26,6 +26,9 @@ def test_phase_a_smoke_creates_expected_artifacts(tmp_path: Path) -> None:
 
     assert run_payload["mode"] == "phase_a_smoke"
     assert run_payload["screen_source"] == "placeholder_png"
+    assert run_payload["vlm"]["requested"] == "auto"
+    assert run_payload["vlm"]["resolved"] == "stub"
+    assert run_payload["vlm"]["fallback_used"] is False
     assert "timestamp_utc" in run_payload
     assert run_payload["paths"]["run_dir"] == str(run_dir)
     assert run_payload["paths"]["screenshot"] == str(screenshot_path)
@@ -34,4 +37,3 @@ def test_phase_a_smoke_creates_expected_artifacts(tmp_path: Path) -> None:
     assert response_payload["provider"] == "deterministic_stub_v1"
     assert "summary" in response_payload
     assert isinstance(response_payload["next_steps"], list)
-
