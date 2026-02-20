@@ -5,12 +5,13 @@
 ## Status (as of 2026-02-20)
 
 * M0 + M1 completed.
-* `python -m pytest` green (`13 passed`).
+* `python -m pytest` green (`17 passed`).
 * `scripts/phase_a_smoke.py` выполняется и создаёт run artifacts.
 * Контракт fixture: `tests/fixtures/rag_docs_sample.jsonl` — строгий JSONL без пустых строк.
 * Phase B baseline validated e2e on local ATM10 data + local Qdrant.
 * GitHub `origin` настроен, `master` запушен.
 * CI workflow `pytest` on push/pull_request добавлен.
+* В M2 добавлены staged retrieval (`candidate-k + reranker`) и benchmark `eval_retrieval.py`.
 
 ---
 
@@ -100,15 +101,16 @@ DoD:
 
 Current gap:
 
-* [ ] Improve retrieval relevance inside `chapters/*` (lightweight reranking / better SNBT signal extraction)
-* [ ] Integrate specialized stage-2 reranking via `Qwen3-Reranker` family (start with `Qwen3-Reranker-0.6B`)
+* [ ] Improve retrieval relevance inside `chapters/*` (better SNBT signal extraction + richer chapter signals)
+* [ ] Calibrate `topk/candidate_k/reranker` defaults on real ATM10 corpus via benchmark metrics
 
 Approved direction (2026-02-20):
 
 * [x] Для улучшения качества retrieval выбран двухэтапный pipeline: first-stage candidate retrieval + second-stage reranking.
 * [x] Для second-stage принят специализированный reranker из семейства `Qwen3-Reranker`; первый rollout: `Qwen3-Reranker-0.6B`.
-* [ ] Добавить CLI-параметры (`--reranker`, `--candidate-k`) и fallback `--reranker none`.
-* [ ] Добавить tests на rerank ordering и fallback behavior.
+* [x] Добавить CLI-параметры (`--reranker`, `--candidate-k`) и fallback `--reranker none`.
+* [x] Добавить tests на rerank ordering и fallback behavior.
+* [x] Добавить benchmark script (`scripts/eval_retrieval.py`) для Recall@k / MRR@k / hit-rate.
 
 ### M2.1 — Repo hygiene: LF/CRLF policy (approved focus)
 
@@ -116,10 +118,10 @@ Approved direction (2026-02-20):
 
 Tasks:
 
-* [ ] Добавить `.gitattributes` с явной политикой EOL для source/docs/config.
-* [ ] Зафиксировать Windows-ориентированные исключения (`*.ps1`, `*.bat`, `*.cmd`) с `crlf`.
-* [ ] Проверить, что после политики нет неожиданных массовых изменений в tracked-файлах.
-* [ ] Зафиксировать решение в `docs/DECISIONS.md`.
+* [x] Добавить `.gitattributes` с явной политикой EOL для source/docs/config.
+* [x] Зафиксировать Windows-ориентированные исключения (`*.ps1`, `*.bat`, `*.cmd`) с `crlf`.
+* [x] Проверить, что после политики нет неожиданных массовых изменений в tracked-файлах.
+* [x] Зафиксировать решение в `docs/DECISIONS.md`.
 
 DoD:
 

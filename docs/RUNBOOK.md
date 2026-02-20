@@ -115,6 +115,19 @@ python scripts/retrieve_demo.py --in data/ftbquests_norm --query "steel tools" -
 
 Примечание: `--reranker qwen3` требует дополнительных зависимостей (`transformers`, `torch`) и загрузки модели; по умолчанию baseline использует `--reranker none`.
 
+Установка optional deps для `qwen3`:
+
+```powershell
+cd D:\atm10-agent
+.\.venv\Scripts\Activate.ps1
+python -m pip install "transformers>=4.51.0" "torch>=2.4.0"
+```
+
+Практика запуска:
+
+* Первый `qwen3` run заметно медленнее из-за download/model load.
+* Повторные runs быстрее (warm cache).
+
 ## M2: Retrieval eval benchmark (Recall@k / MRR@k)
 
 ```powershell

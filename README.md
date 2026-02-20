@@ -47,13 +47,16 @@ python -m pytest
 
 ## Current status (2026-02-20)
 
-* `python -m pytest` green (`12 passed`).
+* `python -m pytest` green (`17 passed`).
 * Phase A smoke работает и пишет run artifacts.
 * Phase B baseline работает end-to-end:
   * нормализация FTB Quests (`.json` + `.snbt`) в `data/ftbquests_norm/quests.jsonl`
   * ingest в Qdrant
   * retrieval с top-k + citations
+  * staged retrieval (`candidate-k` + optional `Qwen3-Reranker-0.6B`)
+  * eval benchmark (`scripts/eval_retrieval.py`) с метриками Recall@k / MRR@k
 * Для снижения шума по умолчанию из индекса исключаются `lang/**` и `reward_tables/**`.
+* EOL policy зафиксирована в `.gitattributes` (LF для code/docs, CRLF для Windows scripts).
 
 ---
 

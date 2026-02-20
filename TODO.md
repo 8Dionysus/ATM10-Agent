@@ -7,7 +7,7 @@
 ## Status (as of 2026-02-20)
 
 * M0 и M1 завершены.
-* Текущий baseline: `python -m pytest` проходит (`13 passed`).
+* Текущий baseline: `python -m pytest` проходит (`17 passed`).
 * `scripts/phase_a_smoke.py` выполняется и пишет artifacts в `runs/<timestamp>/`.
 * Phase B baseline (normalize -> ingest -> retrieve) validated на локальном ATM10 + Qdrant.
 
@@ -46,6 +46,9 @@
 * [x] Добавлен SNBT fallback ingestion для ATM10 квестов.
 * [x] Добавлено default исключение noise-веток (`lang/**`, `reward_tables/**`) при нормализации.
 * [x] Ingest в Qdrant стал идемпотентным при `collection already exists` (HTTP 409).
+* [x] Добавлен двухэтапный retrieval (`candidate-k` + optional reranker `none|qwen3`).
+* [x] Добавлен benchmark `scripts/eval_retrieval.py` (Recall@k / MRR@k / hit-rate).
+* [x] Добавлены тесты на rerank ordering/fallback и benchmark artifacts.
 
 ---
 
@@ -53,14 +56,14 @@
 
 ### Sprint focus (approved)
 
-* [ ] Focus #1: повысить релевантность retrieval внутри `chapters/*` через stage-2 reranker.
-* [ ] Focus #3: зафиксировать и применить LF/CRLF политику через `.gitattributes`.
+* [ ] Focus #1: донастроить relevance в `chapters/*` (quality tuning по benchmark на реальных ATM10 данных).
+* [x] Focus #3: LF/CRLF политика зафиксирована и применена через `.gitattributes`.
 
 ### Project/repo operations
 
 * [x] Добавить `origin` и сделать push в GitHub.
 * [x] Добавить GitHub Actions: `pytest` on push.
-* [ ] Зафиксировать LF/CRLF политику через `.gitattributes` и проверить, что нет неожиданного массового diff.
+* [x] Зафиксировать LF/CRLF политику через `.gitattributes` и проверить, что нет неожиданного массового diff.
 
 ### Dependencies/tooling
 
@@ -68,11 +71,13 @@
 
 ### Phase B completion
 
-* [ ] Реализовать двухэтапный retrieval: first-stage top candidates + second-stage rerank.
-* [ ] Добавить специализированный reranker из семейства `Qwen3-Reranker` (старт: `Qwen3-Reranker-0.6B`).
-* [ ] Добавить CLI-параметры (`--reranker`, `--candidate-k`) в retrieval demo.
-* [ ] Сохранить fallback `--reranker none`, чтобы baseline работал без модели.
-* [ ] Добавить tests на rerank ordering и fallback.
+* [x] Реализовать двухэтапный retrieval: first-stage top candidates + second-stage rerank.
+* [x] Добавить специализированный reranker из семейства `Qwen3-Reranker` (старт: `Qwen3-Reranker-0.6B`).
+* [x] Добавить CLI-параметры (`--reranker`, `--candidate-k`) в retrieval demo.
+* [x] Сохранить fallback `--reranker none`, чтобы baseline работал без модели.
+* [x] Добавить tests на rerank ordering и fallback.
+* [x] Добавить benchmark (`eval_retrieval.py`) для metric-driven выбора defaults.
+* [ ] Выбрать production defaults (`topk`, `candidate_k`, `reranker`) по eval на реальном ATM10 корпусе.
 * [ ] Улучшить SNBT signal extraction внутри `chapters/*` для повышения recall перед rerank.
 
 ### VLM integration

@@ -21,3 +21,4 @@
 * Специализированный rerank выбран через семейство `Qwen3-Reranker`; стартовая целевая модель для rollout — `Qwen/Qwen3-Reranker-0.6B` (опционально, без обязательного добавления heavy deps в baseline).
 * Зафиксирована EOL-политика через `.gitattributes`: source/docs/config по LF, Windows scripts (`*.ps1`, `*.bat`, `*.cmd`) по CRLF для стабильных diff и меньшего шума.
 * Для настройки retrieval defaults добавлен reproducible benchmark `scripts/eval_retrieval.py` (Recall@k, MRR@k, hit-rate) с артефактами в `runs/<timestamp>/`; подбор `topk/candidate_k/reranker` теперь делается по метрикам, а не по ручным примерам.
+* Интеграция `Qwen3-Reranker` выровнена с официальным scoring-flow (yes/no logits через CausalLM prompt), чтобы избежать некорректного режима `SequenceClassification` и получать валидный rerank score.
