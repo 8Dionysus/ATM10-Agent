@@ -2,10 +2,10 @@
 
 Русский — основной язык. English terms используем там, где это устоявшиеся термины (Phase, Quickstart, smoke test, RAG, VLM, artifacts, run, tests, boundaries).
 
-## Status (as of 2026-02-20)
+## Status (as of 2026-02-22)
 
 * M0 + M1 completed.
-* `python -m pytest` green (`68 passed`).
+* `python -m pytest` green (`99 passed`).
 * `scripts/phase_a_smoke.py` выполняется и создаёт run artifacts.
 * Контракт fixture: `tests/fixtures/rag_docs_sample.jsonl` — строгий JSONL без пустых строк.
 * Phase B baseline validated e2e on local ATM10 data + local Qdrant.
@@ -16,7 +16,18 @@
 * В M2 добавлен runtime switch для qwen3 reranker: `torch|openvino` + device (`AUTO|CPU|GPU|NPU`).
 * Для M3 добавлен long-lived voice runtime (`voice_runtime_service` + `voice_runtime_client`).
 * По voice SLA check: ASR warm <1s; `Qwen3-TTS` path переведен в archived/deactivated.
-* Session snapshot зафиксирован в `docs/SESSION_2026-02-20.md`.
+* Session snapshots зафиксированы в `docs/SESSION_2026-02-20.md` и `docs/SESSION_2026-02-22.md`.
+* ASR export probes (2026-02-22): после прогона в `.venv` с export toolchain
+  статус перешёл из `import_error` в `blocked_upstream`; unlock-gate остаётся `ready=false`
+  (artifacts: `runs/20260222_142450-qwen3-voice-probe/`, `runs/20260222_142518-qwen3-custom-export/`).
+* Для `scripts/export_qwen3_custom_openvino.py` восстановлена script/module CLI-совместимость
+  и добавлен regression test на `--help`.
+* Добавлен ASR backend benchmark runner `scripts/benchmark_asr_backends.py`;
+  baseline-run на 6 локальных WAV (`runs/20260222_152347-asr-backend-bench/`) подтвердил
+  сопоставимый avg latency для `qwen_asr` и `whisper_genai` (NPU).
+* Для low-latency realtime loop принят startup профиль `whisper_genai + NPU + warmup`
+  (`scripts/start_voice_whisper_npu.ps1`); по warm-path benchmark
+  `runs/20260222_152914-asr-backend-bench/` `whisper_genai` показал лучший p95 tail latency.
 
 ---
 

@@ -54,8 +54,8 @@ python scripts/export_qwen3_openvino.py --preset qwen3-vl-4b
 python scripts/export_qwen3_openvino.py --preset qwen3-vl-4b --execute
 
 # Working custom path
-python scripts/export_qwen3_custom_openvino.py --preset qwen3-vl-4b --model-source models\hf_raw\qwen3-vl-4b
-python scripts/export_qwen3_custom_openvino.py --preset qwen3-vl-4b --execute --model-source models\hf_raw\qwen3-vl-4b
+python -m scripts.export_qwen3_custom_openvino --preset qwen3-vl-4b --model-source models\hf_raw\qwen3-vl-4b
+python -m scripts.export_qwen3_custom_openvino --preset qwen3-vl-4b --execute --model-source models\hf_raw\qwen3-vl-4b
 ```
 
 ### Qwen3-ASR self-conversion (candidate path)
@@ -68,11 +68,14 @@ python scripts/export_qwen3_openvino.py --preset qwen3-asr-0.6b
 python scripts/export_qwen3_openvino.py --preset qwen3-asr-0.6b --execute
 
 # Dry-run custom exporter
-python scripts/export_qwen3_custom_openvino.py --preset qwen3-asr-0.6b
+python -m scripts.export_qwen3_custom_openvino --preset qwen3-asr-0.6b
 
 # Real custom export
-python scripts/export_qwen3_custom_openvino.py --preset qwen3-asr-0.6b --execute
+python -m scripts.export_qwen3_custom_openvino --preset qwen3-asr-0.6b --execute
 ```
+
+Примечание: для `--execute` требуется установленный export toolchain (`transformers`, `optimum`, `optimum-intel`);
+в runtime-only окружении dry-run может вернуть `support_probe.status=import_error`.
 
 ### Voice support probe + matrix
 
@@ -146,6 +149,37 @@ python scripts/asr_demo.py --record-seconds 5
 * Создается `runs/<timestamp>-asr-demo/`.
 * Внутри есть `run.json` и `transcription.json`.
 
+### ASR demo (OpenVINO GenAI + Whisper v3 Turbo, NPU path)
+
+Установка runtime deps:
+
+```powershell
+cd D:\atm10-agent
+.\.venv\Scripts\Activate.ps1
+python -m pip install "openvino-genai>=2025.4.0"
+```
+
+Подготовка OpenVINO модели Whisper v3 Turbo:
+
+```powershell
+optimum-cli export openvino --model openai/whisper-large-v3-turbo models\whisper-large-v3-turbo-ov
+```
+
+Запуск demo:
+
+```powershell
+# File -> text on NPU
+python scripts/asr_demo_whisper_genai.py --model-dir models\whisper-large-v3-turbo-ov --audio-in "C:\path\to\sample.wav" --device NPU
+
+# Optional timestamps
+python scripts/asr_demo_whisper_genai.py --model-dir models\whisper-large-v3-turbo-ov --audio-in "C:\path\to\sample.wav" --device NPU --return-timestamps --word-timestamps
+```
+
+Ожидаемый результат:
+
+* Создается `runs/<timestamp>-asr-whisper-genai/`.
+* Внутри есть `run.json` и `transcription.json`.
+
 ### Long-lived voice runtime service (ASR only)
 
 ```powershell
@@ -158,6 +192,46 @@ python scripts/voice_runtime_client.py --service-url http://127.0.0.1:8765 healt
 # ASR request
 python scripts/voice_runtime_client.py --service-url http://127.0.0.1:8765 asr --audio-in "C:\path\to\sample.wav"
 ```
+
+### Long-lived voice runtime service (Whisper GenAI + NPU ASR)
+
+```powershell
+# Service start with Whisper v3 Turbo OpenVINO model
+python scripts/voice_runtime_service.py --host 127.0.0.1 --port 8765 --asr-backend whisper_genai --asr-model models\whisper-large-v3-turbo-ov --asr-device NPU --asr-task transcribe --asr-warmup-request --asr-warmup-language en --no-preload-asr --no-preload-tts
+
+# Same profile via helper start script
+pwsh -File scripts\start_voice_whisper_npu.ps1 -BindHost 127.0.0.1 -Port 8765 -AsrModelDir "models\whisper-large-v3-turbo-ov" -WarmupLanguage en
+
+# Health
+python scripts/voice_runtime_client.py --service-url http://127.0.0.1:8765 health
+
+# ASR request
+python scripts/voice_runtime_client.py --service-url http://127.0.0.1:8765 asr --audio-in "C:\path\to\sample.wav" --language en
+```
+
+Примечание: `--asr-warmup-request` делает один ASR inference на старте (по умолчанию на сгенерированном silence WAV, либо через `--asr-warmup-audio`) и снижает cold-start impact в игровом цикле.
+Пока warmup выполняется, `/health` может быть временно недоступен; это нормально для startup-фазы.
+
+### ASR backend benchmark (`qwen_asr` vs `whisper_genai`)
+
+```powershell
+# Example on the same WAV set
+python scripts/benchmark_asr_backends.py `
+  --inputs `
+    runs\20260222_151611-voice-client\input_recorded.wav `
+    runs\20260220_175616-asr-demo\input_recorded.wav `
+    runs\20260220_211505-voice-latency-bench\asr_input.wav `
+    runs\20260220_211708-voice-latency-oneshot-bench\asr_input.wav `
+    runs\20260220_211505-voice-latency-bench\20260220_181617-voice-client\input_from_file.wav `
+  --backends qwen_asr whisper_genai `
+  --whisper-model-dir models\whisper-large-v3-turbo-ov `
+  --whisper-device NPU
+```
+
+Ожидаемый результат:
+
+* Создается `runs/<timestamp>-asr-backend-bench/`.
+* Внутри есть `summary.json`, `summary.md`, `per_sample_results.jsonl`.
 
 ### TTS runtime service (separate process/container)
 

@@ -10,7 +10,8 @@
 * `PLANS.md` — milestones и общий план.
 * `docs/RUNBOOK.md` и `docs/DECISIONS.md` — reference docs по запуску и архитектурным решениям.
 * `docs/QWEN3_MODEL_STACK.md` — зафиксированный стек Qwen3 + OpenVINO readiness/conversion policy.
-* `docs/SESSION_2026-02-20.md` — краткий session snapshot по ключевым результатам.
+* `docs/SESSION_2026-02-20.md` — исторический session snapshot по ключевым результатам.
+* `docs/SESSION_2026-02-22.md` — актуальный session snapshot с обновлённым baseline и ASR export probe.
 
 ---
 
@@ -48,9 +49,9 @@ python -m pytest
 
 ---
 
-## Current status (2026-02-20)
+## Current status (2026-02-22)
 
-* `python -m pytest` green (`68 passed`).
+* `python -m pytest` green (`99 passed`).
 * Phase A smoke работает и пишет run artifacts.
 * Phase B baseline работает end-to-end:
   * нормализация FTB Quests (`.json` + `.snbt`) в `data/ftbquests_norm/quests.jsonl`
@@ -70,12 +71,25 @@ python -m pytest
   для Windows добавлен wrapper `scripts/run_qwen3_openvino.ps1`.
 * `Qwen3-VL-4B-Instruct` успешно конвертирован в OpenVINO IR через custom path
   (`scripts/export_qwen3_custom_openvino.py`, artifact: `runs/20260220_150028-qwen3-custom-export/`).
-* `Qwen3-ASR-0.6B` пока остается в блокере текущего export flow (`qwen3_asr` не распознается в `transformers`).
+* `Qwen3-ASR-0.6B` остаётся в open gap для OpenVINO export:
+  * initial runtime-only probe/dry-run: `runs/20260222_141416-qwen3-voice-probe/`,
+    `runs/20260222_141431-qwen3-custom-export/` (`import_error`)
+  * после запуска в `.venv` с export toolchain:
+    `runs/20260222_142450-qwen3-voice-probe/`, `runs/20260222_142518-qwen3-custom-export/`
+    -> `blocked_upstream`, `unlock_gate.ready=false`
+  * текущий вывод: блокер в upstream support `qwen3_asr`, а не только в локальных зависимостях.
 * Для Phase C активный runnable path:
   * `scripts/asr_demo.py` (audio file / microphone -> `transcription.json`)
+  * `scripts/asr_demo_whisper_genai.py` (OpenVINO GenAI Whisper v3 Turbo, `CPU|GPU|NPU`)
   * `scripts/voice_runtime_service.py` (long-lived HTTP service)
+  * `scripts/start_voice_whisper_npu.ps1` (ready-to-run low-latency profile: `whisper_genai + NPU + startup warmup`)
   * `scripts/voice_runtime_client.py` (fast CLI client)
   * runtime layer: `src/agent_core/io_voice.py`
+* Добавлен ASR backend benchmark: `scripts/benchmark_asr_backends.py`.
+  Baseline run `runs/20260222_152347-asr-backend-bench/` на 6 одинаковых WAV:
+  `qwen_asr avg=1.377s`, `whisper_genai(NPU) avg=1.364s`.
+  Warm-path run `runs/20260222_152914-asr-backend-bench/` (10 повторов одного WAV):
+  `qwen_asr p95=2.317s`, `whisper_genai(NPU) p95=1.560s` (лучший tail latency для realtime loop).
 * `Qwen3-TTS` деактивирован в active stack (остался только как historical reference в артефактах).
 * Для снижения шума по умолчанию из индекса исключаются `lang/**` и `reward_tables/**`.
 * EOL policy зафиксирована в `.gitattributes` (LF для code/docs, CRLF для Windows scripts).

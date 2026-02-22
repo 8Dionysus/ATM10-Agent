@@ -4,6 +4,7 @@ import json
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
+from types import SimpleNamespace
 
 import numpy as np
 import pytest
@@ -46,6 +47,61 @@ def test_process_asr_request_validates_audio_path() -> None:
 
     with pytest.raises(FileNotFoundError):
         voice_runtime_service.process_asr_request(_FakeState(), {"audio_path": "missing.wav"})
+
+
+def test_voice_runtime_state_ensure_asr_uses_whisper_genai_backend(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    captured: dict[str, object] = {}
+
+    class _FakeWhisperClient:
+        def transcribe_path(self, *, audio_path: Path, context: str, language: str | None) -> dict[str, str]:
+            return {"text": "fake whisper", "language": "en"}
+
+    def _fake_from_pretrained(
+        *,
+        model_dir: str | Path,
+        device: str,
+        task: str,
+        max_new_tokens: int,
+        static_language: str | None,
+    ) -> _FakeWhisperClient:
+        captured["model_dir"] = str(model_dir)
+        captured["device"] = device
+        captured["task"] = task
+        captured["max_new_tokens"] = max_new_tokens
+        captured["static_language"] = static_language
+        return _FakeWhisperClient()
+
+    monkeypatch.setattr(
+        voice_runtime_service,
+        "WhisperGenAIASRClient",
+        SimpleNamespace(from_pretrained=_fake_from_pretrained),
+    )
+
+    state = voice_runtime_service.VoiceRuntimeState(
+        run_dir=tmp_path,
+        asr_model_id="models/whisper-large-v3-turbo-ov",
+        asr_backend="whisper_genai",
+        asr_device="NPU",
+        asr_task="transcribe",
+        asr_static_language="en",
+        tts_model_id="tts-model",
+        device_map="auto",
+        dtype="auto",
+        asr_max_new_tokens=256,
+    )
+
+    asr_client = state.ensure_asr()
+    assert isinstance(asr_client, _FakeWhisperClient)
+    assert captured == {
+        "model_dir": "models/whisper-large-v3-turbo-ov",
+        "device": "NPU",
+        "task": "transcribe",
+        "max_new_tokens": 256,
+        "static_language": "en",
+    }
+    health = state.health_payload()
+    assert health["models"]["asr"]["backend"] == "whisper_genai"
+    assert health["models"]["asr"]["device"] == "NPU"
 
 
 def test_process_tts_request_writes_audio(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
@@ -301,6 +357,87 @@ def test_run_voice_runtime_service_writes_stopped_status(
     assert run_payload["status"] == "stopped"
     assert run_payload["preload"]["asr"]["requested"] is False
     assert run_payload["preload"]["tts"]["requested"] is False
+
+
+def test_run_voice_runtime_service_runs_asr_warmup_request(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    class _FakeServer:
+        def __init__(self, bind: tuple[str, int], handler: type[object]) -> None:
+            self.bind = bind
+            self.handler = handler
+
+        def serve_forever(self) -> None:
+            return
+
+        def server_close(self) -> None:
+            return
+
+    class _FakeASRClient:
+        def transcribe_path(self, *, audio_path: Path, context: str, language: str | None) -> dict[str, str]:
+            assert audio_path.exists()
+            assert context == ""
+            assert language == "en"
+            return {"text": "warmup ok", "language": "en"}
+
+    class _FakeState:
+        def __init__(
+            self,
+            *,
+            run_dir: Path,
+            asr_model_id: str,
+            asr_backend: str,
+            asr_device: str,
+            asr_task: str,
+            asr_static_language: str | None,
+            tts_model_id: str,
+            device_map: str,
+            dtype: str,
+            asr_max_new_tokens: int,
+        ) -> None:
+            self.run_dir = run_dir
+
+        def ensure_asr(self) -> _FakeASRClient:
+            return _FakeASRClient()
+
+        def ensure_tts(self) -> object:
+            raise AssertionError("ensure_tts must not be called in this test")
+
+        def health_payload(self) -> dict[str, object]:
+            return {"status": "ok"}
+
+    monkeypatch.setattr(voice_runtime_service, "ThreadingHTTPServer", _FakeServer)
+    monkeypatch.setattr(voice_runtime_service, "VoiceRuntimeState", _FakeState)
+
+    now = datetime(2026, 2, 22, 16, 30, 0, tzinfo=timezone.utc)
+    result = voice_runtime_service.run_voice_runtime_service(
+        host="127.0.0.1",
+        port=8765,
+        runs_dir=tmp_path / "runs",
+        asr_model_id="models/whisper-large-v3-turbo-ov",
+        asr_backend="whisper_genai",
+        asr_device="NPU",
+        asr_task="transcribe",
+        asr_static_language=None,
+        tts_model_id="tts-model",
+        device_map="auto",
+        dtype="auto",
+        asr_max_new_tokens=128,
+        preload_asr=False,
+        preload_tts=False,
+        asr_warmup_request=True,
+        asr_warmup_audio=None,
+        asr_warmup_language="en",
+        now=now,
+    )
+
+    run_payload = json.loads((result["run_dir"] / "run.json").read_text(encoding="utf-8"))
+    warmup = run_payload["preload"]["asr"]["warmup"]
+    assert warmup["requested"] is True
+    assert warmup["ok"] is True
+    assert isinstance(warmup["latency_sec"], float)
+    assert warmup["text_preview"] == "warmup ok"
+    assert Path(warmup["audio_path"]).exists()
 
 
 def test_voice_runtime_service_cli_help_exits_zero(monkeypatch: pytest.MonkeyPatch) -> None:

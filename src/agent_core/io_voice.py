@@ -13,6 +13,7 @@ import numpy as np
 
 
 DEFAULT_QWEN3_ASR_MODEL = "Qwen/Qwen3-ASR-0.6B"
+DEFAULT_WHISPER_GENAI_MODEL_DIR = "models/whisper-large-v3-turbo-ov"
 DEFAULT_QWEN3_TTS_MODEL = "Qwen/Qwen3-TTS-12Hz-0.6B-CustomVoice"
 DEFAULT_FAST_TTS_RUNTIME = "ovms"
 
@@ -277,6 +278,177 @@ class QwenASRClient:
         return {
             "text": str(getattr(first, "text", "")),
             "language": str(getattr(first, "language", "")),
+        }
+
+
+def _read_wav_mono_f32(path: Path) -> tuple[np.ndarray, int]:
+    with wave.open(str(path), "rb") as wav_file:
+        num_channels = int(wav_file.getnchannels())
+        sample_width = int(wav_file.getsampwidth())
+        sample_rate = int(wav_file.getframerate())
+        num_frames = int(wav_file.getnframes())
+        raw_bytes = wav_file.readframes(num_frames)
+
+    if sample_width == 1:
+        data_u8 = np.frombuffer(raw_bytes, dtype=np.uint8)
+        data = ((data_u8.astype(np.float32) - 128.0) / 128.0).astype(np.float32)
+    elif sample_width == 2:
+        data_i16 = np.frombuffer(raw_bytes, dtype=np.int16)
+        data = (data_i16.astype(np.float32) / 32768.0).astype(np.float32)
+    elif sample_width == 4:
+        data_i32 = np.frombuffer(raw_bytes, dtype=np.int32)
+        data = (data_i32.astype(np.float32) / 2147483648.0).astype(np.float32)
+    else:
+        raise ValueError(f"Unsupported WAV sample width: {sample_width} bytes.")
+
+    if num_channels > 1:
+        if data.size % num_channels != 0:
+            raise ValueError("Corrupted WAV payload: sample count is not divisible by channel count.")
+        data = data.reshape(-1, num_channels).mean(axis=1).astype(np.float32)
+
+    return np.clip(data, -1.0, 1.0), sample_rate
+
+
+def _linear_resample(waveform: np.ndarray, src_sr: int, dst_sr: int) -> np.ndarray:
+    if src_sr == dst_sr:
+        return waveform.astype(np.float32, copy=False)
+    if src_sr <= 0 or dst_sr <= 0:
+        raise ValueError("Sample rates must be > 0 for resampling.")
+    if waveform.size == 0:
+        return np.zeros(0, dtype=np.float32)
+
+    duration_sec = waveform.shape[0] / float(src_sr)
+    target_size = max(1, int(round(duration_sec * float(dst_sr))))
+    x_old = np.linspace(0.0, duration_sec, num=waveform.shape[0], endpoint=False, dtype=np.float64)
+    x_new = np.linspace(0.0, duration_sec, num=target_size, endpoint=False, dtype=np.float64)
+    resampled = np.interp(x_new, x_old, waveform.astype(np.float64))
+    return resampled.astype(np.float32)
+
+
+def _load_audio_mono_16k(path: Path) -> np.ndarray:
+    if path.suffix.lower() == ".wav":
+        wav, sr = _read_wav_mono_f32(path)
+    else:
+        try:
+            import librosa  # pragma: no cover - optional dependency
+        except Exception as exc:  # pragma: no cover - dependency presence
+            raise VoiceRuntimeUnavailableError(
+                "Non-WAV input requires librosa. Install dependency: librosa."
+            ) from exc
+        wav, sr = librosa.load(str(path), sr=None, mono=True)
+        wav = np.asarray(wav, dtype=np.float32).reshape(-1)
+        sr = int(sr)
+
+    wav_16k = _linear_resample(wav, src_sr=sr, dst_sr=16000)
+    return np.clip(wav_16k, -1.0, 1.0).astype(np.float32)
+
+
+def _normalize_whisper_language_tag(language: str | None) -> str | None:
+    if language is None:
+        return None
+    normalized = language.strip()
+    if not normalized:
+        return None
+    if normalized.startswith("<|") and normalized.endswith("|>"):
+        return normalized
+    return f"<|{normalized.lower()}|>"
+
+
+class WhisperGenAIASRClient:
+    def __init__(
+        self,
+        *,
+        pipeline: Any,
+        task: str = "transcribe",
+        max_new_tokens: int = 128,
+        static_language: str | None = None,
+        return_timestamps: bool = False,
+        word_timestamps: bool = False,
+    ) -> None:
+        self._pipeline = pipeline
+        self._task = task
+        self._max_new_tokens = int(max_new_tokens)
+        self._static_language = _normalize_whisper_language_tag(static_language)
+        self._return_timestamps = bool(return_timestamps)
+        self._word_timestamps = bool(word_timestamps)
+
+    @classmethod
+    def from_pretrained(
+        cls,
+        *,
+        model_dir: str | Path = DEFAULT_WHISPER_GENAI_MODEL_DIR,
+        device: str = "NPU",
+        task: str = "transcribe",
+        max_new_tokens: int = 128,
+        static_language: str | None = None,
+        return_timestamps: bool = False,
+        word_timestamps: bool = False,
+    ) -> "WhisperGenAIASRClient":
+        try:
+            import openvino_genai as ov_genai
+        except Exception as exc:  # pragma: no cover - dependency presence
+            raise VoiceRuntimeUnavailableError(
+                "OpenVINO GenAI runtime is not installed. Install dependency: openvino-genai."
+            ) from exc
+
+        resolved_model_dir = Path(model_dir)
+        if not resolved_model_dir.exists():
+            raise FileNotFoundError(f"Whisper model directory does not exist: {resolved_model_dir}")
+
+        normalized_device = str(device).strip().upper()
+        if normalized_device not in {"CPU", "GPU", "NPU"}:
+            raise ValueError("device must be one of: CPU, GPU, NPU.")
+
+        pipeline_kwargs: dict[str, Any] = {}
+        if normalized_device == "NPU":
+            pipeline_kwargs["STATIC_PIPELINE"] = True
+        if word_timestamps:
+            pipeline_kwargs["word_timestamps"] = True
+
+        pipe = ov_genai.WhisperPipeline(str(resolved_model_dir), normalized_device, **pipeline_kwargs)
+        return cls(
+            pipeline=pipe,
+            task=task,
+            max_new_tokens=max_new_tokens,
+            static_language=static_language,
+            return_timestamps=return_timestamps,
+            word_timestamps=word_timestamps,
+        )
+
+    def transcribe_path(
+        self,
+        *,
+        audio_path: Path,
+        context: str = "",
+        language: str | None = None,
+    ) -> dict[str, Any]:
+        del context  # Whisper pipeline does not use text context prompt in this runtime path.
+
+        speech = _load_audio_mono_16k(audio_path)
+        generate_kwargs: dict[str, Any] = {
+            "max_new_tokens": self._max_new_tokens,
+            "task": self._task,
+        }
+        normalized_language = _normalize_whisper_language_tag(language) or self._static_language
+        if normalized_language is not None:
+            generate_kwargs["language"] = normalized_language
+        if self._return_timestamps:
+            generate_kwargs["return_timestamps"] = True
+        if self._word_timestamps:
+            generate_kwargs["word_timestamps"] = True
+
+        result = self._pipeline.generate(speech.tolist(), **generate_kwargs)
+        texts = getattr(result, "texts", None)
+        if isinstance(texts, (list, tuple)) and texts:
+            text = str(texts[0])
+        else:
+            text = str(getattr(result, "text", ""))
+            if not text:
+                text = str(result)
+
+        return {
+            "text": text,
+            "language": str(getattr(result, "language", "")),
         }
 
 

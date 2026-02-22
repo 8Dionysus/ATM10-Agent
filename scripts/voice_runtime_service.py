@@ -23,8 +23,10 @@ from src.agent_core.io_voice import (
     DEFAULT_FAST_TTS_RUNTIME,
     DEFAULT_QWEN3_ASR_MODEL,
     DEFAULT_QWEN3_TTS_MODEL,
+    DEFAULT_WHISPER_GENAI_MODEL_DIR,
     QwenASRClient,
     QwenTTSClient,
+    WhisperGenAIASRClient,
     VoiceRuntimeUnavailableError,
     synthesize_ovms_tts_to_wav,
     write_wav_pcm16,
@@ -57,6 +59,46 @@ def _utc_now() -> str:
 
 
 SUPPORTED_TTS_RUNTIMES = ("auto", "qwen3", DEFAULT_FAST_TTS_RUNTIME)
+SUPPORTED_ASR_BACKENDS = ("qwen_asr", "whisper_genai")
+
+
+def _create_asr_warmup_silence_wav(*, run_dir: Path, sample_rate: int = 16000, duration_sec: float = 0.8) -> Path:
+    if sample_rate <= 0:
+        raise ValueError("sample_rate must be > 0.")
+    if duration_sec <= 0:
+        raise ValueError("duration_sec must be > 0.")
+    out_dir = run_dir / "tmp"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    out_path = out_dir / "asr_warmup_silence.wav"
+    num_samples = max(1, int(round(sample_rate * duration_sec)))
+    silence = np.zeros(num_samples, dtype=np.float32)
+    write_wav_pcm16(path=out_path, waveform=silence, sample_rate=sample_rate)
+    return out_path
+
+
+def _run_asr_warmup_request(
+    *,
+    state: "VoiceRuntimeState",
+    audio_path: Path | None,
+    language: str | None,
+) -> dict[str, Any]:
+    warmup_audio = audio_path if audio_path is not None else _create_asr_warmup_silence_wav(run_dir=state.run_dir)
+    if not warmup_audio.exists():
+        raise FileNotFoundError(f"ASR warmup audio does not exist: {warmup_audio}")
+    client = state.ensure_asr()
+    t0 = perf_counter()
+    result = client.transcribe_path(
+        audio_path=warmup_audio,
+        context="",
+        language=language,
+    )
+    latency_sec = perf_counter() - t0
+    return {
+        "audio_path": str(warmup_audio),
+        "latency_sec": latency_sec,
+        "text_preview": str(result.get("text", ""))[:120],
+        "language": str(result.get("language", "")),
+    }
 
 
 class VoiceRuntimeState:
@@ -65,6 +107,10 @@ class VoiceRuntimeState:
         *,
         run_dir: Path,
         asr_model_id: str,
+        asr_backend: str,
+        asr_device: str,
+        asr_task: str,
+        asr_static_language: str | None,
         tts_model_id: str,
         device_map: str,
         dtype: str,
@@ -72,31 +118,46 @@ class VoiceRuntimeState:
     ) -> None:
         self.run_dir = run_dir
         self.asr_model_id = asr_model_id
+        self.asr_backend = asr_backend
+        self.asr_device = asr_device
+        self.asr_task = asr_task
+        self.asr_static_language = asr_static_language
         self.tts_model_id = tts_model_id
         self.device_map = device_map
         self.dtype = dtype
         self.asr_max_new_tokens = asr_max_new_tokens
 
         self._lock = threading.RLock()
-        self._asr_client: QwenASRClient | None = None
+        self._asr_client: Any | None = None
         self._tts_client: QwenTTSClient | None = None
         self._asr_load_sec: float | None = None
         self._tts_load_sec: float | None = None
         self._asr_load_error: str | None = None
         self._tts_load_error: str | None = None
 
-    def ensure_asr(self) -> QwenASRClient:
+    def ensure_asr(self) -> Any:
         with self._lock:
             if self._asr_client is not None:
                 return self._asr_client
             t0 = perf_counter()
             try:
-                self._asr_client = QwenASRClient.from_pretrained(
-                    model_id=self.asr_model_id,
-                    device_map=self.device_map,
-                    dtype=self.dtype,
-                    max_new_tokens=self.asr_max_new_tokens,
-                )
+                if self.asr_backend == "qwen_asr":
+                    self._asr_client = QwenASRClient.from_pretrained(
+                        model_id=self.asr_model_id,
+                        device_map=self.device_map,
+                        dtype=self.dtype,
+                        max_new_tokens=self.asr_max_new_tokens,
+                    )
+                elif self.asr_backend == "whisper_genai":
+                    self._asr_client = WhisperGenAIASRClient.from_pretrained(
+                        model_dir=self.asr_model_id,
+                        device=self.asr_device,
+                        task=self.asr_task,
+                        max_new_tokens=self.asr_max_new_tokens,
+                        static_language=self.asr_static_language,
+                    )
+                else:
+                    raise ValueError(f"Unsupported ASR backend: {self.asr_backend}")
                 self._asr_load_sec = perf_counter() - t0
                 self._asr_load_error = None
                 return self._asr_client
@@ -129,7 +190,11 @@ class VoiceRuntimeState:
                 "status": "ok",
                 "models": {
                     "asr": {
+                        "backend": self.asr_backend,
                         "id": self.asr_model_id,
+                        "device": self.asr_device if self.asr_backend == "whisper_genai" else self.device_map,
+                        "task": self.asr_task if self.asr_backend == "whisper_genai" else "transcribe",
+                        "static_language": self.asr_static_language if self.asr_backend == "whisper_genai" else None,
                         "loaded": self._asr_client is not None,
                         "load_seconds": self._asr_load_sec,
                         "load_error": self._asr_load_error,
@@ -661,6 +726,13 @@ def run_voice_runtime_service(
     asr_max_new_tokens: int,
     preload_asr: bool,
     preload_tts: bool,
+    asr_backend: str = "qwen_asr",
+    asr_device: str = "NPU",
+    asr_task: str = "transcribe",
+    asr_static_language: str | None = None,
+    asr_warmup_request: bool = False,
+    asr_warmup_audio: Path | None = None,
+    asr_warmup_language: str | None = None,
     now: datetime | None = None,
 ) -> dict[str, Any]:
     if now is None:
@@ -670,6 +742,10 @@ def run_voice_runtime_service(
     state = VoiceRuntimeState(
         run_dir=run_dir,
         asr_model_id=asr_model_id,
+        asr_backend=asr_backend,
+        asr_device=asr_device,
+        asr_task=asr_task,
+        asr_static_language=asr_static_language,
         tts_model_id=tts_model_id,
         device_map=device_map,
         dtype=dtype,
@@ -677,7 +753,21 @@ def run_voice_runtime_service(
     )
 
     preload: dict[str, Any] = {
-        "asr": {"requested": preload_asr, "ok": None, "error": None},
+        "asr": {
+            "requested": preload_asr,
+            "ok": None,
+            "error": None,
+            "warmup": {
+                "requested": asr_warmup_request,
+                "ok": None,
+                "error": None,
+                "audio_path": str(asr_warmup_audio) if asr_warmup_audio is not None else None,
+                "requested_language": asr_warmup_language,
+                "result_language": None,
+                "latency_sec": None,
+                "text_preview": None,
+            },
+        },
         "tts": {"requested": preload_tts, "ok": None, "error": None},
     }
 
@@ -696,6 +786,22 @@ def run_voice_runtime_service(
             preload["tts"]["ok"] = False
             preload["tts"]["error"] = str(exc)
 
+    if asr_warmup_request:
+        try:
+            warmup_result = _run_asr_warmup_request(
+                state=state,
+                audio_path=asr_warmup_audio,
+                language=asr_warmup_language,
+            )
+            preload["asr"]["warmup"]["ok"] = True
+            preload["asr"]["warmup"]["latency_sec"] = warmup_result["latency_sec"]
+            preload["asr"]["warmup"]["text_preview"] = warmup_result["text_preview"]
+            preload["asr"]["warmup"]["audio_path"] = warmup_result["audio_path"]
+            preload["asr"]["warmup"]["result_language"] = warmup_result["language"]
+        except Exception as exc:
+            preload["asr"]["warmup"]["ok"] = False
+            preload["asr"]["warmup"]["error"] = str(exc)
+
     run_payload: dict[str, Any] = {
         "timestamp_utc": now.astimezone(timezone.utc).isoformat(),
         "mode": "voice_runtime_service",
@@ -706,7 +812,14 @@ def run_voice_runtime_service(
             "base_url": f"http://{host}:{port}",
         },
         "models": {
+            "asr_backend": asr_backend,
             "asr_model": asr_model_id,
+            "asr_device": asr_device if asr_backend == "whisper_genai" else device_map,
+            "asr_task": asr_task if asr_backend == "whisper_genai" else "transcribe",
+            "asr_static_language": asr_static_language if asr_backend == "whisper_genai" else None,
+            "asr_warmup_request": asr_warmup_request,
+            "asr_warmup_audio": str(asr_warmup_audio) if asr_warmup_audio is not None else None,
+            "asr_warmup_language": asr_warmup_language,
             "tts_model": tts_model_id,
             "device_map": device_map,
             "dtype": dtype,
@@ -734,12 +847,47 @@ def run_voice_runtime_service(
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Long-lived voice runtime HTTP service with Qwen ASR and selectable TTS runtime."
+        description="Long-lived voice runtime HTTP service with selectable ASR/TTS runtime backends."
     )
     parser.add_argument("--host", default="127.0.0.1", help="Bind host (default: 127.0.0.1).")
     parser.add_argument("--port", type=int, default=8765, help="Bind port (default: 8765).")
     parser.add_argument("--runs-dir", type=Path, default=Path("runs"), help="Run artifact base directory.")
-    parser.add_argument("--asr-model", type=str, default=DEFAULT_QWEN3_ASR_MODEL, help="ASR model id/path.")
+    parser.add_argument(
+        "--asr-backend",
+        type=str,
+        default="qwen_asr",
+        choices=SUPPORTED_ASR_BACKENDS,
+        help="ASR backend: qwen_asr or whisper_genai.",
+    )
+    parser.add_argument(
+        "--asr-model",
+        type=str,
+        default=DEFAULT_QWEN3_ASR_MODEL,
+        help=(
+            "ASR model id/path. For qwen_asr: HF id/path (default Qwen3-ASR). "
+            "For whisper_genai: OpenVINO model directory."
+        ),
+    )
+    parser.add_argument(
+        "--asr-device",
+        type=str,
+        default="NPU",
+        choices=("CPU", "GPU", "NPU"),
+        help="ASR device for whisper_genai backend (default: NPU).",
+    )
+    parser.add_argument(
+        "--asr-task",
+        type=str,
+        default="transcribe",
+        choices=("transcribe", "translate"),
+        help="ASR task for whisper_genai backend (default: transcribe).",
+    )
+    parser.add_argument(
+        "--asr-language",
+        type=str,
+        default=None,
+        help="Optional static language hint for whisper_genai backend (example: en or <|en|>).",
+    )
     parser.add_argument("--tts-model", type=str, default=DEFAULT_QWEN3_TTS_MODEL, help="TTS model id/path.")
     parser.add_argument("--device-map", type=str, default="auto", help="Model device_map.")
     parser.add_argument(
@@ -750,6 +898,23 @@ def parse_args() -> argparse.Namespace:
         help="Torch dtype (default: auto).",
     )
     parser.add_argument("--asr-max-new-tokens", type=int, default=512, help="ASR max_new_tokens.")
+    parser.add_argument(
+        "--asr-warmup-request",
+        action="store_true",
+        help="Run one ASR request on startup to warm runtime/graph caches.",
+    )
+    parser.add_argument(
+        "--asr-warmup-audio",
+        type=Path,
+        default=None,
+        help="Optional WAV/audio path for ASR warmup request. If omitted, service uses generated silence WAV.",
+    )
+    parser.add_argument(
+        "--asr-warmup-language",
+        type=str,
+        default=None,
+        help="Optional language hint for ASR warmup request.",
+    )
     parser.add_argument("--no-preload-asr", action="store_true", help="Do not preload ASR model on startup.")
     parser.add_argument("--no-preload-tts", action="store_true", help="Do not preload TTS model on startup.")
     return parser.parse_args()
@@ -757,11 +922,22 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> int:
     args = parse_args()
+    asr_model_id = args.asr_model
+    if args.asr_backend == "whisper_genai" and asr_model_id == DEFAULT_QWEN3_ASR_MODEL:
+        asr_model_id = DEFAULT_WHISPER_GENAI_MODEL_DIR
+
     result = run_voice_runtime_service(
         host=args.host,
         port=args.port,
         runs_dir=args.runs_dir,
-        asr_model_id=args.asr_model,
+        asr_model_id=asr_model_id,
+        asr_backend=args.asr_backend,
+        asr_device=args.asr_device,
+        asr_task=args.asr_task,
+        asr_static_language=args.asr_language,
+        asr_warmup_request=args.asr_warmup_request,
+        asr_warmup_audio=args.asr_warmup_audio,
+        asr_warmup_language=args.asr_warmup_language,
         tts_model_id=args.tts_model,
         device_map=args.device_map,
         dtype=args.dtype,

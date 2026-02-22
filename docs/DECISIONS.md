@@ -56,3 +56,13 @@
 
 * Принято разделение зависимостей на runtime/dev: `requirements.txt` содержит только runtime-пакеты, `requirements-dev.txt` включает runtime + `pytest` для локального тестирования и CI.
 * Для закрытия voice SLA-gap принят отдельный native Python TTS runtime как independent service/container: Router=`FastAPI`, main engine=`XTTS v2`, fallback engines=`Piper` + `Silero` (для русской служебной озвучки), с operational техниками prewarm/queue/chunking/phrase cache.
+
+## 2026-02-22
+
+* Зафиксирован operational-path для custom exporter: `scripts/export_qwen3_custom_openvino.py` должен быть runnable и как module (`python -m scripts.export_qwen3_custom_openvino`), и как script (`python scripts/export_qwen3_custom_openvino.py`); добавлен fallback import и smoke-test на `--help`.
+* В рабочем runtime-only окружении поддерживаем probe-first политику для ASR export: если `support_probe.status=import_error` (например, отсутствует `transformers`), считаем `unlock_gate.ready=false` и не делаем ложных выводов о natively-supported `qwen3_asr` до отдельного export-toolchain прогона.
+* После отдельного прогона в `.venv` с установленным `transformers/optimum/optimum-intel` зафиксирован `blocked_upstream` для `qwen3_asr` (run artifacts: `runs/20260222_142450-qwen3-voice-probe/`, `runs/20260222_142518-qwen3-custom-export/`): текущий unlock-gate блокируется upstream-support, а не локальной нехваткой пакетов.
+* Для быстрого NPU-ASR пути принят дополнительный runtime-branch на `OpenVINO GenAI + Whisper v3 Turbo` (`scripts/asr_demo_whisper_genai.py`) без замены основного `qwen-asr` branch: это снижает зависимость от upstream-support `qwen3_asr` в `transformers/optimum`.
+* Long-lived voice runtime расширен переключаемым ASR backend (`qwen_asr|whisper_genai`) в `scripts/voice_runtime_service.py`; для `whisper_genai` добавлены параметры `--asr-device` и `--asr-task`, при этом контракт `/asr` и `voice_runtime_client` сохранён без breaking changes.
+* Для сравнения operational ASR-веток добавлен reproducible benchmark `scripts/benchmark_asr_backends.py` с artifacts (`summary.json`, `summary.md`, `per_sample_results.jsonl`) в `runs/<timestamp>-asr-backend-bench/`; baseline run `runs/20260222_152347-asr-backend-bench/` показал сопоставимый avg latency (`qwen_asr` ~1.377s vs `whisper_genai` NPU ~1.364s) на одинаковом локальном наборе WAV.
+* Для снижения cold-start impact в игровом цикле добавлен startup warmup request в `scripts/voice_runtime_service.py` (`--asr-warmup-request`, опционально `--asr-warmup-audio`/`--asr-warmup-language`) и helper launcher `scripts/start_voice_whisper_npu.ps1` для low-latency профиля `whisper_genai + NPU + warmup`.

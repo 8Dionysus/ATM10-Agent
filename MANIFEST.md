@@ -1,13 +1,13 @@
 # MANIFEST.md
 
-Актуально на: 2026-02-20
+Актуально на: 2026-02-22
 
 ## Снимок проекта
 
 * Проект: `atm10-agent`
 * Target platform: Windows 11 + PowerShell 7
 * Target Python: 3.11+ (проверено на 3.12.10)
-* Текущий статус tests: `68 passed` (`python -m pytest`)
+* Текущий статус tests: `99 passed` (`python -m pytest`)
 * Статус по фазам:
   * Phase A baseline: done
   * Phase B baseline: done (`normalize -> ingest -> retrieve`)
@@ -64,6 +64,8 @@
 * `scripts/`
   * `discover_instance.py`
   * `asr_demo.py`
+  * `asr_demo_whisper_genai.py`
+  * `benchmark_asr_backends.py`
   * `export_qwen3_custom_openvino.py`
   * `export_qwen3_openvino.py`
   * `phase_a_smoke.py`
@@ -73,12 +75,15 @@
   * `retrieve_demo.py`
   * `eval_retrieval.py`
   * `run_qwen3_openvino.ps1`
+  * `start_voice_whisper_npu.ps1`
   * `voice_runtime_service.py`
   * `voice_runtime_client.py`
   * `tts_demo.py` (archived)
 * `tests/`
   * `test_discover_instance.py`
   * `test_asr_demo.py`
+  * `test_asr_demo_whisper_genai.py`
+  * `test_benchmark_asr_backends.py`
   * `test_export_qwen3_openvino.py`
   * `test_export_qwen3_custom_openvino.py`
   * `test_phase_a_smoke.py`
@@ -133,8 +138,11 @@
 
 ## Текущий known gap
 
-* Решить политику `requirements-dev.txt` (разделение runtime/dev зависимостей).
-* Подготовить рабочий self-conversion path для `Qwen3-ASR-0.6B` (текущий блокер: `qwen3_asr` в `transformers` export flow).
+* Подготовить рабочий self-conversion path для `Qwen3-ASR-0.6B`.
+  * Исторический блокер: `qwen3_asr` в upstream export flow (`transformers/optimum`).
+  * Текущий статус (2026-02-22): после прогона в `.venv` с export toolchain probe-status=`blocked_upstream`,
+    unlock-gate=`ready=false` (artifacts: `runs/20260222_142450-qwen3-voice-probe/`,
+    `runs/20260222_142518-qwen3-custom-export/`).
 
 ## Ключевые документы
 
@@ -144,4 +152,5 @@
 * `docs/RUNBOOK.md`: runnable commands
 * `docs/DECISIONS.md`: architecture decisions log
 * `docs/QWEN3_MODEL_STACK.md`: approved Qwen3 stack + OpenVINO readiness/conversion map
-* `docs/SESSION_2026-02-20.md`: session snapshot (ключевые результаты и метрики)
+* `docs/SESSION_2026-02-20.md`: исторический session snapshot (ключевые результаты и метрики)
+* `docs/SESSION_2026-02-22.md`: актуальный session snapshot (baseline + open gaps)

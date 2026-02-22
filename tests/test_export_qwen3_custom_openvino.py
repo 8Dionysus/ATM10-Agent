@@ -1,4 +1,6 @@
 import json
+import subprocess
+import sys
 from datetime import datetime, timezone
 from pathlib import Path
 from types import SimpleNamespace
@@ -176,3 +178,18 @@ def test_resolve_qwen_vl_export_types_supports_generic_qwenvl_names(monkeypatch)
     config_cls, behavior_cls = custom_export._resolve_qwen_vl_export_types()
     assert config_cls is fake_module.QwenVLOpenVINOConfig
     assert behavior_cls is fake_module.QwenVLConfigBehavior
+
+
+def test_custom_export_cli_help_works_when_run_as_script() -> None:
+    repo_root = Path(__file__).resolve().parents[1]
+    script_path = repo_root / "scripts" / "export_qwen3_custom_openvino.py"
+    result = subprocess.run(
+        [sys.executable, str(script_path), "--help"],
+        capture_output=True,
+        text=True,
+        cwd=repo_root,
+        check=False,
+    )
+
+    assert result.returncode == 0
+    assert "Custom OpenVINO export path" in result.stdout

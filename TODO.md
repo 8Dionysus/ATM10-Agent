@@ -4,10 +4,10 @@
 
 Правило выполнения: small, reviewable diffs + runnable commands + минимум 1 test на заметное изменение поведения.
 
-## Status (as of 2026-02-20)
+## Status (as of 2026-02-22)
 
 * M0 и M1 завершены.
-* Текущий baseline: `python -m pytest` проходит (`68 passed`).
+* Текущий baseline: `python -m pytest` проходит (`99 passed`).
 * `scripts/phase_a_smoke.py` выполняется и пишет artifacts в `runs/<timestamp>/`.
 * Phase B baseline (normalize -> ingest -> retrieve) validated на локальном ATM10 + Qdrant.
 
@@ -21,6 +21,10 @@
 * [x] `requirements.txt` добавлен.
 * [x] `tests/` harness на `pytest` добавлен.
 * [x] Добавлен session snapshot `docs/SESSION_2026-02-20.md` с ключевыми артефактами/метриками.
+* [x] Добавлен session snapshot `docs/SESSION_2026-02-22.md` (актуализирован baseline и ASR export gap).
+* [x] Исправлена CLI-совместимость `scripts/export_qwen3_custom_openvino.py`:
+  скрипт теперь запускается и как `python scripts/...`, и как `python -m scripts...`;
+  добавлен smoke-test `--help`.
 
 ### Instance discovery
 
@@ -95,6 +99,9 @@
   `qwen3-asr-0.6b` + unified support probe/status (`supported|blocked_upstream|import_error|runtime_error`)
   в `export_plan.json`; нужен валидированный успешный run на целевом окружении.
   Nightly-check (artifact: `runs/20260220_190319-qwen3-exp-venv-probe/`) пока не снял блокер.
+  Update (2026-02-22): после прогона в `.venv` с export toolchain probe даёт `blocked_upstream`
+  (модель `qwen3_asr` не распознана в `transformers.AutoConfig`), поэтому unlock-gate остаётся
+  `ready=false` (artifacts: `runs/20260222_142450-qwen3-voice-probe/`, `runs/20260222_142518-qwen3-custom-export/`).
 * [x] `Qwen3-TTS` ветка переведена в archived/deactivated status.
   Исторические артефакты и результаты бенчмарков сохранены в `runs/*qwen3-tts*`,
   но `Qwen3-TTS` исключен из active roadmap и production планирования.
@@ -126,6 +133,16 @@
 ### Phase C (optional)
 
 * [x] `scripts/asr_demo.py` + graceful no-device error.
+* [x] Добавлен альтернативный ASR demo path: `scripts/asr_demo_whisper_genai.py`
+  (`OpenVINO GenAI + Whisper v3 Turbo`, включая `--device NPU` и timestamps artifacts).
+* [x] `scripts/voice_runtime_service.py` поддерживает переключаемый ASR backend:
+  `qwen_asr|whisper_genai` (для `whisper_genai` добавлены `--asr-device` и `--asr-task`).
+* [x] Добавлен startup warmup для ASR в `voice_runtime_service`
+  (`--asr-warmup-request`, `--asr-warmup-audio`, `--asr-warmup-language`).
+* [x] Добавлен helper start script `scripts/start_voice_whisper_npu.ps1`
+  для low-latency profile (`whisper_genai + NPU + warmup`).
+* [x] Добавлен benchmark runner `scripts/benchmark_asr_backends.py`
+  (сводка load/latency per backend + per-sample results artifacts).
 * [x] `scripts/tts_demo.py` оставлен как historical reference (archived).
 * [x] Runtime layer `src/agent_core/io_voice.py` (active: `QwenASRClient` + audio IO; TTS path archived).
 * [x] Tests: CLI help + no-crash import checks.
