@@ -12,6 +12,7 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from src.rag.retrieval import load_docs, retrieve_top_k, retrieve_top_k_qdrant
+from src.rag.retrieval_profiles import list_profile_names, resolve_profile
 
 
 def _create_run_dir(runs_dir: Path, now: datetime) -> Path:
@@ -38,6 +39,12 @@ def _write_json(path: Path, payload: Mapping[str, Any]) -> None:
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Retrieve top-k docs from in-memory JSONL or Qdrant backend.")
     parser.add_argument(
+        "--profile",
+        choices=list_profile_names(),
+        default="baseline",
+        help="Retrieval profile: baseline (default) or ov_production.",
+    )
+    parser.add_argument(
         "--backend",
         choices=("in_memory", "qdrant"),
         default="in_memory",
@@ -51,34 +58,34 @@ def parse_args() -> argparse.Namespace:
         help="Path to JSONL file or directory with *.jsonl files (used by in_memory backend).",
     )
     parser.add_argument("--query", required=True, help="User query for retrieval.")
-    parser.add_argument("--topk", type=int, default=5, help="Number of retrieval results (default: 5).")
+    parser.add_argument("--topk", type=int, default=None, help="Number of retrieval results (overrides --profile).")
     parser.add_argument(
         "--candidate-k",
         type=int,
-        default=50,
-        help="First-stage candidate pool size before reranking (default: 50).",
+        default=None,
+        help="First-stage candidate pool size before reranking (overrides --profile).",
     )
     parser.add_argument(
         "--reranker",
         choices=("none", "qwen3"),
-        default="none",
-        help="Second-stage reranker: none (default) or qwen3.",
+        default=None,
+        help="Second-stage reranker: none or qwen3 (overrides --profile).",
     )
     parser.add_argument(
         "--reranker-model",
-        default="Qwen/Qwen3-Reranker-0.6B",
-        help="Reranker model id for --reranker qwen3.",
+        default=None,
+        help="Reranker model id for --reranker qwen3 (overrides --profile).",
     )
     parser.add_argument(
         "--reranker-runtime",
         choices=("torch", "openvino"),
-        default="torch",
-        help="Runtime for qwen3 reranker: torch (default) or openvino.",
+        default=None,
+        help="Runtime for qwen3 reranker: torch or openvino (overrides --profile).",
     )
     parser.add_argument(
         "--reranker-device",
-        default="AUTO",
-        help="Device for openvino runtime: AUTO (default), CPU, GPU, or NPU.",
+        default=None,
+        help="Device for openvino runtime: AUTO, CPU, GPU, or NPU (overrides --profile).",
     )
     parser.add_argument(
         "--reranker-max-length",
@@ -102,6 +109,25 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> int:
     args = parse_args()
+    profile = resolve_profile(args.profile)
+    effective_topk = args.topk if args.topk is not None else profile.topk
+    effective_candidate_k = args.candidate_k if args.candidate_k is not None else profile.candidate_k
+    effective_reranker = args.reranker if args.reranker is not None else profile.reranker
+    effective_reranker_model = (
+        args.reranker_model
+        if args.reranker_model is not None
+        else (profile.reranker_model or "Qwen/Qwen3-Reranker-0.6B")
+    )
+    effective_reranker_runtime = (
+        args.reranker_runtime
+        if args.reranker_runtime is not None
+        else (profile.reranker_runtime or "torch")
+    )
+    effective_reranker_device = (
+        args.reranker_device
+        if args.reranker_device is not None
+        else (profile.reranker_device or "AUTO")
+    )
     now = datetime.now(timezone.utc)
     run_dir = _create_run_dir(args.runs_dir, now=now)
     run_json_path = run_dir / "run.json"
@@ -113,25 +139,25 @@ def main() -> int:
             results = retrieve_top_k(
                 args.query,
                 docs,
-                topk=args.topk,
-                candidate_k=args.candidate_k,
-                reranker=args.reranker,
-                reranker_model=args.reranker_model,
+                topk=effective_topk,
+                candidate_k=effective_candidate_k,
+                reranker=effective_reranker,
+                reranker_model=effective_reranker_model,
                 reranker_max_length=args.reranker_max_length,
-                reranker_runtime=args.reranker_runtime,
-                reranker_device=args.reranker_device,
+                reranker_runtime=effective_reranker_runtime,
+                reranker_device=effective_reranker_device,
             )
         else:
             results = retrieve_top_k_qdrant(
                 args.query,
                 collection=args.collection,
-                topk=args.topk,
-                candidate_k=args.candidate_k,
-                reranker=args.reranker,
-                reranker_model=args.reranker_model,
+                topk=effective_topk,
+                candidate_k=effective_candidate_k,
+                reranker=effective_reranker,
+                reranker_model=effective_reranker_model,
                 reranker_max_length=args.reranker_max_length,
-                reranker_runtime=args.reranker_runtime,
-                reranker_device=args.reranker_device,
+                reranker_runtime=effective_reranker_runtime,
+                reranker_device=effective_reranker_device,
                 host=args.host,
                 port=args.port,
                 vector_size=args.vector_size,
@@ -144,16 +170,20 @@ def main() -> int:
     run_payload = {
         "timestamp_utc": now.isoformat(),
         "mode": "retrieve_demo",
+        "profile": profile.name,
         "backend": args.backend,
         "query": args.query,
-        "topk": args.topk,
-        "candidate_k": args.candidate_k,
+        "topk": effective_topk,
+        "candidate_k": effective_candidate_k,
         "reranker": {
-            "name": args.reranker,
-            "model": args.reranker_model if args.reranker == "qwen3" else None,
-            "runtime": args.reranker_runtime if args.reranker == "qwen3" else None,
-            "device": args.reranker_device if args.reranker == "qwen3" else None,
-            "max_length": args.reranker_max_length if args.reranker == "qwen3" else None,
+            "name": effective_reranker,
+            "model": effective_reranker_model if effective_reranker == "qwen3" else None,
+            "runtime": effective_reranker_runtime if effective_reranker == "qwen3" else None,
+            "device": effective_reranker_device if effective_reranker == "qwen3" else None,
+            "max_length": args.reranker_max_length if effective_reranker == "qwen3" else None,
+        },
+        "models": {
+            "embedding": profile.embedding_model,
         },
         "paths": {
             "input": str(args.input_path) if args.backend == "in_memory" else None,
@@ -173,9 +203,10 @@ def main() -> int:
     _write_json(results_path, {"results": results, "count": len(results)})
 
     print(f"[retrieve_demo] run_dir: {run_dir}")
+    print(f"[retrieve_demo] profile: {profile.name}")
     print(f"[retrieve_demo] backend: {args.backend}")
-    print(f"[retrieve_demo] reranker: {args.reranker}")
-    print(f"[retrieve_demo] candidate_k: {args.candidate_k}")
+    print(f"[retrieve_demo] reranker: {effective_reranker}")
+    print(f"[retrieve_demo] candidate_k: {effective_candidate_k}")
     if args.backend == "in_memory":
         print(f"[retrieve_demo] input: {args.input_path}")
     else:

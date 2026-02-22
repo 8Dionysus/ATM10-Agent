@@ -12,6 +12,7 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from src.rag.retrieval import load_docs, retrieve_top_k, retrieve_top_k_qdrant
+from src.rag.retrieval_profiles import list_profile_names, resolve_profile
 
 
 def _create_run_dir(runs_dir: Path, now: datetime) -> Path:
@@ -110,6 +111,7 @@ def run_eval_retrieval(
     vector_size: int = 64,
     timeout_sec: float = 10.0,
     runs_dir: Path = Path("runs"),
+    profile: str = "baseline",
     now: datetime | None = None,
 ) -> dict[str, Any]:
     if now is None:
@@ -122,6 +124,7 @@ def run_eval_retrieval(
     run_payload: dict[str, Any] = {
         "timestamp_utc": now.isoformat(),
         "mode": "eval_retrieval",
+        "profile": profile,
         "status": "started",
         "backend": backend,
         "params": {
@@ -244,6 +247,12 @@ def parse_args() -> argparse.Namespace:
         help="Retrieval backend: in_memory (default) or qdrant.",
     )
     parser.add_argument(
+        "--profile",
+        choices=list_profile_names(),
+        default="baseline",
+        help="Retrieval profile: baseline (default) or ov_production.",
+    )
+    parser.add_argument(
         "--docs",
         type=Path,
         default=Path("data") / "ftbquests_norm" / "quests.jsonl",
@@ -256,29 +265,34 @@ def parse_args() -> argparse.Namespace:
         default=Path("tests") / "fixtures" / "retrieval_eval_sample.jsonl",
         help="JSONL file with eval cases: {id?, query, relevant_ids}.",
     )
-    parser.add_argument("--topk", type=int, default=5, help="Cutoff k for metrics (default: 5).")
-    parser.add_argument("--candidate-k", type=int, default=50, help="First-stage candidate pool size (default: 50).")
+    parser.add_argument("--topk", type=int, default=None, help="Cutoff k for metrics (overrides --profile).")
+    parser.add_argument(
+        "--candidate-k",
+        type=int,
+        default=None,
+        help="First-stage candidate pool size (overrides --profile).",
+    )
     parser.add_argument(
         "--reranker",
         choices=("none", "qwen3"),
-        default="none",
-        help="Second-stage reranker: none (default) or qwen3.",
+        default=None,
+        help="Second-stage reranker: none or qwen3 (overrides --profile).",
     )
     parser.add_argument(
         "--reranker-model",
-        default="Qwen/Qwen3-Reranker-0.6B",
-        help="Reranker model id for --reranker qwen3.",
+        default=None,
+        help="Reranker model id for --reranker qwen3 (overrides --profile).",
     )
     parser.add_argument(
         "--reranker-runtime",
         choices=("torch", "openvino"),
-        default="torch",
-        help="Runtime for qwen3 reranker: torch (default) or openvino.",
+        default=None,
+        help="Runtime for qwen3 reranker: torch or openvino (overrides --profile).",
     )
     parser.add_argument(
         "--reranker-device",
-        default="AUTO",
-        help="Device for openvino runtime: AUTO (default), CPU, GPU, or NPU.",
+        default=None,
+        help="Device for openvino runtime: AUTO, CPU, GPU, or NPU (overrides --profile).",
     )
     parser.add_argument(
         "--reranker-max-length",
@@ -302,16 +316,35 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> int:
     args = parse_args()
+    profile = resolve_profile(args.profile)
+    effective_topk = args.topk if args.topk is not None else profile.topk
+    effective_candidate_k = args.candidate_k if args.candidate_k is not None else profile.candidate_k
+    effective_reranker = args.reranker if args.reranker is not None else profile.reranker
+    effective_reranker_model = (
+        args.reranker_model
+        if args.reranker_model is not None
+        else (profile.reranker_model or "Qwen/Qwen3-Reranker-0.6B")
+    )
+    effective_reranker_runtime = (
+        args.reranker_runtime
+        if args.reranker_runtime is not None
+        else (profile.reranker_runtime or "torch")
+    )
+    effective_reranker_device = (
+        args.reranker_device
+        if args.reranker_device is not None
+        else (profile.reranker_device or "AUTO")
+    )
     result = run_eval_retrieval(
         backend=args.backend,
         docs_path=args.docs,
         eval_path=args.eval_path,
-        topk=args.topk,
-        candidate_k=args.candidate_k,
-        reranker=args.reranker,
-        reranker_model=args.reranker_model,
-        reranker_runtime=args.reranker_runtime,
-        reranker_device=args.reranker_device,
+        topk=effective_topk,
+        candidate_k=effective_candidate_k,
+        reranker=effective_reranker,
+        reranker_model=effective_reranker_model,
+        reranker_runtime=effective_reranker_runtime,
+        reranker_device=effective_reranker_device,
         reranker_max_length=args.reranker_max_length,
         collection=args.collection,
         host=args.host,
@@ -319,6 +352,7 @@ def main() -> int:
         vector_size=args.vector_size,
         timeout_sec=args.timeout_sec,
         runs_dir=args.runs_dir,
+        profile=profile.name,
     )
 
     run_dir = result["run_dir"]

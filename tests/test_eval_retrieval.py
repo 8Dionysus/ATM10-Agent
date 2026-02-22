@@ -70,6 +70,7 @@ def test_run_eval_retrieval_writes_artifacts_and_metrics(tmp_path: Path) -> None
 
     assert run_payload["status"] == "ok"
     assert run_payload["mode"] == "eval_retrieval"
+    assert run_payload["profile"] == "baseline"
     assert eval_payload["metrics"]["query_count"] == 3
     assert eval_payload["metrics"]["topk"] == 1
     assert eval_payload["metrics"]["candidate_k"] == 1
