@@ -445,3 +445,59 @@ def test_voice_runtime_service_cli_help_exits_zero(monkeypatch: pytest.MonkeyPat
     with pytest.raises(SystemExit) as exc:
         voice_runtime_service.parse_args()
     assert exc.value.code == 0
+
+
+def test_run_voice_runtime_service_blocks_archived_qwen_backend_by_default(tmp_path: Path) -> None:
+    with pytest.raises(ValueError) as exc:
+        voice_runtime_service.run_voice_runtime_service(
+            host="127.0.0.1",
+            port=8765,
+            runs_dir=tmp_path / "runs",
+            asr_model_id="Qwen/Qwen3-ASR-0.6B",
+            asr_backend="qwen_asr",
+            tts_model_id="tts-model",
+            device_map="auto",
+            dtype="auto",
+            asr_max_new_tokens=128,
+            preload_asr=False,
+            preload_tts=False,
+            now=datetime(2026, 2, 22, 17, 0, 0, tzinfo=timezone.utc),
+        )
+    assert "archived" in str(exc.value)
+
+
+def test_run_voice_runtime_service_allows_archived_qwen_backend_with_opt_in(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    class _FakeServer:
+        def __init__(self, bind: tuple[str, int], handler: type[object]) -> None:
+            self.bind = bind
+            self.handler = handler
+
+        def serve_forever(self) -> None:
+            return
+
+        def server_close(self) -> None:
+            return
+
+    monkeypatch.setattr(voice_runtime_service, "ThreadingHTTPServer", _FakeServer)
+
+    result = voice_runtime_service.run_voice_runtime_service(
+        host="127.0.0.1",
+        port=8765,
+        runs_dir=tmp_path / "runs",
+        asr_model_id="Qwen/Qwen3-ASR-0.6B",
+        asr_backend="qwen_asr",
+        allow_archived_asr_backend=True,
+        tts_model_id="tts-model",
+        device_map="auto",
+        dtype="auto",
+        asr_max_new_tokens=128,
+        preload_asr=False,
+        preload_tts=False,
+        now=datetime(2026, 2, 22, 17, 1, 0, tzinfo=timezone.utc),
+    )
+
+    run_payload = json.loads((result["run_dir"] / "run.json").read_text(encoding="utf-8"))
+    assert run_payload["models"]["asr_backend"] == "qwen_asr"
+    assert run_payload["models"]["asr_backend_archived"] is True

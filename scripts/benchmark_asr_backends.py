@@ -23,6 +23,7 @@ from src.agent_core.io_voice import (  # noqa: E402
 
 
 SUPPORTED_BACKENDS = ("qwen_asr", "whisper_genai")
+ARCHIVED_BACKENDS = ("qwen_asr",)
 
 
 def _create_run_dir(runs_dir: Path, now: datetime) -> Path:
@@ -374,7 +375,10 @@ def _utc_now() -> str:
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Benchmark ASR backends (qwen_asr vs whisper_genai) on the same WAV dataset."
+        description=(
+            "Benchmark ASR backends on the same WAV dataset. "
+            "whisper_genai is active; qwen_asr is archived."
+        )
     )
     parser.add_argument(
         "--inputs",
@@ -393,8 +397,17 @@ def parse_args() -> argparse.Namespace:
         "--backends",
         nargs="+",
         choices=SUPPORTED_BACKENDS,
-        default=list(SUPPORTED_BACKENDS),
-        help="Backends to include in benchmark (default: both).",
+        default=["whisper_genai"],
+        help="Backends to include in benchmark (default: whisper_genai only).",
+    )
+    parser.add_argument(
+        "--include-archived-qwen-asr",
+        action="store_true",
+        help=(
+            "Include archived backend(s) in addition to selected backends: "
+            + ", ".join(ARCHIVED_BACKENDS)
+            + "."
+        ),
     )
     parser.add_argument("--runs-dir", type=Path, default=Path("runs"), help="Run artifact base directory.")
 
@@ -436,10 +449,13 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> int:
     args = parse_args()
+    selected_backends = list(args.backends)
+    if args.include_archived_qwen_asr and "qwen_asr" not in selected_backends:
+        selected_backends.append("qwen_asr")
     result = run_asr_backend_benchmark(
         inputs=args.inputs,
         manifest=args.manifest,
-        backends=args.backends,
+        backends=selected_backends,
         qwen_model_id=args.qwen_model,
         qwen_device_map=args.qwen_device_map,
         qwen_dtype=args.qwen_dtype,

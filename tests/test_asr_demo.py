@@ -47,6 +47,7 @@ def test_asr_demo_audio_file_mode_writes_artifacts(monkeypatch: pytest.MonkeyPat
     result = asr_demo.run_asr_demo(
         audio_in=audio_in,
         runs_dir=tmp_path / "runs",
+        allow_archived_qwen_asr=True,
         now=datetime(2026, 2, 20, 21, 0, 0, tzinfo=timezone.utc),
     )
 
@@ -69,6 +70,7 @@ def test_asr_demo_requires_exactly_one_audio_input_mode(tmp_path: Path) -> None:
         audio_in=audio_in,
         record_seconds=3.0,
         runs_dir=tmp_path / "runs",
+        allow_archived_qwen_asr=True,
         now=datetime(2026, 2, 20, 21, 1, 0, tzinfo=timezone.utc),
     )
     assert result["ok"] is False
@@ -81,3 +83,18 @@ def test_asr_demo_cli_help_exits_zero(monkeypatch: pytest.MonkeyPatch) -> None:
     with pytest.raises(SystemExit) as exc:
         asr_demo.parse_args()
     assert exc.value.code == 0
+
+
+def test_asr_demo_requires_archive_opt_in(tmp_path: Path) -> None:
+    audio_in = tmp_path / "input.wav"
+    _write_test_wav(audio_in)
+
+    result = asr_demo.run_asr_demo(
+        audio_in=audio_in,
+        runs_dir=tmp_path / "runs",
+        now=datetime(2026, 2, 20, 21, 2, 0, tzinfo=timezone.utc),
+    )
+
+    assert result["ok"] is False
+    assert result["run_payload"]["error_code"] == "archived_backend_disabled"
+    assert "archived" in result["run_payload"]["error"]

@@ -86,6 +86,7 @@ def run_asr_demo(
     language: str | None = None,
     max_new_tokens: int = 512,
     runs_dir: Path = Path("runs"),
+    allow_archived_qwen_asr: bool = False,
     now: datetime | None = None,
 ) -> dict[str, Any]:
     if now is None:
@@ -97,7 +98,7 @@ def run_asr_demo(
 
     run_payload: dict[str, Any] = {
         "timestamp_utc": now.astimezone(timezone.utc).isoformat(),
-        "mode": "qwen3_asr_demo",
+        "mode": "qwen3_asr_demo_archived",
         "status": "started",
         "paths": {
             "run_dir": str(run_dir),
@@ -117,10 +118,18 @@ def run_asr_demo(
             "context": context,
             "language": language,
         },
+        "archived": {
+            "qwen3_asr": True,
+            "enabled": allow_archived_qwen_asr,
+        },
     }
     _write_json(run_json_path, run_payload)
 
     try:
+        if not allow_archived_qwen_asr:
+            raise RuntimeError(
+                "qwen3-asr path is archived. Use --allow-archived-qwen-asr to run this demo."
+            )
         audio_path, input_meta = _prepare_audio_input(
             audio_in=audio_in,
             record_seconds=record_seconds,
@@ -159,6 +168,8 @@ def run_asr_demo(
         run_payload["error"] = str(exc)
         if isinstance(exc, VoiceRuntimeUnavailableError):
             run_payload["error_code"] = "voice_runtime_missing_dependency"
+        elif isinstance(exc, RuntimeError) and "archived" in str(exc):
+            run_payload["error_code"] = "archived_backend_disabled"
         elif isinstance(exc, RuntimeError) and "No audio input device" in str(exc):
             run_payload["error_code"] = "audio_input_device_unavailable"
         else:
@@ -173,7 +184,9 @@ def run_asr_demo(
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Qwen3 ASR demo: audio file or microphone -> text artifact.")
+    parser = argparse.ArgumentParser(
+        description="Archived Qwen3 ASR demo: audio file or microphone -> text artifact."
+    )
     parser.add_argument(
         "--audio-in",
         type=Path,
@@ -209,6 +222,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--context", type=str, default="", help="Optional ASR system context.")
     parser.add_argument("--language", type=str, default=None, help="Optional forced language.")
     parser.add_argument("--max-new-tokens", type=int, default=512, help="ASR max_new_tokens (default: 512).")
+    parser.add_argument(
+        "--allow-archived-qwen-asr",
+        action="store_true",
+        help="Required to run archived qwen3-asr demo path.",
+    )
     parser.add_argument("--runs-dir", type=Path, default=Path("runs"), help="Run artifact base directory.")
     return parser.parse_args()
 
@@ -226,6 +244,7 @@ def main() -> int:
         language=args.language,
         max_new_tokens=args.max_new_tokens,
         runs_dir=args.runs_dir,
+        allow_archived_qwen_asr=args.allow_archived_qwen_asr,
     )
     run_dir = result["run_dir"]
     print(f"[asr_demo] run_dir: {run_dir}")

@@ -78,3 +78,29 @@ def test_asr_backend_benchmark_cli_help_exits_zero(monkeypatch: pytest.MonkeyPat
     with pytest.raises(SystemExit) as exc:
         bench.parse_args()
     assert exc.value.code == 0
+
+
+def test_benchmark_main_can_include_archived_qwen_backend(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    captured: dict[str, object] = {}
+
+    def _fake_run_asr_backend_benchmark(**kwargs):
+        captured["backends"] = kwargs["backends"]
+        return {"run_dir": tmp_path / "runs" / "fake", "ok": True}
+
+    monkeypatch.setattr(bench, "run_asr_backend_benchmark", _fake_run_asr_backend_benchmark)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "benchmark_asr_backends.py",
+            "--inputs",
+            str(tmp_path / "sample.wav"),
+            "--include-archived-qwen-asr",
+        ],
+    )
+
+    exit_code = bench.main()
+    assert exit_code == 0
+    assert captured["backends"] == ["whisper_genai", "qwen_asr"]

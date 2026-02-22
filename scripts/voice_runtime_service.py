@@ -60,6 +60,7 @@ def _utc_now() -> str:
 
 SUPPORTED_TTS_RUNTIMES = ("auto", "qwen3", DEFAULT_FAST_TTS_RUNTIME)
 SUPPORTED_ASR_BACKENDS = ("qwen_asr", "whisper_genai")
+ARCHIVED_ASR_BACKENDS = ("qwen_asr",)
 
 
 def _create_asr_warmup_silence_wav(*, run_dir: Path, sample_rate: int = 16000, duration_sec: float = 0.8) -> Path:
@@ -726,15 +727,21 @@ def run_voice_runtime_service(
     asr_max_new_tokens: int,
     preload_asr: bool,
     preload_tts: bool,
-    asr_backend: str = "qwen_asr",
+    asr_backend: str = "whisper_genai",
     asr_device: str = "NPU",
     asr_task: str = "transcribe",
     asr_static_language: str | None = None,
+    allow_archived_asr_backend: bool = False,
     asr_warmup_request: bool = False,
     asr_warmup_audio: Path | None = None,
     asr_warmup_language: str | None = None,
     now: datetime | None = None,
 ) -> dict[str, Any]:
+    if asr_backend in ARCHIVED_ASR_BACKENDS and not allow_archived_asr_backend:
+        raise ValueError(
+            f"ASR backend '{asr_backend}' is archived. "
+            "Use --allow-archived-qwen-asr to enable it temporarily."
+        )
     if now is None:
         now = datetime.now(timezone.utc)
     run_dir = _create_run_dir(runs_dir, now)
@@ -813,6 +820,7 @@ def run_voice_runtime_service(
         },
         "models": {
             "asr_backend": asr_backend,
+            "asr_backend_archived": asr_backend in ARCHIVED_ASR_BACKENDS,
             "asr_model": asr_model_id,
             "asr_device": asr_device if asr_backend == "whisper_genai" else device_map,
             "asr_task": asr_task if asr_backend == "whisper_genai" else "transcribe",
@@ -855,17 +863,18 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--asr-backend",
         type=str,
-        default="qwen_asr",
+        default="whisper_genai",
         choices=SUPPORTED_ASR_BACKENDS,
-        help="ASR backend: qwen_asr or whisper_genai.",
+        help="ASR backend: whisper_genai (active) or qwen_asr (archived).",
     )
     parser.add_argument(
         "--asr-model",
         type=str,
-        default=DEFAULT_QWEN3_ASR_MODEL,
+        default=DEFAULT_WHISPER_GENAI_MODEL_DIR,
         help=(
-            "ASR model id/path. For qwen_asr: HF id/path (default Qwen3-ASR). "
-            "For whisper_genai: OpenVINO model directory."
+            "ASR model id/path. For whisper_genai: OpenVINO model directory "
+            f"(default: {DEFAULT_WHISPER_GENAI_MODEL_DIR}). "
+            "For qwen_asr (archived): HF id/path."
         ),
     )
     parser.add_argument(
@@ -887,6 +896,11 @@ def parse_args() -> argparse.Namespace:
         type=str,
         default=None,
         help="Optional static language hint for whisper_genai backend (example: en or <|en|>).",
+    )
+    parser.add_argument(
+        "--allow-archived-qwen-asr",
+        action="store_true",
+        help="Allow archived qwen_asr backend for temporary rollback/testing.",
     )
     parser.add_argument("--tts-model", type=str, default=DEFAULT_QWEN3_TTS_MODEL, help="TTS model id/path.")
     parser.add_argument("--device-map", type=str, default="auto", help="Model device_map.")
@@ -935,6 +949,7 @@ def main() -> int:
         asr_device=args.asr_device,
         asr_task=args.asr_task,
         asr_static_language=args.asr_language,
+        allow_archived_asr_backend=args.allow_archived_qwen_asr,
         asr_warmup_request=args.asr_warmup_request,
         asr_warmup_audio=args.asr_warmup_audio,
         asr_warmup_language=args.asr_warmup_language,
