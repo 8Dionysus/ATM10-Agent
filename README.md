@@ -27,10 +27,11 @@ py -3.12 -m venv .venv
 python -m pip install -U pip
 ```
 
-2. Установи dependencies:
+2. Установи dependencies (runtime + dev):
 
 ```powershell
 pip install -r requirements.txt
+pip install -r requirements-dev.txt
 ```
 
 3. Запусти Phase A smoke:
