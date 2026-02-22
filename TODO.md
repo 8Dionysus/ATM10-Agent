@@ -68,11 +68,13 @@
 
 * [x] Добавить `origin` и сделать push в GitHub.
 * [x] Добавить GitHub Actions: `pytest` on push.
+* [x] Добавить CI smoke jobs для runnable scripts (`phase_a_smoke`, `retrieve_demo`, `eval_retrieval`).
 * [x] Зафиксировать LF/CRLF политику через `.gitattributes` и проверить, что нет неожиданного массового diff.
 
 ### Dependencies/tooling
 
-* [ ] Решить, нужен ли `requirements-dev.txt` (разделить runtime/dev).
+* [x] Решить, нужен ли `requirements-dev.txt` (разделить runtime/dev).
+  Принято: `requirements.txt` = runtime, `requirements-dev.txt` = runtime + `pytest` для тестов/CI.
 
 ### Qwen3 model stack (fixed)
 
@@ -128,7 +130,12 @@
 * [x] Runtime layer `src/agent_core/io_voice.py` (active: `QwenASRClient` + audio IO; TTS path archived).
 * [x] Tests: CLI help + no-crash import checks.
 * [x] Long-lived runtime path: `scripts/voice_runtime_service.py` + `scripts/voice_runtime_client.py` (active ASR path).
-* [ ] In-game SLA `<=2s`: добавить отдельный fast-fallback TTS path (не `Qwen3-TTS`).
+* [x] In-game SLA `<=2s`: добавить отдельный fast-fallback TTS path (не `Qwen3-TTS`).
+  Реализовано: отдельный `scripts/tts_runtime_service.py` (FastAPI router) с
+  `XTTS v2` как main engine и fallback `Piper` + `Silero` (ru service voice),
+  включая prewarm/queue/chunking/phrase cache.
+* [x] Добавить отдельный CLI client для нового TTS runtime (`health|tts|tts-stream`)
+  с run artifacts в `runs/<timestamp>-tts-client/`.
 
 ---
 

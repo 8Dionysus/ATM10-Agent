@@ -51,3 +51,8 @@
 * Эксперимент `int4_asym` добавлен в `--weights-quantization` (`int4_asym|int4_sym`): на текущем хосте CPU warm-path ускорился дополнительно до ~`8.7-9.5s` (artifact: `runs/20260220_222426-qwen3-tts-ov-speed-bench-int4-cpu/`), GPU warm-path остаётся вариативным (~`8.8-12.3s`), а NPU compile для TTS pipeline по-прежнему `0/10` (artifact: `runs/20260220_222650-qwen3-tts-npu-compile-diag-int4/`).
 * Для снижения perceived latency в voice runtime добавлен streaming-контракт `POST /tts_stream` (NDJSON events) и режим клиента `tts-stream`; в артефактах теперь фиксируются `first_chunk_latency_sec`, `total_synthesis_sec`, `rtf` и `streaming_mode` для воспроизводимого latency-профилирования.
 * Принято решение деактивировать `Qwen3-TTS` в active stack (2026-02-20): production path для voice ограничен ASR (`qwen-asr`), TTS-эксперименты сохранены только как historical artifacts; `qwen-tts` удален из рабочего `.venv`, `.venv-exp` удалено как cleanup-хвост.
+
+## 2026-02-21
+
+* Принято разделение зависимостей на runtime/dev: `requirements.txt` содержит только runtime-пакеты, `requirements-dev.txt` включает runtime + `pytest` для локального тестирования и CI.
+* Для закрытия voice SLA-gap принят отдельный native Python TTS runtime как independent service/container: Router=`FastAPI`, main engine=`XTTS v2`, fallback engines=`Piper` + `Silero` (для русской служебной озвучки), с operational техниками prewarm/queue/chunking/phrase cache.

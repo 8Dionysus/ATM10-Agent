@@ -11,6 +11,7 @@
 * Phase B baseline validated e2e on local ATM10 data + local Qdrant.
 * GitHub `origin` настроен, `master` запушен.
 * CI workflow `pytest` on push/pull_request добавлен.
+* Разделены зависимости runtime/dev: добавлен `requirements-dev.txt` (CI/tests ставят dev requirements).
 * В M2 добавлены staged retrieval (`candidate-k + reranker`) и benchmark `eval_retrieval.py`.
 * В M2 добавлен runtime switch для qwen3 reranker: `torch|openvino` + device (`AUTO|CPU|GPU|NPU`).
 * Для M3 добавлен long-lived voice runtime (`voice_runtime_service` + `voice_runtime_client`).
@@ -156,7 +157,12 @@ Tasks:
 * [x] Optional integration into loop: `src/agent_core/io_voice.py`
 * [x] Graceful degradation: если нет audio device — понятная ошибка
 * [x] Long-lived runtime for lower steady-state latency: `scripts/voice_runtime_service.py` + `scripts/voice_runtime_client.py` (active ASR path)
-* [ ] Add fast-fallback TTS mode for in-game SLA `<=2s` (separate stack, not `Qwen3-TTS`)
+* [x] Add fast-fallback TTS mode for in-game SLA `<=2s` (separate stack, not `Qwen3-TTS`)
+  Done: отдельный native Python TTS runtime (`scripts/tts_runtime_service.py`):
+  FastAPI router + `XTTS v2` main engine + fallback `Piper`/`Silero` (ru service voice),
+  с prewarm/queue/chunking/phrase cache.
+* [x] Добавить operational CLI client для TTS runtime:
+  `scripts/tts_runtime_client.py` (`health|tts|tts-stream`) + run artifacts.
 * [ ] Qwen3 voice target (active):
   * ASR: `Qwen3-ASR-0.6B` (OpenVINO runtime or self-converted IR)
 
@@ -192,7 +198,8 @@ DoD:
 * [ ] HUD assistance (OCR baseline / mod hook)
 * [ ] Graph/KAG via Neo4j (только после measurable value в Phase B)
 * [ ] Automation (hotkeys/mouse) строго локально, default dry-run
-* [ ] CI hardening: добавить smoke jobs для runnable scripts помимо `pytest`
+* [x] CI hardening: добавить smoke jobs для runnable scripts помимо `pytest`
+  Done: CI workflow запускает `phase_a_smoke` (stub), `retrieve_demo` (fixtures), `eval_retrieval` (fixtures).
 
 ---
 

@@ -16,7 +16,16 @@ python scripts/discover_instance.py
 ## Tests
 
 ```powershell
+python -m pip install -r requirements-dev.txt
 python -m pytest
+```
+
+## CI smoke (runnable scripts)
+
+```powershell
+python scripts/phase_a_smoke.py --vlm-provider stub --runs-dir runs/ci-smoke-phase-a
+python scripts/retrieve_demo.py --in tests/fixtures/retrieval_docs_sample.jsonl --query "mekanism steel" --topk 3 --candidate-k 10 --reranker none --runs-dir runs/ci-smoke-retrieve
+python scripts/eval_retrieval.py --docs tests/fixtures/retrieval_docs_sample.jsonl --eval tests/fixtures/retrieval_eval_sample.jsonl --topk 3 --candidate-k 10 --reranker none --runs-dir runs/ci-smoke-eval
 ```
 
 ## Qwen3 stack (OpenVINO-first)
@@ -150,7 +159,52 @@ python scripts/voice_runtime_client.py --service-url http://127.0.0.1:8765 healt
 python scripts/voice_runtime_client.py --service-url http://127.0.0.1:8765 asr --audio-in "C:\path\to\sample.wav"
 ```
 
-Примечание: TTS endpoints (`/tts`, `/tts_stream`) в текущем runbook не используются.
+### TTS runtime service (separate process/container)
+
+```powershell
+cd D:\atm10-agent
+.\.venv\Scripts\Activate.ps1
+python -m pip install fastapi uvicorn
+python scripts/tts_runtime_service.py --host 127.0.0.1 --port 8780
+```
+
+Принятый runtime design:
+
+* Router: FastAPI
+* Main engine: XTTS v2
+* Fallback engines: Piper, Silero (для `ru` service voice)
+* Techniques: prewarm, queue, chunking, phrase cache
+
+Минимальная конфигурация adapters (env):
+
+```powershell
+# XTTS v2
+$env:XTTS_MODEL_NAME="tts_models/multilingual/multi-dataset/xtts_v2"
+$env:XTTS_USE_GPU="false"
+# optional cloning wav for XTTS
+# $env:XTTS_DEFAULT_SPEAKER_WAV="C:\path\to\speaker.wav"
+
+# Piper fallback
+$env:PIPER_EXECUTABLE="piper"
+$env:PIPER_MODEL_PATH="C:\path\to\piper\en_US-model.onnx"
+# optional
+# $env:PIPER_SPEAKER="0"
+
+# Silero (ru service voice)
+$env:SILERO_REPO_OR_DIR="snakers4/silero-models"
+$env:SILERO_MODEL_LANGUAGE="ru"
+$env:SILERO_MODEL_ID="v4_ru"
+$env:SILERO_SAMPLE_RATE="24000"
+$env:SILERO_SPEAKER="xenia"
+```
+
+Пример запроса TTS:
+
+```powershell
+python scripts/tts_runtime_client.py --service-url http://127.0.0.1:8780 health
+python scripts/tts_runtime_client.py --service-url http://127.0.0.1:8780 tts --text "crafting started" --language en
+python scripts/tts_runtime_client.py --service-url http://127.0.0.1:8780 tts-stream --text "служебное сообщение" --language ru --service-voice
+```
 
 ### Voice latency benchmark (historical)
 
