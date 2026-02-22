@@ -97,6 +97,109 @@ def test_process_tts_request_writes_audio(monkeypatch: pytest.MonkeyPatch, tmp_p
     assert captured["path"] == output_path
 
 
+def test_process_tts_request_fast_fallback_runtime_writes_audio(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    class _FakeState:
+        def __init__(self, run_dir: Path) -> None:
+            self.run_dir = run_dir
+
+        def ensure_tts(self) -> object:
+            raise AssertionError("ensure_tts must not be called for ovms runtime")
+
+    def _fake_ovms_tts(
+        *,
+        text: str,
+        output_path: Path,
+        endpoint_url: str | None = None,
+        model_id: str | None = None,
+        speaker: str | None = None,
+        language: str = "Auto",
+        instruct: str | None = None,
+        timeout_sec: float = 20.0,
+    ) -> dict[str, object]:
+        assert text == "fast hello"
+        assert endpoint_url == "http://127.0.0.1:9000/v1/audio/tts"
+        assert model_id == "tts-fast-en"
+        assert speaker == "voice_a"
+        assert language == "Auto"
+        voice_runtime_service.write_wav_pcm16(
+            path=output_path,
+            waveform=np.array([0.1, 0.0, -0.1, 0.2], dtype=np.float32),
+            sample_rate=16000,
+        )
+        return {"runtime": "ovms", "audio_out_wav": str(output_path)}
+
+    monkeypatch.setattr(voice_runtime_service, "synthesize_ovms_tts_to_wav", _fake_ovms_tts)
+
+    result = voice_runtime_service.process_tts_request(
+        _FakeState(tmp_path),
+        {
+            "text": "fast hello",
+            "speaker": "voice_a",
+            "runtime": "ovms",
+            "ovms_tts_url": "http://127.0.0.1:9000/v1/audio/tts",
+            "ovms_tts_model": "tts-fast-en",
+        },
+    )
+
+    assert result["tts_runtime"] == "ovms"
+    assert result["requested_tts_runtime"] == "ovms"
+    assert result["speaker_selected"] == "voice_a"
+    assert result["num_samples"] == 4
+    assert Path(result["audio_out_wav"]).exists()
+
+
+def test_process_tts_request_auto_falls_back_when_qwen_unavailable(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    class _FakeState:
+        def __init__(self, run_dir: Path) -> None:
+            self.run_dir = run_dir
+
+        def ensure_tts(self) -> object:
+            raise voice_runtime_service.VoiceRuntimeUnavailableError("qwen-tts missing")
+
+    def _fake_ovms_tts(
+        *,
+        text: str,
+        output_path: Path,
+        endpoint_url: str | None = None,
+        model_id: str | None = None,
+        speaker: str | None = None,
+        language: str = "Auto",
+        instruct: str | None = None,
+        timeout_sec: float = 20.0,
+    ) -> dict[str, object]:
+        assert endpoint_url == "http://127.0.0.1:9000/v1/audio/tts"
+        assert model_id == "tts-fast-en"
+        voice_runtime_service.write_wav_pcm16(
+            path=output_path,
+            waveform=np.array([0.3, 0.2, 0.1], dtype=np.float32),
+            sample_rate=22050,
+        )
+        return {"runtime": "ovms", "audio_out_wav": str(output_path)}
+
+    monkeypatch.setattr(voice_runtime_service, "synthesize_ovms_tts_to_wav", _fake_ovms_tts)
+
+    result = voice_runtime_service.process_tts_request(
+        _FakeState(tmp_path),
+        {
+            "text": "auto hello",
+            "runtime": "auto",
+            "ovms_tts_url": "http://127.0.0.1:9000/v1/audio/tts",
+            "ovms_tts_model": "tts-fast-en",
+        },
+    )
+
+    assert result["requested_tts_runtime"] == "auto"
+    assert result["tts_runtime"] == "ovms"
+    assert result["fallback_used"] is True
+    assert "qwen-tts missing" in str(result["fallback_reason"])
+    assert result["num_samples"] == 3
+    assert Path(result["audio_out_wav"]).exists()
+
+
 def test_process_tts_stream_request_emits_chunk_events(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:

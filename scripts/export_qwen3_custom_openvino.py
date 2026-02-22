@@ -8,11 +8,12 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Mapping
 
-from optimum.exporters.openvino import main_export
-from optimum.intel.openvino.configuration import OVConfig, OVWeightQuantizationConfig
-from transformers import AutoConfig
-
 from scripts.probe_qwen3_voice_support import diagnose_probe_result, probe_architecture_support
+
+main_export: Any | None = None
+OVConfig: Any | None = None
+OVWeightQuantizationConfig: Any | None = None
+AutoConfig: Any | None = None
 
 
 PRESETS: dict[str, dict[str, str]] = {
@@ -27,6 +28,60 @@ PRESETS: dict[str, dict[str, str]] = {
         "task": "automatic-speech-recognition",
     },
 }
+
+
+def _ensure_export_dependencies() -> None:
+    global OVConfig
+    global OVWeightQuantizationConfig
+    global main_export
+
+    if main_export is None:
+        try:
+            from optimum.exporters.openvino import main_export as imported_main_export
+        except ModuleNotFoundError as exc:
+            raise RuntimeError(
+                "Missing optional export dependency: optimum/openvino exporter. "
+                "Install export toolchain before running --execute."
+            ) from exc
+        main_export = imported_main_export
+
+    if OVConfig is None or OVWeightQuantizationConfig is None:
+        try:
+            from optimum.intel.openvino.configuration import (
+                OVConfig as imported_ov_config,
+                OVWeightQuantizationConfig as imported_weight_config,
+            )
+            OVConfig = imported_ov_config
+            OVWeightQuantizationConfig = imported_weight_config
+        except ModuleNotFoundError:
+            # Lightweight fallback keeps tests runnable when exporters are monkeypatched.
+            class _FallbackOVWeightQuantizationConfig:
+                def __init__(self, *, bits: int) -> None:
+                    self.bits = bits
+
+            class _FallbackOVConfig:
+                def __init__(self, *, quantization_config: Any) -> None:
+                    self.quantization_config = quantization_config
+
+            if OVConfig is None:
+                OVConfig = _FallbackOVConfig
+            if OVWeightQuantizationConfig is None:
+                OVWeightQuantizationConfig = _FallbackOVWeightQuantizationConfig
+
+
+def _ensure_transformers_dependency() -> None:
+    global AutoConfig
+
+    if AutoConfig is not None:
+        return
+    try:
+        from transformers import AutoConfig as imported_auto_config
+    except ModuleNotFoundError as exc:
+        raise RuntimeError(
+            "Missing optional export dependency: transformers. "
+            "Install export toolchain before running Qwen3-VL custom export."
+        ) from exc
+    AutoConfig = imported_auto_config
 
 
 def _create_run_dir(runs_dir: Path, now: datetime) -> Path:
@@ -207,7 +262,9 @@ def run_export_qwen3_custom_openvino(
         return {"run_dir": run_dir, "run_payload": run_payload, "plan_payload": plan_payload, "ok": True}
 
     try:
+        _ensure_export_dependencies()
         if preset_name == "qwen3-vl-4b":
+            _ensure_transformers_dependency()
             config = AutoConfig.from_pretrained(model_source_value, trust_remote_code=True)
             custom_export_configs, fn_get_submodels = _qwen3_vl_custom_configs(config)
             ov_config = OVConfig(quantization_config=OVWeightQuantizationConfig(bits=weight_bits))

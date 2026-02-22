@@ -1,18 +1,112 @@
 from __future__ import annotations
 
+import base64
+import json
+import os
 import wave
 from pathlib import Path
 from typing import Any, Iterator
+from urllib.error import HTTPError, URLError
+from urllib.request import Request, urlopen
 
 import numpy as np
 
 
 DEFAULT_QWEN3_ASR_MODEL = "Qwen/Qwen3-ASR-0.6B"
 DEFAULT_QWEN3_TTS_MODEL = "Qwen/Qwen3-TTS-12Hz-0.6B-CustomVoice"
+DEFAULT_FAST_TTS_RUNTIME = "ovms"
 
 
 class VoiceRuntimeUnavailableError(RuntimeError):
     """Raised when voice runtime dependency is not available in environment."""
+
+
+def _extract_audio_wav_b64(payload: Any) -> str | None:
+    if isinstance(payload, dict):
+        direct = payload.get("audio_wav_b64")
+        if isinstance(direct, str) and direct.strip():
+            return direct
+        result = payload.get("result")
+        if isinstance(result, dict):
+            nested = result.get("audio_wav_b64")
+            if isinstance(nested, str) and nested.strip():
+                return nested
+        choices = payload.get("choices")
+        if isinstance(choices, list) and choices:
+            first = choices[0]
+            if isinstance(first, dict):
+                nested_choice = first.get("audio_wav_b64")
+                if isinstance(nested_choice, str) and nested_choice.strip():
+                    return nested_choice
+    return None
+
+
+def synthesize_ovms_tts_to_wav(
+    *,
+    text: str,
+    output_path: Path,
+    endpoint_url: str | None = None,
+    model_id: str | None = None,
+    speaker: str | None = None,
+    language: str = "Auto",
+    instruct: str | None = None,
+    timeout_sec: float = 20.0,
+) -> dict[str, Any]:
+    if not text.strip():
+        raise ValueError("text must be non-empty for fast fallback TTS.")
+
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    resolved_endpoint_url = endpoint_url or os.getenv("OVMS_TTS_URL")
+    if not resolved_endpoint_url:
+        raise VoiceRuntimeUnavailableError(
+            "OVMS endpoint is required. Set OVMS_TTS_URL or pass endpoint_url."
+        )
+    resolved_model_id = model_id or os.getenv("OVMS_TTS_MODEL")
+    payload: dict[str, Any] = {
+        "text": text,
+        "speaker": speaker,
+        "language": language,
+        "instruct": instruct,
+    }
+    if resolved_model_id:
+        payload["model"] = resolved_model_id
+    request = Request(
+        url=resolved_endpoint_url,
+        method="POST",
+        headers={"Content-Type": "application/json"},
+        data=json.dumps(payload).encode("utf-8"),
+    )
+    try:
+        with urlopen(request, timeout=timeout_sec) as response:
+            response_payload = json.loads(response.read().decode("utf-8"))
+    except HTTPError as exc:
+        body = exc.read().decode("utf-8", errors="replace")
+        raise VoiceRuntimeUnavailableError(f"OVMS TTS HTTP {exc.code}: {body}") from exc
+    except URLError as exc:
+        reason = getattr(exc, "reason", str(exc))
+        raise VoiceRuntimeUnavailableError(f"OVMS TTS endpoint unreachable: {reason}") from exc
+    except Exception as exc:
+        raise VoiceRuntimeUnavailableError(f"OVMS TTS request failed: {exc}") from exc
+
+    wav_b64 = _extract_audio_wav_b64(response_payload)
+    if not wav_b64:
+        raise RuntimeError("OVMS TTS response does not contain 'audio_wav_b64'.")
+    try:
+        wav_bytes = base64.b64decode(wav_b64, validate=True)
+    except Exception as exc:
+        raise RuntimeError("Invalid base64 audio payload from OVMS TTS response.") from exc
+    output_path.write_bytes(wav_bytes)
+    if output_path.stat().st_size == 0:
+        raise RuntimeError(f"OVMS TTS produced empty output file: {output_path}")
+
+    return {
+        "runtime": DEFAULT_FAST_TTS_RUNTIME,
+        "engine": "ovms",
+        "endpoint_url": resolved_endpoint_url,
+        "model_id": resolved_model_id,
+        "speaker": speaker,
+        "audio_out_wav": str(output_path),
+    }
 
 
 def _resolve_torch_dtype(dtype: str) -> Any:

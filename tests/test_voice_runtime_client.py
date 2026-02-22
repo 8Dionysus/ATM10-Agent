@@ -96,6 +96,68 @@ def test_voice_runtime_client_tts_requires_text(tmp_path: Path) -> None:
     assert "--text is required for tts mode." in result["run_payload"]["error"]
 
 
+def test_voice_runtime_client_tts_mode_forwards_runtime(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    captured: dict[str, object] = {}
+
+    def _fake_request_json(*, method: str, url: str, payload: dict[str, object] | None, timeout_sec: float = 120.0):
+        assert method == "POST"
+        assert url == "http://127.0.0.1:8765/tts"
+        assert payload is not None
+        captured["payload"] = payload
+        return {"ok": True, "result": {"audio_out_wav": "C:/tmp/out.wav"}}
+
+    monkeypatch.setattr(voice_runtime_client, "_request_json", _fake_request_json)
+
+    result = voice_runtime_client.run_voice_runtime_client(
+        service_url="http://127.0.0.1:8765",
+        mode="tts",
+        runs_dir=tmp_path / "runs",
+        text="hello runtime",
+        tts_runtime="qwen3",
+        now=datetime(2026, 2, 20, 22, 13, 30, tzinfo=timezone.utc),
+    )
+
+    request_payload = captured["payload"]
+    assert isinstance(request_payload, dict)
+    assert request_payload["runtime"] == "qwen3"
+    assert result["ok"] is True
+
+
+def test_voice_runtime_client_tts_mode_forwards_ovms_overrides(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    captured: dict[str, object] = {}
+
+    def _fake_request_json(*, method: str, url: str, payload: dict[str, object] | None, timeout_sec: float = 120.0):
+        assert method == "POST"
+        assert url == "http://127.0.0.1:8765/tts"
+        assert payload is not None
+        captured["payload"] = payload
+        return {"ok": True, "result": {"audio_out_wav": "C:/tmp/out.wav"}}
+
+    monkeypatch.setattr(voice_runtime_client, "_request_json", _fake_request_json)
+
+    result = voice_runtime_client.run_voice_runtime_client(
+        service_url="http://127.0.0.1:8765",
+        mode="tts",
+        runs_dir=tmp_path / "runs",
+        text="ovms override",
+        tts_runtime="ovms",
+        ovms_tts_url="http://127.0.0.1:9000/v1/audio/tts",
+        ovms_tts_model="tts-fast-en",
+        now=datetime(2026, 2, 20, 22, 13, 45, tzinfo=timezone.utc),
+    )
+
+    request_payload = captured["payload"]
+    assert isinstance(request_payload, dict)
+    assert request_payload["runtime"] == "ovms"
+    assert request_payload["ovms_tts_url"] == "http://127.0.0.1:9000/v1/audio/tts"
+    assert request_payload["ovms_tts_model"] == "tts-fast-en"
+    assert result["ok"] is True
+
+
 def test_voice_runtime_client_tts_stream_writes_events(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
@@ -111,6 +173,7 @@ def test_voice_runtime_client_tts_stream_writes_events(
         assert payload is not None
         assert payload["text"] == "stream text"
         assert payload["chunk_ms"] == 150
+        assert payload["runtime"] == "ovms"
         return [
             {"event": "started"},
             {"event": "audio_chunk", "chunk_index": 0},

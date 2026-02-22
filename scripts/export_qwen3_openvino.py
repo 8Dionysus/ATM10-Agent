@@ -91,7 +91,8 @@ def _resolve_executable(name_or_path: str) -> str:
     if candidate.exists():
         return str(candidate)
 
-    raise FileNotFoundError(f"Executable not found: {name_or_path}")
+    # Keep unresolved command name for environments where CLI is optional.
+    return name_or_path
 
 
 def _run_command(command: list[str], cwd: Path) -> subprocess.CompletedProcess[str]:

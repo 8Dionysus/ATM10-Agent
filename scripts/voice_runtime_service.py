@@ -6,6 +6,7 @@ import json
 import sys
 import threading
 import traceback
+import wave
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -19,11 +20,13 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from src.agent_core.io_voice import (
+    DEFAULT_FAST_TTS_RUNTIME,
     DEFAULT_QWEN3_ASR_MODEL,
     DEFAULT_QWEN3_TTS_MODEL,
     QwenASRClient,
     QwenTTSClient,
     VoiceRuntimeUnavailableError,
+    synthesize_ovms_tts_to_wav,
     write_wav_pcm16,
 )
 
@@ -51,6 +54,9 @@ def _write_json(path: Path, payload: Mapping[str, Any]) -> None:
 
 def _utc_now() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+SUPPORTED_TTS_RUNTIMES = ("auto", "qwen3", DEFAULT_FAST_TTS_RUNTIME)
 
 
 class VoiceRuntimeState:
@@ -133,6 +139,7 @@ class VoiceRuntimeState:
                         "loaded": self._tts_client is not None,
                         "load_seconds": self._tts_load_sec,
                         "load_error": self._tts_load_error,
+                        "supported_runtimes": list(SUPPORTED_TTS_RUNTIMES),
                     },
                 },
             }
@@ -166,7 +173,77 @@ def process_asr_request(state: VoiceRuntimeState, payload: Mapping[str, Any]) ->
 
 def process_tts_request(state: VoiceRuntimeState, payload: Mapping[str, Any]) -> dict[str, Any]:
     text, speaker, language, instruct, out_wav_path = _parse_tts_payload(state, payload)
+    requested_runtime = _resolve_tts_runtime(payload)
+    ovms_tts_url, ovms_tts_model = _resolve_ovms_overrides(payload)
+    result_payload = _synthesize_tts_non_streaming(
+        state=state,
+        requested_runtime=requested_runtime,
+        text=text,
+        speaker=speaker,
+        language=language,
+        instruct=instruct,
+        out_wav_path=out_wav_path,
+        ovms_tts_url=ovms_tts_url,
+        ovms_tts_model=ovms_tts_model,
+    )
+    return {
+        "timestamp_utc": _utc_now(),
+        "text": text,
+        **result_payload,
+    }
 
+
+def _waveform_to_pcm16_bytes(waveform: np.ndarray) -> bytes:
+    mono = np.asarray(waveform, dtype=np.float32).reshape(-1)
+    clipped = np.clip(mono, -1.0, 1.0)
+    pcm16 = (clipped * 32767.0).astype(np.int16)
+    return pcm16.tobytes()
+
+
+def _resolve_tts_runtime(payload: Mapping[str, Any]) -> str:
+    runtime_value = payload.get("runtime", "auto")
+    runtime = str(runtime_value).strip().lower() if runtime_value is not None else "auto"
+    if runtime == "fast_fallback":
+        runtime = DEFAULT_FAST_TTS_RUNTIME
+    if runtime not in SUPPORTED_TTS_RUNTIMES:
+        raise ValueError(
+            "runtime must be one of: auto, qwen3, ovms."
+        )
+    return runtime
+
+
+def _resolve_ovms_overrides(payload: Mapping[str, Any]) -> tuple[str | None, str | None]:
+    url_value = payload.get("ovms_tts_url")
+    model_value = payload.get("ovms_tts_model")
+    ovms_tts_url = str(url_value).strip() if isinstance(url_value, str) and url_value.strip() else None
+    ovms_tts_model = str(model_value).strip() if isinstance(model_value, str) and model_value.strip() else None
+    return ovms_tts_url, ovms_tts_model
+
+
+def _load_wav_mono(path: Path) -> tuple[np.ndarray, int]:
+    with wave.open(str(path), "rb") as wav_file:
+        channels = int(wav_file.getnchannels())
+        sample_rate = int(wav_file.getframerate())
+        num_frames = int(wav_file.getnframes())
+        raw = wav_file.readframes(num_frames)
+
+    if channels <= 0:
+        raise RuntimeError(f"Invalid WAV channels: {channels}")
+    data = np.frombuffer(raw, dtype=np.int16).astype(np.float32) / 32767.0
+    if channels > 1:
+        data = data.reshape(-1, channels).mean(axis=1)
+    return data.reshape(-1), sample_rate
+
+
+def _synthesize_tts_qwen(
+    *,
+    state: VoiceRuntimeState,
+    text: str,
+    speaker: str | None,
+    language: str,
+    instruct: str | None,
+    out_wav_path: Path,
+) -> dict[str, Any]:
     client = state.ensure_tts()
     selected_speaker = client.resolve_speaker(speaker)
     waveform, sample_rate = client.synthesize_custom_voice(
@@ -177,21 +254,117 @@ def process_tts_request(state: VoiceRuntimeState, payload: Mapping[str, Any]) ->
     )
     write_wav_pcm16(path=out_wav_path, waveform=waveform, sample_rate=sample_rate)
     return {
-        "timestamp_utc": _utc_now(),
-        "text": text,
         "speaker_selected": selected_speaker,
         "language": language,
-        "sample_rate": sample_rate,
+        "sample_rate": int(sample_rate),
         "num_samples": int(waveform.shape[0]),
         "audio_out_wav": str(out_wav_path),
+        "tts_runtime": "qwen3",
+        "fallback_used": False,
+        "fallback_reason": None,
     }
 
 
-def _waveform_to_pcm16_bytes(waveform: np.ndarray) -> bytes:
+def _synthesize_tts_fast_fallback(
+    *,
+    text: str,
+    speaker: str | None,
+    language: str,
+    out_wav_path: Path,
+    ovms_tts_url: str | None,
+    ovms_tts_model: str | None,
+) -> dict[str, Any]:
+    synthesize_ovms_tts_to_wav(
+        text=text,
+        output_path=out_wav_path,
+        endpoint_url=ovms_tts_url,
+        model_id=ovms_tts_model,
+        speaker=speaker,
+        language=language,
+    )
+    waveform, sample_rate = _load_wav_mono(out_wav_path)
+    return {
+        "speaker_selected": speaker or "default_system_voice",
+        "language": language,
+        "sample_rate": int(sample_rate),
+        "num_samples": int(waveform.shape[0]),
+        "audio_out_wav": str(out_wav_path),
+        "tts_runtime": DEFAULT_FAST_TTS_RUNTIME,
+    }
+
+
+def _synthesize_tts_non_streaming(
+    *,
+    state: VoiceRuntimeState,
+    requested_runtime: str,
+    text: str,
+    speaker: str | None,
+    language: str,
+    instruct: str | None,
+    out_wav_path: Path,
+    ovms_tts_url: str | None,
+    ovms_tts_model: str | None,
+) -> dict[str, Any]:
+    if requested_runtime == "qwen3":
+        result = _synthesize_tts_qwen(
+            state=state,
+            text=text,
+            speaker=speaker,
+            language=language,
+            instruct=instruct,
+            out_wav_path=out_wav_path,
+        )
+        result["requested_tts_runtime"] = requested_runtime
+        return result
+
+    if requested_runtime == DEFAULT_FAST_TTS_RUNTIME:
+        result = _synthesize_tts_fast_fallback(
+            text=text,
+            speaker=speaker,
+            language=language,
+            out_wav_path=out_wav_path,
+            ovms_tts_url=ovms_tts_url,
+            ovms_tts_model=ovms_tts_model,
+        )
+        result["requested_tts_runtime"] = requested_runtime
+        result["fallback_used"] = False
+        result["fallback_reason"] = None
+        return result
+
+    try:
+        result = _synthesize_tts_qwen(
+            state=state,
+            text=text,
+            speaker=speaker,
+            language=language,
+            instruct=instruct,
+            out_wav_path=out_wav_path,
+        )
+        result["requested_tts_runtime"] = requested_runtime
+        return result
+    except VoiceRuntimeUnavailableError as exc:
+        result = _synthesize_tts_fast_fallback(
+            text=text,
+            speaker=speaker,
+            language=language,
+            out_wav_path=out_wav_path,
+            ovms_tts_url=ovms_tts_url,
+            ovms_tts_model=ovms_tts_model,
+        )
+        result["requested_tts_runtime"] = requested_runtime
+        result["fallback_used"] = True
+        result["fallback_reason"] = str(exc)
+        return result
+
+
+def _iter_waveform_chunks(*, waveform: np.ndarray, chunk_ms: int, sample_rate: int):
+    chunk_samples = max(1, int(sample_rate * (float(chunk_ms) / 1000.0)))
     mono = np.asarray(waveform, dtype=np.float32).reshape(-1)
-    clipped = np.clip(mono, -1.0, 1.0)
-    pcm16 = (clipped * 32767.0).astype(np.int16)
-    return pcm16.tobytes()
+    for offset in range(0, int(mono.shape[0]), int(chunk_samples)):
+        chunk = mono[offset : offset + int(chunk_samples)]
+        if chunk.size == 0:
+            continue
+        yield chunk
 
 
 def _parse_tts_payload(
@@ -227,10 +400,68 @@ def process_tts_stream_request(state: VoiceRuntimeState, payload: Mapping[str, A
     if not isinstance(chunk_ms_raw, int) or chunk_ms_raw <= 0:
         raise ValueError("chunk_ms must be positive integer.")
     chunk_ms = int(chunk_ms_raw)
+    requested_runtime = _resolve_tts_runtime(payload)
+    ovms_tts_url, ovms_tts_model = _resolve_ovms_overrides(payload)
 
-    client = state.ensure_tts()
-    selected_speaker = client.resolve_speaker(speaker)
     t0 = perf_counter()
+    selected_speaker = speaker or "default_system_voice"
+    fallback_used = False
+    fallback_reason: str | None = None
+    collected_chunks: list[np.ndarray] = []
+    sample_rate: int | None = None
+    first_chunk_latency_sec: float | None = None
+    streaming_mode = "fallback_chunked"
+
+    if requested_runtime != DEFAULT_FAST_TTS_RUNTIME:
+        try:
+            client = state.ensure_tts()
+            selected_speaker = client.resolve_speaker(speaker)
+            for chunk, chunk_sample_rate, mode in client.stream_synthesize_custom_voice(
+                text=text,
+                speaker=selected_speaker,
+                language=language,
+                instruct=instruct,
+                chunk_duration_ms=chunk_ms,
+            ):
+                if chunk.size == 0:
+                    continue
+                if sample_rate is None:
+                    sample_rate = int(chunk_sample_rate)
+                if first_chunk_latency_sec is None:
+                    first_chunk_latency_sec = perf_counter() - t0
+                collected_chunks.append(np.asarray(chunk, dtype=np.float32).reshape(-1))
+                streaming_mode = mode
+        except VoiceRuntimeUnavailableError as exc:
+            if requested_runtime == "qwen3":
+                raise
+            fallback_used = True
+            fallback_reason = str(exc)
+
+    if not collected_chunks:
+        synthesize_ovms_tts_to_wav(
+            text=text,
+            output_path=out_wav_path,
+            endpoint_url=ovms_tts_url,
+            model_id=ovms_tts_model,
+            speaker=speaker,
+            language=language,
+        )
+        waveform, sample_rate = _load_wav_mono(out_wav_path)
+        for chunk in _iter_waveform_chunks(waveform=waveform, chunk_ms=chunk_ms, sample_rate=sample_rate):
+            if first_chunk_latency_sec is None:
+                first_chunk_latency_sec = perf_counter() - t0
+            collected_chunks.append(chunk)
+        if not collected_chunks:
+            raise RuntimeError("Fast fallback TTS produced empty waveform.")
+        streaming_mode = "ovms_file_chunked"
+        selected_speaker = speaker or "default_system_voice"
+    else:
+        assert sample_rate is not None
+        waveform = np.concatenate(collected_chunks)
+        write_wav_pcm16(path=out_wav_path, waveform=waveform, sample_rate=sample_rate)
+
+    assert sample_rate is not None
+    waveform = np.concatenate(collected_chunks)
 
     events: list[dict[str, Any]] = [
         {
@@ -240,54 +471,30 @@ def process_tts_stream_request(state: VoiceRuntimeState, payload: Mapping[str, A
             "speaker_selected": selected_speaker,
             "language": language,
             "chunk_ms": chunk_ms,
+            "requested_tts_runtime": requested_runtime,
+            "fallback_used": fallback_used,
+            "fallback_reason": fallback_reason,
         }
     ]
 
-    collected_chunks: list[np.ndarray] = []
-    sample_rate: int | None = None
-    first_chunk_latency_sec: float | None = None
-    streaming_mode = "fallback_chunked"
-
-    for chunk_index, (chunk, chunk_sample_rate, mode) in enumerate(
-        client.stream_synthesize_custom_voice(
-            text=text,
-            speaker=selected_speaker,
-            language=language,
-            instruct=instruct,
-            chunk_duration_ms=chunk_ms,
-        )
-    ):
-        if chunk.size == 0:
-            continue
-        if sample_rate is None:
-            sample_rate = int(chunk_sample_rate)
-        if first_chunk_latency_sec is None:
-            first_chunk_latency_sec = perf_counter() - t0
-        collected_chunks.append(np.asarray(chunk, dtype=np.float32).reshape(-1))
-        streaming_mode = mode
+    for chunk_index, chunk in enumerate(collected_chunks):
         pcm16_b64 = base64.b64encode(_waveform_to_pcm16_bytes(chunk)).decode("ascii")
         events.append(
             {
                 "event": "audio_chunk",
                 "timestamp_utc": _utc_now(),
                 "chunk_index": chunk_index,
-                "sample_rate": int(chunk_sample_rate),
+                "sample_rate": int(sample_rate),
                 "num_samples": int(chunk.shape[0]),
                 "first_chunk_latency_sec": first_chunk_latency_sec,
-                "streaming_mode": mode,
+                "streaming_mode": streaming_mode,
                 "pcm16_b64": pcm16_b64,
             }
         )
 
-    if not collected_chunks or sample_rate is None:
-        raise RuntimeError("TTS model returned no audio chunks.")
-
-    waveform = np.concatenate(collected_chunks)
-    write_wav_pcm16(path=out_wav_path, waveform=waveform, sample_rate=sample_rate)
     total_synthesis_sec = perf_counter() - t0
     audio_duration_sec = float(waveform.shape[0]) / float(sample_rate)
     rtf = total_synthesis_sec / audio_duration_sec if audio_duration_sec > 0 else None
-
     events.append(
         {
             "event": "completed",
@@ -296,6 +503,10 @@ def process_tts_stream_request(state: VoiceRuntimeState, payload: Mapping[str, A
             "speaker_selected": selected_speaker,
             "language": language,
             "streaming_mode": streaming_mode,
+            "requested_tts_runtime": requested_runtime,
+            "tts_runtime": "qwen3" if streaming_mode != "ovms_file_chunked" else DEFAULT_FAST_TTS_RUNTIME,
+            "fallback_used": fallback_used,
+            "fallback_reason": fallback_reason,
             "sample_rate": int(sample_rate),
             "num_samples": int(waveform.shape[0]),
             "audio_duration_sec": audio_duration_sec,
@@ -523,7 +734,7 @@ def run_voice_runtime_service(
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Long-lived voice runtime HTTP service with in-memory Qwen ASR/TTS models."
+        description="Long-lived voice runtime HTTP service with Qwen ASR and selectable TTS runtime."
     )
     parser.add_argument("--host", default="127.0.0.1", help="Bind host (default: 127.0.0.1).")
     parser.add_argument("--port", type=int, default=8765, help="Bind port (default: 8765).")

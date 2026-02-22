@@ -149,6 +149,9 @@ def run_voice_runtime_client(
     speaker: str | None = None,
     instruct: str | None = None,
     out_wav: Path | None = None,
+    tts_runtime: str = "ovms",
+    ovms_tts_url: str | None = None,
+    ovms_tts_model: str | None = None,
     chunk_ms: int = 200,
     now: datetime | None = None,
 ) -> dict[str, Any]:
@@ -211,8 +214,13 @@ def run_voice_runtime_client(
                 "speaker": speaker,
                 "language": language or "Auto",
                 "instruct": instruct,
+                "runtime": tts_runtime,
                 "out_wav_path": str(output_path.resolve()),
             }
+            if ovms_tts_url:
+                payload["ovms_tts_url"] = ovms_tts_url
+            if ovms_tts_model:
+                payload["ovms_tts_model"] = ovms_tts_model
             response = _request_json(method="POST", url=f"{base_url}/tts", payload=payload)
             response_path = run_dir / "tts_response.json"
             _write_json(response_path, response)
@@ -231,9 +239,14 @@ def run_voice_runtime_client(
                 "speaker": speaker,
                 "language": language or "Auto",
                 "instruct": instruct,
+                "runtime": tts_runtime,
                 "out_wav_path": str(output_path.resolve()),
                 "chunk_ms": int(chunk_ms),
             }
+            if ovms_tts_url:
+                payload["ovms_tts_url"] = ovms_tts_url
+            if ovms_tts_model:
+                payload["ovms_tts_model"] = ovms_tts_model
             events = _request_ndjson(method="POST", url=f"{base_url}/tts_stream", payload=payload)
             events_path = run_dir / "tts_stream_events.jsonl"
             with events_path.open("w", encoding="utf-8") as handle:
@@ -323,6 +336,24 @@ def parse_args() -> argparse.Namespace:
     tts_parser.add_argument("--language", type=str, default="Auto", help="Language (default: Auto).")
     tts_parser.add_argument("--instruct", type=str, default=None, help="Optional style instruction.")
     tts_parser.add_argument("--out-wav", type=Path, default=None, help="Optional output WAV path.")
+    tts_parser.add_argument(
+        "--tts-runtime",
+        choices=("auto", "qwen3", "ovms", "fast_fallback"),
+        default="ovms",
+        help="TTS runtime mode (default: ovms; fast_fallback is alias).",
+    )
+    tts_parser.add_argument(
+        "--ovms-tts-url",
+        type=str,
+        default=None,
+        help="Optional OVMS TTS endpoint override for this request.",
+    )
+    tts_parser.add_argument(
+        "--ovms-tts-model",
+        type=str,
+        default=None,
+        help="Optional OVMS TTS model id override for this request.",
+    )
 
     tts_stream_parser = subparsers.add_parser("tts-stream", help="Stream TTS chunks and write stream metrics.")
     tts_stream_parser.add_argument("--text", type=str, required=True, help="Text to synthesize.")
@@ -330,6 +361,24 @@ def parse_args() -> argparse.Namespace:
     tts_stream_parser.add_argument("--language", type=str, default="Auto", help="Language (default: Auto).")
     tts_stream_parser.add_argument("--instruct", type=str, default=None, help="Optional style instruction.")
     tts_stream_parser.add_argument("--out-wav", type=Path, default=None, help="Optional output WAV path.")
+    tts_stream_parser.add_argument(
+        "--tts-runtime",
+        choices=("auto", "qwen3", "ovms", "fast_fallback"),
+        default="ovms",
+        help="TTS runtime mode (default: ovms; fast_fallback is alias).",
+    )
+    tts_stream_parser.add_argument(
+        "--ovms-tts-url",
+        type=str,
+        default=None,
+        help="Optional OVMS TTS endpoint override for this request.",
+    )
+    tts_stream_parser.add_argument(
+        "--ovms-tts-model",
+        type=str,
+        default=None,
+        help="Optional OVMS TTS model id override for this request.",
+    )
     tts_stream_parser.add_argument(
         "--chunk-ms",
         type=int,
@@ -354,6 +403,9 @@ def main() -> int:
         speaker=getattr(args, "speaker", None),
         instruct=getattr(args, "instruct", None),
         out_wav=getattr(args, "out_wav", None),
+        tts_runtime=getattr(args, "tts_runtime", "ovms"),
+        ovms_tts_url=getattr(args, "ovms_tts_url", None),
+        ovms_tts_model=getattr(args, "ovms_tts_model", None),
         chunk_ms=getattr(args, "chunk_ms", 200),
     )
     run_dir = result["run_dir"]
