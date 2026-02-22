@@ -36,11 +36,12 @@ python scripts/eval_retrieval.py --docs tests/fixtures/retrieval_docs_sample.jso
 * `Qwen3-VL-4B-Instruct`
 * `Qwen3-Embedding-0.6B`
 * `Qwen3-Reranker-0.6B`
-* `Qwen3-ASR-0.6B`
+* `Whisper v3 Turbo (OpenVINO GenAI runtime path for ASR)`
 
 Деактивировано:
 
 * `Qwen3-TTS-12Hz-0.6B-CustomVoice` (archived; не использовать в production runbook).
+* `Qwen3-ASR-0.6B` (archived; reversible via explicit opt-in flags).
 
 Подробная матрица: `docs/QWEN3_MODEL_STACK.md`.
 
@@ -58,7 +59,7 @@ python -m scripts.export_qwen3_custom_openvino --preset qwen3-vl-4b --model-sour
 python -m scripts.export_qwen3_custom_openvino --preset qwen3-vl-4b --execute --model-source models\hf_raw\qwen3-vl-4b
 ```
 
-### Qwen3-ASR self-conversion (candidate path)
+### Qwen3-ASR self-conversion (archived reference, keep for future restore)
 
 ```powershell
 # Dry-run
@@ -91,7 +92,7 @@ python scripts/qwen3_voice_probe_matrix.py --execute
 Ожидаемый результат:
 
 * Создается `runs/<timestamp>-qwen3-voice-probe/`.
-* Для активного roadmap проверяем в первую очередь `qwen3_asr`.
+* `qwen3_asr` проверяем только для upstream-monitoring archived path.
 
 ### Isolated upstream experiment
 
@@ -121,7 +122,7 @@ python scripts/openvino_diag.py
 
 * В `runs/<timestamp>-openvino/` создан `openvino_diag_all_devices.json`.
 
-## M3: Voice runtime demos (active path = ASR)
+## M3.1: Text core demo (OpenVINO GenAI + Qwen3-8B profile)
 
 Установка runtime deps:
 
@@ -129,19 +130,84 @@ python scripts/openvino_diag.py
 cd D:\atm10-agent
 .\.venv\Scripts\Activate.ps1
 python -m pip install -r requirements.txt
-python -m pip install "qwen-asr==0.0.6"
+python -m pip install "openvino-genai>=2025.4.0"
 ```
 
-Примечание: `qwen-tts` деактивирован и не входит в active stack.
+Запуск demo:
 
-### ASR demo
+```powershell
+python scripts/text_core_openvino_demo.py --model-dir models\qwen3-8b-int4-cw-ov --prompt "Give me a short ATM10 starter plan" --device NPU
+```
+
+Ожидаемый результат:
+
+* Создается `runs/<timestamp>-text-core-openvino/`.
+* Внутри есть `run.json` и `response.json`.
+
+## M4: HUD OCR baseline (Tesseract CLI)
+
+Примечание: для этого baseline нужен установленный системный `tesseract` в `PATH`.
+
+```powershell
+cd D:\atm10-agent
+.\.venv\Scripts\Activate.ps1
+python scripts/hud_ocr_baseline.py --image-in "C:\path\to\hud_screenshot.png" --lang eng --psm 6 --oem 1
+```
+
+Ожидаемый результат:
+
+* Создается `runs/<timestamp>-hud-ocr/`.
+* Внутри есть `run.json`, `ocr.json`, `ocr.txt`.
+
+## M4: HUD mod-hook baseline
+
+Подготовь payload JSON (пример):
+
+```json
+{
+  "event_ts": "2026-02-22T20:00:00+00:00",
+  "source": "atm10_mod_hook",
+  "hud_lines": ["Quest Updated", "Collect 16 wood"],
+  "quest_updates": [{"id": "quest:start", "text": "Collect logs", "status": "active"}],
+  "player_state": {"dimension": "minecraft:overworld", "x": 12, "y": 70, "z": -5, "health": 18.0},
+  "context_tags": ["hud", "quest", "overlay"]
+}
+```
+
+Запуск:
+
+```powershell
+cd D:\atm10-agent
+.\.venv\Scripts\Activate.ps1
+python scripts/hud_mod_hook_baseline.py --hook-json "C:\path\to\hud_hook_payload.json"
+```
+
+Ожидаемый результат:
+
+* Создается `runs/<timestamp>-hud-hook/`.
+* Внутри есть `run.json`, `hook_raw.json`, `hook_normalized.json`, `hud_text.txt`.
+
+## M3: Voice runtime demos (active path = Whisper GenAI ASR)
+
+Установка runtime deps (active path):
+
+```powershell
+cd D:\atm10-agent
+.\.venv\Scripts\Activate.ps1
+python -m pip install -r requirements.txt
+```
+
+Примечание: `qwen-tts` и `qwen-asr` выведены из active stack.
+Rollback к archived `qwen-asr` допускается только временно и с explicit opt-in флагами.
+
+### ASR demo (archived qwen3-asr path)
 
 ```powershell
 # File -> text
-python scripts/asr_demo.py --audio-in "C:\path\to\sample.wav"
+python scripts/asr_demo.py --allow-archived-qwen-asr --audio-in "C:\path\to\sample.wav"
 
 # Microphone -> text (5s)
-python scripts/asr_demo.py --record-seconds 5
+python scripts/asr_demo.py --allow-archived-qwen-asr --record-seconds 5
 ```
 
 Ожидаемый результат:
@@ -183,8 +249,8 @@ python scripts/asr_demo_whisper_genai.py --model-dir models\whisper-large-v3-tur
 ### Long-lived voice runtime service (ASR only)
 
 ```powershell
-# Service start
-python scripts/voice_runtime_service.py --host 127.0.0.1 --port 8765
+# Service start (default backend = whisper_genai)
+python scripts/voice_runtime_service.py --host 127.0.0.1 --port 8765 --asr-model models\whisper-large-v3-turbo-ov
 
 # Health
 python scripts/voice_runtime_client.py --service-url http://127.0.0.1:8765 health
@@ -212,7 +278,13 @@ python scripts/voice_runtime_client.py --service-url http://127.0.0.1:8765 asr -
 Примечание: `--asr-warmup-request` делает один ASR inference на старте (по умолчанию на сгенерированном silence WAV, либо через `--asr-warmup-audio`) и снижает cold-start impact в игровом цикле.
 Пока warmup выполняется, `/health` может быть временно недоступен; это нормально для startup-фазы.
 
-### ASR backend benchmark (`qwen_asr` vs `whisper_genai`)
+### Optional rollback: archived qwen_asr service profile
+
+```powershell
+python scripts/voice_runtime_service.py --host 127.0.0.1 --port 8765 --asr-backend qwen_asr --allow-archived-qwen-asr --asr-model Qwen/Qwen3-ASR-0.6B
+```
+
+### ASR backend benchmark (active default = `whisper_genai`)
 
 ```powershell
 # Example on the same WAV set
@@ -223,7 +295,15 @@ python scripts/benchmark_asr_backends.py `
     runs\20260220_211505-voice-latency-bench\asr_input.wav `
     runs\20260220_211708-voice-latency-oneshot-bench\asr_input.wav `
     runs\20260220_211505-voice-latency-bench\20260220_181617-voice-client\input_from_file.wav `
-  --backends qwen_asr whisper_genai `
+  --backends whisper_genai `
+  --whisper-model-dir models\whisper-large-v3-turbo-ov `
+  --whisper-device NPU
+
+# Optional archived backend compare
+python scripts/benchmark_asr_backends.py `
+  --inputs runs\20260222_151611-voice-client\input_recorded.wav `
+  --backends whisper_genai `
+  --include-archived-qwen-asr `
   --whisper-model-dir models\whisper-large-v3-turbo-ov `
   --whisper-device NPU
 ```
@@ -317,13 +397,19 @@ python scripts/normalize_ftbquests.py --quests-dir "C:\path\to\config\ftbquests\
 ```powershell
 cd D:\atm10-agent
 .\.venv\Scripts\Activate.ps1
-python scripts/retrieve_demo.py --in data/ftbquests_norm --query "steel tools" --topk 5
+python scripts/retrieve_demo.py --profile baseline --in data/ftbquests_norm --query "steel tools"
 ```
 
-Опционально, с rerank:
+Опционально, OV production profile:
 
 ```powershell
-python scripts/retrieve_demo.py --in data/ftbquests_norm --query "steel tools" --topk 5 --candidate-k 50 --reranker qwen3 --reranker-model "Qwen/Qwen3-Reranker-0.6B"
+python scripts/retrieve_demo.py --profile ov_production --in data/ftbquests_norm --query "steel tools"
+```
+
+Опционально, ручной override поверх profile:
+
+```powershell
+python scripts/retrieve_demo.py --profile ov_production --in data/ftbquests_norm --query "steel tools" --reranker-device NPU
 ```
 
 ## M2: Retrieval eval benchmark
@@ -331,7 +417,13 @@ python scripts/retrieve_demo.py --in data/ftbquests_norm --query "steel tools" -
 ```powershell
 cd D:\atm10-agent
 .\.venv\Scripts\Activate.ps1
-python scripts/eval_retrieval.py --docs tests/fixtures/retrieval_docs_sample.jsonl --eval tests/fixtures/retrieval_eval_sample.jsonl --topk 3 --candidate-k 50 --reranker none
+python scripts/eval_retrieval.py --profile baseline --docs tests/fixtures/retrieval_docs_sample.jsonl --eval tests/fixtures/retrieval_eval_sample.jsonl --topk 3 --candidate-k 50 --reranker none
+```
+
+Опционально, OV production profile:
+
+```powershell
+python scripts/eval_retrieval.py --profile ov_production --docs tests/fixtures/retrieval_docs_sample.jsonl --eval tests/fixtures/retrieval_eval_sample.jsonl
 ```
 
 ## M2: Qdrant ingest (optional backend)
@@ -350,3 +442,146 @@ cd D:\atm10-agent
 .\.venv\Scripts\Activate.ps1
 python scripts/retrieve_demo.py --backend qdrant --collection atm10 --query "steel tools" --topk 5
 ```
+
+## M5: KAG baseline (file-based, no Neo4j)
+
+### Build graph
+
+```powershell
+cd D:\atm10-agent
+.\.venv\Scripts\Activate.ps1
+python scripts/kag_build_baseline.py --in data/ftbquests_norm/quests.jsonl
+```
+
+Ожидаемый результат:
+
+* Создается `runs/<timestamp>-kag-build/`.
+* Внутри есть `run.json` и `kag_graph.json`.
+
+### Query graph
+
+```powershell
+cd D:\atm10-agent
+.\.venv\Scripts\Activate.ps1
+python scripts/kag_query_demo.py --graph runs\YYYYMMDD_HHMMSS-kag-build\kag_graph.json --query "steel tools"
+```
+
+Ожидаемый результат:
+
+* Создается `runs/<timestamp>-kag-query/`.
+* Внутри есть `run.json` и `kag_query_results.json`.
+
+## M5.1: KAG via Neo4j (approved transition)
+
+### Start Neo4j locally
+
+```powershell
+docker run --name atm10-neo4j -p 7474:7474 -p 7687:7687 `
+  -e NEO4J_AUTH=neo4j/neo4jpass `
+  neo4j:5
+```
+
+### Sync `kag_graph.json` to Neo4j
+
+```powershell
+cd D:\atm10-agent
+.\.venv\Scripts\Activate.ps1
+$env:NEO4J_PASSWORD="neo4jpass"
+python scripts/kag_sync_neo4j.py `
+  --graph runs\YYYYMMDD_HHMMSS-kag-build\kag_graph.json `
+  --neo4j-url http://127.0.0.1:7474 `
+  --neo4j-database neo4j `
+  --neo4j-user neo4j `
+  --reset-graph
+```
+
+Ожидаемый результат:
+
+* Создается `runs/<timestamp>-kag-sync-neo4j/`.
+* Внутри есть `run.json` и `neo4j_sync_summary.json`.
+
+### Query KAG directly from Neo4j
+
+```powershell
+cd D:\atm10-agent
+.\.venv\Scripts\Activate.ps1
+$env:NEO4J_PASSWORD="neo4jpass"
+python scripts/kag_query_neo4j.py `
+  --query "steel tools" `
+  --topk 5 `
+  --neo4j-url http://127.0.0.1:7474 `
+  --neo4j-database neo4j `
+  --neo4j-user neo4j
+```
+
+Ожидаемый результат:
+
+* Создается `runs/<timestamp>-kag-query-neo4j/`.
+* Внутри есть `run.json` и `kag_query_results.json`.
+
+## M5.2: KAG Neo4j benchmark (quality + latency)
+
+```powershell
+cd D:\atm10-agent
+.\.venv\Scripts\Activate.ps1
+$env:NEO4J_PASSWORD="neo4jpass"
+python scripts/eval_kag_neo4j.py `
+  --eval tests/fixtures/kag_neo4j_eval_sample.jsonl `
+  --topk 5 `
+  --warmup-runs 1 `
+  --neo4j-url http://127.0.0.1:7474 `
+  --neo4j-database neo4j `
+  --neo4j-user neo4j
+```
+
+Ожидаемый результат:
+
+* Создается `runs/<timestamp>-kag-neo4j-eval/`.
+* Внутри есть `run.json`, `eval_results.json`, `summary.md`.
+* В `eval_results.json` есть:
+  * `mean_recall_at_k`
+  * `mean_mrr_at_k`
+  * `hit_rate_at_k`
+  * `latency_mean_ms`, `latency_p95_ms`, `latency_max_ms`
+* `--warmup-runs` делает N полноценных warmup-проходов по eval-набору до измеряемого прогона.
+  Warmup-запросы не входят в per-case latency и итоговые метрики, но фиксируются в `run.json.warmup`.
+
+### Hard-cases benchmark
+
+Nightly hard profile (recommended): использовать `--warmup-runs 1` как default.
+
+```powershell
+cd D:\atm10-agent
+.\.venv\Scripts\Activate.ps1
+$env:NEO4J_PASSWORD="neo4jpass"
+python scripts/eval_kag_neo4j.py `
+  --eval tests/fixtures/kag_neo4j_eval_hard.jsonl `
+  --topk 5 `
+  --warmup-runs 1 `
+  --neo4j-url http://127.0.0.1:7474 `
+  --neo4j-database neo4j `
+  --neo4j-user neo4j
+```
+
+### Warmup A/B compare (mini benchmark)
+
+```powershell
+cd D:\atm10-agent
+.\.venv\Scripts\Activate.ps1
+$env:NEO4J_PASSWORD="neo4jpass"
+python scripts/compare_kag_neo4j_warmup.py `
+  --eval tests/fixtures/kag_neo4j_eval_hard.jsonl `
+  --repeats 3 `
+  --baseline-warmup-runs 0 `
+  --candidate-warmup-runs 1 `
+  --topk 5 `
+  --neo4j-url http://127.0.0.1:7474 `
+  --neo4j-database neo4j `
+  --neo4j-user neo4j
+```
+
+Ожидаемый результат:
+
+* Создается `runs/<timestamp>-kag-neo4j-warmup-compare/`.
+* Внутри есть `run.json`, `summary.json`, `summary.md`.
+* `summary.json.delta.p95_improvement_ms > 0` означает, что candidate профиль быстрее baseline по p95.
