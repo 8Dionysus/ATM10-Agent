@@ -585,3 +585,35 @@ python scripts/compare_kag_neo4j_warmup.py `
 * Создается `runs/<timestamp>-kag-neo4j-warmup-compare/`.
 * Внутри есть `run.json`, `summary.json`, `summary.md`.
 * `summary.json.delta.p95_improvement_ms > 0` означает, что candidate профиль быстрее baseline по p95.
+
+## M6: Automation scaffold (dry-run only)
+
+Важно: этот entrypoint не выполняет реальные keyboard/mouse события. Он только валидирует план и пишет dry-run artifacts.
+
+```powershell
+cd D:\atm10-agent
+.\.venv\Scripts\Activate.ps1
+python scripts/automation_dry_run.py --plan-json "C:\path\to\automation_plan.json"
+```
+
+Пример `automation_plan.json`:
+
+```json
+{
+  "context": {
+    "source": "manual_hotkey",
+    "note": "open quest book and wait"
+  },
+  "actions": [
+    {"type": "key_tap", "key": "l"},
+    {"type": "wait", "duration_ms": 250, "repeats": 2},
+    {"type": "mouse_click", "button": "left", "x": 1200, "y": 640}
+  ]
+}
+```
+
+Ожидаемый результат:
+
+* Создается `runs/<timestamp>-automation-dry-run/`.
+* Внутри есть `run.json`, `actions_normalized.json`, `execution_plan.json`.
+* `run.json.result.dry_run=true`, никаких системных input events не отправляется.
