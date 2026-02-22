@@ -51,7 +51,7 @@ python -m pytest
 
 ## Current status (2026-02-22)
 
-* `python -m pytest` green (`99 passed`).
+* `python -m pytest` green (`127 passed`).
 * Phase A smoke работает и пишет run artifacts.
 * Phase B baseline работает end-to-end:
   * нормализация FTB Quests (`.json` + `.snbt`) в `data/ftbquests_norm/quests.jsonl`
@@ -69,27 +69,57 @@ python -m pytest
     (artifact: `runs/20260220_132946/`).
 * `qwen3` можно запускать через `torch` или `openvino` runtime (`--reranker-runtime`, `--reranker-device`);
   для Windows добавлен wrapper `scripts/run_qwen3_openvino.ps1`.
+* Для retrieval добавлен profile-layer `baseline|ov_production`:
+  `ov_production` фиксирует OpenVINO reranker path (`OpenVINO/Qwen3-Reranker-0.6B-fp16-ov`, runtime `openvino`)
+  без ломки baseline профиля.
 * `Qwen3-VL-4B-Instruct` успешно конвертирован в OpenVINO IR через custom path
   (`scripts/export_qwen3_custom_openvino.py`, artifact: `runs/20260220_150028-qwen3-custom-export/`).
-* `Qwen3-ASR-0.6B` остаётся в open gap для OpenVINO export:
+* `Qwen3-ASR-0.6B` переведен в archived status (reversible) из-за upstream blocker в export path:
   * initial runtime-only probe/dry-run: `runs/20260222_141416-qwen3-voice-probe/`,
     `runs/20260222_141431-qwen3-custom-export/` (`import_error`)
   * после запуска в `.venv` с export toolchain:
     `runs/20260222_142450-qwen3-voice-probe/`, `runs/20260222_142518-qwen3-custom-export/`
     -> `blocked_upstream`, `unlock_gate.ready=false`
   * текущий вывод: блокер в upstream support `qwen3_asr`, а не только в локальных зависимостях.
+  * runtime-path сохранен в коде и включается только explicit opt-in флагами.
 * Для Phase C активный runnable path:
-  * `scripts/asr_demo.py` (audio file / microphone -> `transcription.json`)
   * `scripts/asr_demo_whisper_genai.py` (OpenVINO GenAI Whisper v3 Turbo, `CPU|GPU|NPU`)
   * `scripts/voice_runtime_service.py` (long-lived HTTP service)
   * `scripts/start_voice_whisper_npu.ps1` (ready-to-run low-latency profile: `whisper_genai + NPU + startup warmup`)
   * `scripts/voice_runtime_client.py` (fast CLI client)
+  * `scripts/asr_demo.py` (archived qwen3-asr path; требуется `--allow-archived-qwen-asr`)
   * runtime layer: `src/agent_core/io_voice.py`
+* Для M3.1 добавлен text-core OpenVINO demo:
+  `scripts/text_core_openvino_demo.py` (`prompt` -> `response.json` в `runs/<timestamp>-text-core-openvino/`).
+* Для HUD assistance добавлены два runnable baseline path:
+  * `scripts/hud_ocr_baseline.py` (screenshot/image -> OCR artifacts)
+  * `scripts/hud_mod_hook_baseline.py` (hook JSON -> normalized HUD artifacts)
+* Для Graph/KAG добавлен file-based baseline:
+  * `scripts/kag_build_baseline.py` (docs -> `kag_graph.json`)
+  * `scripts/kag_query_demo.py` (`kag_graph.json` + query -> top-k docs + citations)
+* Для Graph/KAG добавлен Neo4j runtime path (approved transition):
+  * `scripts/kag_sync_neo4j.py` (`kag_graph.json` -> Neo4j via HTTP Cypher)
+  * `scripts/kag_query_neo4j.py` (Neo4j -> top-k docs + citations)
+* Neo4j e2e подтвержден локальным прогоном:
+  `runs/20260222_164928-kag-build/` -> `runs/20260222_164942-kag-sync-neo4j/` -> `runs/20260222_165026-kag-query-neo4j/`
+  (latency snapshot: `runs/20260222_165100-kag-neo4j-e2e/e2e_latency_snapshot.json`).
+* Добавлен benchmark для KAG Neo4j:
+  `scripts/eval_kag_neo4j.py` + fixture `tests/fixtures/kag_neo4j_eval_sample.jsonl`.
+  Baseline run: `runs/20260222_171620-kag-neo4j-eval/`
+  (`recall@5=1.0000`, `mrr@5=0.8571`, `hit-rate@5=1.0000`, `latency_p95_ms=70.96`).
+  Hard-cases pre-uplift: `runs/20260222_170006-kag-neo4j-eval/`
+  (`recall@5=0.5000`, `mrr@5=0.3750`, `hit-rate@5=0.5000`, `latency_p95_ms=70.50`).
+  Hard-cases post-uplift: `runs/20260222_170453-kag-neo4j-eval/`
+  (`recall@5=1.0000`, `mrr@5=0.7812`, `hit-rate@5=1.0000`, `latency_p95_ms=133.00`).
+  Hard-cases post-latency-tuning: `runs/20260222_171240-kag-neo4j-eval/`
+  (`recall@5=1.0000`, `mrr@5=0.8438`, `hit-rate@5=1.0000`, `latency_p95_ms=66.14`).
 * Добавлен ASR backend benchmark: `scripts/benchmark_asr_backends.py`.
   Baseline run `runs/20260222_152347-asr-backend-bench/` на 6 одинаковых WAV:
   `qwen_asr avg=1.377s`, `whisper_genai(NPU) avg=1.364s`.
   Warm-path run `runs/20260222_152914-asr-backend-bench/` (10 повторов одного WAV):
   `qwen_asr p95=2.317s`, `whisper_genai(NPU) p95=1.560s` (лучший tail latency для realtime loop).
+  Для текущего operational path benchmark по умолчанию запускается только для `whisper_genai`;
+  `qwen_asr` включается отдельным флагом.
 * `Qwen3-TTS` деактивирован в active stack (остался только как historical reference в артефактах).
 * Для снижения шума по умолчанию из индекса исключаются `lang/**` и `reward_tables/**`.
 * EOL policy зафиксирована в `.gitattributes` (LF для code/docs, CRLF для Windows scripts).
@@ -133,14 +163,15 @@ Definition of Done:
 
 ### Phase C — Voice (опционально)
 
-**Активный voice path: ASR на Qwen3**
+**Активный voice path: ASR на Whisper GenAI (OpenVINO)**
 
 * push-to-talk -> transcribe
 * voice не ломает core (Phase A/B работают без voice)
-* operational path: `qwen-asr` + `voice_runtime_service/client` для low-latency ASR
+* operational path: `whisper_genai` + `voice_runtime_service/client` + `start_voice_whisper_npu.ps1`
+* `qwen3-asr` сохранен как archived path (reversible) и включается только explicit opt-in
 * `Qwen3-TTS` path исключен из active roadmap; для озвучки нужен отдельный fast-fallback runtime
 
-Установка voice runtime (дополнительно к `requirements.txt`):
+Опциональный rollback к archived `qwen3-asr` path:
 
 ```powershell
 python -m pip install "qwen-asr==0.0.6"

@@ -1,13 +1,13 @@
 # QWEN3 Model Stack (OpenVINO-first)
 
-Актуально на: 2026-02-20 (updated)
+Актуально на: 2026-02-22 (updated)
 
 ## Active target stack
 
 1. Text core LLM: `Qwen3-8B`
 2. Vision core: `Qwen3-VL-4B-Instruct`
 3. Retrieval: `Qwen3-Embedding-0.6B` + `Qwen3-Reranker-0.6B`
-4. Voice IN: `Qwen3-ASR-0.6B`
+4. Voice IN (active runtime): `Whisper v3 Turbo (OpenVINO GenAI)`
 
 Rule: no substitution to `Qwen2.5*`.
 
@@ -16,6 +16,9 @@ Rule: no substitution to `Qwen2.5*`.
 * `Qwen3-TTS-12Hz-0.6B-CustomVoice` + `Qwen3-TTS-Tokenizer-12Hz` removed from active stack on 2026-02-20.
 * Причина: не проходит production SLA по latency и остается заблокированным для NPU compile-path в текущем OpenVINO pipeline.
 * Все TTS-эксперименты оставлены только как архив артефактов (`runs/*qwen3-tts*`), без operational rollout.
+* `Qwen3-ASR-0.6B` переведен в archived/recoverable status на 2026-02-22.
+* Причина: подтвержденный `blocked_upstream` в `transformers/optimum` export flow (`qwen3_asr`), активный ASR path переведен на Whisper GenAI.
+* Восстановление возможно без переписывания кода: используются explicit opt-in флаги в runtime scripts.
 
 ## Local hardware profile (this repo host)
 
@@ -40,7 +43,7 @@ Rule: no substitution to `Qwen2.5*`.
 * Vision:
   * source: `Qwen/Qwen3-VL-4B-Instruct`
   * export target: OpenVINO IR INT4 (`image-text-to-text`)
-* Voice IN:
+* Voice IN (archived reference):
   * source: `Qwen/Qwen3-ASR-0.6B`
   * export target: OpenVINO IR (ASR pipeline, custom validation required)
 
@@ -60,7 +63,7 @@ python scripts/export_qwen3_custom_openvino.py --preset qwen3-vl-4b --model-sour
 python scripts/export_qwen3_custom_openvino.py --preset qwen3-vl-4b --execute --model-source models\hf_raw\qwen3-vl-4b
 ```
 
-### Qwen3-ASR -> OpenVINO IR (candidate path, validate first)
+### Qwen3-ASR -> OpenVINO IR (archived candidate path, validate before restore)
 
 ```powershell
 # Dry-run
