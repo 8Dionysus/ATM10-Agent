@@ -5,7 +5,7 @@
 ## Status (as of 2026-02-22)
 
 * M0 + M1 completed.
-* `python -m pytest` green (`99 passed`).
+* `python -m pytest` green (`136 passed`).
 * `scripts/phase_a_smoke.py` выполняется и создаёт run artifacts.
 * Контракт fixture: `tests/fixtures/rag_docs_sample.jsonl` — строгий JSONL без пустых строк.
 * Phase B baseline validated e2e on local ATM10 data + local Qdrant.
@@ -28,6 +28,10 @@
 * Для low-latency realtime loop принят startup профиль `whisper_genai + NPU + warmup`
   (`scripts/start_voice_whisper_npu.ps1`); по warm-path benchmark
   `runs/20260222_152914-asr-backend-bench/` `whisper_genai` показал лучший p95 tail latency.
+* `qwen3-asr` переведен в archived/recoverable status:
+  runtime путь оставлен в коде, но включается только explicit opt-in флагами.
+* Добавлен text-core OpenVINO demo entrypoint:
+  `scripts/text_core_openvino_demo.py` (prompt -> `response.json` в `runs/<timestamp>-text-core-openvino/`).
 
 ---
 
@@ -163,19 +167,20 @@ DoD:
 
 Tasks:
 
-* [x] `scripts/asr_demo.py` (record short clip -> text)
+* [x] `scripts/asr_demo.py` сохранен как archived qwen3-asr demo (explicit opt-in).
 * [x] `scripts/tts_demo.py` сохранен как historical reference (archived)
 * [x] Optional integration into loop: `src/agent_core/io_voice.py`
 * [x] Graceful degradation: если нет audio device — понятная ошибка
-* [x] Long-lived runtime for lower steady-state latency: `scripts/voice_runtime_service.py` + `scripts/voice_runtime_client.py` (active ASR path)
+* [x] Long-lived runtime for lower steady-state latency: `scripts/voice_runtime_service.py` + `scripts/voice_runtime_client.py` (active backend: `whisper_genai`)
 * [x] Add fast-fallback TTS mode for in-game SLA `<=2s` (separate stack, not `Qwen3-TTS`)
   Done: отдельный native Python TTS runtime (`scripts/tts_runtime_service.py`):
   FastAPI router + `XTTS v2` main engine + fallback `Piper`/`Silero` (ru service voice),
   с prewarm/queue/chunking/phrase cache.
 * [x] Добавить operational CLI client для TTS runtime:
   `scripts/tts_runtime_client.py` (`health|tts|tts-stream`) + run artifacts.
-* [ ] Qwen3 voice target (active):
-  * ASR: `Qwen3-ASR-0.6B` (OpenVINO runtime or self-converted IR)
+* [x] Перевести `Qwen3-ASR-0.6B` в archived/recoverable status.
+  * Active ASR target: `Whisper v3 Turbo (OpenVINO GenAI)`.
+  * `Qwen3-ASR-0.6B` остается в repo как restore path с explicit opt-in.
 
 ### M3.1 — OpenVINO model rollout for Qwen3 stack
 
@@ -183,13 +188,19 @@ Tasks:
 
 Tasks:
 
-* [ ] Поднять text core на готовом OV-репозитории (`Qwen3-8B`, int4/int8 профиль).
-* [ ] Зафиксировать retrieval на OV-моделях (`Embedding 0.6B`, `Reranker 0.6B`) как production default.
+* [x] Поднять text core на готовом OV-репозитории (`Qwen3-8B`, int4/int8 профиль).
+  Done: добавлен runnable smoke entrypoint `scripts/text_core_openvino_demo.py`
+  с `OpenVINO GenAI` runtime и artifact contract (`run.json`, `response.json`).
+* [x] Зафиксировать retrieval на OV-моделях (`Embedding 0.6B`, `Reranker 0.6B`) как production default.
+  Done: добавлен profile-layer `baseline|ov_production` (`src/rag/retrieval_profiles.py`),
+  profile `ov_production` использует `OpenVINO/Qwen3-Reranker-0.6B-fp16-ov` +
+  `reranker_runtime=openvino` + `OpenVINO/Qwen3-Embedding-0.6B-int8-ov` metadata;
+  подключено в `scripts/retrieve_demo.py` и `scripts/eval_retrieval.py`.
 * [x] Добавить self-conversion pipeline для `Qwen3-VL-4B-Instruct` -> OV IR.
   Done: custom path `scripts/export_qwen3_custom_openvino.py --preset qwen3-vl-4b --execute --model-source ...`,
   artifact: `runs/20260220_150028-qwen3-custom-export/`,
   output: `models/qwen3-vl-4b-instruct-ov-custom`.
-* [ ] Добавить self-conversion pipeline для `Qwen3-ASR-0.6B` -> OV IR.
+* [ ] (Archived track) Добавить self-conversion pipeline для `Qwen3-ASR-0.6B` -> OV IR.
 * [x] `Qwen3-TTS` export/benchmark ветка переведена в archived/deactivated status;
   артефакты сохранены как historical reference (`runs/*qwen3-tts*`).
 * [x] Добавить единый probe-слой для voice-архитектур (`qwen3_asr` + archived `qwen3_tts*`)
@@ -206,9 +217,46 @@ DoD:
 
 ## Backlog (Later / Optional)
 
-* [ ] HUD assistance (OCR baseline / mod hook)
-* [ ] Graph/KAG via Neo4j (только после measurable value в Phase B)
-* [ ] Automation (hotkeys/mouse) строго локально, default dry-run
+* [x] HUD assistance: OCR baseline.
+  Done: добавлен runnable entrypoint `scripts/hud_ocr_baseline.py` (Tesseract CLI),
+  артефакты `run.json/ocr.json/ocr.txt`, покрытие тестами.
+* [x] HUD assistance: mod hook.
+  Done: добавлен runnable entrypoint `scripts/hud_mod_hook_baseline.py` (hook JSON ingest),
+  артефакты `run.json/hook_raw.json/hook_normalized.json/hud_text.txt`, покрытие тестами.
+* [x] Graph/KAG baseline (file-based, no Neo4j).
+  Done: `src/kag/baseline.py`, `scripts/kag_build_baseline.py`, `scripts/kag_query_demo.py`,
+  артефакты `kag_graph.json` и `kag_query_results.json`, тестовое покрытие добавлено.
+* [x] Graph/KAG Neo4j runtime path (approved transition).
+  Done: `src/kag/neo4j_backend.py`, `scripts/kag_sync_neo4j.py`, `scripts/kag_query_neo4j.py`,
+  тесты на backend/sync/query добавлены.
+* [x] Graph/KAG Neo4j e2e validation на локальном инстансе (artifacted run + latency snapshot).
+  Done: `runs/20260222_164928-kag-build/`, `runs/20260222_164942-kag-sync-neo4j/`,
+  `runs/20260222_165026-kag-query-neo4j/`,
+  latency snapshot: `runs/20260222_165100-kag-neo4j-e2e/e2e_latency_snapshot.json`.
+* [x] Graph/KAG Neo4j benchmark на фиксированном eval-наборе (quality + latency).
+  Done: `scripts/eval_kag_neo4j.py`, fixture `tests/fixtures/kag_neo4j_eval_sample.jsonl`,
+  run `runs/20260222_171620-kag-neo4j-eval/`
+  (`recall@5=1.0000`, `mrr@5=0.8571`, `hit-rate@5=1.0000`, `latency_p95_ms=70.96`).
+* [x] Graph/KAG Neo4j hard-cases benchmark.
+  Done: fixture `tests/fixtures/kag_neo4j_eval_hard.jsonl`,
+  run `runs/20260222_170006-kag-neo4j-eval/`
+  (`recall@5=0.5000`, `mrr@5=0.3750`, `hit-rate@5=0.5000`, `latency_p95_ms=70.50`).
+* [x] Graph/KAG Neo4j relevance uplift по hard-cases (target `hit-rate@5 >= 0.75`).
+  Done: query uplift (lexical fallback in `query_kag_neo4j`),
+  run `runs/20260222_170453-kag-neo4j-eval/`
+  (`recall@5=1.0000`, `mrr@5=0.7812`, `hit-rate@5=1.0000`, `latency_p95_ms=133.00`).
+* [x] Graph/KAG Neo4j latency tuning после relevance uplift.
+  Done: hybrid lexical strategy (`fulltext -> limited scan fallback`) +
+  lexical gating (`run lexical only when direct_rows < topk`) +
+  skip expansion for single-token queries;
+  run `runs/20260222_171240-kag-neo4j-eval/`
+  (`recall@5=1.0000`, `mrr@5=0.8438`, `hit-rate@5=1.0000`, `latency_p95_ms=66.14`).
+* [x] Graph/KAG Neo4j ranking uplift для `star` (target: улучшить first-hit rank).
+  Done: `query_kag_neo4j` single-token lexical alignment bonus + fallback gating,
+  run `runs/20260222_213235-kag-neo4j-eval/` (`star.first_hit_rank=1`).
+* [x] Automation (hotkeys/mouse) строго локально, default dry-run
+  Done: `scripts/automation_dry_run.py` (plan JSON -> normalized dry-run artifacts, no real input events),
+  tests: `tests/test_automation_dry_run.py`.
 * [x] CI hardening: добавить smoke jobs для runnable scripts помимо `pytest`
   Done: CI workflow запускает `phase_a_smoke` (stub), `retrieve_demo` (fixtures), `eval_retrieval` (fixtures).
 
