@@ -78,7 +78,7 @@ Definition of Done:
 
 Open tasks:
 
-* Согласовать guardrail-пороги (`mrr`, `hit-rate`, `p95`) для CI/nightly режима.
+* Откалибровать severity-правила (`warn`/`critical`) для regression-флагов nightly trend-report при корректировке guardrail thresholds.
 
 #### G3 — CI Smoke Expansion
 
@@ -93,7 +93,7 @@ Definition of Done:
 
 Open tasks:
 
-* Выбрать приоритетные scripts для CI-smoke (вероятнее всего: `automation_dry_run`, `eval_kag_neo4j` c lightweight profile).
+* Поддерживать machine-readable smoke summaries в CI и унифицировать quick-links на troubleshooting playbook между workflow summaries.
 
 ## Archived Tracks
 

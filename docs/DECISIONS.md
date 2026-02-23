@@ -91,3 +91,26 @@
 * Документационная структура приведена к единому source of truth: `TODO.md` используется только как execution-план (Now/Next/Blocked + WIP=3), `PLANS.md` — только как цели/milestones/DoD, подробная хронология и run-детали перенесены в `docs/SESSION_*.md`.
 * Archived/recoverable направления вынесены в отдельный реестр `docs/ARCHIVED_TRACKS.md`, чтобы roadmap не смешивался с recovery-треками.
 * Счетчики вида `N passed` не дублируются по всем статус-докам: оперативная истина фиксируется в CI и в последнем `docs/SESSION_*.md` snapshot.
+
+## 2026-02-23
+
+* Для `automation_dry_run` зафиксирован явный action-plan контракт `automation_plan_v1`: валидируем `schema_version`, добавляем нормализацию `intent` (`goal/priority/tags/constraints`) и сохраняем его в `actions_normalized.json` для интеграции с planning-слоем.
+* В контракте введено правило уникальности `action.id`, чтобы предотвратить неоднозначность в downstream execution traces и regression-тестах.
+* Для reproducible demo-path добавлены canonical сценарии `tests/fixtures/automation_plan_quest_book.json` и `tests/fixtures/automation_plan_inventory_check.json`; runbook обновлен командами прямого запуска этих fixtures.
+* Для `M6.3` добавлен lightweight adapter `scripts/intent_to_automation_plan.py` (`automation_intent_v1` -> `automation_plan_v1`) с детерминированными template-intent сценариями (`open_quest_book`, `check_inventory_tool`) и artifact contract `runs/<timestamp>-intent-to-automation-plan/{run.json,automation_plan.json}`.
+* Для `M6.4` добавлен единый smoke entrypoint `scripts/automation_intent_chain_smoke.py`, который оркестрирует dry-run цепочку `intent -> automation_plan_v1 -> automation_dry_run` и пишет chain artifacts (`run.json`, `chain_summary.json`, `automation_plan.json`) с ссылками на child runs.
+* Для `M6.5` CI smoke расширен двумя lightweight automation-сценариями на фиксированных fixtures: `scripts/automation_dry_run.py --plan-json tests/fixtures/automation_plan_quest_book.json` и `scripts/automation_intent_chain_smoke.py --intent-json tests/fixtures/intent_open_quest_book.json`.
+* Для снижения flaky-риска в CI выбран fixture-only подход без внешних сервисов/девайсов: новые smoke-steps не требуют Docker, аудио-устройств или модельных runtime-загрузок.
+* Для `KAG quality guardrail` зафиксированы canonical threshold-профили `sample|hard` и отдельный checker `scripts/check_kag_neo4j_guardrail.py` для явного pass/fail по `recall/mrr/hit-rate/latency_p95`.
+* Для `M6.6` зафиксирован CI contract-check layer для automation smoke: `scripts/check_automation_smoke_contract.py` проверяет artifact contract и минимальные thresholds; шаги валидации добавлены в `.github/workflows/pytest.yml`.
+* Для `M5.3` guardrail-path переведен в отдельный nightly workflow `.github/workflows/kag-neo4j-guardrail-nightly.yml` (`build -> sync -> eval sample/hard -> guardrail-check`) с upload artifacts и step summary.
+* Для `M6.7` в `scripts/check_automation_smoke_contract.py` добавлен machine-readable output (`--summary-json`), а в CI smoke job добавлены summary/report шаг и artifact upload для контрактных проверок.
+* Для `M5.4` добавлен lightweight trend-snapshot script `scripts/kag_guardrail_trend_snapshot.py`, который сравнивает latest метрики `sample/hard` из nightly run artifacts и пишет `trend_snapshot.json` + `summary.md`.
+* Для `M6.8` troubleshooting playbook по automation smoke contract failures зафиксирован в `docs/RUNBOOK.md` как canonical оперативная процедура диагностики.
+* Для `M5.5` nightly workflow дополнен trend-report шагом: `kag_guardrail_trend_snapshot.py` выполняется в CI, а результаты добавляются в `GITHUB_STEP_SUMMARY` и в upload artifacts (`runs/nightly-kag-trend`).
+* Для `M6.9` в CI smoke summary добавлен прямой quick-link на runbook section `M6.8`, чтобы сократить time-to-diagnosis при контрактных падениях.
+* Для `M5.6` trend snapshot расширен rolling-baseline сравнением (`latest` vs mean previous N runs) с отдельными baseline-дельтами в `trend_snapshot.json`, `summary.md` и nightly step summary.
+* Для `M6.10` quick-link на runbook troubleshooting (`M6.8`) продублирован в nightly guardrail summary, чтобы CI/nightly отчеты имели единый path к диагностике.
+* Для `M5.7` в `kag_guardrail_trend_snapshot` добавлен regression-статус слой для rolling-baseline (`mrr` и `latency_p95`: `improved|stable|regressed|insufficient_history`) и агрегированный флаг `has_any_regression`.
+* Для doc-hygiene на закрытии сессии `README.md` и `MANIFEST.md` переведены в lightweight snapshot-формат с ссылками на `TODO/PLANS/RUNBOOK/SESSION`, чтобы исключить расхождение длинных статус-блоков.
+* Для weekly ретроспектив зафиксирован единый one-screen шаблон `docs/SESSION_WEEKLY_TEMPLATE.md`; `docs/SOURCE_OF_TRUTH.md` обновлен с явной ролью шаблона.

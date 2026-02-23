@@ -26,6 +26,10 @@ python -m pytest
 python scripts/phase_a_smoke.py --vlm-provider stub --runs-dir runs/ci-smoke-phase-a
 python scripts/retrieve_demo.py --in tests/fixtures/retrieval_docs_sample.jsonl --query "mekanism steel" --topk 3 --candidate-k 10 --reranker none --runs-dir runs/ci-smoke-retrieve
 python scripts/eval_retrieval.py --docs tests/fixtures/retrieval_docs_sample.jsonl --eval tests/fixtures/retrieval_eval_sample.jsonl --topk 3 --candidate-k 10 --reranker none --runs-dir runs/ci-smoke-eval
+python scripts/automation_dry_run.py --plan-json tests/fixtures/automation_plan_quest_book.json --runs-dir runs/ci-smoke-automation-dry-run
+python scripts/check_automation_smoke_contract.py --mode dry_run --runs-dir runs/ci-smoke-automation-dry-run --min-action-count 3 --min-step-count 4 --summary-json runs/ci-smoke-automation-dry-run/contract_summary.json
+python scripts/automation_intent_chain_smoke.py --intent-json tests/fixtures/intent_open_quest_book.json --runs-dir runs/ci-smoke-automation-chain
+python scripts/check_automation_smoke_contract.py --mode intent_chain --runs-dir runs/ci-smoke-automation-chain --min-action-count 3 --min-step-count 4 --expected-intent-type open_quest_book --summary-json runs/ci-smoke-automation-chain/contract_summary.json
 ```
 
 ## Qwen3 stack (OpenVINO-first)
@@ -563,6 +567,53 @@ python scripts/eval_kag_neo4j.py `
   --neo4j-user neo4j
 ```
 
+### Canonical guardrail thresholds (sample + hard)
+
+Пороговые профили:
+
+* `sample`: `recall@k >= 1.0`, `mrr@k >= 0.80`, `hit-rate@k >= 1.0`, `latency_p95_ms <= 120`
+* `hard`: `recall@k >= 1.0`, `mrr@k >= 0.90`, `hit-rate@k >= 1.0`, `latency_p95_ms <= 130`
+
+Проверка sample-run:
+
+```powershell
+python scripts/check_kag_neo4j_guardrail.py --profile sample --eval-results-json "runs\YYYYMMDD_HHMMSS-kag-neo4j-eval\eval_results.json"
+```
+
+Проверка hard-run:
+
+```powershell
+python scripts/check_kag_neo4j_guardrail.py --profile hard --eval-results-json "runs\YYYYMMDD_HHMMSS-kag-neo4j-eval\eval_results.json"
+```
+
+## M5.3: KAG guardrail nightly workflow
+
+Nightly workflow file:
+
+* `.github/workflows/kag-neo4j-guardrail-nightly.yml`
+
+Workflow steps:
+
+* `kag_build_baseline` на fixture docs `tests/fixtures/kag_neo4j_docs_sample.jsonl`
+* `kag_sync_neo4j` в локальный Neo4j service
+* `eval_kag_neo4j` для `sample` + `hard` (оба с `--warmup-runs 1`)
+* `check_kag_neo4j_guardrail.py` для `sample` + `hard`
+* `kag_guardrail_trend_snapshot.py` для latest/history trend (`sample` vs `hard`)
+* upload run artifacts + step summary (guardrail table + trend snapshot)
+
+Trend snapshot manual run (optional):
+
+```powershell
+python scripts/kag_guardrail_trend_snapshot.py --sample-runs-dir runs/nightly-kag-eval-sample --hard-runs-dir runs/nightly-kag-eval-hard --history-limit 10 --baseline-window 5 --runs-dir runs/nightly-kag-trend
+```
+
+Ожидаемый результат:
+
+* Создается `runs/<timestamp>-kag-guardrail-trend/`.
+* Внутри есть `run.json`, `trend_snapshot.json`, `summary.md`.
+* В `trend_snapshot.json` есть `rolling_baseline` по `sample`/`hard` (latest vs mean previous N runs).
+* В `rolling_baseline.regression_flags` фиксируются статусы `mrr`/`latency_p95` (`improved|stable|regressed|insufficient_history`).
+
 ### Warmup A/B compare (mini benchmark)
 
 ```powershell
@@ -600,6 +651,13 @@ python scripts/automation_dry_run.py --plan-json "C:\path\to\automation_plan.jso
 
 ```json
 {
+  "schema_version": "automation_plan_v1",
+  "intent": {
+    "goal": "open quest book and inspect active objective",
+    "priority": "normal",
+    "tags": ["quests", "ui"],
+    "constraints": ["dry_run_only"]
+  },
   "context": {
     "source": "manual_hotkey",
     "note": "open quest book and wait"
@@ -612,8 +670,112 @@ python scripts/automation_dry_run.py --plan-json "C:\path\to\automation_plan.jso
 }
 ```
 
+Canonical demo scenarios (fixtures):
+
+* `tests/fixtures/automation_plan_quest_book.json`
+* `tests/fixtures/automation_plan_inventory_check.json`
+
+Пример запуска fixture-сценариев:
+
+```powershell
+python scripts/automation_dry_run.py --plan-json "tests/fixtures/automation_plan_quest_book.json"
+python scripts/automation_dry_run.py --plan-json "tests/fixtures/automation_plan_inventory_check.json"
+```
+
 Ожидаемый результат:
 
 * Создается `runs/<timestamp>-automation-dry-run/`.
 * Внутри есть `run.json`, `actions_normalized.json`, `execution_plan.json`.
 * `run.json.result.dry_run=true`, никаких системных input events не отправляется.
+
+## M6.3: Intent -> automation_plan adapter (dry-run only)
+
+Важно: adapter только строит `automation_plan_v1` из intent payload и сохраняет artifacts. Реальных input events нет.
+
+```powershell
+cd D:\atm10-agent
+.\.venv\Scripts\Activate.ps1
+python scripts/intent_to_automation_plan.py --intent-json "tests/fixtures/intent_open_quest_book.json"
+```
+
+Ожидаемый результат:
+
+* Создается `runs/<timestamp>-intent-to-automation-plan/`.
+* Внутри есть `run.json` и `automation_plan.json`.
+* `run.json.result.dry_run_only=true`.
+
+Проверка end-to-end через existing dry-run runner:
+
+```powershell
+python scripts/intent_to_automation_plan.py --intent-json "tests/fixtures/intent_open_quest_book.json" --plan-out "runs\m6_3_intent_plan.json"
+python scripts/automation_dry_run.py --plan-json "runs\m6_3_intent_plan.json"
+```
+
+## M6.4: Unified smoke chain (`intent -> plan -> automation_dry_run`)
+
+Единый smoke entrypoint для dry-run цепочки.
+
+```powershell
+cd D:\atm10-agent
+.\.venv\Scripts\Activate.ps1
+python scripts/automation_intent_chain_smoke.py --intent-json "tests/fixtures/intent_open_quest_book.json"
+```
+
+Ожидаемый результат:
+
+* Создается `runs/<timestamp>-automation-intent-chain-smoke/`.
+* Внутри есть:
+  * `run.json`
+  * `chain_summary.json`
+  * `automation_plan.json`
+  * `child_runs/` (adapter + dry-run child artifacts)
+* `run.json.result.dry_run_only=true`.
+
+## M6.6: CI acceptance thresholds for automation smoke
+
+Dry-run smoke contract:
+
+```powershell
+python scripts/check_automation_smoke_contract.py --mode dry_run --runs-dir runs/ci-smoke-automation-dry-run --min-action-count 3 --min-step-count 4
+```
+
+Intent-chain smoke contract:
+
+```powershell
+python scripts/check_automation_smoke_contract.py --mode intent_chain --runs-dir runs/ci-smoke-automation-chain --min-action-count 3 --min-step-count 4 --expected-intent-type open_quest_book
+```
+
+Machine-readable summary output:
+
+```powershell
+python scripts/check_automation_smoke_contract.py --mode dry_run --runs-dir runs/ci-smoke-automation-dry-run --min-action-count 3 --min-step-count 4 --summary-json runs/ci-smoke-automation-dry-run/contract_summary.json
+python scripts/check_automation_smoke_contract.py --mode intent_chain --runs-dir runs/ci-smoke-automation-chain --min-action-count 3 --min-step-count 4 --expected-intent-type open_quest_book --summary-json runs/ci-smoke-automation-chain/contract_summary.json
+```
+
+Ожидаемый результат:
+
+* Оба check-скрипта завершаются с `status=ok`.
+* Любое нарушение контракта (missing artifact/метрики ниже порога/несовпадение intent) даёт non-zero exit code.
+
+## M6.8: Troubleshooting automation smoke contract failures (CI)
+
+Быстрый чек-лист при падении `check_automation_smoke_contract`:
+
+1. Проверить summary artifacts:
+   * `runs/ci-smoke-automation-dry-run/contract_summary.json`
+   * `runs/ci-smoke-automation-chain/contract_summary.json`
+2. Проверить поле `violations` и `error` в summary JSON:
+   * `error != null` обычно указывает на missing artifact path.
+   * `violations` содержит конкретный контракт, который не выполнен.
+3. Сверить минимальные пороги в workflow:
+   * `min_action_count=3`, `min_step_count=4`
+   * для chain дополнительно `expected_intent_type=open_quest_book`
+4. Перезапустить локально те же команды CI:
+   * `automation_dry_run` + `check_automation_smoke_contract --mode dry_run`
+   * `automation_intent_chain_smoke` + `check_automation_smoke_contract --mode intent_chain`
+5. Если проблема в артефактах:
+   * убедиться, что smoke script завершился `status=ok` в `run.json`
+   * проверить, что пути в `--runs-dir` совпадают между smoke step и check step
+6. Если проблема в `intent_type`:
+   * проверить fixture `tests/fixtures/intent_open_quest_book.json`
+   * проверить `automation_plan.json.context.intent_type` в chain run artifacts

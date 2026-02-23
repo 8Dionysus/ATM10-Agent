@@ -4,6 +4,15 @@
 
 ## Canonical Roles
 
+* `README.md`
+  * Короткий human-facing entrypoint.
+  * Только high-level статус + ссылки на каноничные документы.
+  * Не хранит длинные списки run IDs и исторические метрики.
+
+* `MANIFEST.md`
+  * Короткий machine/human snapshot репозитория (актуальная дата, capabilities, ссылки).
+  * Без детальной хронологии; детали держим в `docs/SESSION_*.md`.
+
 * `TODO.md`
   * Пошаговый execution-план.
   * Формат: `Now`, `Next`, `Blocked`, `Done this week`.
@@ -16,6 +25,7 @@
 * `docs/SESSION_YYYY-MM-DD.md`
   * Подробная хронология изменений, запусков, метрик и артефактов.
   * Это место для «длинной истории».
+  * Weekly выжимка — по шаблону `docs/SESSION_WEEKLY_TEMPLATE.md`.
 
 * `docs/DECISIONS.md`
   * Архитектурные решения и policy-изменения.
