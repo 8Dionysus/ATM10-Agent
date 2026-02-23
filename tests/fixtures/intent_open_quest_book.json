@@ -1,0 +1,9 @@
+{
+  "schema_version": "automation_intent_v1",
+  "intent_type": "open_quest_book",
+  "priority": "normal",
+  "source": "voice_intent",
+  "note": "show active quests",
+  "tags": ["quests", "overlay"],
+  "constraints": ["dry_run_only"]
+}

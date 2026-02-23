@@ -10,6 +10,11 @@ import pytest
 import scripts.automation_dry_run as automation_dry_run
 
 
+def _fixture_payload(name: str) -> dict[str, object]:
+    fixture_path = Path(__file__).parent / "fixtures" / name
+    return json.loads(fixture_path.read_text(encoding="utf-8"))
+
+
 def test_automation_dry_run_writes_plan_artifacts(tmp_path: Path) -> None:
     plan_path = tmp_path / "actions.json"
     payload = {
@@ -45,6 +50,27 @@ def test_automation_dry_run_writes_plan_artifacts(tmp_path: Path) -> None:
     assert execution_plan["steps"][1]["dry_run_message"].startswith("DRY-RUN: would execute wait")
 
 
+def test_automation_dry_run_contract_v1_with_intent_fixture(tmp_path: Path) -> None:
+    plan_path = tmp_path / "plan_contract_v1.json"
+    payload = _fixture_payload("automation_plan_quest_book.json")
+    plan_path.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+
+    result = automation_dry_run.run_automation_dry_run(
+        plan_json=plan_path,
+        runs_dir=tmp_path / "runs",
+        now=datetime(2026, 2, 23, 18, 0, 0, tzinfo=timezone.utc),
+    )
+
+    normalized_payload = json.loads(
+        (result["run_dir"] / "actions_normalized.json").read_text(encoding="utf-8")
+    )
+    assert result["ok"] is True
+    assert normalized_payload["schema_version"] == "automation_plan_v1"
+    assert normalized_payload["intent"]["goal"] == "open quest book and inspect active objective"
+    assert normalized_payload["intent"]["priority"] == "normal"
+    assert normalized_payload["intent"]["constraints"][0] == "dry_run_only"
+
+
 def test_automation_dry_run_rejects_empty_actions(tmp_path: Path) -> None:
     plan_path = tmp_path / "bad_actions.json"
     plan_path.write_text(json.dumps({"actions": []}, ensure_ascii=False), encoding="utf-8")
@@ -58,6 +84,26 @@ def test_automation_dry_run_rejects_empty_actions(tmp_path: Path) -> None:
     assert result["ok"] is False
     assert result["run_payload"]["status"] == "error"
     assert result["run_payload"]["error_code"] == "invalid_action_plan"
+
+
+def test_automation_dry_run_rejects_unknown_schema_version(tmp_path: Path) -> None:
+    plan_path = tmp_path / "bad_schema.json"
+    payload = {
+        "schema_version": "automation_plan_v2",
+        "actions": [{"type": "key_tap", "key": "l"}],
+    }
+    plan_path.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+
+    result = automation_dry_run.run_automation_dry_run(
+        plan_json=plan_path,
+        runs_dir=tmp_path / "runs",
+        now=datetime(2026, 2, 23, 18, 1, 0, tzinfo=timezone.utc),
+    )
+
+    assert result["ok"] is False
+    assert result["run_payload"]["status"] == "error"
+    assert result["run_payload"]["error_code"] == "invalid_action_plan"
+    assert "Unsupported schema_version" in str(result["run_payload"]["error"])
 
 
 def test_automation_dry_run_cli_help_exits_zero(monkeypatch: pytest.MonkeyPatch) -> None:

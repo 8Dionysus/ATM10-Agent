@@ -1,0 +1,19 @@
+{
+  "schema_version": "automation_plan_v1",
+  "intent": {
+    "goal": "open inventory and verify tool durability",
+    "priority": "high",
+    "tags": ["inventory", "status"],
+    "constraints": ["dry_run_only"]
+  },
+  "context": {
+    "source": "voice_intent",
+    "note": "check pickaxe before mining trip"
+  },
+  "actions": [
+    {"type": "key_tap", "key": "e"},
+    {"type": "wait", "duration_ms": 150},
+    {"type": "mouse_move", "x": 1130, "y": 510},
+    {"type": "wait", "duration_ms": 120}
+  ]
+}

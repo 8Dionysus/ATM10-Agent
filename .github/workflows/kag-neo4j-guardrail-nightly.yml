@@ -1,0 +1,219 @@
+name: KAG Neo4j Guardrail Nightly
+
+on:
+  schedule:
+    - cron: "20 3 * * *"
+  workflow_dispatch:
+
+jobs:
+  kag_guardrail:
+    runs-on: ubuntu-latest
+    services:
+      neo4j:
+        image: neo4j:5
+        env:
+          NEO4J_AUTH: neo4j/neo4jpass
+        ports:
+          - 7474:7474
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-dev.txt
+
+      - name: Wait for Neo4j HTTP
+        run: |
+          for i in {1..40}; do
+            if curl -fsS -u neo4j:neo4jpass http://127.0.0.1:7474 > /dev/null; then
+              echo "Neo4j is ready"
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "Neo4j did not start in time" >&2
+          exit 1
+
+      - name: Build KAG graph from fixture docs
+        run: |
+          python scripts/kag_build_baseline.py --in tests/fixtures/kag_neo4j_docs_sample.jsonl --runs-dir runs/nightly-kag-build
+
+      - name: Resolve graph path
+        run: |
+          GRAPH_JSON=$(find runs/nightly-kag-build -name kag_graph.json | sort | tail -n1)
+          if [ -z "$GRAPH_JSON" ]; then
+            echo "kag_graph.json not found" >&2
+            exit 1
+          fi
+          echo "GRAPH_JSON=$GRAPH_JSON" >> "$GITHUB_ENV"
+
+      - name: Sync graph to Neo4j
+        env:
+          NEO4J_PASSWORD: neo4jpass
+        run: |
+          python scripts/kag_sync_neo4j.py \
+            --graph "$GRAPH_JSON" \
+            --neo4j-url http://127.0.0.1:7474 \
+            --neo4j-database neo4j \
+            --neo4j-user neo4j \
+            --reset-graph \
+            --runs-dir runs/nightly-kag-sync
+
+      - name: Eval KAG Neo4j (sample profile)
+        env:
+          NEO4J_PASSWORD: neo4jpass
+        run: |
+          python scripts/eval_kag_neo4j.py \
+            --eval tests/fixtures/kag_neo4j_eval_sample.jsonl \
+            --topk 5 \
+            --warmup-runs 1 \
+            --neo4j-url http://127.0.0.1:7474 \
+            --neo4j-database neo4j \
+            --neo4j-user neo4j \
+            --runs-dir runs/nightly-kag-eval-sample
+
+      - name: Eval KAG Neo4j (hard profile)
+        env:
+          NEO4J_PASSWORD: neo4jpass
+        run: |
+          python scripts/eval_kag_neo4j.py \
+            --eval tests/fixtures/kag_neo4j_eval_hard.jsonl \
+            --topk 5 \
+            --warmup-runs 1 \
+            --neo4j-url http://127.0.0.1:7474 \
+            --neo4j-database neo4j \
+            --neo4j-user neo4j \
+            --runs-dir runs/nightly-kag-eval-hard
+
+      - name: Resolve eval result paths
+        run: |
+          SAMPLE_EVAL_JSON=$(find runs/nightly-kag-eval-sample -name eval_results.json | sort | tail -n1)
+          HARD_EVAL_JSON=$(find runs/nightly-kag-eval-hard -name eval_results.json | sort | tail -n1)
+          if [ -z "$SAMPLE_EVAL_JSON" ] || [ -z "$HARD_EVAL_JSON" ]; then
+            echo "eval_results.json not found for sample/hard" >&2
+            exit 1
+          fi
+          echo "SAMPLE_EVAL_JSON=$SAMPLE_EVAL_JSON" >> "$GITHUB_ENV"
+          echo "HARD_EVAL_JSON=$HARD_EVAL_JSON" >> "$GITHUB_ENV"
+
+      - name: Guardrail check (sample)
+        run: |
+          python scripts/check_kag_neo4j_guardrail.py --profile sample --eval-results-json "$SAMPLE_EVAL_JSON"
+
+      - name: Guardrail check (hard)
+        run: |
+          python scripts/check_kag_neo4j_guardrail.py --profile hard --eval-results-json "$HARD_EVAL_JSON"
+
+      - name: Build guardrail trend snapshot
+        run: |
+          python scripts/kag_guardrail_trend_snapshot.py \
+            --sample-runs-dir runs/nightly-kag-eval-sample \
+            --hard-runs-dir runs/nightly-kag-eval-hard \
+            --history-limit 10 \
+            --baseline-window 5 \
+            --runs-dir runs/nightly-kag-trend
+
+      - name: Resolve trend snapshot paths
+        run: |
+          TREND_SNAPSHOT_JSON=$(find runs/nightly-kag-trend -name trend_snapshot.json | sort | tail -n1)
+          TREND_SUMMARY_MD=$(find runs/nightly-kag-trend -name summary.md | sort | tail -n1)
+          if [ -z "$TREND_SNAPSHOT_JSON" ] || [ -z "$TREND_SUMMARY_MD" ]; then
+            echo "trend snapshot artifacts not found" >&2
+            exit 1
+          fi
+          echo "TREND_SNAPSHOT_JSON=$TREND_SNAPSHOT_JSON" >> "$GITHUB_ENV"
+          echo "TREND_SUMMARY_MD=$TREND_SUMMARY_MD" >> "$GITHUB_ENV"
+
+      - name: Summary - KAG guardrail
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          sample = json.loads(open(os.environ["SAMPLE_EVAL_JSON"], encoding="utf-8").read())["metrics"]
+          hard = json.loads(open(os.environ["HARD_EVAL_JSON"], encoding="utf-8").read())["metrics"]
+          lines = [
+              "## KAG Neo4j Guardrail Nightly",
+              "",
+              "| profile | recall@k | mrr@k | hit-rate@k | latency_p95_ms |",
+              "|---|---:|---:|---:|---:|",
+              f"| sample | {sample['mean_recall_at_k']:.4f} | {sample['mean_mrr_at_k']:.4f} | {sample['hit_rate_at_k']:.4f} | {sample['latency_p95_ms']:.2f} |",
+              f"| hard | {hard['mean_recall_at_k']:.4f} | {hard['mean_mrr_at_k']:.4f} | {hard['hit_rate_at_k']:.4f} | {hard['latency_p95_ms']:.2f} |",
+          ]
+          with open(os.environ["GITHUB_STEP_SUMMARY"], "a", encoding="utf-8") as handle:
+              handle.write("\\n".join(lines) + "\\n")
+          PY
+
+      - name: Summary - KAG guardrail trend
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          snapshot = json.loads(open(os.environ["TREND_SNAPSHOT_JSON"], encoding="utf-8").read())
+          sample = snapshot["profiles"]["sample"]["latest"]
+          hard = snapshot["profiles"]["hard"]["latest"]
+          sample_roll = snapshot["profiles"]["sample"]["rolling_baseline"]
+          hard_roll = snapshot["profiles"]["hard"]["rolling_baseline"]
+          delta = snapshot["comparison"]["latest_hard_minus_sample"]
+          sample_flags = sample_roll.get("regression_flags") or {}
+          hard_flags = hard_roll.get("regression_flags") or {}
+          server = os.environ.get("GITHUB_SERVER_URL", "https://github.com")
+          repo = os.environ.get("GITHUB_REPOSITORY", "")
+          ref_name = os.environ.get("GITHUB_REF_NAME", "main")
+          if repo:
+              runbook_url = (
+                  f"{server}/{repo}/blob/{ref_name}/docs/RUNBOOK.md"
+                  "#m68-troubleshooting-automation-smoke-contract-failures-ci"
+              )
+          else:
+              runbook_url = "docs/RUNBOOK.md#m68-troubleshooting-automation-smoke-contract-failures-ci"
+
+          def fmt(value, decimals):
+              if value is None:
+                  return "n/a"
+              return f"{float(value):.{decimals}f}"
+
+          sample_delta = sample_roll.get("delta_latest_minus_baseline") or {}
+          hard_delta = hard_roll.get("delta_latest_minus_baseline") or {}
+          lines = [
+              "",
+              "## KAG Guardrail Trend Snapshot",
+              "",
+              f"- `sample_latest_run`: {sample['run_name']}",
+              f"- `hard_latest_run`: {hard['run_name']}",
+              f"- `delta_mrr (hard-sample)`: {float(delta['delta_mrr']):.4f}",
+              f"- `delta_latency_p95_ms (hard-sample)`: {float(delta['delta_latency_p95_ms']):.2f}",
+              f"- `sample_baseline_count`: {sample_roll['count']}",
+              f"- `sample_delta_mrr (latest-baseline)`: {fmt(sample_delta.get('delta_mean_mrr_at_k'), 4)}",
+              f"- `sample_mrr_status`: {sample_flags.get('mrr_status', 'n/a')}",
+              f"- `sample_latency_p95_status`: {sample_flags.get('latency_p95_status', 'n/a')}",
+              f"- `sample_has_any_regression`: {sample_flags.get('has_any_regression', 'n/a')}",
+              f"- `hard_baseline_count`: {hard_roll['count']}",
+              f"- `hard_delta_mrr (latest-baseline)`: {fmt(hard_delta.get('delta_mean_mrr_at_k'), 4)}",
+              f"- `hard_mrr_status`: {hard_flags.get('mrr_status', 'n/a')}",
+              f"- `hard_latency_p95_status`: {hard_flags.get('latency_p95_status', 'n/a')}",
+              f"- `hard_has_any_regression`: {hard_flags.get('has_any_regression', 'n/a')}",
+              f"- `trend_summary_md`: {os.environ['TREND_SUMMARY_MD']}",
+              f"- Troubleshooting: [RUNBOOK M6.8]({runbook_url})",
+          ]
+          with open(os.environ["GITHUB_STEP_SUMMARY"], "a", encoding="utf-8") as handle:
+              handle.write("\\n".join(lines) + "\\n")
+          PY
+
+      - name: Upload artifact - KAG nightly runs
+        uses: actions/upload-artifact@v4
+        with:
+          name: kag-neo4j-guardrail-nightly-runs
+          path: |
+            runs/nightly-kag-build
+            runs/nightly-kag-sync
+            runs/nightly-kag-eval-sample
+            runs/nightly-kag-eval-hard
+            runs/nightly-kag-trend

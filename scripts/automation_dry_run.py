@@ -15,6 +15,8 @@ _ALLOWED_ACTION_TYPES = {
     "wait",
 }
 _ALLOWED_MOUSE_BUTTONS = {"left", "right", "middle"}
+_ACTION_PLAN_SCHEMA_VERSION = "automation_plan_v1"
+_ALLOWED_INTENT_PRIORITIES = {"low", "normal", "high"}
 
 
 def _create_run_dir(runs_dir: Path, now: datetime) -> Path:
@@ -53,7 +55,7 @@ def _load_plan_payload(path: Path) -> dict[str, Any]:
 
 
 def _coerce_int(name: str, value: Any, *, min_value: int | None = None) -> int:
-    if not isinstance(value, int):
+    if isinstance(value, bool) or not isinstance(value, int):
         raise ValueError(f"{name} must be integer.")
     if min_value is not None and value < min_value:
         raise ValueError(f"{name} must be >= {min_value}.")
@@ -66,7 +68,7 @@ def _normalize_action(action: Mapping[str, Any], *, default_id: str) -> dict[str
         raise ValueError(f"Unsupported action type: {action_type!r}")
 
     action_id = str(action.get("id", default_id)).strip() or default_id
-    repeats = _coerce_int("repeats", int(action.get("repeats", 1)), min_value=1)
+    repeats = _coerce_int("repeats", action.get("repeats", 1), min_value=1)
     params: dict[str, Any] = {}
     base_duration_ms = 0
 
@@ -121,16 +123,83 @@ def _normalize_action(action: Mapping[str, Any], *, default_id: str) -> dict[str
     }
 
 
+def _normalize_schema_version(raw_payload: Mapping[str, Any]) -> str:
+    raw_schema_version = raw_payload.get("schema_version", _ACTION_PLAN_SCHEMA_VERSION)
+    schema_version = str(raw_schema_version).strip()
+    if not schema_version:
+        raise ValueError("schema_version must be non-empty string when provided.")
+    if schema_version != _ACTION_PLAN_SCHEMA_VERSION:
+        raise ValueError(
+            f"Unsupported schema_version: {schema_version!r}. "
+            f"Expected {_ACTION_PLAN_SCHEMA_VERSION!r}."
+        )
+    return schema_version
+
+
+def _normalize_intent(raw_payload: Mapping[str, Any]) -> dict[str, Any]:
+    raw_intent = raw_payload.get("intent")
+    if raw_intent is None:
+        return {
+            "goal": "unspecified",
+            "priority": "normal",
+            "tags": [],
+            "constraints": ["dry_run_only"],
+        }
+    if not isinstance(raw_intent, Mapping):
+        raise ValueError("intent must be JSON object when provided.")
+
+    goal = str(raw_intent.get("goal", "")).strip()
+    if not goal:
+        raise ValueError("intent.goal must be non-empty string.")
+
+    priority = str(raw_intent.get("priority", "normal")).strip().lower()
+    if priority not in _ALLOWED_INTENT_PRIORITIES:
+        raise ValueError(
+            f"intent.priority must be one of {sorted(_ALLOWED_INTENT_PRIORITIES)}."
+        )
+
+    raw_tags = raw_intent.get("tags", [])
+    if raw_tags is None:
+        raw_tags = []
+    if not isinstance(raw_tags, list):
+        raise ValueError("intent.tags must be array when provided.")
+    tags = [str(tag).strip() for tag in raw_tags if str(tag).strip()]
+
+    raw_constraints = raw_intent.get("constraints", ["dry_run_only"])
+    if raw_constraints is None:
+        raw_constraints = ["dry_run_only"]
+    if not isinstance(raw_constraints, list):
+        raise ValueError("intent.constraints must be array when provided.")
+    constraints = [str(item).strip() for item in raw_constraints if str(item).strip()]
+    if "dry_run_only" not in constraints:
+        constraints.insert(0, "dry_run_only")
+
+    return {
+        "goal": goal,
+        "priority": priority,
+        "tags": tags,
+        "constraints": constraints,
+    }
+
+
 def _normalize_plan_payload(raw_payload: Mapping[str, Any]) -> dict[str, Any]:
+    schema_version = _normalize_schema_version(raw_payload)
+    intent = _normalize_intent(raw_payload)
     raw_actions = raw_payload.get("actions")
     if not isinstance(raw_actions, list) or not raw_actions:
         raise ValueError("Plan payload must contain non-empty actions list.")
 
     normalized_actions: list[dict[str, Any]] = []
+    action_ids: set[str] = set()
     for index, action in enumerate(raw_actions, start=1):
         if not isinstance(action, Mapping):
             raise ValueError(f"Action #{index} must be JSON object.")
-        normalized_actions.append(_normalize_action(action, default_id=f"a{index:03d}"))
+        normalized_action = _normalize_action(action, default_id=f"a{index:03d}")
+        action_id = str(normalized_action["id"])
+        if action_id in action_ids:
+            raise ValueError(f"Action id must be unique: {action_id!r}")
+        action_ids.add(action_id)
+        normalized_actions.append(normalized_action)
 
     context = raw_payload.get("context", {})
     if context is None:
@@ -139,8 +208,9 @@ def _normalize_plan_payload(raw_payload: Mapping[str, Any]) -> dict[str, Any]:
         raise ValueError("context must be JSON object when provided.")
 
     return {
-        "schema_version": "automation_plan_v1",
+        "schema_version": schema_version,
         "dry_run": True,
+        "intent": intent,
         "context": dict(context),
         "actions": normalized_actions,
     }

@@ -1,0 +1,18 @@
+{
+  "schema_version": "automation_plan_v1",
+  "intent": {
+    "goal": "open quest book and inspect active objective",
+    "priority": "normal",
+    "tags": ["quests", "ui"],
+    "constraints": ["dry_run_only", "no_real_input_events"]
+  },
+  "context": {
+    "source": "manual_hotkey",
+    "note": "open quest book and wait"
+  },
+  "actions": [
+    {"type": "key_tap", "key": "l"},
+    {"type": "wait", "duration_ms": 250, "repeats": 2},
+    {"type": "mouse_click", "button": "left", "x": 1200, "y": 640}
+  ]
+}
