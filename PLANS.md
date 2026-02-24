@@ -1,6 +1,6 @@
 # PLANS.md — atm10-agent
 
-Русский — основной язык. English terms используем там, где это устоявшиеся термины (Phase, Quickstart, smoke test, RAG, VLM, artifacts, run, tests, boundaries).
+Русский — основной язык. English terms используем только как устоявшиеся термины (Phase, smoke, RAG, KAG, artifacts, DoD, guardrail, gateway).
 
 ## Source Of Truth
 
@@ -9,26 +9,40 @@
 Роли документов:
 
 * `TODO.md` — пошаговое исполнение (Now/Next/Blocked, WIP-limit).
-* `PLANS.md` — цели проекта, milestones, DoD, риски.
-* `docs/SESSION_*.md` — подробная история экспериментов и artifacts.
+* `PLANS.md` — цели, milestones, Definition of Done, риски.
+* `docs/SESSION_*.md` — подробная хронология запусков и artifacts.
 * `docs/ARCHIVED_TRACKS.md` — archived/recoverable направления.
+
+## Strategic Baseline (as of 2026-02-24)
+
+Выбран стратегический baseline:
+
+* Production baseline: **Combo A**.
+* Frontend path: **Streamlit** (operator web panel) + CLI fallback.
+* Backend path: FastAPI gateway + workers + Qdrant + Neo4j + file artifacts (`runs/...`).
+* Runtime policy: `OpenVINO-first` с fallback `CPU/GPU/NPU`.
+* Model policy: pragmatic hybrid by task:
+  * text/retrieval/rerank: Qwen3 stack,
+  * ASR active path: Whisper GenAI,
+  * archived paths остаются recoverable через explicit opt-in.
 
 ## North Star
 
-Сделать local “game companion” для ATM10:
+Сделать local-first game companion для ATM10 с production-ready операторским контуром:
 
-* Phase A: vision loop (screenshot -> VLM interface -> structured output + artifacts)
-* Phase B: memory (RAG / retrieval / KAG)
-* Phase C: voice (active ASR path; TTS archived)
-* Automation: только safe assistive path, default dry-run
+* Phase A: vision loop (screenshot -> VLM interface -> structured output + artifacts).
+* Phase B: memory (retrieval + KAG + citations + guardrails).
+* Phase C: voice (active ASR path + resilient TTS service/fallback).
+* Phase D: operator control plane (Streamlit) поверх unified local API.
+* Automation: safe assistive path, default dry-run, без real input events по умолчанию.
 
 ## Constraints
 
-* OS: Windows 11 + PowerShell 7 (first-class).
-* Dev loop: small, reviewable diffs + reproducible commands + tests/smoke.
-* Paths: `pathlib`, без hardcoded machine-specific путей.
+* OS/Runtime: Windows 11 + PowerShell 7 (first-class).
+* Dev style: small, reviewable diffs + reproducible commands + tests/smoke.
+* Paths/files: `pathlib`, без hardcoded machine-specific путей.
 * Data hygiene: не коммитим модели/дампы/артефакты/секреты.
-* Model policy: core stack = `Qwen3`; без замены на `Qwen2.5*`.
+* Architecture hygiene: важные policy/архитектурные решения фиксируем в `docs/DECISIONS.md`.
 * Runtime policy: `OpenVINO-first`.
 * WIP limit (execution): максимум 3 активные задачи одновременно.
 
@@ -36,83 +50,146 @@
 
 ### Completed
 
-* M0: Instance discovery & repo hygiene.
+* M0: Instance discovery + repo hygiene.
 * M1: Phase A vision loop baseline.
-* M2: Phase B retrieval baseline + benchmark + profile defaults.
-* M2.1: LF/CRLF policy.
+* M2: Retrieval baseline + benchmark + profile defaults.
 * M3: Voice runtime operational path (active ASR + archived policy).
 * M3.1: OpenVINO rollout (text-core + retrieval profile).
-* M4: HUD assistance baselines (OCR + mod-hook).
-* M5: KAG baseline + Neo4j path + benchmark ladder.
-* M6.0: Automation safe scaffold (dry-run only).
+* M4: HUD baselines (OCR + mod-hook ingest).
+* M5: KAG baseline + Neo4j path + nightly guardrail + trend/severity policy.
+* M6.0: Automation safe scaffold (dry-run only) + CI contract checks.
+* M6.1-M6.19: Intent-chain contract hardening (trace/intent correlation, strict CI checks, rollout checklist).
 
 ### Active Goals
 
-#### G1 — M6.1 Automation Safe Loop (next step)
+#### G1 — M7 Combo A Service Foundation
 
 Goal:
 
-* Связать intent/planning слой с `automation_dry_run` без перехода к real input events.
+* Перевести текущий script-per-task baseline в unified local gateway без потери reproducibility.
 
 Definition of Done:
 
-* Есть runnable path: `intent -> action-plan JSON -> dry-run validation/execution plan`.
-* Есть минимум 1 regression test на контракт action-plan.
-* Артефакты пишутся в `runs/<timestamp>-automation-dry-run/`.
+* Есть FastAPI gateway как единая точка входа для health, retrieval, KAG query и automation dry-run orchestration.
+* Есть стабильный artifact contract для gateway-run (request/response + status + links на child artifacts).
+* Есть минимум 2 smoke-проверки gateway-path в CI (без внешних нестабильных зависимостей).
 
 Open tasks:
 
-* Поддерживать актуальным policy-чеклист `M6.19` в `docs/RUNBOOK.md` при каждом новом `intent_type` (fixture + smoke + contract-check + summary + artifacts + test).
+* Зафиксировать минимальный API-контракт v1 (endpoint list + request/response schema + error contract).
+* Добавить lightweight gateway smoke path с machine-readable summary.
+* Зафиксировать в runbook единый локальный startup sequence для Combo A.
 
-#### G2 — KAG Quality/Latency Guardrail
+#### G2 — M8 Streamlit Operator Panel (Combo A UI)
 
 Goal:
 
-* Держать стабильный quality/latency baseline по sample+hard eval-наборам.
+* Дать операторский web UI для ежедневного управления локальным стеком и быстрой диагностики.
 
 Definition of Done:
 
-* Есть canonical benchmark profile (включая warmup policy) в runbook.
-* Любая правка ранжирования проверяется на sample/hard без regressions по agreed thresholds.
+* Есть runnable Streamlit app с минимум 4 рабочими зонами:
+  * stack health,
+  * run explorer (`runs/<timestamp>/...`),
+  * latest metrics (smoke/guardrail snapshots),
+  * safe action triggers (smoke/dry-run only).
+* UI работает на Windows 11 локально и не требует cloud/deploy инфраструктуры.
+* UI-действия оставляют traceable artifacts/log entries.
 
 Open tasks:
 
-* Продолжать мониторинг nightly истории и при необходимости пересматривать severity thresholds (`warn`/`critical`) относительно обновленного baseline (`latency_warn=5.0`, `latency_critical=15.0`).
-* Переоценивать readiness для перехода `critical_policy=fail_nightly` (с текущего baseline `signal_only`) после накопления стабильной истории nightly без noisy false positives.
+* Утвердить minimal IA для v0 (страницы/вкладки + data sources).
+* Реализовать read-only observability first, затем safe action buttons.
+* Добавить smoke-check на запуск Streamlit entrypoint без crash.
 
-#### G3 — CI Smoke Expansion
+#### G3 — M6.1 Automation Safe Loop (ongoing)
 
 Goal:
 
-* Расширить CI smoke на новые runnable entrypoints без роста flaky-риска.
+* Поддерживать безопасный intent -> plan -> dry-run loop как обязательный слой для automation.
 
 Definition of Done:
 
-* Добавлены 1–2 новых smoke-сценария, которые стабильны на CI.
-* Runbook и decisions синхронизированы.
+* Для каждого нового `intent_type` выполняется policy `M6.19` (fixture + smoke + strict contract-check + summary/artifact wiring + regression test).
+* Контракт `automation_plan_v1` остается backward-compatible и traceable.
 
 Open tasks:
 
-* Поддерживать единый helper-конвенции для runbook links (`scripts/build_runbook_link.py`) во всех новых CI summaries.
-* Добавлять machine-readable smoke summaries для каждого нового smoke entrypoint по умолчанию (core smoke через `scripts/collect_smoke_run_summary.py`, automation через `check_automation_smoke_contract --summary-json`).
+* Применять `M6.19` checklist при каждом расширении intent templates.
+
+#### G4 — KAG Quality/Latency Guardrail
+
+Goal:
+
+* Держать стабильный quality/latency baseline на sample+hard наборах без silent regressions.
+
+Definition of Done:
+
+* Nightly trend snapshot стабильно отражает rolling-baseline статус (`mrr`, `latency_p95`, severity).
+* Изменения retrieval/KAG проходят sample/hard профили без нарушения agreed thresholds.
+
+Open tasks:
+
+* Переоценивать readiness для перехода `critical_policy=fail_nightly` (baseline сейчас `signal_only`).
+* Периодически перекалибровывать latency severity thresholds по актуальной шумовой базе.
+
+#### G5 — CI Smoke Expansion & Contract Uniformity
+
+Goal:
+
+* Расширять coverage новых runnable entrypoints без роста flaky-риска.
+
+Definition of Done:
+
+* Для каждого нового smoke entrypoint есть machine-readable summary и стабильный CI шаг.
+* Runbook и Decisions синхронизированы с фактическими CI контрактами.
+
+Open tasks:
+
+* Сохранять единый summary-contract подход для core smoke и automation smoke.
+* Поддерживать единый runbook-link helper (`scripts/build_runbook_link.py`) в CI summaries.
+
+## Roadmap Horizons
+
+### 0-30 days
+
+* Зафиксировать API contract v1 для Combo A gateway.
+* Поднять v0 Streamlit operator panel (health + run explorer + latest metrics + safe smoke triggers).
+* Закрыть интеграционный smoke контур для gateway + Streamlit entrypoint.
+
+### 30-60 days
+
+* Внедрить default hybrid query planner (`retrieval first + KAG expansion/citations`).
+* Формализовать SLA на уровне API/summary contracts (voice, retrieval, KAG).
+* Добавить cross-service benchmark suite для Combo A.
+
+### 60-90 days
+
+* Подготовить pilot overlay/hotkey UX поверх стабилизированного API.
+* Оценить переход части automation из dry-run в supervised mode (только после security gates).
+* Пересмотреть archived R&D paths по критериям re-open из `docs/ARCHIVED_TRACKS.md`.
 
 ## Archived Tracks
 
-Все archived/recoverable направления вынесены в:
+Все archived/recoverable направления ведем в:
 
 * `docs/ARCHIVED_TRACKS.md`
 
-Текущее ключевое archived направление:
+Ключевые archived направления:
 
-* `Qwen3-ASR-0.6B` self-conversion pipeline (upstream blocker).
+* `Qwen3-ASR-0.6B` self-conversion pipeline (blocked upstream).
+* `Qwen3-TTS` operational path (deactivated по latency/SLA).
 
 ## Risks & Mitigations
 
-* Risk: застрять в infra/model-деталях вместо product loop.
-  Mitigation: milestone gates + DoD + короткий execution-cycle в `TODO.md`.
+* Risk: scope creep (одновременный рост voice + KAG + gateway + UI).
+  Mitigation: WIP-limit=3 + milestone gates + явный Now/Next/Blocked в `TODO.md`.
 
-* Risk: разрастание документации и дубли.
-  Mitigation: строгая роль документов через `docs/SOURCE_OF_TRUTH.md`.
+* Risk: drift между policy в документах и фактическим runtime.
+  Mitigation: синхронизация `PLANS` + `RUNBOOK` + `DECISIONS` на каждом milestone update.
 
-* Risk: scope creep (voice + KAG + automation одновременно).
-  Mitigation: WIP-limit=3 и явный список `Now`/`Blocked`.
+* Risk: security gaps в локальных сервисах при расширении API/UI.
+  Mitigation: sandboxed paths, sanitized errors, request limits, dry-run by default.
+
+* Risk: disk/RAM pressure от model zoo.
+  Mitigation: OpenVINO pre-converted models, INT4/INT8 приоритет, контролируемый cache lifecycle.

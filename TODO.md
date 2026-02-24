@@ -26,9 +26,9 @@
 
 ## Session Focus (2026-02-24)
 
-* Подтвердить и formalize policy для `critical` trend severity (`signal_only` baseline + `fail_nightly` opt-in).
-* Откалибровать latency severity thresholds по фактическому noise-floor (`warn=5.0`, `critical=15.0`).
-* Закрыть doc-sync по source-of-truth файлам и сохранить calibration artifact snapshot.
+* Зафиксировать execution-приоритет `M7`: unified local gateway (Combo A service foundation).
+* Запустить `M8` planning для Streamlit operator panel v0 (health, runs explorer, latest metrics, safe smoke triggers).
+* Синхронизировать source-of-truth документы под курс `Combo A + Streamlit` без привязки к перемещаемым audit-файлам.
 
 ## WIP Policy
 
@@ -37,9 +37,15 @@
 
 ## Now (WIP <= 3)
 
+* [ ] M7.0: зафиксировать минимальный API contract v1 для gateway (`health`, `retrieval`, `kag_query`, `automation_dry_run`) и error contract.
+* [ ] M8.0: определить IA для Streamlit panel v0 (вкладки/экраны + источники данных + links на artifacts).
+* [ ] M8.1: подготовить smoke-gate для Streamlit entrypoint (no-crash запуск + machine-readable summary).
+
 ## Next
 
 * [ ] G1 follow-up: при следующем новом `intent_type` применить checklist `M6.19` (fixture + smoke + strict contract-check + summary/artifacts + e2e test).
+* [ ] G2 follow-up: переоценить readiness для `critical_policy=fail_nightly` после накопления стабильной nightly истории.
+* [ ] G5 follow-up: расширять machine-readable summaries для новых smoke entrypoints по умолчанию.
 
 ## Blocked
 
