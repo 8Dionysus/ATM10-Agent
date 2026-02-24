@@ -119,6 +119,11 @@ jobs:
             --hard-runs-dir runs/nightly-kag-eval-hard \
             --history-limit 10 \
             --baseline-window 5 \
+            --mrr-warn-delta 0.005 \
+            --mrr-critical-delta 0.02 \
+            --latency-warn-delta-ms 5.0 \
+            --latency-critical-delta-ms 15.0 \
+            --critical-policy signal_only \
             --runs-dir runs/nightly-kag-trend
 
       - name: Resolve trend snapshot paths
@@ -161,6 +166,7 @@ jobs:
           hard = snapshot["profiles"]["hard"]["latest"]
           sample_roll = snapshot["profiles"]["sample"]["rolling_baseline"]
           hard_roll = snapshot["profiles"]["hard"]["rolling_baseline"]
+          critical_policy = snapshot.get("critical_policy") or {}
           delta = snapshot["comparison"]["latest_hard_minus_sample"]
           sample_flags = sample_roll.get("regression_flags") or {}
           hard_flags = hard_roll.get("regression_flags") or {}
@@ -199,6 +205,9 @@ jobs:
               f"- `hard_latency_p95_severity`: {hard_flags.get('latency_p95_regression_severity', 'n/a')}",
               f"- `hard_max_regression_severity`: {hard_flags.get('max_regression_severity', 'n/a')}",
               f"- `hard_has_any_regression`: {hard_flags.get('has_any_regression', 'n/a')}",
+              f"- `critical_policy_mode`: {critical_policy.get('mode', 'n/a')}",
+              f"- `critical_policy_has_critical_regression`: {critical_policy.get('has_critical_regression', 'n/a')}",
+              f"- `critical_policy_should_fail_nightly`: {critical_policy.get('should_fail_nightly', 'n/a')}",
               f"- `trend_summary_md`: {os.environ['TREND_SUMMARY_MD']}",
               "",
               "### Quick Links",

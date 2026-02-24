@@ -24,8 +24,11 @@ python -m pytest
 
 ```powershell
 python scripts/phase_a_smoke.py --vlm-provider stub --runs-dir runs/ci-smoke-phase-a
+python scripts/collect_smoke_run_summary.py --runs-dir runs/ci-smoke-phase-a --expected-mode phase_a_smoke --summary-json runs/ci-smoke-phase-a/smoke_summary.json
 python scripts/retrieve_demo.py --in tests/fixtures/retrieval_docs_sample.jsonl --query "mekanism steel" --topk 3 --candidate-k 10 --reranker none --runs-dir runs/ci-smoke-retrieve
+python scripts/collect_smoke_run_summary.py --runs-dir runs/ci-smoke-retrieve --expected-mode retrieve_demo --summary-json runs/ci-smoke-retrieve/smoke_summary.json
 python scripts/eval_retrieval.py --docs tests/fixtures/retrieval_docs_sample.jsonl --eval tests/fixtures/retrieval_eval_sample.jsonl --topk 3 --candidate-k 10 --reranker none --runs-dir runs/ci-smoke-eval
+python scripts/collect_smoke_run_summary.py --runs-dir runs/ci-smoke-eval --expected-mode eval_retrieval --summary-json runs/ci-smoke-eval/smoke_summary.json
 python scripts/automation_dry_run.py --plan-json tests/fixtures/automation_plan_quest_book.json --runs-dir runs/ci-smoke-automation-dry-run
 python scripts/check_automation_smoke_contract.py --mode dry_run --runs-dir runs/ci-smoke-automation-dry-run --min-action-count 3 --min-step-count 4 --summary-json runs/ci-smoke-automation-dry-run/contract_summary.json
 python scripts/automation_intent_chain_smoke.py --intent-json tests/fixtures/intent_open_quest_book.json --runs-dir runs/ci-smoke-automation-chain
@@ -33,6 +36,17 @@ python scripts/check_automation_smoke_contract.py --mode intent_chain --runs-dir
 python scripts/automation_intent_chain_smoke.py --intent-json tests/fixtures/intent_check_inventory_tool.json --runs-dir runs/ci-smoke-automation-chain-inventory
 python scripts/check_automation_smoke_contract.py --mode intent_chain --runs-dir runs/ci-smoke-automation-chain-inventory --min-action-count 3 --min-step-count 4 --expected-intent-type check_inventory_tool --require-trace-id --require-intent-id --summary-json runs/ci-smoke-automation-chain-inventory/contract_summary.json
 ```
+
+Ожидаемый результат:
+
+* Для core smoke шагов создаются machine-readable summaries:
+  * `runs/ci-smoke-phase-a/smoke_summary.json`
+  * `runs/ci-smoke-retrieve/smoke_summary.json`
+  * `runs/ci-smoke-eval/smoke_summary.json`
+* Для automation smoke шагов создаются contract summaries:
+  * `runs/ci-smoke-automation-dry-run/contract_summary.json`
+  * `runs/ci-smoke-automation-chain/contract_summary.json`
+  * `runs/ci-smoke-automation-chain-inventory/contract_summary.json`
 
 ## Qwen3 stack (OpenVINO-first)
 
@@ -616,13 +630,19 @@ Workflow steps:
 Trend snapshot manual run (optional):
 
 ```powershell
-python scripts/kag_guardrail_trend_snapshot.py --sample-runs-dir runs/nightly-kag-eval-sample --hard-runs-dir runs/nightly-kag-eval-hard --history-limit 10 --baseline-window 5 --runs-dir runs/nightly-kag-trend
+python scripts/kag_guardrail_trend_snapshot.py --sample-runs-dir runs/nightly-kag-eval-sample --hard-runs-dir runs/nightly-kag-eval-hard --history-limit 10 --baseline-window 5 --critical-policy signal_only --runs-dir runs/nightly-kag-trend
 ```
 
 Trend snapshot with explicit severity thresholds (optional):
 
 ```powershell
-python scripts/kag_guardrail_trend_snapshot.py --sample-runs-dir runs/nightly-kag-eval-sample --hard-runs-dir runs/nightly-kag-eval-hard --history-limit 10 --baseline-window 5 --mrr-warn-delta 0.005 --mrr-critical-delta 0.02 --latency-warn-delta-ms 2.0 --latency-critical-delta-ms 8.0 --runs-dir runs/nightly-kag-trend
+python scripts/kag_guardrail_trend_snapshot.py --sample-runs-dir runs/nightly-kag-eval-sample --hard-runs-dir runs/nightly-kag-eval-hard --history-limit 10 --baseline-window 5 --mrr-warn-delta 0.005 --mrr-critical-delta 0.02 --latency-warn-delta-ms 5.0 --latency-critical-delta-ms 15.0 --runs-dir runs/nightly-kag-trend
+```
+
+Trend snapshot with fail-nightly policy on critical severity (opt-in):
+
+```powershell
+python scripts/kag_guardrail_trend_snapshot.py --sample-runs-dir runs/nightly-kag-eval-sample --hard-runs-dir runs/nightly-kag-eval-hard --history-limit 10 --baseline-window 5 --critical-policy fail_nightly --runs-dir runs/nightly-kag-trend
 ```
 
 Ожидаемый результат:
@@ -631,6 +651,9 @@ python scripts/kag_guardrail_trend_snapshot.py --sample-runs-dir runs/nightly-ka
 * Внутри есть `run.json`, `trend_snapshot.json`, `summary.md`.
 * В `trend_snapshot.json` есть `rolling_baseline` по `sample`/`hard` (latest vs mean previous N runs).
 * В `rolling_baseline.regression_flags` фиксируются статусы `mrr`/`latency_p95` (`improved|stable|regressed|insufficient_history`) и severity (`none|warn|critical`) с агрегатом `max_regression_severity`.
+* В `trend_snapshot.json.critical_policy` фиксируется принятый policy (`signal_only|fail_nightly`) и `critical_profiles`.
+* Nightly baseline policy: `signal_only` (critical severity сигнализируется в summary/artifacts и не фейлит job).
+* Опциональный `fail_nightly` режим доступен только как explicit opt-in для ужесточения guardrail.
 
 ### Warmup A/B compare (mini benchmark)
 

@@ -8,7 +8,7 @@
 - `PLANS.md` — цели, milestones, DoD, риски.
 - `docs/RUNBOOK.md` — runnable команды и операционные профили.
 - `docs/DECISIONS.md` — архитектурные решения.
-- `docs/SESSION_2026-02-23.md` — текущий session snapshot.
+- `docs/SESSION_2026-02-24.md` — текущий session snapshot.
 - `docs/SOURCE_OF_TRUTH.md` — роли документов.
 
 ## Quickstart (Phase A smoke)
@@ -24,12 +24,12 @@ python scripts/phase_a_smoke.py
 python -m pytest
 ```
 
-## Current status (as of 2026-02-23)
+## Current status (as of 2026-02-24)
 
-- `python -m pytest` green (`156 passed`).
+- `python -m pytest` green (`186 passed`).
 - Active ASR path: `whisper_genai`; `qwen_asr` — archived/recoverable opt-in.
 - KAG Neo4j nightly guardrail path активен: `build -> sync -> eval(sample+hard) -> guardrail-check -> trend snapshot`.
-- Trend snapshot включает rolling-baseline и regression flags (`mrr`, `latency_p95`).
+- Trend snapshot включает rolling-baseline, severity-policy (`signal_only|fail_nightly`) и calibration-aware thresholds (`latency warn=5.0`, `critical=15.0`).
 
 ## Где смотреть детали
 

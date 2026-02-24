@@ -17,18 +17,18 @@
 * `docs/RUNBOOK.md` — runnable команды и операционные профили.
 * `docs/ARCHIVED_TRACKS.md` — archived/recoverable направления.
 
-## Status Snapshot (as of 2026-02-23)
+## Status Snapshot (as of 2026-02-24)
 
 * M0/M1/M2/M3 базово закрыты.
 * `python -m pytest` green (см. последний session snapshot и CI).
 * Active ASR path: `whisper_genai`; `qwen_asr` — archived/recoverable opt-in.
 * KAG Neo4j path валидирован (`build -> sync -> query -> eval`, hard-cases uplift + latency tuning).
 
-## Session Focus (2026-02-23)
+## Session Focus (2026-02-24)
 
-* Закрыть `M5.4`: trend snapshot по nightly KAG guardrail.
-* Закрыть `M6.8`: troubleshooting playbook для automation smoke contract failures.
-* Закрыть `M5.5`: встроить trend snapshot в nightly summary/report path.
+* Подтвердить и formalize policy для `critical` trend severity (`signal_only` baseline + `fail_nightly` opt-in).
+* Откалибровать latency severity thresholds по фактическому noise-floor (`warn=5.0`, `critical=15.0`).
+* Закрыть doc-sync по source-of-truth файлам и сохранить calibration artifact snapshot.
 
 ## WIP Policy
 
@@ -84,6 +84,9 @@
 * [x] M6.17: в intent-chain CI contract-check включен `--require-trace-id` (canonical fixtures), отсутствие trace id теперь fail-fast.
 * [x] M6.18: в intent-chain CI contract-check включен `--require-intent-id` (canonical fixtures), отсутствие intent id теперь fail-fast.
 * [x] M6.19: в `docs/RUNBOOK.md` зафиксирован policy-чеклист rollout новых `intent_type` (fixture + smoke + strict contract-check + summary/artifacts + test).
+* [x] G3: для core CI smoke (`phase_a_smoke`, `retrieve_demo`, `eval_retrieval`) добавлен единый machine-readable summary контракт через `scripts/collect_smoke_run_summary.py` + artifact upload в `pytest` workflow.
+* [x] G2: зафиксирован policy для `critical` trend severity — baseline `signal_only` (nightly signal без fail), с explicit opt-in `fail_nightly` через `--critical-policy`.
+* [x] G2: по локальной истории `kag-neo4j-eval` откалиброваны latency severity thresholds в trend snapshot (`warn=5.0 ms`, `critical=15.0 ms`) для снижения noisy regression-сигналов.
 * [x] Добавлен weekly review шаблон: `docs/SESSION_WEEKLY_TEMPLATE.md`.
 * [x] Упрощен `README.md`: status-блок переведен в формат ссылок на каноничные документы.
 * [x] Обновлен `MANIFEST.md` до короткого snapshot-формата (дата, capabilities, canonical links).

@@ -15,9 +15,10 @@ _METRIC_KEYS: tuple[str, ...] = (
 _EPSILON = 1e-9
 _DEFAULT_MRR_WARN_DELTA = 0.005
 _DEFAULT_MRR_CRITICAL_DELTA = 0.02
-_DEFAULT_LATENCY_WARN_DELTA_MS = 2.0
-_DEFAULT_LATENCY_CRITICAL_DELTA_MS = 8.0
+_DEFAULT_LATENCY_WARN_DELTA_MS = 5.0
+_DEFAULT_LATENCY_CRITICAL_DELTA_MS = 15.0
 _SEVERITY_RANK = {"none": 0, "warn": 1, "critical": 2}
+_CRITICAL_POLICIES: tuple[str, ...] = ("signal_only", "fail_nightly")
 
 
 def _create_run_dir(runs_dir: Path, now: datetime) -> Path:
@@ -215,6 +216,7 @@ def _write_summary_md(path: Path, *, snapshot: Mapping[str, Any]) -> None:
     sample_profile = snapshot["profiles"]["sample"]
     hard_profile = snapshot["profiles"]["hard"]
     comparison = snapshot["comparison"]
+    critical_policy = snapshot.get("critical_policy") or {}
 
     def _fmt_metric(row: Mapping[str, Any], key: str) -> str:
         value = float(row["metrics"][key])
@@ -301,6 +303,23 @@ def _write_summary_md(path: Path, *, snapshot: Mapping[str, Any]) -> None:
             f"{str(flags['has_any_regression']).lower()} |"
         )
 
+    critical_profiles = critical_policy.get("critical_profiles")
+    if isinstance(critical_profiles, list) and critical_profiles:
+        critical_profiles_text = ", ".join(str(item) for item in critical_profiles)
+    else:
+        critical_profiles_text = "none"
+    lines.extend(
+        [
+            "",
+            "## Critical Policy",
+            "",
+            f"- `mode`: {critical_policy.get('mode', 'n/a')}",
+            f"- `has_critical_regression`: {str(bool(critical_policy.get('has_critical_regression', False))).lower()}",
+            f"- `critical_profiles`: {critical_profiles_text}",
+            f"- `should_fail_nightly`: {str(bool(critical_policy.get('should_fail_nightly', False))).lower()}",
+        ]
+    )
+
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
@@ -315,6 +334,7 @@ def run_kag_guardrail_trend_snapshot(
     mrr_critical_delta: float = _DEFAULT_MRR_CRITICAL_DELTA,
     latency_warn_delta_ms: float = _DEFAULT_LATENCY_WARN_DELTA_MS,
     latency_critical_delta_ms: float = _DEFAULT_LATENCY_CRITICAL_DELTA_MS,
+    critical_policy: str = "signal_only",
     runs_dir: Path = Path("runs"),
     now: datetime | None = None,
 ) -> dict[str, Any]:
@@ -322,6 +342,8 @@ def run_kag_guardrail_trend_snapshot(
         raise ValueError("history_limit must be > 0.")
     if baseline_window <= 0:
         raise ValueError("baseline_window must be > 0.")
+    if critical_policy not in _CRITICAL_POLICIES:
+        raise ValueError(f"critical_policy must be one of: {', '.join(_CRITICAL_POLICIES)}")
     _validate_regression_thresholds(
         mrr_warn_delta=mrr_warn_delta,
         mrr_critical_delta=mrr_critical_delta,
@@ -349,6 +371,7 @@ def run_kag_guardrail_trend_snapshot(
             "mrr_critical_delta": mrr_critical_delta,
             "latency_warn_delta_ms": latency_warn_delta_ms,
             "latency_critical_delta_ms": latency_critical_delta_ms,
+            "critical_policy": critical_policy,
         },
         "paths": {
             "run_dir": str(run_dir),
@@ -421,10 +444,27 @@ def run_kag_guardrail_trend_snapshot(
                 }
             },
         }
+
+        critical_profiles: list[str] = []
+        for profile_name, rolling_payload in (
+            ("sample", sample_rolling_baseline),
+            ("hard", hard_rolling_baseline),
+        ):
+            flags = rolling_payload.get("regression_flags") or {}
+            if flags.get("comparison_evaluated") and flags.get("max_regression_severity") == "critical":
+                critical_profiles.append(profile_name)
+        has_critical_regression = bool(critical_profiles)
+        should_fail_nightly = critical_policy == "fail_nightly" and has_critical_regression
+        snapshot_payload["critical_policy"] = {
+            "mode": critical_policy,
+            "has_critical_regression": has_critical_regression,
+            "critical_profiles": critical_profiles,
+            "should_fail_nightly": should_fail_nightly,
+        }
+
         _write_json(snapshot_json_path, snapshot_payload)
         _write_summary_md(summary_md_path, snapshot=snapshot_payload)
 
-        run_payload["status"] = "ok"
         run_payload["result"] = {
             "sample_latest_run": latest_sample["run_name"],
             "hard_latest_run": latest_hard["run_name"],
@@ -436,10 +476,20 @@ def run_kag_guardrail_trend_snapshot(
             "hard_has_regression": hard_rolling_baseline["regression_flags"]["has_any_regression"],
             "sample_regression_severity": sample_rolling_baseline["regression_flags"]["max_regression_severity"],
             "hard_regression_severity": hard_rolling_baseline["regression_flags"]["max_regression_severity"],
+            "critical_policy": critical_policy,
+            "critical_profiles": critical_profiles,
+            "has_critical_regression": has_critical_regression,
+            "should_fail_nightly": should_fail_nightly,
         }
+        if should_fail_nightly:
+            run_payload["status"] = "error"
+            run_payload["error_code"] = "critical_regression_policy_failed"
+            run_payload["error"] = "Critical regression detected and critical_policy=fail_nightly."
+        else:
+            run_payload["status"] = "ok"
         _write_json(run_json_path, run_payload)
         return {
-            "ok": True,
+            "ok": not should_fail_nightly,
             "run_dir": run_dir,
             "run_payload": run_payload,
             "snapshot_payload": snapshot_payload,
@@ -502,6 +552,12 @@ def parse_args() -> argparse.Namespace:
         default=_DEFAULT_LATENCY_CRITICAL_DELTA_MS,
         help="latency_p95 regression critical threshold for abs(latest-baseline) delta in ms.",
     )
+    parser.add_argument(
+        "--critical-policy",
+        choices=_CRITICAL_POLICIES,
+        default="signal_only",
+        help="Policy for critical trend severity: signal_only (default) or fail_nightly.",
+    )
     parser.add_argument("--runs-dir", type=Path, default=Path("runs"), help="Run artifact base directory.")
     return parser.parse_args()
 
@@ -517,6 +573,7 @@ def main() -> int:
         mrr_critical_delta=args.mrr_critical_delta,
         latency_warn_delta_ms=args.latency_warn_delta_ms,
         latency_critical_delta_ms=args.latency_critical_delta_ms,
+        critical_policy=args.critical_policy,
         runs_dir=args.runs_dir,
     )
     run_dir = result["run_dir"]

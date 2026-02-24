@@ -46,13 +46,25 @@ jobs:
         run: |
           python scripts/phase_a_smoke.py --vlm-provider stub --runs-dir runs/ci-smoke-phase-a
 
+      - name: Validate - Smoke summary (Phase A)
+        run: |
+          python scripts/collect_smoke_run_summary.py --runs-dir runs/ci-smoke-phase-a --expected-mode phase_a_smoke --summary-json runs/ci-smoke-phase-a/smoke_summary.json
+
       - name: Smoke - Retrieval demo (in-memory)
         run: |
           python scripts/retrieve_demo.py --in tests/fixtures/retrieval_docs_sample.jsonl --query "mekanism steel" --topk 3 --candidate-k 10 --reranker none --runs-dir runs/ci-smoke-retrieve
 
+      - name: Validate - Smoke summary (Retrieve demo)
+        run: |
+          python scripts/collect_smoke_run_summary.py --runs-dir runs/ci-smoke-retrieve --expected-mode retrieve_demo --summary-json runs/ci-smoke-retrieve/smoke_summary.json
+
       - name: Smoke - Retrieval eval (fixtures)
         run: |
           python scripts/eval_retrieval.py --docs tests/fixtures/retrieval_docs_sample.jsonl --eval tests/fixtures/retrieval_eval_sample.jsonl --topk 3 --candidate-k 10 --reranker none --runs-dir runs/ci-smoke-eval
+
+      - name: Validate - Smoke summary (Retrieval eval)
+        run: |
+          python scripts/collect_smoke_run_summary.py --runs-dir runs/ci-smoke-eval --expected-mode eval_retrieval --summary-json runs/ci-smoke-eval/smoke_summary.json
 
       - name: Smoke - Automation dry-run (fixture)
         run: |
@@ -77,6 +89,29 @@ jobs:
       - name: Validate - Automation intent chain contract (inventory fixture)
         run: |
           python scripts/check_automation_smoke_contract.py --mode intent_chain --runs-dir runs/ci-smoke-automation-chain-inventory --min-action-count 3 --min-step-count 4 --expected-intent-type check_inventory_tool --require-trace-id --require-intent-id --summary-json runs/ci-smoke-automation-chain-inventory/contract_summary.json
+
+      - name: Summary - Core smoke summaries
+        shell: pwsh
+        run: |
+          $phaseA = Get-Content "runs/ci-smoke-phase-a/smoke_summary.json" | ConvertFrom-Json
+          $retrieve = Get-Content "runs/ci-smoke-retrieve/smoke_summary.json" | ConvertFrom-Json
+          $eval = Get-Content "runs/ci-smoke-eval/smoke_summary.json" | ConvertFrom-Json
+          function FmtOpt([object]$value) {
+            if ($null -eq $value) { return "-" }
+            $text = "$value".Trim()
+            if ([string]::IsNullOrEmpty($text)) { return "-" }
+            return $text
+          }
+          $lines = @(
+            "## Core Smoke Summaries",
+            "",
+            "| mode | status | details |",
+            "|---|---|---|",
+            "| phase_a_smoke | $($phaseA.status) | vlm=$(FmtOpt $phaseA.observed.vlm_resolved), fallback=$(FmtOpt $phaseA.observed.vlm_fallback_used) |",
+            "| retrieve_demo | $($retrieve.status) | results_count=$(FmtOpt $retrieve.observed.results_count) |",
+            "| eval_retrieval | $($eval.status) | query_count=$(FmtOpt $eval.observed.query_count), mrr=$(FmtOpt $eval.observed.mean_mrr_at_k) |"
+          )
+          $lines -join "`n" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
 
       - name: Summary - Automation smoke contracts
         shell: pwsh
@@ -108,8 +143,11 @@ jobs:
       - name: Upload artifact - Automation smoke summaries
         uses: actions/upload-artifact@v4
         with:
-          name: automation-smoke-contract-summaries
+          name: smoke-contract-summaries
           path: |
+            runs/ci-smoke-phase-a/smoke_summary.json
+            runs/ci-smoke-retrieve/smoke_summary.json
+            runs/ci-smoke-eval/smoke_summary.json
             runs/ci-smoke-automation-dry-run/contract_summary.json
             runs/ci-smoke-automation-chain/contract_summary.json
             runs/ci-smoke-automation-chain-inventory/contract_summary.json

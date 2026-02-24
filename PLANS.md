@@ -77,8 +77,8 @@ Definition of Done:
 
 Open tasks:
 
-* Накопить историю nightly runs и при необходимости скорректировать severity thresholds (`warn`/`critical`) по фактическому noise-floor метрик.
-* Зафиксировать policy для `critical` trend severity (только сигнал vs fail-nightly) после накопления baseline истории.
+* Продолжать мониторинг nightly истории и при необходимости пересматривать severity thresholds (`warn`/`critical`) относительно обновленного baseline (`latency_warn=5.0`, `latency_critical=15.0`).
+* Переоценивать readiness для перехода `critical_policy=fail_nightly` (с текущего baseline `signal_only`) после накопления стабильной истории nightly без noisy false positives.
 
 #### G3 — CI Smoke Expansion
 
@@ -94,7 +94,7 @@ Definition of Done:
 Open tasks:
 
 * Поддерживать единый helper-конвенции для runbook links (`scripts/build_runbook_link.py`) во всех новых CI summaries.
-* Добавлять machine-readable smoke summaries для каждого нового smoke entrypoint по умолчанию.
+* Добавлять machine-readable smoke summaries для каждого нового smoke entrypoint по умолчанию (core smoke через `scripts/collect_smoke_run_summary.py`, automation через `check_automation_smoke_contract --summary-json`).
 
 ## Archived Tracks
 

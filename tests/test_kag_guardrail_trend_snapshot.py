@@ -109,17 +109,21 @@ def test_run_kag_guardrail_trend_snapshot_writes_artifacts(tmp_path: Path) -> No
     assert snapshot["profiles"]["hard"]["rolling_baseline"]["regression_flags"]["mrr_regression_severity"] == "none"
     assert (
         snapshot["profiles"]["hard"]["rolling_baseline"]["regression_flags"]["latency_p95_regression_severity"]
-        == "warn"
+        == "none"
     )
-    assert snapshot["profiles"]["hard"]["rolling_baseline"]["regression_flags"]["max_regression_severity"] == "warn"
-    assert snapshot["profiles"]["hard"]["rolling_baseline"]["regression_flags"]["has_warn_or_higher_regression"] is True
+    assert snapshot["profiles"]["hard"]["rolling_baseline"]["regression_flags"]["max_regression_severity"] == "none"
+    assert snapshot["profiles"]["hard"]["rolling_baseline"]["regression_flags"]["has_warn_or_higher_regression"] is False
     assert snapshot["profiles"]["hard"]["rolling_baseline"]["regression_flags"]["has_any_regression"] is True
     assert snapshot["severity_thresholds"]["mrr"]["warn_delta_latest_minus_baseline"] == pytest.approx(0.005)
     assert snapshot["severity_thresholds"]["mrr"]["critical_delta_latest_minus_baseline"] == pytest.approx(0.02)
-    assert snapshot["severity_thresholds"]["latency_p95_ms"]["warn_delta_latest_minus_baseline"] == pytest.approx(2.0)
-    assert snapshot["severity_thresholds"]["latency_p95_ms"]["critical_delta_latest_minus_baseline"] == pytest.approx(8.0)
+    assert snapshot["severity_thresholds"]["latency_p95_ms"]["warn_delta_latest_minus_baseline"] == pytest.approx(5.0)
+    assert snapshot["severity_thresholds"]["latency_p95_ms"]["critical_delta_latest_minus_baseline"] == pytest.approx(15.0)
     assert snapshot["comparison"]["latest_hard_minus_sample"]["delta_mrr"] == pytest.approx(0.10)
     assert snapshot["comparison"]["latest_hard_minus_sample"]["delta_latency_p95_ms"] == pytest.approx(25.0)
+    assert snapshot["critical_policy"]["mode"] == "signal_only"
+    assert snapshot["critical_policy"]["has_critical_regression"] is False
+    assert snapshot["critical_policy"]["critical_profiles"] == []
+    assert snapshot["critical_policy"]["should_fail_nightly"] is False
 
 
 def test_run_kag_guardrail_trend_snapshot_rolling_baseline_is_empty_with_single_run(tmp_path: Path) -> None:
@@ -248,6 +252,63 @@ def test_run_kag_guardrail_trend_snapshot_marks_critical_regression_by_threshold
     assert sample_flags["max_regression_severity"] == "critical"
     assert sample_flags["has_warn_or_higher_regression"] is True
     assert sample_flags["has_any_regression"] is True
+    assert snapshot["critical_policy"]["mode"] == "signal_only"
+    assert snapshot["critical_policy"]["has_critical_regression"] is True
+    assert snapshot["critical_policy"]["critical_profiles"] == ["sample", "hard"]
+    assert snapshot["critical_policy"]["should_fail_nightly"] is False
+
+
+def test_run_kag_guardrail_trend_snapshot_fail_nightly_policy_returns_error(tmp_path: Path) -> None:
+    sample_runs_dir = tmp_path / "sample"
+    hard_runs_dir = tmp_path / "hard"
+    _write_eval_results(
+        sample_runs_dir / "20260223_100000-kag-neo4j-eval" / "eval_results.json",
+        recall=1.0,
+        mrr=0.90,
+        hit_rate=1.0,
+        latency_p95_ms=60.0,
+    )
+    _write_eval_results(
+        sample_runs_dir / "20260223_110000-kag-neo4j-eval" / "eval_results.json",
+        recall=1.0,
+        mrr=0.85,
+        hit_rate=1.0,
+        latency_p95_ms=72.5,
+    )
+    _write_eval_results(
+        hard_runs_dir / "20260223_100500-kag-neo4j-eval" / "eval_results.json",
+        recall=1.0,
+        mrr=0.95,
+        hit_rate=1.0,
+        latency_p95_ms=80.0,
+    )
+    _write_eval_results(
+        hard_runs_dir / "20260223_110500-kag-neo4j-eval" / "eval_results.json",
+        recall=1.0,
+        mrr=0.90,
+        hit_rate=1.0,
+        latency_p95_ms=88.1,
+    )
+
+    result = trend_snapshot.run_kag_guardrail_trend_snapshot(
+        sample_runs_dir=sample_runs_dir,
+        hard_runs_dir=hard_runs_dir,
+        history_limit=2,
+        baseline_window=2,
+        mrr_warn_delta=0.01,
+        mrr_critical_delta=0.03,
+        latency_warn_delta_ms=4.0,
+        latency_critical_delta_ms=8.0,
+        critical_policy="fail_nightly",
+        runs_dir=tmp_path / "runs",
+        now=datetime(2026, 2, 23, 21, 0, 50, tzinfo=timezone.utc),
+    )
+
+    assert result["ok"] is False
+    assert result["run_payload"]["status"] == "error"
+    assert result["run_payload"]["error_code"] == "critical_regression_policy_failed"
+    assert result["run_payload"]["result"]["critical_policy"] == "fail_nightly"
+    assert result["run_payload"]["result"]["should_fail_nightly"] is True
 
 
 def test_run_kag_guardrail_trend_snapshot_returns_error_on_missing_profile(tmp_path: Path) -> None:
