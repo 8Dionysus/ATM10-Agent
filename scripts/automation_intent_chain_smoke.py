@@ -151,6 +151,9 @@ def run_automation_intent_chain_smoke(
             "generated_plan_json": str(generated_plan_path),
         },
     }
+    trace_id = adapter_result["plan_payload"].get("planning", {}).get("trace_id")
+    if trace_id is not None:
+        chain_summary["intent_adapter"]["trace_id"] = trace_id
     _write_json(chain_summary_path, chain_summary)
 
     run_payload["status"] = "ok"
@@ -160,6 +163,8 @@ def run_automation_intent_chain_smoke(
         "action_count": chain_summary["intent_adapter"]["action_count"],
         "step_count": chain_summary["automation_dry_run"]["step_count"],
     }
+    if trace_id is not None:
+        run_payload["result"]["trace_id"] = trace_id
     run_payload["child_runs"] = {
         "intent_adapter": str(adapter_result["run_dir"]),
         "automation_dry_run": str(dry_run_result["run_dir"]),

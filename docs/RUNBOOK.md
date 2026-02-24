@@ -29,7 +29,9 @@ python scripts/eval_retrieval.py --docs tests/fixtures/retrieval_docs_sample.jso
 python scripts/automation_dry_run.py --plan-json tests/fixtures/automation_plan_quest_book.json --runs-dir runs/ci-smoke-automation-dry-run
 python scripts/check_automation_smoke_contract.py --mode dry_run --runs-dir runs/ci-smoke-automation-dry-run --min-action-count 3 --min-step-count 4 --summary-json runs/ci-smoke-automation-dry-run/contract_summary.json
 python scripts/automation_intent_chain_smoke.py --intent-json tests/fixtures/intent_open_quest_book.json --runs-dir runs/ci-smoke-automation-chain
-python scripts/check_automation_smoke_contract.py --mode intent_chain --runs-dir runs/ci-smoke-automation-chain --min-action-count 3 --min-step-count 4 --expected-intent-type open_quest_book --summary-json runs/ci-smoke-automation-chain/contract_summary.json
+python scripts/check_automation_smoke_contract.py --mode intent_chain --runs-dir runs/ci-smoke-automation-chain --min-action-count 3 --min-step-count 4 --expected-intent-type open_quest_book --require-trace-id --require-intent-id --summary-json runs/ci-smoke-automation-chain/contract_summary.json
+python scripts/automation_intent_chain_smoke.py --intent-json tests/fixtures/intent_check_inventory_tool.json --runs-dir runs/ci-smoke-automation-chain-inventory
+python scripts/check_automation_smoke_contract.py --mode intent_chain --runs-dir runs/ci-smoke-automation-chain-inventory --min-action-count 3 --min-step-count 4 --expected-intent-type check_inventory_tool --require-trace-id --require-intent-id --summary-json runs/ci-smoke-automation-chain-inventory/contract_summary.json
 ```
 
 ## Qwen3 stack (OpenVINO-first)
@@ -617,12 +619,18 @@ Trend snapshot manual run (optional):
 python scripts/kag_guardrail_trend_snapshot.py --sample-runs-dir runs/nightly-kag-eval-sample --hard-runs-dir runs/nightly-kag-eval-hard --history-limit 10 --baseline-window 5 --runs-dir runs/nightly-kag-trend
 ```
 
+Trend snapshot with explicit severity thresholds (optional):
+
+```powershell
+python scripts/kag_guardrail_trend_snapshot.py --sample-runs-dir runs/nightly-kag-eval-sample --hard-runs-dir runs/nightly-kag-eval-hard --history-limit 10 --baseline-window 5 --mrr-warn-delta 0.005 --mrr-critical-delta 0.02 --latency-warn-delta-ms 2.0 --latency-critical-delta-ms 8.0 --runs-dir runs/nightly-kag-trend
+```
+
 Ожидаемый результат:
 
 * Создается `runs/<timestamp>-kag-guardrail-trend/`.
 * Внутри есть `run.json`, `trend_snapshot.json`, `summary.md`.
 * В `trend_snapshot.json` есть `rolling_baseline` по `sample`/`hard` (latest vs mean previous N runs).
-* В `rolling_baseline.regression_flags` фиксируются статусы `mrr`/`latency_p95` (`improved|stable|regressed|insufficient_history`).
+* В `rolling_baseline.regression_flags` фиксируются статусы `mrr`/`latency_p95` (`improved|stable|regressed|insufficient_history`) и severity (`none|warn|critical`) с агрегатом `max_regression_severity`.
 
 ### Warmup A/B compare (mini benchmark)
 
@@ -672,6 +680,14 @@ python scripts/automation_dry_run.py --plan-json "C:\path\to\automation_plan.jso
     "source": "manual_hotkey",
     "note": "open quest book and wait"
   },
+  "planning": {
+    "intent_type": "open_quest_book",
+    "intent_id": "intent-123",
+    "trace_id": "trace-xyz",
+    "intent_schema_version": "automation_intent_v1",
+    "adapter_name": "intent_to_automation_plan",
+    "adapter_version": "v1"
+  },
   "actions": [
     {"type": "key_tap", "key": "l"},
     {"type": "wait", "duration_ms": 250, "repeats": 2},
@@ -713,6 +729,7 @@ python scripts/intent_to_automation_plan.py --intent-json "tests/fixtures/intent
 * Создается `runs/<timestamp>-intent-to-automation-plan/`.
 * Внутри есть `run.json` и `automation_plan.json`.
 * `run.json.result.dry_run_only=true`.
+* В `automation_plan.json` есть `planning` metadata (`intent_type`, `intent_schema_version`, `adapter_name`, `adapter_version`; optional `intent_id/trace_id`).
 
 Проверка end-to-end через existing dry-run runner:
 
@@ -729,6 +746,7 @@ python scripts/automation_dry_run.py --plan-json "runs\m6_3_intent_plan.json"
 cd D:\atm10-agent
 .\.venv\Scripts\Activate.ps1
 python scripts/automation_intent_chain_smoke.py --intent-json "tests/fixtures/intent_open_quest_book.json"
+python scripts/automation_intent_chain_smoke.py --intent-json "tests/fixtures/intent_check_inventory_tool.json"
 ```
 
 Ожидаемый результат:
@@ -752,20 +770,43 @@ python scripts/check_automation_smoke_contract.py --mode dry_run --runs-dir runs
 Intent-chain smoke contract:
 
 ```powershell
-python scripts/check_automation_smoke_contract.py --mode intent_chain --runs-dir runs/ci-smoke-automation-chain --min-action-count 3 --min-step-count 4 --expected-intent-type open_quest_book
+python scripts/check_automation_smoke_contract.py --mode intent_chain --runs-dir runs/ci-smoke-automation-chain --min-action-count 3 --min-step-count 4 --expected-intent-type open_quest_book --require-trace-id --require-intent-id
+python scripts/check_automation_smoke_contract.py --mode intent_chain --runs-dir runs/ci-smoke-automation-chain-inventory --min-action-count 3 --min-step-count 4 --expected-intent-type check_inventory_tool --require-trace-id --require-intent-id
 ```
 
 Machine-readable summary output:
 
 ```powershell
 python scripts/check_automation_smoke_contract.py --mode dry_run --runs-dir runs/ci-smoke-automation-dry-run --min-action-count 3 --min-step-count 4 --summary-json runs/ci-smoke-automation-dry-run/contract_summary.json
-python scripts/check_automation_smoke_contract.py --mode intent_chain --runs-dir runs/ci-smoke-automation-chain --min-action-count 3 --min-step-count 4 --expected-intent-type open_quest_book --summary-json runs/ci-smoke-automation-chain/contract_summary.json
+python scripts/check_automation_smoke_contract.py --mode intent_chain --runs-dir runs/ci-smoke-automation-chain --min-action-count 3 --min-step-count 4 --expected-intent-type open_quest_book --require-trace-id --require-intent-id --summary-json runs/ci-smoke-automation-chain/contract_summary.json
+python scripts/check_automation_smoke_contract.py --mode intent_chain --runs-dir runs/ci-smoke-automation-chain-inventory --min-action-count 3 --min-step-count 4 --expected-intent-type check_inventory_tool --require-trace-id --require-intent-id --summary-json runs/ci-smoke-automation-chain-inventory/contract_summary.json
 ```
 
 Ожидаемый результат:
 
 * Оба check-скрипта завершаются с `status=ok`.
+* В `--summary-json` поле `observed` включает optional trace-correlation metadata:
+  * `trace_id`, `intent_id` (если они есть в `planning` action-plan metadata).
+* Для intent-chain canonical fixtures используются `--require-trace-id` и `--require-intent-id`; отсутствие любого из id считается contract violation.
+* В CI step summary (`Automation Smoke Contracts`) эти поля выводятся отдельными колонками `trace_id/intent_id` для быстрого triage.
 * Любое нарушение контракта (missing artifact/метрики ниже порога/несовпадение intent) даёт non-zero exit code.
+
+## M6.19: New intent template rollout policy (CI)
+
+Policy checklist для каждого нового `intent_type`:
+
+1. Добавить canonical fixture:
+   * `tests/fixtures/intent_<new_intent_type>.json`
+   * fixture должен включать `intent_id` и `trace_id`.
+2. Добавить smoke run step:
+   * `python scripts/automation_intent_chain_smoke.py --intent-json tests/fixtures/intent_<new_intent_type>.json --runs-dir runs/ci-smoke-automation-chain-<new_intent_type>`
+3. Добавить contract-check step:
+   * `python scripts/check_automation_smoke_contract.py --mode intent_chain --runs-dir runs/ci-smoke-automation-chain-<new_intent_type> --min-action-count 3 --min-step-count 4 --expected-intent-type <new_intent_type> --require-trace-id --require-intent-id --summary-json runs/ci-smoke-automation-chain-<new_intent_type>/contract_summary.json`
+4. Добавить summary/artifact wiring:
+   * новая строка в `Automation Smoke Contracts` summary table;
+   * новый `contract_summary.json` в upload artifact path.
+5. Добавить regression test:
+   * минимум 1 pytest на e2e dry-run chain для нового fixture.
 
 ## M6.8: Troubleshooting automation smoke contract failures (CI)
 

@@ -1,6 +1,8 @@
 {
   "schema_version": "automation_intent_v1",
   "intent_type": "open_quest_book",
+  "intent_id": "intent-open-quest-book-001",
+  "trace_id": "trace-open-quest-book-001",
   "priority": "normal",
   "source": "voice_intent",
   "note": "show active quests",

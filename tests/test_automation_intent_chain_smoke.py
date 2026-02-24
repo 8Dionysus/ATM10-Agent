@@ -46,6 +46,60 @@ def test_automation_intent_chain_smoke_runs_end_to_end(tmp_path: Path) -> None:
     assert summary_payload["automation_dry_run"]["ok"] is True
     assert plan_payload["schema_version"] == "automation_plan_v1"
     assert plan_payload["context"]["intent_type"] == "open_quest_book"
+    assert plan_payload["planning"]["intent_type"] == "open_quest_book"
+
+
+def test_automation_intent_chain_smoke_propagates_trace_id(tmp_path: Path) -> None:
+    intent_json = tmp_path / "intent_with_trace.json"
+    intent_json.write_text(
+        json.dumps(
+            {
+                "schema_version": "automation_intent_v1",
+                "intent_type": "open_quest_book",
+                "trace_id": "trace-chain-42",
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+
+    result = chain_smoke.run_automation_intent_chain_smoke(
+        intent_json=intent_json,
+        runs_dir=tmp_path / "runs",
+        now=datetime(2026, 2, 24, 10, 32, 0, tzinfo=timezone.utc),
+    )
+
+    run_payload = json.loads((result["run_dir"] / "run.json").read_text(encoding="utf-8"))
+    summary_payload = json.loads((result["run_dir"] / "chain_summary.json").read_text(encoding="utf-8"))
+
+    assert result["ok"] is True
+    assert run_payload["result"]["trace_id"] == "trace-chain-42"
+    assert summary_payload["intent_adapter"]["trace_id"] == "trace-chain-42"
+
+
+def test_automation_intent_chain_smoke_runs_inventory_fixture(tmp_path: Path) -> None:
+    intent_json = tmp_path / "intent_inventory.json"
+    intent_json.write_text(
+        json.dumps(_fixture_payload("intent_check_inventory_tool.json"), ensure_ascii=False),
+        encoding="utf-8",
+    )
+
+    result = chain_smoke.run_automation_intent_chain_smoke(
+        intent_json=intent_json,
+        runs_dir=tmp_path / "runs",
+        now=datetime(2026, 2, 24, 11, 0, 0, tzinfo=timezone.utc),
+    )
+
+    run_payload = json.loads((result["run_dir"] / "run.json").read_text(encoding="utf-8"))
+    summary_payload = json.loads((result["run_dir"] / "chain_summary.json").read_text(encoding="utf-8"))
+    plan_payload = json.loads((result["run_dir"] / "automation_plan.json").read_text(encoding="utf-8"))
+
+    assert result["ok"] is True
+    assert run_payload["result"]["intent_type"] == "check_inventory_tool"
+    assert run_payload["result"]["action_count"] == 4
+    assert run_payload["result"]["step_count"] == 4
+    assert summary_payload["intent_adapter"]["intent_type"] == "check_inventory_tool"
+    assert plan_payload["context"]["intent_type"] == "check_inventory_tool"
 
 
 def test_automation_intent_chain_smoke_rejects_invalid_intent(tmp_path: Path) -> None:

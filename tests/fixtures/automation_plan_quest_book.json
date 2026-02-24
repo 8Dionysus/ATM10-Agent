@@ -10,6 +10,14 @@
     "source": "manual_hotkey",
     "note": "open quest book and wait"
   },
+  "planning": {
+    "intent_type": "open_quest_book",
+    "intent_id": "intent-open-quest-book-001",
+    "trace_id": "trace-open-quest-book-001",
+    "intent_schema_version": "automation_intent_v1",
+    "adapter_name": "manual_fixture",
+    "adapter_version": "v1"
+  },
   "actions": [
     {"type": "key_tap", "key": "l"},
     {"type": "wait", "duration_ms": 250, "repeats": 2},

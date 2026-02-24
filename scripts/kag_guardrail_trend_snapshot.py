@@ -13,6 +13,11 @@ _METRIC_KEYS: tuple[str, ...] = (
     "latency_p95_ms",
 )
 _EPSILON = 1e-9
+_DEFAULT_MRR_WARN_DELTA = 0.005
+_DEFAULT_MRR_CRITICAL_DELTA = 0.02
+_DEFAULT_LATENCY_WARN_DELTA_MS = 2.0
+_DEFAULT_LATENCY_CRITICAL_DELTA_MS = 8.0
+_SEVERITY_RANK = {"none": 0, "warn": 1, "critical": 2}
 
 
 def _create_run_dir(runs_dir: Path, now: datetime) -> Path:
@@ -69,7 +74,56 @@ def _collect_profile_history(profile_runs_dir: Path, *, limit: int) -> list[dict
     return rows
 
 
-def _compute_rolling_baseline(history: list[dict[str, Any]], *, window: int) -> dict[str, Any]:
+def _validate_regression_thresholds(
+    *,
+    mrr_warn_delta: float,
+    mrr_critical_delta: float,
+    latency_warn_delta_ms: float,
+    latency_critical_delta_ms: float,
+) -> None:
+    if mrr_warn_delta < 0:
+        raise ValueError("mrr_warn_delta must be >= 0.")
+    if mrr_critical_delta < 0:
+        raise ValueError("mrr_critical_delta must be >= 0.")
+    if latency_warn_delta_ms < 0:
+        raise ValueError("latency_warn_delta_ms must be >= 0.")
+    if latency_critical_delta_ms < 0:
+        raise ValueError("latency_critical_delta_ms must be >= 0.")
+    if mrr_critical_delta + _EPSILON < mrr_warn_delta:
+        raise ValueError("mrr_critical_delta must be >= mrr_warn_delta.")
+    if latency_critical_delta_ms + _EPSILON < latency_warn_delta_ms:
+        raise ValueError("latency_critical_delta_ms must be >= latency_warn_delta_ms.")
+
+
+def _regression_severity(
+    *,
+    status: str,
+    magnitude: float,
+    warn_delta: float,
+    critical_delta: float,
+) -> str:
+    if status != "regressed":
+        return "none"
+    if magnitude + _EPSILON >= critical_delta:
+        return "critical"
+    if magnitude + _EPSILON >= warn_delta:
+        return "warn"
+    return "none"
+
+
+def _max_severity(*values: str) -> str:
+    return max(values, key=lambda item: _SEVERITY_RANK.get(item, 0))
+
+
+def _compute_rolling_baseline(
+    history: list[dict[str, Any]],
+    *,
+    window: int,
+    mrr_warn_delta: float,
+    mrr_critical_delta: float,
+    latency_warn_delta_ms: float,
+    latency_critical_delta_ms: float,
+) -> dict[str, Any]:
     baseline_rows = history[:-1]
     if window > 0 and len(baseline_rows) > window:
         baseline_rows = baseline_rows[-window:]
@@ -87,8 +141,12 @@ def _compute_rolling_baseline(history: list[dict[str, Any]], *, window: int) -> 
                 "comparison_evaluated": False,
                 "mrr_status": "insufficient_history",
                 "latency_p95_status": "insufficient_history",
+                "mrr_regression_severity": "none",
+                "latency_p95_regression_severity": "none",
+                "max_regression_severity": "none",
                 "has_mrr_regression": False,
                 "has_latency_p95_regression": False,
+                "has_warn_or_higher_regression": False,
                 "has_any_regression": False,
             },
         }
@@ -119,6 +177,19 @@ def _compute_rolling_baseline(history: list[dict[str, Any]], *, window: int) -> 
 
     has_mrr_regression = mrr_status == "regressed"
     has_latency_regression = latency_status == "regressed"
+    mrr_severity = _regression_severity(
+        status=mrr_status,
+        magnitude=abs(delta_mrr),
+        warn_delta=mrr_warn_delta,
+        critical_delta=mrr_critical_delta,
+    )
+    latency_severity = _regression_severity(
+        status=latency_status,
+        magnitude=abs(delta_latency),
+        warn_delta=latency_warn_delta_ms,
+        critical_delta=latency_critical_delta_ms,
+    )
+    max_regression_severity = _max_severity(mrr_severity, latency_severity)
     return {
         "window": window,
         "count": count,
@@ -129,8 +200,12 @@ def _compute_rolling_baseline(history: list[dict[str, Any]], *, window: int) -> 
             "comparison_evaluated": True,
             "mrr_status": mrr_status,
             "latency_p95_status": latency_status,
+            "mrr_regression_severity": mrr_severity,
+            "latency_p95_regression_severity": latency_severity,
+            "max_regression_severity": max_regression_severity,
             "has_mrr_regression": has_mrr_regression,
             "has_latency_p95_regression": has_latency_regression,
+            "has_warn_or_higher_regression": max_regression_severity != "none",
             "has_any_regression": has_mrr_regression or has_latency_regression,
         },
     }
@@ -199,9 +274,10 @@ def _write_summary_md(path: Path, *, snapshot: Mapping[str, Any]) -> None:
             "",
             (
                 "| profile | baseline_count | baseline_mrr | baseline_latency_p95_ms | delta_mrr | "
-                "delta_latency_p95_ms | mrr_status | latency_p95_status | any_regression |"
+                "delta_latency_p95_ms | mrr_status | latency_p95_status | mrr_severity | "
+                "latency_p95_severity | max_severity | any_regression |"
             ),
-            "|---|---:|---:|---:|---:|---:|---|---|---|",
+            "|---|---:|---:|---:|---:|---:|---|---|---|---|---|---|",
         ]
     )
 
@@ -219,6 +295,9 @@ def _write_summary_md(path: Path, *, snapshot: Mapping[str, Any]) -> None:
             f"{_fmt_opt(deltas.get('delta_latency_p95_ms'), decimals=2)} | "
             f"{flags['mrr_status']} | "
             f"{flags['latency_p95_status']} | "
+            f"{flags['mrr_regression_severity']} | "
+            f"{flags['latency_p95_regression_severity']} | "
+            f"{flags['max_regression_severity']} | "
             f"{str(flags['has_any_regression']).lower()} |"
         )
 
@@ -232,6 +311,10 @@ def run_kag_guardrail_trend_snapshot(
     hard_runs_dir: Path = Path("runs") / "nightly-kag-eval-hard",
     history_limit: int = 5,
     baseline_window: int = 3,
+    mrr_warn_delta: float = _DEFAULT_MRR_WARN_DELTA,
+    mrr_critical_delta: float = _DEFAULT_MRR_CRITICAL_DELTA,
+    latency_warn_delta_ms: float = _DEFAULT_LATENCY_WARN_DELTA_MS,
+    latency_critical_delta_ms: float = _DEFAULT_LATENCY_CRITICAL_DELTA_MS,
     runs_dir: Path = Path("runs"),
     now: datetime | None = None,
 ) -> dict[str, Any]:
@@ -239,6 +322,12 @@ def run_kag_guardrail_trend_snapshot(
         raise ValueError("history_limit must be > 0.")
     if baseline_window <= 0:
         raise ValueError("baseline_window must be > 0.")
+    _validate_regression_thresholds(
+        mrr_warn_delta=mrr_warn_delta,
+        mrr_critical_delta=mrr_critical_delta,
+        latency_warn_delta_ms=latency_warn_delta_ms,
+        latency_critical_delta_ms=latency_critical_delta_ms,
+    )
     if now is None:
         now = datetime.now(timezone.utc)
 
@@ -256,6 +345,10 @@ def run_kag_guardrail_trend_snapshot(
             "hard_runs_dir": str(hard_runs_dir),
             "history_limit": history_limit,
             "baseline_window": baseline_window,
+            "mrr_warn_delta": mrr_warn_delta,
+            "mrr_critical_delta": mrr_critical_delta,
+            "latency_warn_delta_ms": latency_warn_delta_ms,
+            "latency_critical_delta_ms": latency_critical_delta_ms,
         },
         "paths": {
             "run_dir": str(run_dir),
@@ -276,11 +369,35 @@ def run_kag_guardrail_trend_snapshot(
 
         latest_sample = sample_history[-1]
         latest_hard = hard_history[-1]
-        sample_rolling_baseline = _compute_rolling_baseline(sample_history, window=baseline_window)
-        hard_rolling_baseline = _compute_rolling_baseline(hard_history, window=baseline_window)
+        sample_rolling_baseline = _compute_rolling_baseline(
+            sample_history,
+            window=baseline_window,
+            mrr_warn_delta=mrr_warn_delta,
+            mrr_critical_delta=mrr_critical_delta,
+            latency_warn_delta_ms=latency_warn_delta_ms,
+            latency_critical_delta_ms=latency_critical_delta_ms,
+        )
+        hard_rolling_baseline = _compute_rolling_baseline(
+            hard_history,
+            window=baseline_window,
+            mrr_warn_delta=mrr_warn_delta,
+            mrr_critical_delta=mrr_critical_delta,
+            latency_warn_delta_ms=latency_warn_delta_ms,
+            latency_critical_delta_ms=latency_critical_delta_ms,
+        )
         snapshot_payload = {
             "history_limit": history_limit,
             "baseline_window": baseline_window,
+            "severity_thresholds": {
+                "mrr": {
+                    "warn_delta_latest_minus_baseline": mrr_warn_delta,
+                    "critical_delta_latest_minus_baseline": mrr_critical_delta,
+                },
+                "latency_p95_ms": {
+                    "warn_delta_latest_minus_baseline": latency_warn_delta_ms,
+                    "critical_delta_latest_minus_baseline": latency_critical_delta_ms,
+                },
+            },
             "profiles": {
                 "sample": {
                     "count": len(sample_history),
@@ -317,6 +434,8 @@ def run_kag_guardrail_trend_snapshot(
             "hard_baseline_count": hard_rolling_baseline["count"],
             "sample_has_regression": sample_rolling_baseline["regression_flags"]["has_any_regression"],
             "hard_has_regression": hard_rolling_baseline["regression_flags"]["has_any_regression"],
+            "sample_regression_severity": sample_rolling_baseline["regression_flags"]["max_regression_severity"],
+            "hard_regression_severity": hard_rolling_baseline["regression_flags"]["max_regression_severity"],
         }
         _write_json(run_json_path, run_payload)
         return {
@@ -359,6 +478,30 @@ def parse_args() -> argparse.Namespace:
         default=3,
         help="Number of previous runs used for rolling baseline comparison per profile.",
     )
+    parser.add_argument(
+        "--mrr-warn-delta",
+        type=float,
+        default=_DEFAULT_MRR_WARN_DELTA,
+        help="MRR regression warn threshold for abs(latest-baseline) delta.",
+    )
+    parser.add_argument(
+        "--mrr-critical-delta",
+        type=float,
+        default=_DEFAULT_MRR_CRITICAL_DELTA,
+        help="MRR regression critical threshold for abs(latest-baseline) delta.",
+    )
+    parser.add_argument(
+        "--latency-warn-delta-ms",
+        type=float,
+        default=_DEFAULT_LATENCY_WARN_DELTA_MS,
+        help="latency_p95 regression warn threshold for abs(latest-baseline) delta in ms.",
+    )
+    parser.add_argument(
+        "--latency-critical-delta-ms",
+        type=float,
+        default=_DEFAULT_LATENCY_CRITICAL_DELTA_MS,
+        help="latency_p95 regression critical threshold for abs(latest-baseline) delta in ms.",
+    )
     parser.add_argument("--runs-dir", type=Path, default=Path("runs"), help="Run artifact base directory.")
     return parser.parse_args()
 
@@ -370,6 +513,10 @@ def main() -> int:
         hard_runs_dir=args.hard_runs_dir,
         history_limit=args.history_limit,
         baseline_window=args.baseline_window,
+        mrr_warn_delta=args.mrr_warn_delta,
+        mrr_critical_delta=args.mrr_critical_delta,
+        latency_warn_delta_ms=args.latency_warn_delta_ms,
+        latency_critical_delta_ms=args.latency_critical_delta_ms,
         runs_dir=args.runs_dir,
     )
     run_dir = result["run_dir"]

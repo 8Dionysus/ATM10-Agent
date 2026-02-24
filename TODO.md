@@ -37,13 +37,9 @@
 
 ## Now (WIP <= 3)
 
-* [ ] M5.8: добавить severity-правила для regression-флагов (`warn`/`critical`) по mrr/p95 дельтам.
-* [ ] M6.11: унифицировать формат quick-links в CI summaries (`pytest` + nightly guardrail).
-
 ## Next
 
-* [ ] M5.9: вывести severity (`warn`/`critical`) в nightly trend summary и `trend_snapshot.json`.
-* [ ] M6.12: добавить единый helper/конвенцию для build runbook links в workflow summaries.
+* [ ] G1 follow-up: при следующем новом `intent_type` применить checklist `M6.19` (fixture + smoke + strict contract-check + summary/artifacts + e2e test).
 
 ## Blocked
 
@@ -77,6 +73,17 @@
 * [x] M5.6: в `kag_guardrail_trend_snapshot` добавлен rolling-baseline comparison (N previous runs) + nightly summary поля.
 * [x] M6.10: quick-link на runbook troubleshooting добавлен и в nightly guardrail summary.
 * [x] M5.7: в trend snapshot добавлены regression-флаги (`mrr`/`latency_p95`) для latest vs rolling-baseline.
+* [x] M5.8: добавлены severity-правила (`warn`/`critical`) для regression-флагов (`mrr`/`latency_p95`) и пороги дельт.
+* [x] M5.9: severity (`warn`/`critical`) выведен в nightly trend summary и `trend_snapshot.json`.
+* [x] M6.11: формат quick-links унифицирован между `pytest` и nightly guardrail summaries.
+* [x] M6.12: добавлен единый helper/конвенция для build runbook links в workflow summaries.
+* [x] M6.13: в `automation_plan_v1` добавлен optional `planning` metadata envelope (`intent_id/trace_id/adapter*`) для интеграции с верхним planning-слоем.
+* [x] M6.14: CI smoke расширен вторым intent-chain fixture-сценарием (`check_inventory_tool`) с отдельным contract-check и summary row.
+* [x] M6.15: `check_automation_smoke_contract --summary-json` теперь пробрасывает `planning.trace_id/intent_id` в `observed` (dry_run + intent_chain).
+* [x] M6.16: в CI step summary (`pytest` smoke) добавлены колонки `trace_id/intent_id` из contract summary + canonical fixtures получили trace metadata.
+* [x] M6.17: в intent-chain CI contract-check включен `--require-trace-id` (canonical fixtures), отсутствие trace id теперь fail-fast.
+* [x] M6.18: в intent-chain CI contract-check включен `--require-intent-id` (canonical fixtures), отсутствие intent id теперь fail-fast.
+* [x] M6.19: в `docs/RUNBOOK.md` зафиксирован policy-чеклист rollout новых `intent_type` (fixture + smoke + strict contract-check + summary/artifacts + test).
 * [x] Добавлен weekly review шаблон: `docs/SESSION_WEEKLY_TEMPLATE.md`.
 * [x] Упрощен `README.md`: status-блок переведен в формат ссылок на каноничные документы.
 * [x] Обновлен `MANIFEST.md` до короткого snapshot-формата (дата, capabilities, canonical links).

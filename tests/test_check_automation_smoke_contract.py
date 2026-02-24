@@ -23,7 +23,13 @@ def test_check_automation_smoke_contract_dry_run_ok(tmp_path: Path) -> None:
             "result": {"dry_run": True, "action_count": 3, "step_count": 4},
         },
     )
-    _write_json(run_dir / "actions_normalized.json", {"schema_version": "automation_plan_v1"})
+    _write_json(
+        run_dir / "actions_normalized.json",
+        {
+            "schema_version": "automation_plan_v1",
+            "planning": {"trace_id": "trace-dry-1", "intent_id": "intent-dry-1"},
+        },
+    )
     _write_json(run_dir / "execution_plan.json", {"dry_run": True, "step_count": 4})
     ok, errors, observed = checker._check_dry_run_contract(
         run_dir=run_dir,
@@ -35,6 +41,8 @@ def test_check_automation_smoke_contract_dry_run_ok(tmp_path: Path) -> None:
     assert observed["action_count"] == 3
     assert observed["step_count"] == 4
     assert observed["schema_version"] == "automation_plan_v1"
+    assert observed["trace_id"] == "trace-dry-1"
+    assert observed["intent_id"] == "intent-dry-1"
 
 
 def test_check_automation_smoke_contract_chain_ok(tmp_path: Path) -> None:
@@ -52,18 +60,29 @@ def test_check_automation_smoke_contract_chain_ok(tmp_path: Path) -> None:
         },
     )
     _write_json(run_dir / "chain_summary.json", {"ok": True})
-    _write_json(run_dir / "automation_plan.json", {"schema_version": "automation_plan_v1", "context": {"intent_type": "open_quest_book"}})
+    _write_json(
+        run_dir / "automation_plan.json",
+        {
+            "schema_version": "automation_plan_v1",
+            "context": {"intent_type": "open_quest_book"},
+            "planning": {"trace_id": "trace-chain-1", "intent_id": "intent-chain-1"},
+        },
+    )
     ok, errors, observed = checker._check_chain_contract(
         run_dir=run_dir,
         min_action_count=3,
         min_step_count=4,
         expected_intent_type="open_quest_book",
+        require_trace_id=True,
+        require_intent_id=True,
     )
     assert ok is True
     assert errors == []
     assert observed["action_count"] == 3
     assert observed["step_count"] == 4
     assert observed["intent_type"] == "open_quest_book"
+    assert observed["trace_id"] == "trace-chain-1"
+    assert observed["intent_id"] == "intent-chain-1"
 
 
 def test_check_automation_smoke_contract_chain_fails_on_intent_type(tmp_path: Path) -> None:
@@ -92,6 +111,100 @@ def test_check_automation_smoke_contract_chain_fails_on_intent_type(tmp_path: Pa
     assert any("expected_intent_type" in item for item in errors)
 
 
+def test_check_automation_smoke_contract_chain_uses_trace_fallback_from_chain_summary(tmp_path: Path) -> None:
+    run_dir = tmp_path / "runs" / "20260223_210004-automation-intent-chain-smoke"
+    _write_json(
+        run_dir / "run.json",
+        {
+            "status": "ok",
+            "result": {
+                "dry_run_only": True,
+                "intent_type": "open_quest_book",
+                "action_count": 3,
+                "step_count": 4,
+            },
+        },
+    )
+    _write_json(run_dir / "chain_summary.json", {"ok": True, "intent_adapter": {"trace_id": "trace-fallback-1"}})
+    _write_json(run_dir / "automation_plan.json", {"schema_version": "automation_plan_v1", "context": {"intent_type": "open_quest_book"}})
+    ok, errors, observed = checker._check_chain_contract(
+        run_dir=run_dir,
+        min_action_count=1,
+        min_step_count=1,
+        expected_intent_type="open_quest_book",
+        require_trace_id=True,
+    )
+    assert ok is True
+    assert errors == []
+    assert observed["trace_id"] == "trace-fallback-1"
+
+
+def test_check_automation_smoke_contract_chain_requires_trace_id(tmp_path: Path) -> None:
+    run_dir = tmp_path / "runs" / "20260223_210005-automation-intent-chain-smoke"
+    _write_json(
+        run_dir / "run.json",
+        {
+            "status": "ok",
+            "result": {
+                "dry_run_only": True,
+                "intent_type": "open_quest_book",
+                "action_count": 3,
+                "step_count": 4,
+            },
+        },
+    )
+    _write_json(run_dir / "chain_summary.json", {"ok": True})
+    _write_json(run_dir / "automation_plan.json", {"schema_version": "automation_plan_v1", "context": {"intent_type": "open_quest_book"}})
+    ok, errors, observed = checker._check_chain_contract(
+        run_dir=run_dir,
+        min_action_count=1,
+        min_step_count=1,
+        expected_intent_type="open_quest_book",
+        require_trace_id=True,
+    )
+    assert ok is False
+    assert any("trace_id is required" in item for item in errors)
+    assert "trace_id" not in observed
+
+
+def test_check_automation_smoke_contract_chain_requires_intent_id(tmp_path: Path) -> None:
+    run_dir = tmp_path / "runs" / "20260223_210006-automation-intent-chain-smoke"
+    _write_json(
+        run_dir / "run.json",
+        {
+            "status": "ok",
+            "result": {
+                "dry_run_only": True,
+                "intent_type": "open_quest_book",
+                "action_count": 3,
+                "step_count": 4,
+                "trace_id": "trace-only",
+            },
+        },
+    )
+    _write_json(run_dir / "chain_summary.json", {"ok": True, "intent_adapter": {"trace_id": "trace-only"}})
+    _write_json(
+        run_dir / "automation_plan.json",
+        {
+            "schema_version": "automation_plan_v1",
+            "context": {"intent_type": "open_quest_book"},
+            "planning": {"trace_id": "trace-only"},
+        },
+    )
+    ok, errors, observed = checker._check_chain_contract(
+        run_dir=run_dir,
+        min_action_count=1,
+        min_step_count=1,
+        expected_intent_type="open_quest_book",
+        require_trace_id=True,
+        require_intent_id=True,
+    )
+    assert ok is False
+    assert any("intent_id is required" in item for item in errors)
+    assert observed["trace_id"] == "trace-only"
+    assert "intent_id" not in observed
+
+
 def test_check_automation_smoke_contract_main_writes_summary_json(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     run_dir = tmp_path / "runs" / "20260223_210003-automation-dry-run"
     _write_json(
@@ -101,7 +214,13 @@ def test_check_automation_smoke_contract_main_writes_summary_json(tmp_path: Path
             "result": {"dry_run": True, "action_count": 3, "step_count": 4},
         },
     )
-    _write_json(run_dir / "actions_normalized.json", {"schema_version": "automation_plan_v1"})
+    _write_json(
+        run_dir / "actions_normalized.json",
+        {
+            "schema_version": "automation_plan_v1",
+            "planning": {"trace_id": "trace-dry-main", "intent_id": "intent-dry-main"},
+        },
+    )
     _write_json(run_dir / "execution_plan.json", {"dry_run": True, "step_count": 4})
     summary_path = tmp_path / "summary.json"
 
@@ -129,6 +248,8 @@ def test_check_automation_smoke_contract_main_writes_summary_json(tmp_path: Path
     assert summary["status"] == "ok"
     assert summary["mode"] == "dry_run"
     assert summary["observed"]["action_count"] == 3
+    assert summary["observed"]["trace_id"] == "trace-dry-main"
+    assert summary["observed"]["intent_id"] == "intent-dry-main"
     assert summary["violations"] == []
 
 

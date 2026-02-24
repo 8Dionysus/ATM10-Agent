@@ -1,0 +1,11 @@
+{
+  "schema_version": "automation_intent_v1",
+  "intent_type": "check_inventory_tool",
+  "intent_id": "intent-check-inventory-tool-001",
+  "trace_id": "trace-check-inventory-tool-001",
+  "priority": "high",
+  "source": "voice_intent",
+  "note": "check pickaxe before mining trip",
+  "tags": ["inventory", "status"],
+  "constraints": ["dry_run_only"]
+}

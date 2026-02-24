@@ -17,6 +17,14 @@ _ALLOWED_ACTION_TYPES = {
 _ALLOWED_MOUSE_BUTTONS = {"left", "right", "middle"}
 _ACTION_PLAN_SCHEMA_VERSION = "automation_plan_v1"
 _ALLOWED_INTENT_PRIORITIES = {"low", "normal", "high"}
+_PLANNING_STRING_FIELDS = {
+    "intent_type",
+    "intent_id",
+    "trace_id",
+    "intent_schema_version",
+    "adapter_name",
+    "adapter_version",
+}
 
 
 def _create_run_dir(runs_dir: Path, now: datetime) -> Path:
@@ -182,9 +190,28 @@ def _normalize_intent(raw_payload: Mapping[str, Any]) -> dict[str, Any]:
     }
 
 
+def _normalize_planning(raw_payload: Mapping[str, Any]) -> dict[str, Any] | None:
+    raw_planning = raw_payload.get("planning")
+    if raw_planning is None:
+        return None
+    if not isinstance(raw_planning, Mapping):
+        raise ValueError("planning must be JSON object when provided.")
+
+    planning: dict[str, Any] = dict(raw_planning)
+    for key in _PLANNING_STRING_FIELDS:
+        if key not in planning:
+            continue
+        value = str(planning[key]).strip()
+        if not value:
+            raise ValueError(f"planning.{key} must be non-empty string when provided.")
+        planning[key] = value
+    return planning
+
+
 def _normalize_plan_payload(raw_payload: Mapping[str, Any]) -> dict[str, Any]:
     schema_version = _normalize_schema_version(raw_payload)
     intent = _normalize_intent(raw_payload)
+    planning = _normalize_planning(raw_payload)
     raw_actions = raw_payload.get("actions")
     if not isinstance(raw_actions, list) or not raw_actions:
         raise ValueError("Plan payload must contain non-empty actions list.")
@@ -207,13 +234,16 @@ def _normalize_plan_payload(raw_payload: Mapping[str, Any]) -> dict[str, Any]:
     if not isinstance(context, Mapping):
         raise ValueError("context must be JSON object when provided.")
 
-    return {
+    normalized_payload: dict[str, Any] = {
         "schema_version": schema_version,
         "dry_run": True,
         "intent": intent,
         "context": dict(context),
         "actions": normalized_actions,
     }
+    if planning is not None:
+        normalized_payload["planning"] = planning
+    return normalized_payload
 
 
 def _build_execution_plan(normalized_payload: Mapping[str, Any]) -> dict[str, Any]:

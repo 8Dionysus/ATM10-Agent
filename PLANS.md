@@ -62,8 +62,7 @@ Definition of Done:
 
 Open tasks:
 
-* Уточнить формат action-plan для интеграции с верхним planning слоем.
-* Зафиксировать canonical demo сценарий (1–2 игровых use-cases).
+* Поддерживать актуальным policy-чеклист `M6.19` в `docs/RUNBOOK.md` при каждом новом `intent_type` (fixture + smoke + contract-check + summary + artifacts + test).
 
 #### G2 — KAG Quality/Latency Guardrail
 
@@ -78,7 +77,8 @@ Definition of Done:
 
 Open tasks:
 
-* Откалибровать severity-правила (`warn`/`critical`) для regression-флагов nightly trend-report при корректировке guardrail thresholds.
+* Накопить историю nightly runs и при необходимости скорректировать severity thresholds (`warn`/`critical`) по фактическому noise-floor метрик.
+* Зафиксировать policy для `critical` trend severity (только сигнал vs fail-nightly) после накопления baseline истории.
 
 #### G3 — CI Smoke Expansion
 
@@ -93,7 +93,8 @@ Definition of Done:
 
 Open tasks:
 
-* Поддерживать machine-readable smoke summaries в CI и унифицировать quick-links на troubleshooting playbook между workflow summaries.
+* Поддерживать единый helper-конвенции для runbook links (`scripts/build_runbook_link.py`) во всех новых CI summaries.
+* Добавлять machine-readable smoke summaries для каждого нового smoke entrypoint по умолчанию.
 
 ## Archived Tracks
 

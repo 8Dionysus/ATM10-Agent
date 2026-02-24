@@ -9,6 +9,8 @@ from typing import Any, Mapping
 _INTENT_SCHEMA_VERSION = "automation_intent_v1"
 _PLAN_SCHEMA_VERSION = "automation_plan_v1"
 _ALLOWED_PRIORITIES = {"low", "normal", "high"}
+_ADAPTER_NAME = "intent_to_automation_plan"
+_ADAPTER_VERSION = "v1"
 
 _INTENT_TEMPLATES: dict[str, dict[str, Any]] = {
     "open_quest_book": {
@@ -83,6 +85,15 @@ def _normalize_list_of_strings(value: Any, *, field: str) -> list[str]:
     return [str(item).strip() for item in value if str(item).strip()]
 
 
+def _normalize_optional_string(raw_payload: Mapping[str, Any], field: str) -> str | None:
+    if field not in raw_payload:
+        return None
+    value = str(raw_payload.get(field, "")).strip()
+    if not value:
+        raise ValueError(f"{field} must be non-empty string when provided.")
+    return value
+
+
 def _normalize_intent_payload(raw_payload: Mapping[str, Any]) -> dict[str, Any]:
     schema_version = str(raw_payload.get("schema_version", _INTENT_SCHEMA_VERSION)).strip()
     if schema_version != _INTENT_SCHEMA_VERSION:
@@ -124,6 +135,8 @@ def _normalize_intent_payload(raw_payload: Mapping[str, Any]) -> dict[str, Any]:
     if note:
         normalized_context["note"] = note
     normalized_context["intent_type"] = intent_type
+    intent_id = _normalize_optional_string(raw_payload, "intent_id")
+    trace_id = _normalize_optional_string(raw_payload, "trace_id")
 
     return {
         "schema_version": schema_version,
@@ -133,12 +146,24 @@ def _normalize_intent_payload(raw_payload: Mapping[str, Any]) -> dict[str, Any]:
         "tags": tags,
         "constraints": constraints,
         "context": normalized_context,
+        "intent_id": intent_id,
+        "trace_id": trace_id,
     }
 
 
 def build_automation_plan_from_intent(raw_payload: Mapping[str, Any]) -> dict[str, Any]:
     intent = _normalize_intent_payload(raw_payload)
     actions = _INTENT_TEMPLATES[intent["intent_type"]]["actions"]
+    planning: dict[str, Any] = {
+        "intent_type": intent["intent_type"],
+        "intent_schema_version": _INTENT_SCHEMA_VERSION,
+        "adapter_name": _ADAPTER_NAME,
+        "adapter_version": _ADAPTER_VERSION,
+    }
+    if intent["intent_id"] is not None:
+        planning["intent_id"] = intent["intent_id"]
+    if intent["trace_id"] is not None:
+        planning["trace_id"] = intent["trace_id"]
     return {
         "schema_version": _PLAN_SCHEMA_VERSION,
         "intent": {
@@ -148,6 +173,7 @@ def build_automation_plan_from_intent(raw_payload: Mapping[str, Any]) -> dict[st
             "constraints": intent["constraints"],
         },
         "context": intent["context"],
+        "planning": planning,
         "actions": [dict(action) for action in actions],
     }
 
@@ -190,6 +216,9 @@ def run_intent_to_automation_plan(
             "intent_type": plan_payload["context"]["intent_type"],
             "action_count": len(plan_payload["actions"]),
         }
+        trace_id = plan_payload.get("planning", {}).get("trace_id")
+        if trace_id is not None:
+            run_payload["result"]["trace_id"] = trace_id
         _write_json(run_json_path, run_payload)
         return {
             "ok": True,

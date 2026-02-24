@@ -71,6 +71,37 @@ def test_automation_dry_run_contract_v1_with_intent_fixture(tmp_path: Path) -> N
     assert normalized_payload["intent"]["constraints"][0] == "dry_run_only"
 
 
+def test_automation_dry_run_preserves_planning_metadata(tmp_path: Path) -> None:
+    plan_path = tmp_path / "plan_with_planning.json"
+    payload = {
+        "schema_version": "automation_plan_v1",
+        "planning": {
+            "intent_type": "open_quest_book",
+            "intent_id": "intent-001",
+            "trace_id": "trace-abc",
+            "intent_schema_version": "automation_intent_v1",
+            "adapter_name": "intent_to_automation_plan",
+            "adapter_version": "v1",
+        },
+        "actions": [{"type": "key_tap", "key": "l"}],
+    }
+    plan_path.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+
+    result = automation_dry_run.run_automation_dry_run(
+        plan_json=plan_path,
+        runs_dir=tmp_path / "runs",
+        now=datetime(2026, 2, 24, 10, 30, 0, tzinfo=timezone.utc),
+    )
+
+    normalized_payload = json.loads(
+        (result["run_dir"] / "actions_normalized.json").read_text(encoding="utf-8")
+    )
+    assert result["ok"] is True
+    assert normalized_payload["planning"]["intent_id"] == "intent-001"
+    assert normalized_payload["planning"]["trace_id"] == "trace-abc"
+    assert normalized_payload["planning"]["adapter_name"] == "intent_to_automation_plan"
+
+
 def test_automation_dry_run_rejects_empty_actions(tmp_path: Path) -> None:
     plan_path = tmp_path / "bad_actions.json"
     plan_path.write_text(json.dumps({"actions": []}, ensure_ascii=False), encoding="utf-8")

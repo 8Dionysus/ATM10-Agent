@@ -68,22 +68,39 @@ jobs:
 
       - name: Validate - Automation intent chain contract
         run: |
-          python scripts/check_automation_smoke_contract.py --mode intent_chain --runs-dir runs/ci-smoke-automation-chain --min-action-count 3 --min-step-count 4 --expected-intent-type open_quest_book --summary-json runs/ci-smoke-automation-chain/contract_summary.json
+          python scripts/check_automation_smoke_contract.py --mode intent_chain --runs-dir runs/ci-smoke-automation-chain --min-action-count 3 --min-step-count 4 --expected-intent-type open_quest_book --require-trace-id --require-intent-id --summary-json runs/ci-smoke-automation-chain/contract_summary.json
+
+      - name: Smoke - Automation intent chain (inventory fixture)
+        run: |
+          python scripts/automation_intent_chain_smoke.py --intent-json tests/fixtures/intent_check_inventory_tool.json --runs-dir runs/ci-smoke-automation-chain-inventory
+
+      - name: Validate - Automation intent chain contract (inventory fixture)
+        run: |
+          python scripts/check_automation_smoke_contract.py --mode intent_chain --runs-dir runs/ci-smoke-automation-chain-inventory --min-action-count 3 --min-step-count 4 --expected-intent-type check_inventory_tool --require-trace-id --require-intent-id --summary-json runs/ci-smoke-automation-chain-inventory/contract_summary.json
 
       - name: Summary - Automation smoke contracts
         shell: pwsh
         run: |
           $dry = Get-Content "runs/ci-smoke-automation-dry-run/contract_summary.json" | ConvertFrom-Json
-          $chain = Get-Content "runs/ci-smoke-automation-chain/contract_summary.json" | ConvertFrom-Json
-          $runbookUrl = "$env:GITHUB_SERVER_URL/$env:GITHUB_REPOSITORY/blob/$env:GITHUB_REF_NAME/docs/RUNBOOK.md#m68-troubleshooting-automation-smoke-contract-failures-ci"
+          $chainQuest = Get-Content "runs/ci-smoke-automation-chain/contract_summary.json" | ConvertFrom-Json
+          $chainInventory = Get-Content "runs/ci-smoke-automation-chain-inventory/contract_summary.json" | ConvertFrom-Json
+          $runbookUrl = python scripts/build_runbook_link.py --anchor "m68-troubleshooting-automation-smoke-contract-failures-ci"
+          function FmtOpt([object]$value) {
+            if ($null -eq $value) { return "-" }
+            $text = "$value".Trim()
+            if ([string]::IsNullOrEmpty($text)) { return "-" }
+            return $text
+          }
           $lines = @(
             "## Automation Smoke Contracts",
             "",
-            "| mode | status | action_count | step_count | intent_type |",
-            "|---|---|---:|---:|---|",
-            "| dry_run | $($dry.status) | $($dry.observed.action_count) | $($dry.observed.step_count) | - |",
-            "| intent_chain | $($chain.status) | $($chain.observed.action_count) | $($chain.observed.step_count) | $($chain.observed.intent_type) |",
+            "| mode | status | action_count | step_count | intent_type | trace_id | intent_id |",
+            "|---|---|---:|---:|---|---|---|",
+            "| dry_run | $($dry.status) | $($dry.observed.action_count) | $($dry.observed.step_count) | - | $(FmtOpt $dry.observed.trace_id) | $(FmtOpt $dry.observed.intent_id) |",
+            "| intent_chain_open_quest_book | $($chainQuest.status) | $($chainQuest.observed.action_count) | $($chainQuest.observed.step_count) | $($chainQuest.observed.intent_type) | $(FmtOpt $chainQuest.observed.trace_id) | $(FmtOpt $chainQuest.observed.intent_id) |",
+            "| intent_chain_check_inventory_tool | $($chainInventory.status) | $($chainInventory.observed.action_count) | $($chainInventory.observed.step_count) | $($chainInventory.observed.intent_type) | $(FmtOpt $chainInventory.observed.trace_id) | $(FmtOpt $chainInventory.observed.intent_id) |",
             "",
+            "### Quick Links",
             "- Troubleshooting: [RUNBOOK M6.8]($runbookUrl)"
           )
           $lines -join "`n" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
@@ -95,3 +112,4 @@ jobs:
           path: |
             runs/ci-smoke-automation-dry-run/contract_summary.json
             runs/ci-smoke-automation-chain/contract_summary.json
+            runs/ci-smoke-automation-chain-inventory/contract_summary.json

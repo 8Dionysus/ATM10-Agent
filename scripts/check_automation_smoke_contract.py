@@ -7,6 +7,16 @@ from pathlib import Path
 from typing import Any
 
 
+def _optional_string(payload: Any, key: str) -> str | None:
+    if not isinstance(payload, dict):
+        return None
+    raw_value = payload.get(key)
+    if raw_value is None:
+        return None
+    value = str(raw_value).strip()
+    return value or None
+
+
 def _latest_run_dir(runs_dir: Path, suffix: str) -> Path:
     if not runs_dir.exists() or not runs_dir.is_dir():
         raise FileNotFoundError(f"Runs directory not found: {runs_dir}")
@@ -72,6 +82,13 @@ def _check_dry_run_contract(
         "step_count": step_count,
         "schema_version": normalized_payload.get("schema_version"),
     }
+    planning = normalized_payload.get("planning")
+    trace_id = _optional_string(planning, "trace_id")
+    intent_id = _optional_string(planning, "intent_id")
+    if trace_id is not None:
+        observed["trace_id"] = trace_id
+    if intent_id is not None:
+        observed["intent_id"] = intent_id
     return (not errors), errors, observed
 
 
@@ -81,6 +98,8 @@ def _check_chain_contract(
     min_action_count: int,
     min_step_count: int,
     expected_intent_type: str | None,
+    require_trace_id: bool = False,
+    require_intent_id: bool = False,
 ) -> tuple[bool, list[str], dict[str, Any]]:
     errors: list[str] = []
     run_payload = _read_json(run_dir / "run.json")
@@ -126,6 +145,23 @@ def _check_chain_contract(
         "schema_version": plan_payload.get("schema_version"),
         "intent_type": intent_type,
     }
+    planning = plan_payload.get("planning")
+    trace_id = _optional_string(planning, "trace_id")
+    if trace_id is None:
+        trace_id = _optional_string(chain_summary.get("intent_adapter"), "trace_id")
+    if trace_id is None:
+        trace_id = _optional_string(result, "trace_id")
+    if require_trace_id and trace_id is None:
+        errors.append("trace_id is required but missing in planning/chain_summary/run result")
+    intent_id = _optional_string(planning, "intent_id")
+    if intent_id is None:
+        intent_id = _optional_string(result, "intent_id")
+    if require_intent_id and intent_id is None:
+        errors.append("intent_id is required but missing in planning/run result")
+    if trace_id is not None:
+        observed["trace_id"] = trace_id
+    if intent_id is not None:
+        observed["intent_id"] = intent_id
     return (not errors), errors, observed
 
 
@@ -154,6 +190,16 @@ def parse_args() -> argparse.Namespace:
         default=None,
         help="Optional output path for machine-readable check summary.",
     )
+    parser.add_argument(
+        "--require-trace-id",
+        action="store_true",
+        help="Fail intent_chain check when trace_id is missing in artifacts.",
+    )
+    parser.add_argument(
+        "--require-intent-id",
+        action="store_true",
+        help="Fail intent_chain check when intent_id is missing in artifacts.",
+    )
     return parser.parse_args()
 
 
@@ -169,6 +215,8 @@ def main() -> int:
             "min_action_count": args.min_action_count,
             "min_step_count": args.min_step_count,
             "expected_intent_type": args.expected_intent_type,
+            "require_trace_id": args.require_trace_id,
+            "require_intent_id": args.require_intent_id,
         },
         "observed": {},
         "violations": [],
@@ -192,6 +240,8 @@ def main() -> int:
                 min_action_count=args.min_action_count,
                 min_step_count=args.min_step_count,
                 expected_intent_type=args.expected_intent_type,
+                require_trace_id=args.require_trace_id,
+                require_intent_id=args.require_intent_id,
             )
 
         summary_payload["ok"] = ok

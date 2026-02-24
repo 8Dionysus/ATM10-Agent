@@ -41,7 +41,41 @@ def test_intent_to_automation_plan_builds_expected_payload(tmp_path: Path) -> No
     assert plan_payload["intent"]["goal"] == "open quest book and inspect active objective"
     assert plan_payload["context"]["source"] == "voice_intent"
     assert plan_payload["context"]["intent_type"] == "open_quest_book"
+    assert plan_payload["planning"]["intent_type"] == "open_quest_book"
+    assert plan_payload["planning"]["intent_schema_version"] == "automation_intent_v1"
+    assert plan_payload["planning"]["adapter_name"] == "intent_to_automation_plan"
+    assert plan_payload["planning"]["adapter_version"] == "v1"
     assert len(plan_payload["actions"]) == 3
+
+
+def test_intent_to_automation_plan_propagates_trace_metadata(tmp_path: Path) -> None:
+    intent_json = tmp_path / "intent_with_trace.json"
+    intent_json.write_text(
+        json.dumps(
+            {
+                "schema_version": "automation_intent_v1",
+                "intent_type": "open_quest_book",
+                "intent_id": "intent-123",
+                "trace_id": "trace-xyz",
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+
+    result = intent_adapter.run_intent_to_automation_plan(
+        intent_json=intent_json,
+        runs_dir=tmp_path / "runs",
+        now=datetime(2026, 2, 24, 10, 31, 0, tzinfo=timezone.utc),
+    )
+
+    run_payload = json.loads((result["run_dir"] / "run.json").read_text(encoding="utf-8"))
+    plan_payload = json.loads((result["run_dir"] / "automation_plan.json").read_text(encoding="utf-8"))
+
+    assert result["ok"] is True
+    assert run_payload["result"]["trace_id"] == "trace-xyz"
+    assert plan_payload["planning"]["intent_id"] == "intent-123"
+    assert plan_payload["planning"]["trace_id"] == "trace-xyz"
 
 
 def test_intent_to_automation_plan_rejects_unknown_intent_type(tmp_path: Path) -> None:

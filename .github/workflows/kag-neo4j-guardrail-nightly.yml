@@ -164,16 +164,9 @@ jobs:
           delta = snapshot["comparison"]["latest_hard_minus_sample"]
           sample_flags = sample_roll.get("regression_flags") or {}
           hard_flags = hard_roll.get("regression_flags") or {}
-          server = os.environ.get("GITHUB_SERVER_URL", "https://github.com")
-          repo = os.environ.get("GITHUB_REPOSITORY", "")
-          ref_name = os.environ.get("GITHUB_REF_NAME", "main")
-          if repo:
-              runbook_url = (
-                  f"{server}/{repo}/blob/{ref_name}/docs/RUNBOOK.md"
-                  "#m68-troubleshooting-automation-smoke-contract-failures-ci"
-              )
-          else:
-              runbook_url = "docs/RUNBOOK.md#m68-troubleshooting-automation-smoke-contract-failures-ci"
+          from scripts.build_runbook_link import build_runbook_url
+
+          runbook_url = build_runbook_url(anchor="m68-troubleshooting-automation-smoke-contract-failures-ci")
 
           def fmt(value, decimals):
               if value is None:
@@ -194,13 +187,21 @@ jobs:
               f"- `sample_delta_mrr (latest-baseline)`: {fmt(sample_delta.get('delta_mean_mrr_at_k'), 4)}",
               f"- `sample_mrr_status`: {sample_flags.get('mrr_status', 'n/a')}",
               f"- `sample_latency_p95_status`: {sample_flags.get('latency_p95_status', 'n/a')}",
+              f"- `sample_mrr_severity`: {sample_flags.get('mrr_regression_severity', 'n/a')}",
+              f"- `sample_latency_p95_severity`: {sample_flags.get('latency_p95_regression_severity', 'n/a')}",
+              f"- `sample_max_regression_severity`: {sample_flags.get('max_regression_severity', 'n/a')}",
               f"- `sample_has_any_regression`: {sample_flags.get('has_any_regression', 'n/a')}",
               f"- `hard_baseline_count`: {hard_roll['count']}",
               f"- `hard_delta_mrr (latest-baseline)`: {fmt(hard_delta.get('delta_mean_mrr_at_k'), 4)}",
               f"- `hard_mrr_status`: {hard_flags.get('mrr_status', 'n/a')}",
               f"- `hard_latency_p95_status`: {hard_flags.get('latency_p95_status', 'n/a')}",
+              f"- `hard_mrr_severity`: {hard_flags.get('mrr_regression_severity', 'n/a')}",
+              f"- `hard_latency_p95_severity`: {hard_flags.get('latency_p95_regression_severity', 'n/a')}",
+              f"- `hard_max_regression_severity`: {hard_flags.get('max_regression_severity', 'n/a')}",
               f"- `hard_has_any_regression`: {hard_flags.get('has_any_regression', 'n/a')}",
               f"- `trend_summary_md`: {os.environ['TREND_SUMMARY_MD']}",
+              "",
+              "### Quick Links",
               f"- Troubleshooting: [RUNBOOK M6.8]({runbook_url})",
           ]
           with open(os.environ["GITHUB_STEP_SUMMARY"], "a", encoding="utf-8") as handle:
