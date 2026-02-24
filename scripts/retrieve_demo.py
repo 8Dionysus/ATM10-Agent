@@ -132,6 +132,40 @@ def main() -> int:
     run_dir = _create_run_dir(args.runs_dir, now=now)
     run_json_path = run_dir / "run.json"
     results_path = run_dir / "retrieval_results.json"
+    run_payload = {
+        "timestamp_utc": now.isoformat(),
+        "mode": "retrieve_demo",
+        "status": "started",
+        "profile": profile.name,
+        "backend": args.backend,
+        "query": args.query,
+        "topk": effective_topk,
+        "candidate_k": effective_candidate_k,
+        "reranker": {
+            "name": effective_reranker,
+            "model": effective_reranker_model if effective_reranker == "qwen3" else None,
+            "runtime": effective_reranker_runtime if effective_reranker == "qwen3" else None,
+            "device": effective_reranker_device if effective_reranker == "qwen3" else None,
+            "max_length": args.reranker_max_length if effective_reranker == "qwen3" else None,
+        },
+        "models": {
+            "embedding": profile.embedding_model,
+        },
+        "paths": {
+            "input": str(args.input_path) if args.backend == "in_memory" else None,
+            "run_dir": str(run_dir),
+            "results_json": str(results_path),
+        },
+        "qdrant": {
+            "collection": args.collection,
+            "host": args.host,
+            "port": args.port,
+            "vector_size": args.vector_size,
+        }
+        if args.backend == "qdrant"
+        else None,
+    }
+    _write_json(run_json_path, run_payload)
 
     try:
         if args.backend == "in_memory":
@@ -164,41 +198,14 @@ def main() -> int:
                 timeout_sec=args.timeout_sec,
             )
     except (RuntimeError, ValueError, FileNotFoundError) as exc:
+        run_payload["status"] = "error"
+        run_payload["error_code"] = "retrieval_backend_error"
+        run_payload["error"] = str(exc)
+        _write_json(run_json_path, run_payload)
         print(f"[retrieve_demo] backend_error: {exc}")
         return 2
 
-    run_payload = {
-        "timestamp_utc": now.isoformat(),
-        "mode": "retrieve_demo",
-        "profile": profile.name,
-        "backend": args.backend,
-        "query": args.query,
-        "topk": effective_topk,
-        "candidate_k": effective_candidate_k,
-        "reranker": {
-            "name": effective_reranker,
-            "model": effective_reranker_model if effective_reranker == "qwen3" else None,
-            "runtime": effective_reranker_runtime if effective_reranker == "qwen3" else None,
-            "device": effective_reranker_device if effective_reranker == "qwen3" else None,
-            "max_length": args.reranker_max_length if effective_reranker == "qwen3" else None,
-        },
-        "models": {
-            "embedding": profile.embedding_model,
-        },
-        "paths": {
-            "input": str(args.input_path) if args.backend == "in_memory" else None,
-            "run_dir": str(run_dir),
-            "results_json": str(results_path),
-        },
-        "qdrant": {
-            "collection": args.collection,
-            "host": args.host,
-            "port": args.port,
-            "vector_size": args.vector_size,
-        }
-        if args.backend == "qdrant"
-        else None,
-    }
+    run_payload["status"] = "ok"
     _write_json(run_json_path, run_payload)
     _write_json(results_path, {"results": results, "count": len(results)})
 

@@ -122,6 +122,7 @@ def test_voice_runtime_client_tts_mode_forwards_runtime(
     request_payload = captured["payload"]
     assert isinstance(request_payload, dict)
     assert request_payload["runtime"] == "qwen3"
+    assert request_payload["out_wav_path"] == "audio_out.wav"
     assert result["ok"] is True
 
 
@@ -153,8 +154,38 @@ def test_voice_runtime_client_tts_mode_forwards_ovms_overrides(
     request_payload = captured["payload"]
     assert isinstance(request_payload, dict)
     assert request_payload["runtime"] == "ovms"
+    assert request_payload["out_wav_path"] == "audio_out.wav"
     assert request_payload["ovms_tts_url"] == "http://127.0.0.1:9000/v1/audio/tts"
     assert request_payload["ovms_tts_model"] == "tts-fast-en"
+    assert result["ok"] is True
+
+
+def test_voice_runtime_client_tts_mode_sends_safe_output_filename(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    captured: dict[str, object] = {}
+
+    def _fake_request_json(*, method: str, url: str, payload: dict[str, object] | None, timeout_sec: float = 120.0):
+        assert method == "POST"
+        assert url == "http://127.0.0.1:8765/tts"
+        assert payload is not None
+        captured["payload"] = payload
+        return {"ok": True, "result": {"audio_out_wav": "runs/service/tts_outputs/client.wav"}}
+
+    monkeypatch.setattr(voice_runtime_client, "_request_json", _fake_request_json)
+
+    result = voice_runtime_client.run_voice_runtime_client(
+        service_url="http://127.0.0.1:8765",
+        mode="tts",
+        runs_dir=tmp_path / "runs",
+        text="safe filename",
+        out_wav=tmp_path / "nested" / "client.wav",
+        now=datetime(2026, 2, 20, 22, 13, 50, tzinfo=timezone.utc),
+    )
+
+    request_payload = captured["payload"]
+    assert isinstance(request_payload, dict)
+    assert request_payload["out_wav_path"] == "client.wav"
     assert result["ok"] is True
 
 
@@ -174,6 +205,7 @@ def test_voice_runtime_client_tts_stream_writes_events(
         assert payload["text"] == "stream text"
         assert payload["chunk_ms"] == 150
         assert payload["runtime"] == "ovms"
+        assert payload["out_wav_path"] == "audio_out.wav"
         return [
             {"event": "started"},
             {"event": "audio_chunk", "chunk_index": 0},

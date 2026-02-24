@@ -54,6 +54,12 @@ def _write_json(path: Path, payload: Mapping[str, Any]) -> None:
     path.write_text(json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8")
 
 
+def _append_jsonl(path: Path, payload: Mapping[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("a", encoding="utf-8") as handle:
+        handle.write(json.dumps(payload, ensure_ascii=False) + "\n")
+
+
 def _utc_now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
@@ -433,6 +439,52 @@ def _iter_waveform_chunks(*, waveform: np.ndarray, chunk_ms: int, sample_rate: i
         yield chunk
 
 
+def _build_tts_output_path(*, run_dir: Path, out_wav_value: Any) -> Path:
+    out_dir = run_dir / "tts_outputs"
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    if isinstance(out_wav_value, str) and out_wav_value.strip():
+        requested = Path(out_wav_value.strip())
+        if requested.is_absolute() or requested.drive:
+            raise ValueError("out_wav_path must be a file name; absolute paths are not allowed.")
+        if any(part == ".." for part in requested.parts):
+            raise ValueError("out_wav_path must not contain parent path segments.")
+        if requested.name != str(requested):
+            raise ValueError("out_wav_path must be a file name without directory separators.")
+        file_name = requested.name
+        if file_name in {"", ".", ".."}:
+            raise ValueError("out_wav_path must contain a valid file name.")
+        if not file_name.lower().endswith(".wav"):
+            file_name = f"{file_name}.wav"
+        return out_dir / file_name
+
+    return out_dir / f"{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S_%f')}.wav"
+
+
+def _internal_error_response(*, run_dir: Path, endpoint: str, exc: Exception, stream_event: bool) -> dict[str, Any]:
+    _append_jsonl(
+        run_dir / "service_errors.jsonl",
+        {
+            "timestamp_utc": _utc_now(),
+            "endpoint": endpoint,
+            "error_code": "internal_error",
+            "error": str(exc),
+            "traceback": traceback.format_exc(),
+        },
+    )
+    if stream_event:
+        return {
+            "event": "error",
+            "error": "internal service error",
+            "error_code": "internal_error",
+        }
+    return {
+        "ok": False,
+        "error": "internal service error",
+        "error_code": "internal_error",
+    }
+
+
 def _parse_tts_payload(
     state: VoiceRuntimeState,
     payload: Mapping[str, Any],
@@ -449,13 +501,7 @@ def _parse_tts_payload(
     instruct_value = payload.get("instruct")
     instruct = instruct_value if isinstance(instruct_value, str) and instruct_value.strip() else None
 
-    out_wav_value = payload.get("out_wav_path")
-    if isinstance(out_wav_value, str) and out_wav_value.strip():
-        out_wav_path = Path(out_wav_value)
-    else:
-        out_dir = state.run_dir / "tts_outputs"
-        out_dir.mkdir(parents=True, exist_ok=True)
-        out_wav_path = out_dir / f"{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S_%f')}.wav"
+    out_wav_path = _build_tts_output_path(run_dir=state.run_dir, out_wav_value=payload.get("out_wav_path"))
     return text, speaker, language, instruct, out_wav_path
 
 
@@ -650,25 +696,16 @@ def _create_handler(state: VoiceRuntimeState) -> type[BaseHTTPRequestHandler]:
                     {"ok": False, "error": str(exc), "error_code": "voice_runtime_missing_dependency"},
                 )
             except Exception as exc:  # pragma: no cover - defensive path
-                if headers_started:
-                    self._write_ndjson_event(
-                        {
-                            "event": "error",
-                            "error": str(exc),
-                            "error_code": "internal_error",
-                            "traceback": traceback.format_exc(),
-                        }
-                    )
-                    return
-                self._send_json(
-                    500,
-                    {
-                        "ok": False,
-                        "error": str(exc),
-                        "error_code": "internal_error",
-                        "traceback": traceback.format_exc(),
-                    },
+                internal_payload = _internal_error_response(
+                    run_dir=state.run_dir,
+                    endpoint="/tts_stream",
+                    exc=exc,
+                    stream_event=headers_started,
                 )
+                if headers_started:
+                    self._write_ndjson_event(internal_payload)
+                    return
+                self._send_json(500, internal_payload)
 
         def do_GET(self) -> None:  # noqa: N802
             if self.path == "/health":
@@ -699,15 +736,13 @@ def _create_handler(state: VoiceRuntimeState) -> type[BaseHTTPRequestHandler]:
                     {"ok": False, "error": str(exc), "error_code": "voice_runtime_missing_dependency"},
                 )
             except Exception as exc:  # pragma: no cover - defensive path
-                self._send_json(
-                    500,
-                    {
-                        "ok": False,
-                        "error": str(exc),
-                        "error_code": "internal_error",
-                        "traceback": traceback.format_exc(),
-                    },
+                internal_payload = _internal_error_response(
+                    run_dir=state.run_dir,
+                    endpoint=self.path,
+                    exc=exc,
+                    stream_event=False,
                 )
+                self._send_json(500, internal_payload)
 
         def log_message(self, _format: str, *_args: Any) -> None:
             return

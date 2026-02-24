@@ -1,4 +1,6 @@
 import json
+import subprocess
+import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -239,3 +241,16 @@ def test_tts_export_notebook_helper_execute_passes_quantization_config(monkeypat
     assert result["run_payload"]["status"] == "completed"
     assert result["plan_payload"]["weights_quantization"] == "int4_asym"
     assert captured["quantization_config"] == {"mode": "resolved::int4_asym"}
+
+
+def test_tts_export_script_help_direct_run_succeeds() -> None:
+    repo_root = Path(__file__).resolve().parents[1]
+    result = subprocess.run(
+        [sys.executable, "scripts/export_qwen3_tts_openvino.py", "--help"],
+        cwd=repo_root,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 0
+    assert "Scaffold custom OpenVINO export pipeline for Qwen3 TTS" in result.stdout

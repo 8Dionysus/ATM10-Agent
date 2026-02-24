@@ -206,6 +206,76 @@ def test_process_tts_request_fast_fallback_runtime_writes_audio(
     assert Path(result["audio_out_wav"]).exists()
 
 
+def test_process_tts_request_rejects_absolute_out_wav_path(tmp_path: Path) -> None:
+    class _FakeState:
+        def __init__(self, run_dir: Path) -> None:
+            self.run_dir = run_dir
+
+        def ensure_tts(self) -> object:
+            raise AssertionError("ensure_tts must not be called when out_wav_path is invalid")
+
+    with pytest.raises(ValueError):
+        voice_runtime_service.process_tts_request(
+            _FakeState(tmp_path),
+            {"text": "hello", "out_wav_path": str((tmp_path / "outside.wav").resolve())},
+        )
+
+
+def test_process_tts_request_rejects_out_wav_path_with_directories(tmp_path: Path) -> None:
+    class _FakeState:
+        def __init__(self, run_dir: Path) -> None:
+            self.run_dir = run_dir
+
+        def ensure_tts(self) -> object:
+            raise AssertionError("ensure_tts must not be called when out_wav_path is invalid")
+
+    with pytest.raises(ValueError):
+        voice_runtime_service.process_tts_request(
+            _FakeState(tmp_path),
+            {"text": "hello", "out_wav_path": "nested/out.wav"},
+        )
+
+
+def test_process_tts_request_stores_named_out_wav_inside_run_dir(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    class _FakeTTSClient:
+        def resolve_speaker(self, requested_speaker: str | None) -> str:
+            return requested_speaker or "speaker_a"
+
+        def synthesize_custom_voice(
+            self,
+            *,
+            text: str,
+            speaker: str,
+            language: str,
+            instruct: str | None,
+        ) -> tuple[np.ndarray, int]:
+            return np.array([0.1, -0.1], dtype=np.float32), 16000
+
+    class _FakeState:
+        def __init__(self, run_dir: Path) -> None:
+            self.run_dir = run_dir
+
+        def ensure_tts(self) -> _FakeTTSClient:
+            return _FakeTTSClient()
+
+    monkeypatch.setattr(
+        voice_runtime_service,
+        "write_wav_pcm16",
+        lambda *, path, waveform, sample_rate: path.write_bytes(b"wav"),
+    )
+
+    result = voice_runtime_service.process_tts_request(
+        _FakeState(tmp_path),
+        {"text": "hello", "out_wav_path": "safe_name"},
+    )
+    output_path = Path(result["audio_out_wav"])
+    assert output_path.parent == tmp_path / "tts_outputs"
+    assert output_path.name == "safe_name.wav"
+    assert output_path.exists()
+
+
 def test_process_tts_request_auto_falls_back_when_qwen_unavailable(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
@@ -438,6 +508,30 @@ def test_run_voice_runtime_service_runs_asr_warmup_request(
     assert isinstance(warmup["latency_sec"], float)
     assert warmup["text_preview"] == "warmup ok"
     assert Path(warmup["audio_path"]).exists()
+
+
+def test_internal_error_response_omits_traceback_and_logs_locally(tmp_path: Path) -> None:
+    try:
+        raise RuntimeError("boom")
+    except RuntimeError as exc:
+        payload = voice_runtime_service._internal_error_response(
+            run_dir=tmp_path,
+            endpoint="/tts",
+            exc=exc,
+            stream_event=False,
+        )
+
+    assert payload == {
+        "ok": False,
+        "error": "internal service error",
+        "error_code": "internal_error",
+    }
+    log_path = tmp_path / "service_errors.jsonl"
+    assert log_path.exists()
+    log_payload = json.loads(log_path.read_text(encoding="utf-8").strip())
+    assert log_payload["endpoint"] == "/tts"
+    assert log_payload["error_code"] == "internal_error"
+    assert "RuntimeError: boom" in log_payload["traceback"]
 
 
 def test_voice_runtime_service_cli_help_exits_zero(monkeypatch: pytest.MonkeyPatch) -> None:

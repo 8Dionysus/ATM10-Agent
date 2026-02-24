@@ -8,7 +8,10 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Mapping
 
-from scripts.probe_qwen3_voice_support import diagnose_probe_result, probe_architecture_support
+try:
+    from scripts.probe_qwen3_voice_support import diagnose_probe_result, probe_architecture_support
+except ModuleNotFoundError:  # Supports direct execution: `python scripts/export_qwen3_tts_openvino.py ...`
+    from probe_qwen3_voice_support import diagnose_probe_result, probe_architecture_support
 
 
 PRESET: dict[str, str] = {

@@ -215,7 +215,7 @@ def run_voice_runtime_client(
                 "language": language or "Auto",
                 "instruct": instruct,
                 "runtime": tts_runtime,
-                "out_wav_path": str(output_path.resolve()),
+                "out_wav_path": output_path.name,
             }
             if ovms_tts_url:
                 payload["ovms_tts_url"] = ovms_tts_url
@@ -224,9 +224,16 @@ def run_voice_runtime_client(
             response = _request_json(method="POST", url=f"{base_url}/tts", payload=payload)
             response_path = run_dir / "tts_response.json"
             _write_json(response_path, response)
+            response_result = response.get("result") if isinstance(response, dict) else None
+            service_audio_out = (
+                response_result.get("audio_out_wav")
+                if isinstance(response_result, dict) and isinstance(response_result.get("audio_out_wav"), str)
+                else None
+            )
             run_payload["status"] = "ok"
             run_payload["paths"]["response_json"] = str(response_path)
-            run_payload["paths"]["audio_out_wav"] = str(output_path.resolve())
+            run_payload["paths"]["requested_audio_name"] = output_path.name
+            run_payload["paths"]["audio_out_wav"] = service_audio_out or output_path.name
             _write_json(run_json_path, run_payload)
             return {"run_dir": run_dir, "run_payload": run_payload, "response_payload": response, "ok": True}
 
@@ -240,7 +247,7 @@ def run_voice_runtime_client(
                 "language": language or "Auto",
                 "instruct": instruct,
                 "runtime": tts_runtime,
-                "out_wav_path": str(output_path.resolve()),
+                "out_wav_path": output_path.name,
                 "chunk_ms": int(chunk_ms),
             }
             if ovms_tts_url:
@@ -257,13 +264,17 @@ def run_voice_runtime_client(
             error_event = next((item for item in events if item.get("event") == "error"), None)
 
             run_payload["paths"]["stream_events_jsonl"] = str(events_path)
-            run_payload["paths"]["audio_out_wav"] = str(output_path.resolve())
+            run_payload["paths"]["requested_audio_name"] = output_path.name
             run_payload["stream"] = {
                 "chunk_ms": int(chunk_ms),
                 "num_events": len(events),
                 "num_audio_chunks": sum(1 for item in events if item.get("event") == "audio_chunk"),
             }
             if completed_event is not None:
+                service_audio_out = completed_event.get("audio_out_wav")
+                run_payload["paths"]["audio_out_wav"] = (
+                    str(service_audio_out) if isinstance(service_audio_out, str) else output_path.name
+                )
                 run_payload["stream"]["first_chunk_latency_sec"] = completed_event.get("first_chunk_latency_sec")
                 run_payload["stream"]["total_synthesis_sec"] = completed_event.get("total_synthesis_sec")
                 run_payload["stream"]["rtf"] = completed_event.get("rtf")
@@ -279,6 +290,7 @@ def run_voice_runtime_client(
 
             run_payload["status"] = "error"
             run_payload["error_code"] = "voice_stream_failed"
+            run_payload["paths"]["audio_out_wav"] = output_path.name
             run_payload["error"] = (
                 str(error_event.get("error"))
                 if isinstance(error_event, dict) and error_event.get("error")

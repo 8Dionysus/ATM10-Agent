@@ -263,6 +263,8 @@ python scripts/voice_runtime_client.py --service-url http://127.0.0.1:8765 healt
 python scripts/voice_runtime_client.py --service-url http://127.0.0.1:8765 asr --audio-in "C:\path\to\sample.wav"
 ```
 
+Примечание (security): в HTTP payload для `/tts` и `/tts_stream` поле `out_wav_path` должно быть только именем файла (без absolute path и директорий). Сервис всегда пишет TTS WAV в свой `runs/<timestamp>-voice-service/tts_outputs/`.
+
 ### Long-lived voice runtime service (Whisper GenAI + NPU ASR)
 
 ```powershell
@@ -350,11 +352,19 @@ $env:PIPER_MODEL_PATH="C:\path\to\piper\en_US-model.onnx"
 
 # Silero (ru service voice)
 $env:SILERO_REPO_OR_DIR="snakers4/silero-models"
+$env:SILERO_ALLOW_REMOTE_HUB="false"
+# required only when using remote hub source with explicit opt-in
+# $env:SILERO_REPO_REF="v4.1.0"
 $env:SILERO_MODEL_LANGUAGE="ru"
 $env:SILERO_MODEL_ID="v4_ru"
 $env:SILERO_SAMPLE_RATE="24000"
 $env:SILERO_SPEAKER="xenia"
 ```
+
+Security policy for Silero source:
+
+* Default mode expects local source (`SILERO_REPO_OR_DIR` as local path) and keeps remote hub disabled.
+* Remote hub source requires explicit opt-in (`SILERO_ALLOW_REMOTE_HUB=true`) and pinned revision (`SILERO_REPO_REF` or `owner/repo:ref` in `SILERO_REPO_OR_DIR`).
 
 Пример запроса TTS:
 

@@ -114,3 +114,13 @@
 * Для `M5.7` в `kag_guardrail_trend_snapshot` добавлен regression-статус слой для rolling-baseline (`mrr` и `latency_p95`: `improved|stable|regressed|insufficient_history`) и агрегированный флаг `has_any_regression`.
 * Для doc-hygiene на закрытии сессии `README.md` и `MANIFEST.md` переведены в lightweight snapshot-формат с ссылками на `TODO/PLANS/RUNBOOK/SESSION`, чтобы исключить расхождение длинных статус-блоков.
 * Для weekly ретроспектив зафиксирован единый one-screen шаблон `docs/SESSION_WEEKLY_TEMPLATE.md`; `docs/SOURCE_OF_TRUTH.md` обновлен с явной ролью шаблона.
+
+## 2026-02-24
+
+* В `scripts/voice_runtime_service.py` зафиксирован безопасный контракт `out_wav_path`: сервис принимает только имя файла и всегда пишет TTS output внутри `runs/<timestamp>-voice-service/tts_outputs`; абсолютные и вложенные пути из HTTP payload запрещены.
+* Для совместимости с этим контрактом `scripts/voice_runtime_client.py` отправляет в `out_wav_path` только безопасное имя файла (basename), а не абсолютный локальный путь.
+* В `voice_runtime_service` internal-error path санитизирован: traceback больше не отдается клиенту в `/tts` и `/tts_stream`; полный traceback теперь пишется только в локальный artifact `service_errors.jsonl`.
+* `scripts/retrieve_demo.py` теперь всегда пишет `run.json`, включая backend failure path (`status=error`, `error_code=retrieval_backend_error`), чтобы не терять диагностический артефакт неуспешного запуска.
+* `scripts/export_qwen3_tts_openvino.py` приведен к dual-run контракту (module + direct script execution через fallback import); добавлен regression test на `python scripts/export_qwen3_tts_openvino.py --help`.
+* `scripts/discover_instance.py` унифицирован по политике run-dir creation: добавлен suffix-loop при timestamp-collision (`_01`, `_02`, ...), чтобы убрать флейки параллельных/повторных запусков в ту же секунду.
+* Для `scripts/tts_runtime_service.py` зафиксирован supply-chain hardening для Silero: remote `torch.hub` источник заблокирован по умолчанию, разрешается только через `SILERO_ALLOW_REMOTE_HUB=true` и pinned revision (`SILERO_REPO_REF` или `owner/repo:ref`); local path остается разрешенным без opt-in.

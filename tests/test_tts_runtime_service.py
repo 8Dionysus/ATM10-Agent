@@ -107,3 +107,81 @@ def test_build_xtts_engine_uses_lazy_import(monkeypatch: pytest.MonkeyPatch) -> 
     wav_bytes, sample_rate = engine.synthesize(text="hello", language="en", speaker=None)
     assert sample_rate == 24000
     assert wav_bytes.startswith(b"RIFF")
+
+
+def test_build_silero_engine_blocks_remote_without_opt_in(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("SILERO_REPO_OR_DIR", "snakers4/silero-models")
+    monkeypatch.delenv("SILERO_ALLOW_REMOTE_HUB", raising=False)
+    monkeypatch.delenv("SILERO_REPO_REF", raising=False)
+
+    with pytest.raises(tts_runtime_service.TTSRuntimeError, match="disabled by default"):
+        tts_runtime_service._build_silero_engine()
+
+
+def test_build_silero_engine_blocks_remote_without_pinned_ref(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("SILERO_REPO_OR_DIR", "snakers4/silero-models")
+    monkeypatch.setenv("SILERO_ALLOW_REMOTE_HUB", "true")
+    monkeypatch.delenv("SILERO_REPO_REF", raising=False)
+
+    with pytest.raises(tts_runtime_service.TTSRuntimeError, match="requires pinned revision"):
+        tts_runtime_service._build_silero_engine()
+
+
+def test_build_silero_engine_uses_local_repo_without_remote_opt_in(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    captured: dict[str, object] = {}
+    monkeypatch.setenv("SILERO_REPO_OR_DIR", str(tmp_path))
+    monkeypatch.delenv("SILERO_ALLOW_REMOTE_HUB", raising=False)
+    monkeypatch.delenv("SILERO_REPO_REF", raising=False)
+
+    class _FakeSileroModel:
+        def apply_tts(self, *, text: str, speaker: str, sample_rate: int):
+            assert text == "hello"
+            assert speaker == "xenia"
+            assert sample_rate == 24000
+            return np.array([0.0, 0.1, -0.1], dtype=np.float32)
+
+    def _fake_hub_load(**kwargs):
+        captured.update(kwargs)
+        return _FakeSileroModel(), "example"
+
+    fake_torch = types.ModuleType("torch")
+    fake_torch.hub = types.SimpleNamespace(load=_fake_hub_load)
+    monkeypatch.setitem(sys.modules, "torch", fake_torch)
+
+    engine = tts_runtime_service._build_silero_engine()
+    wav_bytes, sample_rate = engine.synthesize(text="hello", language="ru", speaker=None)
+    assert sample_rate == 24000
+    assert wav_bytes.startswith(b"RIFF")
+    assert captured["repo_or_dir"] == str(tmp_path)
+    assert captured["source"] == "local"
+
+
+def test_build_silero_engine_uses_remote_with_opt_in_and_pinned_ref(monkeypatch: pytest.MonkeyPatch) -> None:
+    captured: dict[str, object] = {}
+    monkeypatch.setenv("SILERO_REPO_OR_DIR", "snakers4/silero-models")
+    monkeypatch.setenv("SILERO_ALLOW_REMOTE_HUB", "true")
+    monkeypatch.setenv("SILERO_REPO_REF", "v4.1.0")
+
+    class _FakeSileroModel:
+        def apply_tts(self, *, text: str, speaker: str, sample_rate: int):
+            assert text == "hello"
+            assert speaker == "xenia"
+            assert sample_rate == 24000
+            return np.array([0.0, 0.1, -0.1], dtype=np.float32)
+
+    def _fake_hub_load(**kwargs):
+        captured.update(kwargs)
+        return _FakeSileroModel(), "example"
+
+    fake_torch = types.ModuleType("torch")
+    fake_torch.hub = types.SimpleNamespace(load=_fake_hub_load)
+    monkeypatch.setitem(sys.modules, "torch", fake_torch)
+
+    engine = tts_runtime_service._build_silero_engine()
+    wav_bytes, sample_rate = engine.synthesize(text="hello", language="ru", speaker=None)
+    assert sample_rate == 24000
+    assert wav_bytes.startswith(b"RIFF")
+    assert captured["repo_or_dir"] == "snakers4/silero-models:v4.1.0"
+    assert captured["source"] == "github"

@@ -40,6 +40,51 @@ def _disabled_engine(name: str, reason: str) -> CallbackTTSEngine:
     return CallbackTTSEngine(name=name, synthesize_fn=_synthesize)
 
 
+def _env_flag(value: str | None) -> bool:
+    if value is None:
+        return False
+    return value.strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _looks_like_local_repo_path(repo_or_dir: str) -> bool:
+    candidate = repo_or_dir.strip()
+    if not candidate:
+        return False
+    if candidate.startswith((".", "~")):
+        return True
+    if Path(candidate).is_absolute():
+        return True
+    if "\\" in candidate:
+        return True
+    if ":" in candidate:
+        return True
+    return Path(candidate).exists()
+
+
+def _resolve_silero_repo_source(*, repo_or_dir: str, allow_remote: bool, repo_ref: str | None) -> tuple[str, str]:
+    if _looks_like_local_repo_path(repo_or_dir):
+        return "local", repo_or_dir
+
+    if not allow_remote:
+        raise TTSRuntimeError(
+            "Silero remote torch.hub source is disabled by default. "
+            "Use SILERO_ALLOW_REMOTE_HUB=true only with a pinned revision."
+        )
+
+    if ":" in repo_or_dir:
+        owner_repo, _, inline_ref = repo_or_dir.partition(":")
+        if not owner_repo or not inline_ref:
+            raise TTSRuntimeError("SILERO_REPO_OR_DIR must include both owner/repo and revision after ':'.")
+        return "github", repo_or_dir
+
+    if not repo_ref:
+        raise TTSRuntimeError(
+            "Silero remote source requires pinned revision. "
+            "Set SILERO_REPO_REF or include ':<ref>' in SILERO_REPO_OR_DIR."
+        )
+    return "github", f"{repo_or_dir}:{repo_ref}"
+
+
 def _wav_bytes_from_waveform(*, waveform: Any, sample_rate: int) -> bytes:
     mono = np.asarray(waveform, dtype=np.float32).reshape(-1)
     clipped = np.clip(mono, -1.0, 1.0)
@@ -147,10 +192,17 @@ def _build_piper_engine() -> CallbackTTSEngine:
 
 def _build_silero_engine() -> CallbackTTSEngine:
     repo_or_dir = os.getenv("SILERO_REPO_OR_DIR", "snakers4/silero-models")
+    repo_ref = os.getenv("SILERO_REPO_REF")
+    allow_remote_hub = _env_flag(os.getenv("SILERO_ALLOW_REMOTE_HUB"))
     model_language = os.getenv("SILERO_MODEL_LANGUAGE", "ru")
     model_id = os.getenv("SILERO_MODEL_ID", "v4_ru")
     sample_rate = int(os.getenv("SILERO_SAMPLE_RATE", "24000"))
     default_speaker = os.getenv("SILERO_SPEAKER", "xenia")
+    repo_source, resolved_repo_or_dir = _resolve_silero_repo_source(
+        repo_or_dir=repo_or_dir,
+        allow_remote=allow_remote_hub,
+        repo_ref=repo_ref,
+    )
     state: dict[str, Any] = {"model": None}
     lock = threading.RLock()
 
@@ -164,10 +216,11 @@ def _build_silero_engine() -> CallbackTTSEngine:
                 raise TTSRuntimeError("Silero dependency is missing. Install torch.") from exc
             try:
                 model, _example_text = torch.hub.load(
-                    repo_or_dir=repo_or_dir,
+                    repo_or_dir=resolved_repo_or_dir,
                     model="silero_tts",
                     language=model_language,
                     speaker=model_id,
+                    source=repo_source,
                 )
             except Exception as exc:
                 raise TTSRuntimeError(f"Silero model load failed: {exc}") from exc

@@ -43,3 +43,21 @@ def test_run_discovery_creates_artifact_and_detects_markers(tmp_path: Path) -> N
     }
     assert report == payload
 
+
+def test_run_discovery_adds_suffix_on_timestamp_collision(tmp_path: Path) -> None:
+    appdata = tmp_path / "Roaming"
+    minecraft_dir = appdata / ".minecraft"
+    atm10_dir = minecraft_dir / "versions" / "ATM10 Collide"
+    _mkdir(atm10_dir)
+
+    runs_dir = tmp_path / "runs"
+    now = datetime(2026, 2, 19, 12, 0, 0, tzinfo=timezone.utc)
+    env = {"APPDATA": str(appdata)}
+
+    _, first_artifact = run_discovery(env=env, runs_dir=runs_dir, now=now)
+    _, second_artifact = run_discovery(env=env, runs_dir=runs_dir, now=now)
+
+    assert first_artifact.parent.name == "20260219_120000"
+    assert second_artifact.parent.name == "20260219_120000_01"
+    assert first_artifact.exists()
+    assert second_artifact.exists()

@@ -109,6 +109,22 @@ def build_report(env: Mapping[str, str], now: datetime | None = None) -> dict[st
     }
 
 
+def _create_run_dir(runs_dir: Path, now: datetime) -> Path:
+    base_name = now.strftime("%Y%m%d_%H%M%S")
+    run_dir = runs_dir / base_name
+    if not run_dir.exists():
+        run_dir.mkdir(parents=True, exist_ok=False)
+        return run_dir
+
+    suffix = 1
+    while True:
+        candidate = runs_dir / f"{base_name}_{suffix:02d}"
+        if not candidate.exists():
+            candidate.mkdir(parents=True, exist_ok=False)
+            return candidate
+        suffix += 1
+
+
 def run_discovery(
     *,
     env: Mapping[str, str] | None = None,
@@ -119,9 +135,7 @@ def run_discovery(
     if now is None:
         now = datetime.now(timezone.utc)
 
-    timestamp = now.strftime("%Y%m%d_%H%M%S")
-    run_dir = runs_dir / timestamp
-    run_dir.mkdir(parents=True, exist_ok=False)
+    run_dir = _create_run_dir(runs_dir, now=now)
 
     report = build_report(env_map, now=now)
     report_path = run_dir / "instance_paths.json"
@@ -159,4 +173,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-
