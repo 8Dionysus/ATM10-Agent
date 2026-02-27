@@ -35,6 +35,10 @@ python scripts/automation_intent_chain_smoke.py --intent-json tests/fixtures/int
 python scripts/check_automation_smoke_contract.py --mode intent_chain --runs-dir runs/ci-smoke-automation-chain --min-action-count 3 --min-step-count 4 --expected-intent-type open_quest_book --require-trace-id --require-intent-id --summary-json runs/ci-smoke-automation-chain/contract_summary.json
 python scripts/automation_intent_chain_smoke.py --intent-json tests/fixtures/intent_check_inventory_tool.json --runs-dir runs/ci-smoke-automation-chain-inventory
 python scripts/check_automation_smoke_contract.py --mode intent_chain --runs-dir runs/ci-smoke-automation-chain-inventory --min-action-count 3 --min-step-count 4 --expected-intent-type check_inventory_tool --require-trace-id --require-intent-id --summary-json runs/ci-smoke-automation-chain-inventory/contract_summary.json
+python scripts/gateway_v1_smoke.py --scenario core --runs-dir runs/ci-smoke-gateway-core --summary-json runs/ci-smoke-gateway-core/gateway_smoke_summary.json
+python scripts/gateway_v1_smoke.py --scenario automation --runs-dir runs/ci-smoke-gateway-automation --summary-json runs/ci-smoke-gateway-automation/gateway_smoke_summary.json
+python scripts/gateway_v1_http_smoke.py --scenario core --runs-dir runs/ci-smoke-gateway-http-core --summary-json runs/ci-smoke-gateway-http-core/gateway_http_smoke_summary.json
+python scripts/gateway_v1_http_smoke.py --scenario automation --runs-dir runs/ci-smoke-gateway-http-automation --summary-json runs/ci-smoke-gateway-http-automation/gateway_http_smoke_summary.json
 ```
 
 Ожидаемый результат:
@@ -47,6 +51,143 @@ python scripts/check_automation_smoke_contract.py --mode intent_chain --runs-dir
   * `runs/ci-smoke-automation-dry-run/contract_summary.json`
   * `runs/ci-smoke-automation-chain/contract_summary.json`
   * `runs/ci-smoke-automation-chain-inventory/contract_summary.json`
+* Для gateway smoke шагов создаются machine-readable summaries:
+  * `runs/ci-smoke-gateway-core/gateway_smoke_summary.json`
+  * `runs/ci-smoke-gateway-automation/gateway_smoke_summary.json`
+* Для gateway HTTP smoke шагов создаются machine-readable summaries:
+  * `runs/ci-smoke-gateway-http-core/gateway_http_smoke_summary.json`
+  * `runs/ci-smoke-gateway-http-automation/gateway_http_smoke_summary.json`
+
+## M7.0: Gateway v1 local contract runner
+
+Локальный gateway path фиксирует request/response contract без HTTP-транспорта и без новых dependencies.
+
+### Single request (CLI)
+
+```powershell
+cd D:\atm10-agent
+.\.venv\Scripts\Activate.ps1
+python scripts/gateway_v1_local.py --request-json "C:\path\to\gateway_request.json" --runs-dir runs\gateway-local
+```
+
+Пример `gateway_request.json`:
+
+```json
+{
+  "schema_version": "gateway_request_v1",
+  "operation": "retrieval_query",
+  "payload": {
+    "query": "mekanism steel",
+    "docs_path": "tests/fixtures/retrieval_docs_sample.jsonl",
+    "topk": 3,
+    "candidate_k": 10,
+    "reranker": "none"
+  }
+}
+```
+
+Ожидаемый результат:
+
+* Создается `runs/<timestamp>-gateway-v1/`.
+* Внутри есть `request.json`, `run.json`, `response.json`, `child_runs/`.
+* `response.json.schema_version = gateway_response_v1`.
+
+### Gateway smoke scenarios
+
+```powershell
+cd D:\atm10-agent
+.\.venv\Scripts\Activate.ps1
+python scripts/gateway_v1_smoke.py --scenario core --runs-dir runs\ci-smoke-gateway-core --summary-json runs\ci-smoke-gateway-core\gateway_smoke_summary.json
+python scripts/gateway_v1_smoke.py --scenario automation --runs-dir runs\ci-smoke-gateway-automation --summary-json runs\ci-smoke-gateway-automation\gateway_smoke_summary.json
+```
+
+Ожидаемый результат:
+
+* `core` сценарий проверяет `health`, `retrieval_query`, `kag_query` (`backend=file`).
+* `automation` сценарий проверяет `automation_dry_run` через fixture.
+* В каждом `--summary-json` фиксируется `status=ok|error`; любой `error` возвращает non-zero exit code.
+
+## M7.1/M7.2: Gateway v1 HTTP transport + hardening
+
+HTTP слой использует тот же dispatcher `run_gateway_request`, поэтому body-контракт совпадает с CLI gateway.
+
+### Service start (FastAPI)
+
+```powershell
+cd D:\atm10-agent
+.\.venv\Scripts\Activate.ps1
+python scripts/gateway_v1_http_service.py --host 127.0.0.1 --port 8770 --runs-dir runs\gateway-http
+```
+
+Запуск с override policy (пример):
+
+```powershell
+python scripts/gateway_v1_http_service.py --host 127.0.0.1 --port 8770 --runs-dir runs\gateway-http --max-request-bytes 262144 --max-json-depth 8 --max-string-length 8192 --max-array-items 256 --max-object-keys 256 --operation-timeout-sec 15.0
+```
+
+Hardening defaults (`Balanced`):
+
+* `max_request_body_bytes = 262144` (256 KB)
+* `max_json_depth = 8`
+* `max_string_length = 8192`
+* `max_array_items = 256`
+* `max_object_keys = 256`
+* `operation_timeout_sec = 15.0`
+
+Проверка transport health:
+
+```powershell
+python -c "import requests; print(requests.get('http://127.0.0.1:8770/healthz', timeout=10).json())"
+```
+
+### Gateway request over HTTP
+
+```powershell
+python -c "import requests; payload={'schema_version':'gateway_request_v1','operation':'health','payload':{}}; r=requests.post('http://127.0.0.1:8770/v1/gateway', json=payload, timeout=30); print(r.status_code); print(r.json())"
+```
+
+HTTP status mapping:
+
+* `response.status=ok` -> `200`
+* `error_code=invalid_request` -> `400`
+* `error_code=payload_too_large|payload_limit_exceeded` -> `413`
+* `error_code=operation_timeout` -> `504`
+* `error_code=operation_failed|gateway_dispatch_failed|internal_error_sanitized` -> `500`
+
+Sanitize policy:
+
+* Клиент получает только sanitized envelope (без traceback/внутренних деталей).
+* Детали исключений пишутся локально в `runs/.../gateway_http_errors.jsonl`.
+
+### HTTP smoke scenarios
+
+```powershell
+cd D:\atm10-agent
+.\.venv\Scripts\Activate.ps1
+python scripts/gateway_v1_http_smoke.py --scenario core --runs-dir runs\ci-smoke-gateway-http-core --summary-json runs\ci-smoke-gateway-http-core\gateway_http_smoke_summary.json
+python scripts/gateway_v1_http_smoke.py --scenario automation --runs-dir runs\ci-smoke-gateway-http-automation --summary-json runs\ci-smoke-gateway-http-automation\gateway_http_smoke_summary.json
+```
+
+Ожидаемый результат:
+
+* В `core` проходят операции `health`, `retrieval_query`, `kag_query(file)`.
+* В `automation` проходит `automation_dry_run`.
+* Любой error в gateway body/HTTP статусе делает smoke `status=error` и non-zero exit code.
+
+## M8.0: Streamlit IA spec (decision-complete, no implementation)
+
+На шаге `M8.0` фиксируем IA-спецификацию без добавления Streamlit runtime-кода.
+
+Source of truth:
+
+* `docs/STREAMLIT_IA_V0.md`
+
+Ожидаемый результат:
+
+* В документе зафиксированы 4 зоны UI (`Stack Health`, `Run Explorer`, `Latest Metrics`, `Safe Actions`).
+* Зафиксированы canonical data sources (CI smoke summaries) и field mapping.
+* Зафиксированы safe action guardrails и handoff-контракт для `M8.1`.
+* Док защищен regression-тестом `tests/test_streamlit_ia_doc.py`.
 
 ## Qwen3 stack (OpenVINO-first)
 

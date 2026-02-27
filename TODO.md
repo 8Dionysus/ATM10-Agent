@@ -17,18 +17,18 @@
 * `docs/RUNBOOK.md` — runnable команды и операционные профили.
 * `docs/ARCHIVED_TRACKS.md` — archived/recoverable направления.
 
-## Status Snapshot (as of 2026-02-24)
+## Status Snapshot (as of 2026-02-27)
 
 * M0/M1/M2/M3 базово закрыты.
 * `python -m pytest` green (см. последний session snapshot и CI).
 * Active ASR path: `whisper_genai`; `qwen_asr` — archived/recoverable opt-in.
 * KAG Neo4j path валидирован (`build -> sync -> query -> eval`, hard-cases uplift + latency tuning).
 
-## Session Focus (2026-02-24)
+## Session Focus (2026-02-27)
 
-* Зафиксировать execution-приоритет `M7`: unified local gateway (Combo A service foundation).
-* Запустить `M8` planning для Streamlit operator panel v0 (health, runs explorer, latest metrics, safe smoke triggers).
-* Синхронизировать source-of-truth документы под курс `Combo A + Streamlit` без привязки к перемещаемым audit-файлам.
+* Закрыть `M8.0`: decision-complete IA spec для Streamlit panel v0.
+* Подготовить handoff-основу для `M8.1` (`entrypoint args`, `smoke summary contract`, `no-crash criterion`).
+* Синхронизировать `RUNBOOK/DECISIONS/PLANS/TODO` + session snapshot под M8.0.
 
 ## WIP Policy
 
@@ -37,9 +37,8 @@
 
 ## Now (WIP <= 3)
 
-* [ ] M7.0: зафиксировать минимальный API contract v1 для gateway (`health`, `retrieval`, `kag_query`, `automation_dry_run`) и error contract.
-* [ ] M8.0: определить IA для Streamlit panel v0 (вкладки/экраны + источники данных + links на artifacts).
 * [ ] M8.1: подготовить smoke-gate для Streamlit entrypoint (no-crash запуск + machine-readable summary).
+* [ ] M7.post: определить SLA/observability baseline для gateway (`p95 latency`, error-rate buckets, run-level counters) перед ростом API surface.
 
 ## Next
 
@@ -93,6 +92,17 @@
 * [x] G3: для core CI smoke (`phase_a_smoke`, `retrieve_demo`, `eval_retrieval`) добавлен единый machine-readable summary контракт через `scripts/collect_smoke_run_summary.py` + artifact upload в `pytest` workflow.
 * [x] G2: зафиксирован policy для `critical` trend severity — baseline `signal_only` (nightly signal без fail), с explicit opt-in `fail_nightly` через `--critical-policy`.
 * [x] G2: по локальной истории `kag-neo4j-eval` откалиброваны latency severity thresholds в trend snapshot (`warn=5.0 ms`, `critical=15.0 ms`) для снижения noisy regression-сигналов.
+* [x] M7.0: добавлен `scripts/gateway_v1_local.py` c `gateway_request_v1/gateway_response_v1` контрактом и artifact wiring (`request.json`, `run.json`, `response.json`, `child_runs/`).
+* [x] M7.0: добавлен `scripts/gateway_v1_smoke.py` (`core`, `automation`) + machine-readable `gateway_smoke_summary.json`.
+* [x] M7.0: CI smoke расширен gateway scenarios (`runs/ci-smoke-gateway-core`, `runs/ci-smoke-gateway-automation`) и summary table.
+* [x] M7.1: добавлен `scripts/gateway_v1_http_service.py` (`GET /healthz`, `POST /v1/gateway`) как thin-wrapper над `run_gateway_request`.
+* [x] M7.1: добавлен `scripts/gateway_v1_http_smoke.py` (`core`, `automation`) + machine-readable `gateway_http_smoke_summary.json`.
+* [x] M7.1: CI smoke расширен HTTP scenarios (`runs/ci-smoke-gateway-http-core`, `runs/ci-smoke-gateway-http-automation`) и summary section.
+* [x] M7.2: в `gateway_v1_http_service` добавлены runtime limits (`request size`, `json depth/string/array/object`) и timeout policy (`operation_timeout -> HTTP 504`).
+* [x] M7.2: internal error path санитизирован (`internal_error_sanitized` клиенту, traceback в `gateway_http_errors.jsonl` локально).
+* [x] M7.2: добавлен contract parity matrix test `CLI vs HTTP` по 4 операциям + расширены HTTP hardening tests/smoke summary fields.
+* [x] M8.0: добавлен decision-complete IA spec `docs/STREAMLIT_IA_V0.md` (4 зоны, data contracts, flows, safe guardrails).
+* [x] M8.0: добавлен doc-contract regression test `tests/test_streamlit_ia_doc.py` для защиты IA от drift.
 * [x] Добавлен weekly review шаблон: `docs/SESSION_WEEKLY_TEMPLATE.md`.
 * [x] Упрощен `README.md`: status-блок переведен в формат ссылок на каноничные документы.
 * [x] Обновлен `MANIFEST.md` до короткого snapshot-формата (дата, capabilities, canonical links).

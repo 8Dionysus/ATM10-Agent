@@ -138,3 +138,17 @@
 * Стратегический production baseline зафиксирован как `Combo A`: unified local backend (`FastAPI gateway + workers + Qdrant + Neo4j + runs artifacts`) и frontend path `Streamlit` operator panel с CLI fallback.
 * Model/runtime policy уточнена как pragmatic hybrid: `Qwen3` остается core для text/retrieval, active ASR path — `Whisper GenAI`; drift к `Qwen2.5*` в core stack не допускается.
 * Планирование (`PLANS/TODO`) отвязано от стабильности конкретного audit-файла: текущая стратегия фиксируется напрямую в source-of-truth документах без hard reference на перемещаемые артефакты.
+
+## 2026-02-27
+
+* Для `M7.0` зафиксирован contract-first локальный gateway path без новых dependencies: `scripts/gateway_v1_local.py` принимает `gateway_request_v1` и всегда пишет `request.json/run.json/response.json` с `gateway_response_v1` контрактом.
+* В gateway v1 принят operation set `health|retrieval_query|kag_query|automation_dry_run`; `kag_query` по умолчанию работает в `file` backend и держит `neo4j` как optional backend, чтобы smoke path оставался стабильным без внешних сервисов.
+* Для CI smoke добавлены два lightweight сценария `scripts/gateway_v1_smoke.py` (`core`, `automation`) с machine-readable summary (`gateway_smoke_summary.json`) и fail-fast при любом `status=error`.
+* Для `M7.1` зафиксирован canonical HTTP transport `POST /v1/gateway` как thin-wrapper над `run_gateway_request`, чтобы исключить drift между CLI и HTTP body-контрактом (`gateway_request_v1`/`gateway_response_v1`).
+* В `gateway_v1_http_service` зафиксирован явный HTTP status mapping: `ok -> 200`, `invalid_request -> 400`, `operation_failed|gateway_dispatch_failed -> 500`, при этом body всегда остается `gateway_response_v1`.
+* Для проверки transport-пути добавлен отдельный runnable smoke `scripts/gateway_v1_http_smoke.py` (`core`, `automation`) с machine-readable summary (`gateway_http_smoke_summary.json`) и CI fail-fast policy.
+* Для `M7.2` принят hardening profile `Balanced` для `POST /v1/gateway`: `max_request_body_bytes=262144`, `max_json_depth=8`, `max_string_length=8192`, `max_array_items=256`, `max_object_keys=256`, `operation_timeout_sec=15.0`.
+* Для timeout policy зафиксирован transport-level контракт: `operation_timeout` возвращается как sanitized `gateway_response_v1` и маппится в HTTP `504`.
+* Для internal-error policy клиент получает только sanitized envelope (`internal_error_sanitized`), а подробности исключений (`traceback` + request context) пишутся локально в `runs/.../gateway_http_errors.jsonl`.
+* Для `M8.0` IA Streamlit panel v0 зафиксирована как отдельный single source document `docs/STREAMLIT_IA_V0.md`; реализация `M8.1` должна следовать этому документу без дополнительных продуктовых решений.
+* Для сохранения IA contract добавлен regression test `tests/test_streamlit_ia_doc.py` (обязательные секции, canonical data sources, gateway dependency `GET /healthz` + `POST /v1/gateway`).

@@ -90,6 +90,22 @@ jobs:
         run: |
           python scripts/check_automation_smoke_contract.py --mode intent_chain --runs-dir runs/ci-smoke-automation-chain-inventory --min-action-count 3 --min-step-count 4 --expected-intent-type check_inventory_tool --require-trace-id --require-intent-id --summary-json runs/ci-smoke-automation-chain-inventory/contract_summary.json
 
+      - name: Smoke - Gateway v1 (core scenario)
+        run: |
+          python scripts/gateway_v1_smoke.py --scenario core --runs-dir runs/ci-smoke-gateway-core --summary-json runs/ci-smoke-gateway-core/gateway_smoke_summary.json
+
+      - name: Smoke - Gateway v1 (automation scenario)
+        run: |
+          python scripts/gateway_v1_smoke.py --scenario automation --runs-dir runs/ci-smoke-gateway-automation --summary-json runs/ci-smoke-gateway-automation/gateway_smoke_summary.json
+
+      - name: Smoke - Gateway v1 HTTP (core scenario)
+        run: |
+          python scripts/gateway_v1_http_smoke.py --scenario core --runs-dir runs/ci-smoke-gateway-http-core --summary-json runs/ci-smoke-gateway-http-core/gateway_http_smoke_summary.json
+
+      - name: Smoke - Gateway v1 HTTP (automation scenario)
+        run: |
+          python scripts/gateway_v1_http_smoke.py --scenario automation --runs-dir runs/ci-smoke-gateway-http-automation --summary-json runs/ci-smoke-gateway-http-automation/gateway_http_smoke_summary.json
+
       - name: Summary - Core smoke summaries
         shell: pwsh
         run: |
@@ -110,6 +126,36 @@ jobs:
             "| phase_a_smoke | $($phaseA.status) | vlm=$(FmtOpt $phaseA.observed.vlm_resolved), fallback=$(FmtOpt $phaseA.observed.vlm_fallback_used) |",
             "| retrieve_demo | $($retrieve.status) | results_count=$(FmtOpt $retrieve.observed.results_count) |",
             "| eval_retrieval | $($eval.status) | query_count=$(FmtOpt $eval.observed.query_count), mrr=$(FmtOpt $eval.observed.mean_mrr_at_k) |"
+          )
+          $lines -join "`n" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
+
+      - name: Summary - Gateway smoke summaries
+        shell: pwsh
+        run: |
+          $core = Get-Content "runs/ci-smoke-gateway-core/gateway_smoke_summary.json" | ConvertFrom-Json
+          $automation = Get-Content "runs/ci-smoke-gateway-automation/gateway_smoke_summary.json" | ConvertFrom-Json
+          $lines = @(
+            "## Gateway Smoke Summaries",
+            "",
+            "| scenario | status | request_count |",
+            "|---|---|---:|",
+            "| core | $($core.status) | $($core.request_count) |",
+            "| automation | $($automation.status) | $($automation.request_count) |"
+          )
+          $lines -join "`n" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
+
+      - name: Summary - Gateway HTTP smoke summaries
+        shell: pwsh
+        run: |
+          $core = Get-Content "runs/ci-smoke-gateway-http-core/gateway_http_smoke_summary.json" | ConvertFrom-Json
+          $automation = Get-Content "runs/ci-smoke-gateway-http-automation/gateway_http_smoke_summary.json" | ConvertFrom-Json
+          $lines = @(
+            "## Gateway HTTP Smoke Summaries",
+            "",
+            "| scenario | status | request_count | failed_requests_count |",
+            "|---|---|---:|---:|",
+            "| core | $($core.status) | $($core.request_count) | $($core.failed_requests_count) |",
+            "| automation | $($automation.status) | $($automation.request_count) | $($automation.failed_requests_count) |"
           )
           $lines -join "`n" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
 
@@ -151,3 +197,7 @@ jobs:
             runs/ci-smoke-automation-dry-run/contract_summary.json
             runs/ci-smoke-automation-chain/contract_summary.json
             runs/ci-smoke-automation-chain-inventory/contract_summary.json
+            runs/ci-smoke-gateway-core/gateway_smoke_summary.json
+            runs/ci-smoke-gateway-automation/gateway_smoke_summary.json
+            runs/ci-smoke-gateway-http-core/gateway_http_smoke_summary.json
+            runs/ci-smoke-gateway-http-automation/gateway_http_smoke_summary.json

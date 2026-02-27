@@ -76,9 +76,9 @@ Definition of Done:
 
 Open tasks:
 
-* Зафиксировать минимальный API-контракт v1 (endpoint list + request/response schema + error contract).
-* Добавить lightweight gateway smoke path с machine-readable summary.
-* Зафиксировать в runbook единый локальный startup sequence для Combo A.
+* Зафиксировать SLA/observability baseline для gateway (`p95 latency`, error-rate buckets, run-level counters, smoke trend snapshot).
+* Ужесточить policy вокруг gateway artifacts/errors (`retention`, rotation policy, redaction checklist для error logs).
+* Зафиксировать unified startup sequence (gateway HTTP + existing runnable services) в runbook с минимальным operator profile.
 
 #### G2 — M8 Streamlit Operator Panel (Combo A UI)
 
@@ -98,9 +98,9 @@ Definition of Done:
 
 Open tasks:
 
-* Утвердить minimal IA для v0 (страницы/вкладки + data sources).
-* Реализовать read-only observability first, затем safe action buttons.
-* Добавить smoke-check на запуск Streamlit entrypoint без crash.
+* Реализовать `scripts/streamlit_operator_panel.py` по спецификации `docs/STREAMLIT_IA_V0.md` (4 зоны + canonical data sources).
+* Добавить `M8.1` smoke-gate для Streamlit entrypoint (`no-crash startup` + machine-readable summary contract).
+* Подключить Streamlit smoke summary в CI (summary table + artifact wiring) без внешних сервисов.
 
 #### G3 — M6.1 Automation Safe Loop (ongoing)
 
@@ -153,7 +153,7 @@ Open tasks:
 
 ### 0-30 days
 
-* Зафиксировать API contract v1 для Combo A gateway.
+* Зафиксировать post-`M7.2` SLA/observability hardening для gateway HTTP.
 * Поднять v0 Streamlit operator panel (health + run explorer + latest metrics + safe smoke triggers).
 * Закрыть интеграционный smoke контур для gateway + Streamlit entrypoint.
 
