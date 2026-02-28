@@ -26,9 +26,9 @@
 
 ## Session Focus (2026-02-27)
 
-* Закрыть `M8.0`: decision-complete IA spec для Streamlit panel v0.
-* Подготовить handoff-основу для `M8.1` (`entrypoint args`, `smoke summary contract`, `no-crash criterion`).
-* Синхронизировать `RUNBOOK/DECISIONS/PLANS/TODO` + session snapshot под M8.0.
+* Закрыть `M7.post`: добавить SLA/observability baseline поверх gateway smoke summaries.
+* Зафиксировать machine-readable SLA summary contract `gateway_sla_summary_v1` и CI wiring.
+* Подготовить переход к `M8.post` (UX/operability follow-ups для Streamlit panel).
 
 ## WIP Policy
 
@@ -37,8 +37,7 @@
 
 ## Now (WIP <= 3)
 
-* [ ] M8.1: подготовить smoke-gate для Streamlit entrypoint (no-crash запуск + machine-readable summary).
-* [ ] M7.post: определить SLA/observability baseline для gateway (`p95 latency`, error-rate buckets, run-level counters) перед ростом API surface.
+* [ ] M8.post: добавить post-M8.1 UX/operability улучшения (`history filters`, `action audit trail`, compact mobile layout).
 
 ## Next
 
@@ -103,6 +102,12 @@
 * [x] M7.2: добавлен contract parity matrix test `CLI vs HTTP` по 4 операциям + расширены HTTP hardening tests/smoke summary fields.
 * [x] M8.0: добавлен decision-complete IA spec `docs/STREAMLIT_IA_V0.md` (4 зоны, data contracts, flows, safe guardrails).
 * [x] M8.0: добавлен doc-contract regression test `tests/test_streamlit_ia_doc.py` для защиты IA от drift.
+* [x] M8.1: реализован `scripts/streamlit_operator_panel.py` (4 зоны по IA) с canonical sources, health/read-model loaders и whitelisted safe actions.
+* [x] M8.1: добавлен `scripts/streamlit_operator_panel_smoke.py` (`streamlit_smoke_summary_v1`, exit policy `0|2`, no-crash startup gate).
+* [x] M8.1: CI smoke расширен streamlit шагом + summary section + artifact upload (`runs/ci-smoke-streamlit/streamlit_smoke_summary.json`).
+* [x] M7.post: gateway smoke summaries расширены observability метриками (`latency_*`, `error_buckets`, timestamps/duration, failed counters).
+* [x] M7.post: добавлен SLA checker `scripts/check_gateway_sla.py` + `gateway_sla_summary_v1` (`profile`, `policy`, `breaches`, `exit_code`).
+* [x] M7.post: CI smoke расширен SLA step (`signal_only`) + summary section + artifact upload (`runs/ci-smoke-gateway-sla/gateway_sla_summary.json`).
 * [x] Добавлен weekly review шаблон: `docs/SESSION_WEEKLY_TEMPLATE.md`.
 * [x] Упрощен `README.md`: status-блок переведен в формат ссылок на каноничные документы.
 * [x] Обновлен `MANIFEST.md` до короткого snapshot-формата (дата, capabilities, canonical links).

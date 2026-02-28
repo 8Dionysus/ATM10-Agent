@@ -39,6 +39,8 @@ python scripts/gateway_v1_smoke.py --scenario core --runs-dir runs/ci-smoke-gate
 python scripts/gateway_v1_smoke.py --scenario automation --runs-dir runs/ci-smoke-gateway-automation --summary-json runs/ci-smoke-gateway-automation/gateway_smoke_summary.json
 python scripts/gateway_v1_http_smoke.py --scenario core --runs-dir runs/ci-smoke-gateway-http-core --summary-json runs/ci-smoke-gateway-http-core/gateway_http_smoke_summary.json
 python scripts/gateway_v1_http_smoke.py --scenario automation --runs-dir runs/ci-smoke-gateway-http-automation --summary-json runs/ci-smoke-gateway-http-automation/gateway_http_smoke_summary.json
+python scripts/check_gateway_sla.py --http-summary-json runs/ci-smoke-gateway-http-core/gateway_http_smoke_summary.json --summary-json runs/ci-smoke-gateway-sla/gateway_sla_summary.json --profile conservative --policy signal_only
+python scripts/streamlit_operator_panel_smoke.py --panel-runs-dir runs --runs-dir runs/ci-smoke-streamlit --summary-json runs/ci-smoke-streamlit/streamlit_smoke_summary.json --gateway-url http://127.0.0.1:8770 --startup-timeout-sec 45
 ```
 
 Ожидаемый результат:
@@ -57,6 +59,10 @@ python scripts/gateway_v1_http_smoke.py --scenario automation --runs-dir runs/ci
 * Для gateway HTTP smoke шагов создаются machine-readable summaries:
   * `runs/ci-smoke-gateway-http-core/gateway_http_smoke_summary.json`
   * `runs/ci-smoke-gateway-http-automation/gateway_http_smoke_summary.json`
+* Для gateway SLA check создается machine-readable summary:
+  * `runs/ci-smoke-gateway-sla/gateway_sla_summary.json`
+* Для streamlit smoke создается machine-readable summary:
+  * `runs/ci-smoke-streamlit/streamlit_smoke_summary.json`
 
 ## M7.0: Gateway v1 local contract runner
 
@@ -174,6 +180,56 @@ python scripts/gateway_v1_http_smoke.py --scenario automation --runs-dir runs\ci
 * В `automation` проходит `automation_dry_run`.
 * Любой error в gateway body/HTTP статусе делает smoke `status=error` и non-zero exit code.
 
+## M7.post: Gateway SLA/Observability baseline
+
+На шаге `M7.post` SLA и observability строятся поверх HTTP smoke summary без изменения
+`gateway_request_v1/gateway_response_v1`.
+
+### SLA checker
+
+```powershell
+cd D:\atm10-agent
+.\.venv\Scripts\Activate.ps1
+python scripts/check_gateway_sla.py --http-summary-json runs\ci-smoke-gateway-http-core\gateway_http_smoke_summary.json --summary-json runs\ci-smoke-gateway-sla\gateway_sla_summary.json --profile conservative --policy signal_only
+```
+
+SLA summary contract (`gateway_sla_summary_v1`):
+
+* `schema_version = gateway_sla_summary_v1`
+* `status = ok|error` (`error` только для execution/contract ошибок checker)
+* `sla_status = pass|breach`
+* `profile = conservative|moderate|aggressive`
+* `policy = signal_only|fail_on_breach`
+* `metrics`:
+  * `request_count`
+  * `failed_requests_count`
+  * `error_rate`
+  * `timeout_count`
+  * `timeout_rate`
+  * `latency_p50_ms`
+  * `latency_p95_ms`
+  * `latency_max_ms`
+* `thresholds`:
+  * `latency_p95_ms_max`
+  * `error_rate_max`
+  * `timeout_rate_max`
+* `error_buckets`
+* `breaches`
+* `paths.summary_json`
+* `exit_code`
+
+Default conservative thresholds:
+
+* `latency_p95_ms <= 1500`
+* `error_rate <= 0.05`
+* `timeout_rate <= 0.01`
+
+Exit policy:
+
+* `signal_only`: `0` даже при `sla_status=breach`.
+* `fail_on_breach`: `2` при `sla_status=breach`.
+* Любая execution/contract ошибка checker: `2`.
+
 ## M8.0: Streamlit IA spec (decision-complete, no implementation)
 
 На шаге `M8.0` фиксируем IA-спецификацию без добавления Streamlit runtime-кода.
@@ -188,6 +244,40 @@ Source of truth:
 * Зафиксированы canonical data sources (CI smoke summaries) и field mapping.
 * Зафиксированы safe action guardrails и handoff-контракт для `M8.1`.
 * Док защищен regression-тестом `tests/test_streamlit_ia_doc.py`.
+
+## M8.1: Streamlit operator panel v0 + no-crash smoke
+
+Запуск панели:
+
+```powershell
+cd D:\atm10-agent
+.\.venv\Scripts\Activate.ps1
+python -m streamlit run scripts/streamlit_operator_panel.py -- --runs-dir runs --gateway-url http://127.0.0.1:8770
+```
+
+Запуск smoke-gate:
+
+```powershell
+cd D:\atm10-agent
+.\.venv\Scripts\Activate.ps1
+python scripts/streamlit_operator_panel_smoke.py --panel-runs-dir runs --runs-dir runs/ci-smoke-streamlit --summary-json runs/ci-smoke-streamlit/streamlit_smoke_summary.json --gateway-url http://127.0.0.1:8770 --startup-timeout-sec 45
+```
+
+Ожидаемый result contract (`streamlit_smoke_summary_v1`):
+
+* `schema_version = streamlit_smoke_summary_v1`
+* `status = ok|error`
+* `startup_ok`
+* `tabs_detected`
+* `missing_sources`
+* `errors`
+* `exit_code`
+* `paths.run_dir`, `paths.run_json`, `paths.summary_json`
+
+Exit policy:
+
+* `0` только если `status=ok`.
+* `2` для любого `status=error`.
 
 ## Qwen3 stack (OpenVINO-first)
 

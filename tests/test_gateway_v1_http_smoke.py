@@ -25,8 +25,16 @@ def test_gateway_v1_http_smoke_core_ok(tmp_path: Path) -> None:
     summary_payload = json.loads(summary_path.read_text(encoding="utf-8"))
     assert summary_payload["status"] == "ok"
     assert summary_payload["scenario"] == "core"
+    assert summary_payload["started_at_utc"]
+    assert summary_payload["finished_at_utc"]
+    assert summary_payload["duration_ms"] >= 0
     assert summary_payload["request_count"] == 3
     assert summary_payload["failed_requests_count"] == 0
+    assert summary_payload["latency_p50_ms"] is not None
+    assert summary_payload["latency_p95_ms"] is not None
+    assert summary_payload["latency_max_ms"] is not None
+    assert summary_payload["error_buckets"]["none"] == 3
+    assert all(item["latency_ms"] >= 0 for item in summary_payload["requests"])
     assert all(item["ok"] is True for item in summary_payload["requests"])
     assert all(item["http_status"] == item["expected_http_status"] for item in summary_payload["requests"])
 
@@ -45,8 +53,16 @@ def test_gateway_v1_http_smoke_automation_ok(tmp_path: Path) -> None:
     summary_payload = json.loads(summary_path.read_text(encoding="utf-8"))
     assert summary_payload["status"] == "ok"
     assert summary_payload["scenario"] == "automation"
+    assert summary_payload["started_at_utc"]
+    assert summary_payload["finished_at_utc"]
+    assert summary_payload["duration_ms"] >= 0
     assert summary_payload["request_count"] == 1
     assert summary_payload["failed_requests_count"] == 0
+    assert summary_payload["latency_p50_ms"] is not None
+    assert summary_payload["latency_p95_ms"] is not None
+    assert summary_payload["latency_max_ms"] is not None
+    assert summary_payload["error_buckets"]["none"] == 1
+    assert summary_payload["requests"][0]["latency_ms"] >= 0
     assert summary_payload["requests"][0]["operation"] == "automation_dry_run"
     assert summary_payload["requests"][0]["http_status"] == summary_payload["requests"][0]["expected_http_status"]
 

@@ -59,6 +59,8 @@
 * M5: KAG baseline + Neo4j path + nightly guardrail + trend/severity policy.
 * M6.0: Automation safe scaffold (dry-run only) + CI contract checks.
 * M6.1-M6.19: Intent-chain contract hardening (trace/intent correlation, strict CI checks, rollout checklist).
+* M8.0: Streamlit IA spec (`docs/STREAMLIT_IA_V0.md`) как decision-complete source of truth.
+* M8.1: Streamlit operator panel v0 core + no-crash smoke gate + CI summary/artifact wiring.
 
 ### Active Goals
 
@@ -76,8 +78,8 @@ Definition of Done:
 
 Open tasks:
 
-* Зафиксировать SLA/observability baseline для gateway (`p95 latency`, error-rate buckets, run-level counters, smoke trend snapshot).
 * Ужесточить policy вокруг gateway artifacts/errors (`retention`, rotation policy, redaction checklist для error logs).
+* Добавить SLA trend snapshot поверх `gateway_sla_summary_v1` (rolling baseline + breach drift сигнал).
 * Зафиксировать unified startup sequence (gateway HTTP + existing runnable services) в runbook с минимальным operator profile.
 
 #### G2 — M8 Streamlit Operator Panel (Combo A UI)
@@ -98,9 +100,9 @@ Definition of Done:
 
 Open tasks:
 
-* Реализовать `scripts/streamlit_operator_panel.py` по спецификации `docs/STREAMLIT_IA_V0.md` (4 зоны + canonical data sources).
-* Добавить `M8.1` smoke-gate для Streamlit entrypoint (`no-crash startup` + machine-readable summary contract).
-* Подключить Streamlit smoke summary в CI (summary table + artifact wiring) без внешних сервисов.
+* Расширить `Latest Metrics` historical view (последние N summary snapshots без внешней БД).
+* Добавить action audit trail в UI (`last safe action`, `exit_code`, link на summary artifact).
+* Добавить compact mobile layout policy и regression smoke-check для viewport baseline.
 
 #### G3 — M6.1 Automation Safe Loop (ongoing)
 
@@ -153,9 +155,9 @@ Open tasks:
 
 ### 0-30 days
 
-* Зафиксировать post-`M7.2` SLA/observability hardening для gateway HTTP.
-* Поднять v0 Streamlit operator panel (health + run explorer + latest metrics + safe smoke triggers).
-* Закрыть интеграционный smoke контур для gateway + Streamlit entrypoint.
+* Перевести `gateway_sla_summary_v1` из signal-only baseline в управляемый tightening plan (`conservative -> moderate`) на исторических данных.
+* Расширить Streamlit post-`M8.1` UX/operability слой (history filters + action audit trail).
+* Добавить compact/mobile baseline и соответствующий regression smoke-check для panel UI.
 
 ### 30-60 days
 

@@ -106,6 +106,14 @@ jobs:
         run: |
           python scripts/gateway_v1_http_smoke.py --scenario automation --runs-dir runs/ci-smoke-gateway-http-automation --summary-json runs/ci-smoke-gateway-http-automation/gateway_http_smoke_summary.json
 
+      - name: Smoke - Gateway SLA check (signal_only)
+        run: |
+          python scripts/check_gateway_sla.py --http-summary-json runs/ci-smoke-gateway-http-core/gateway_http_smoke_summary.json --summary-json runs/ci-smoke-gateway-sla/gateway_sla_summary.json --profile conservative --policy signal_only
+
+      - name: Smoke - Streamlit operator panel (no-crash)
+        run: |
+          python scripts/streamlit_operator_panel_smoke.py --panel-runs-dir runs --runs-dir runs/ci-smoke-streamlit --summary-json runs/ci-smoke-streamlit/streamlit_smoke_summary.json --gateway-url http://127.0.0.1:8770 --startup-timeout-sec 45
+
       - name: Summary - Core smoke summaries
         shell: pwsh
         run: |
@@ -159,6 +167,35 @@ jobs:
           )
           $lines -join "`n" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
 
+      - name: Summary - Gateway SLA
+        shell: pwsh
+        run: |
+          $sla = Get-Content "runs/ci-smoke-gateway-sla/gateway_sla_summary.json" | ConvertFrom-Json
+          $breachesCount = if ($null -eq $sla.breaches) { 0 } else { $sla.breaches.Count }
+          $lines = @(
+            "## Gateway SLA Summary",
+            "",
+            "| status | sla_status | request_count | failed_requests_count | error_rate | timeout_rate | latency_p95_ms | breaches_count |",
+            "|---|---|---:|---:|---:|---:|---:|---:|",
+            "| $($sla.status) | $($sla.sla_status) | $($sla.metrics.request_count) | $($sla.metrics.failed_requests_count) | $($sla.metrics.error_rate) | $($sla.metrics.timeout_rate) | $($sla.metrics.latency_p95_ms) | $breachesCount |"
+          )
+          $lines -join "`n" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
+
+      - name: Summary - Streamlit smoke summary
+        shell: pwsh
+        run: |
+          $streamlit = Get-Content "runs/ci-smoke-streamlit/streamlit_smoke_summary.json" | ConvertFrom-Json
+          $tabsCount = if ($null -eq $streamlit.tabs_detected) { 0 } else { $streamlit.tabs_detected.Count }
+          $missingCount = if ($null -eq $streamlit.missing_sources) { 0 } else { $streamlit.missing_sources.Count }
+          $lines = @(
+            "## Streamlit Smoke Summary",
+            "",
+            "| status | startup_ok | tabs_detected_count | missing_sources_count |",
+            "|---|---|---:|---:|",
+            "| $($streamlit.status) | $($streamlit.startup_ok) | $tabsCount | $missingCount |"
+          )
+          $lines -join "`n" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
+
       - name: Summary - Automation smoke contracts
         shell: pwsh
         run: |
@@ -201,3 +238,5 @@ jobs:
             runs/ci-smoke-gateway-automation/gateway_smoke_summary.json
             runs/ci-smoke-gateway-http-core/gateway_http_smoke_summary.json
             runs/ci-smoke-gateway-http-automation/gateway_http_smoke_summary.json
+            runs/ci-smoke-gateway-sla/gateway_sla_summary.json
+            runs/ci-smoke-streamlit/streamlit_smoke_summary.json

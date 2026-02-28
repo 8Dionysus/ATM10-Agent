@@ -152,3 +152,9 @@
 * Для internal-error policy клиент получает только sanitized envelope (`internal_error_sanitized`), а подробности исключений (`traceback` + request context) пишутся локально в `runs/.../gateway_http_errors.jsonl`.
 * Для `M8.0` IA Streamlit panel v0 зафиксирована как отдельный single source document `docs/STREAMLIT_IA_V0.md`; реализация `M8.1` должна следовать этому документу без дополнительных продуктовых решений.
 * Для сохранения IA contract добавлен regression test `tests/test_streamlit_ia_doc.py` (обязательные секции, canonical data sources, gateway dependency `GET /healthz` + `POST /v1/gateway`).
+* Для `M8.1` `streamlit` добавлен в runtime dependencies (`requirements.txt`), чтобы panel entrypoint и smoke path были reproducible локально и в CI.
+* Для `M8.1` no-crash smoke реализован через реальный subprocess `python -m streamlit run ...` с timeout/terminate policy и machine-readable summary `streamlit_smoke_summary_v1`.
+* В CI для Streamlit smoke принят strict policy `missing_sources => error`, чтобы panel не маскировала отсутствие canonical summaries в runs tree.
+* Для `M7.post` принят `signal-first` SLA режим для gateway: default policy `signal_only` не валит CI на breach, но всегда публикует machine-readable `gateway_sla_summary_v1` с метриками и breaches.
+* Для SLA baseline выбран профиль `conservative` (`latency_p95<=1500ms`, `error_rate<=0.05`, `timeout_rate<=0.01`) как стартовый operating point до последующего tightening.
+* Gateway smoke summaries (`local` + `http`) расширены observability-полями (`started/finished`, `duration_ms`, per-request `latency_ms`, `latency_p50/p95/max`, `error_buckets`) без изменения существующих response body-контрактов.
