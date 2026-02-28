@@ -100,8 +100,6 @@ Definition of Done:
 
 Open tasks:
 
-* Расширить `Latest Metrics` historical view (последние N summary snapshots без внешней БД).
-* Добавить action audit trail в UI (`last safe action`, `exit_code`, link на summary artifact).
 * Добавить compact mobile layout policy и regression smoke-check для viewport baseline.
 
 #### G3 — M6.1 Automation Safe Loop (ongoing)

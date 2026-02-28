@@ -37,7 +37,7 @@
 
 ## Now (WIP <= 3)
 
-* [ ] M8.post: добавить post-M8.1 UX/operability улучшения (`history filters`, `action audit trail`, compact mobile layout).
+* [ ] M8.post: добавить post-M8.1 UX/operability улучшения (compact mobile layout).
 
 ## Next
 
@@ -53,6 +53,8 @@
 
 ## Done This Week
 
+* [x] M8.post: во вкладке `Latest Metrics` добавлен historical view с filters (`source/status/limit`) по timestamp run snapshots из `runs/ci-smoke-*` (без внешней БД).
+* [x] M8.post: в Streamlit `Safe Actions` добавлен traceable audit trail (`Last safe action`, `Recent safe actions`, JSONL лог `runs/.../ui-safe-actions/safe_actions_audit.jsonl`).
 * [x] KAG Neo4j: поднят rank для `star` до `first_hit_rank=1`.
 * [x] KAG Neo4j: latency retuning после relevance uplift.
 * [x] KAG Neo4j: добавлен `--warmup-runs` в eval + A/B compare script.

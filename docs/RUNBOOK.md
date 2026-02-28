@@ -279,6 +279,74 @@ Exit policy:
 * `0` только если `status=ok`.
 * `2` для любого `status=error`.
 
+## M8.post: Streamlit Safe Actions audit trail
+
+`Safe Actions` в панели ведет append-only audit log с traceable результатами запусков.
+
+Audit artifact path:
+
+* `runs/<runs_dir>/ui-safe-actions/safe_actions_audit.jsonl`
+
+Audit entry contract (JSON object per line):
+
+* `timestamp_utc` (ISO8601 UTC)
+* `action_key`
+* `command`
+* `exit_code`
+* `status` (`ok|error`)
+* `summary_json`
+* `summary_status` (nullable)
+* `error` (nullable)
+* `ok` (bool)
+
+UI behavior:
+
+* В `Safe Actions` после выполнения команды показывается блок `Last safe action`.
+* Ниже показывается таблица `Recent safe actions` (default: последние 10 записей, newest-first).
+* Если лог отсутствует, UI показывает `not available yet` и не падает.
+* При битой JSONL строке UI не падает: показывается error-row `invalid audit entry`.
+
+## M8.post: Streamlit Latest Metrics history filters
+
+Во вкладке `Latest Metrics` добавлен historical view без внешней БД: история строится из уже существующих timestamp run-директорий в canonical smoke roots.
+
+History sources:
+
+* `runs/ci-smoke-phase-a`
+* `runs/ci-smoke-retrieve`
+* `runs/ci-smoke-eval`
+* `runs/ci-smoke-gateway-core`
+* `runs/ci-smoke-gateway-automation`
+* `runs/ci-smoke-gateway-http-core`
+* `runs/ci-smoke-gateway-http-automation`
+
+History controls:
+
+* `History sources` (multiselect, default = все canonical sources)
+* `History statuses` (multiselect, default = `ok,error`)
+* `History limit per source` (default = `10`)
+
+Historical row fields (`metrics_history_row_v1`, in-memory UI contract):
+
+* `source`
+* `timestamp_utc`
+* `status`
+* `run_dir`
+* `run_json`
+* `summary_json` (если доступен)
+* `request_count`
+* `failed_requests_count`
+* `results_count`
+* `query_count`
+* `mean_mrr_at_k`
+* `details`
+
+Resilience/performance policy:
+
+* scan cap: максимум `200` candidate run-директорий на source перед применением limit.
+* некорректные run-директории пропускаются; UI показывает warning и продолжает работу.
+* при отсутствии history строк показывается `not available yet`.
+
 ## Qwen3 stack (OpenVINO-first)
 
 Активный стек:

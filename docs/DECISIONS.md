@@ -158,3 +158,12 @@
 * Для `M7.post` принят `signal-first` SLA режим для gateway: default policy `signal_only` не валит CI на breach, но всегда публикует machine-readable `gateway_sla_summary_v1` с метриками и breaches.
 * Для SLA baseline выбран профиль `conservative` (`latency_p95<=1500ms`, `error_rate<=0.05`, `timeout_rate<=0.01`) как стартовый operating point до последующего tightening.
 * Gateway smoke summaries (`local` + `http`) расширены observability-полями (`started/finished`, `duration_ms`, per-request `latency_ms`, `latency_p50/p95/max`, `error_buckets`) без изменения существующих response body-контрактов.
+
+## 2026-02-28
+
+* Для `M8.post` в `scripts/streamlit_operator_panel.py` принят append-only audit trail safe actions в `runs/.../ui-safe-actions/safe_actions_audit.jsonl` с контрактом `timestamp_utc/action_key/command/exit_code/status/summary_json/summary_status/error/ok`.
+* В `Safe Actions` UI добавлены обязательные operator блоки `Last safe action` и `Recent safe actions` (latest 10, newest-first) для ускорения triage без перехода в внешние логи.
+* Для устойчивости панели выбран tolerant parsing audit JSONL: при отсутствии лога показывается `not available yet`, при битой строке добавляется `invalid audit entry`, UI не падает.
+* Для `M8.post` во вкладке `Latest Metrics` выбран file-based historical view без внешней БД: история собирается из timestamp run-директорий в canonical `runs/ci-smoke-*` roots.
+* В historical view зафиксированы operator filters `source/status/limit` (defaults: all, `ok|error`, `10`), а также scan cap `200` candidate run-директорий на source для контроля latency UI.
+* Некорректные historical run artifacts не блокируют панель: строки с contract/parse mismatch пропускаются, оператор получает warning summary, UI остается no-crash.
