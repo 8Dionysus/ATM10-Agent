@@ -339,6 +339,86 @@ def test_gateway_v1_http_service_internal_error_log_rotation(tmp_path: Path, mon
     assert any(path.name.endswith(".1.jsonl") for path in log_files)
 
 
+def test_gateway_v1_http_service_redacts_sensitive_fields_in_request_artifact(tmp_path: Path) -> None:
+    app = gateway_http.create_app(runs_dir=tmp_path / "runs")
+    with TestClient(app) as client:
+        response = client.post(
+            "/v1/gateway",
+            json={
+                "schema_version": "gateway_request_v1",
+                "operation": "kag_query",
+                "payload": {
+                    "backend": "neo4j",
+                    "query": "steel tools",
+                    "neo4j_password": "HTTP_SUPER_SECRET",
+                    "timeout_sec": 0.01,
+                    "topk": 1,
+                },
+            },
+        )
+    payload = response.json()
+    run_dir = Path(payload["artifacts"]["run_dir"])
+    request_payload = json.loads((run_dir / "request.json").read_text(encoding="utf-8"))
+    run_payload = json.loads((run_dir / "run.json").read_text(encoding="utf-8"))
+
+    assert request_payload["payload"]["neo4j_password"] == "[REDACTED]"
+    assert run_payload["request_redaction"]["applied"] is True
+    assert "payload.neo4j_password" in run_payload["request_redaction"]["fields_redacted"]
+
+
+def test_gateway_v1_http_service_rejects_untrusted_reranker_model(tmp_path: Path) -> None:
+    app = gateway_http.create_app(runs_dir=tmp_path / "runs")
+    with TestClient(app) as client:
+        response = client.post(
+            "/v1/gateway",
+            json={
+                "schema_version": "gateway_request_v1",
+                "operation": "retrieval_query",
+                "payload": {
+                    "query": "mekanism steel",
+                    "docs_path": str(_fixture_path("retrieval_docs_sample.jsonl")),
+                    "reranker": "qwen3",
+                    "reranker_model": "evil/custom-model",
+                },
+            },
+        )
+
+    payload = response.json()
+    assert response.status_code == 400
+    assert payload["status"] == "error"
+    assert payload["error_code"] == "invalid_request"
+    assert "reranker_model is not allowed" in str(payload["error"])
+
+
+def test_gateway_v1_http_service_auth_token_is_optional_and_enforced_when_configured(tmp_path: Path) -> None:
+    app = gateway_http.create_app(runs_dir=tmp_path / "runs", service_token="test-token")
+    request_payload = {
+        "schema_version": "gateway_request_v1",
+        "operation": "health",
+        "payload": {},
+    }
+    with TestClient(app) as client:
+        unauthorized_health = client.get("/healthz")
+        unauthorized_gateway = client.post("/v1/gateway", json=request_payload)
+        authorized_health = client.get("/healthz", headers={"X-ATM10-Token": "test-token"})
+        authorized_gateway = client.post(
+            "/v1/gateway",
+            json=request_payload,
+            headers={"X-ATM10-Token": "test-token"},
+        )
+
+    unauthorized_health_payload = unauthorized_health.json()
+    unauthorized_gateway_payload = unauthorized_gateway.json()
+    assert unauthorized_health.status_code == 401
+    assert unauthorized_health_payload["status"] == "error"
+    assert unauthorized_health_payload["error_code"] == "unauthorized"
+    assert unauthorized_gateway.status_code == 401
+    assert unauthorized_gateway_payload["status"] == "error"
+    assert unauthorized_gateway_payload["error_code"] == "unauthorized"
+    assert authorized_health.status_code == 200
+    assert authorized_gateway.status_code == 200
+
+
 def test_gateway_v1_http_service_startup_retention_cleanup(tmp_path: Path) -> None:
     runs_dir = tmp_path / "runs"
     runs_dir.mkdir(parents=True)

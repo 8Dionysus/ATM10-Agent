@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -12,6 +13,7 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from scripts.automation_dry_run import run_automation_dry_run
+from scripts.gateway_artifact_policy import REDACTION_CHECKLIST_VERSION, redact_payload
 from scripts.kag_build_baseline import run_kag_build_baseline
 from scripts.kag_query_demo import run_kag_query_demo
 from scripts.kag_query_neo4j import run_kag_query_neo4j
@@ -20,6 +22,12 @@ from src.rag.retrieval import load_docs, retrieve_top_k
 REQUEST_SCHEMA_VERSION = "gateway_request_v1"
 RESPONSE_SCHEMA_VERSION = "gateway_response_v1"
 SUPPORTED_OPERATIONS = ("health", "retrieval_query", "kag_query", "automation_dry_run")
+DEFAULT_RERANKER_MODEL = "Qwen/Qwen3-Reranker-0.6B"
+ALLOWED_RERANKER_MODELS = (
+    DEFAULT_RERANKER_MODEL,
+    "OpenVINO/Qwen3-Reranker-0.6B-fp16-ov",
+)
+ALLOW_UNTRUSTED_RERANKER_MODEL_ENV = "ATM10_ALLOW_UNTRUSTED_RERANKER_MODEL"
 
 
 class GatewayOperationError(RuntimeError):
@@ -94,6 +102,25 @@ def _coerce_int(payload: Mapping[str, Any], field: str, default: int, *, min_val
     return raw_value
 
 
+def _env_flag_true(name: str) -> bool:
+    raw = os.getenv(name)
+    if raw is None:
+        return False
+    return raw.strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _validate_reranker_model(model_id: str) -> None:
+    if _env_flag_true(ALLOW_UNTRUSTED_RERANKER_MODEL_ENV):
+        return
+    if model_id in ALLOWED_RERANKER_MODELS:
+        return
+    raise ValueError(
+        "payload.reranker_model is not allowed. "
+        f"Allowed: {list(ALLOWED_RERANKER_MODELS)!r}. "
+        f"Set {ALLOW_UNTRUSTED_RERANKER_MODEL_ENV}=true only for trusted custom models."
+    )
+
+
 def _normalize_request(raw_payload: Mapping[str, Any]) -> dict[str, Any]:
     schema_version = str(raw_payload.get("schema_version", "")).strip()
     if schema_version != REQUEST_SCHEMA_VERSION:
@@ -153,12 +180,14 @@ def _run_retrieval_query(
     reranker = str(payload.get("reranker", "none")).strip().lower()
     if reranker not in {"none", "qwen3"}:
         raise ValueError("payload.reranker must be one of ['none', 'qwen3'].")
-    reranker_model = str(payload.get("reranker_model", "Qwen/Qwen3-Reranker-0.6B")).strip()
+    reranker_model = str(payload.get("reranker_model", DEFAULT_RERANKER_MODEL)).strip()
     reranker_runtime = str(payload.get("reranker_runtime", "torch")).strip().lower()
     if reranker_runtime not in {"torch", "openvino"}:
         raise ValueError("payload.reranker_runtime must be one of ['torch', 'openvino'].")
     reranker_device = str(payload.get("reranker_device", "AUTO")).strip()
     reranker_max_length = _coerce_int(payload, "reranker_max_length", 1024, min_value=1)
+    if reranker == "qwen3":
+        _validate_reranker_model(reranker_model)
 
     child_run_dir = _create_named_dir(child_runs_dir, "retrieval_query")
     child_run_json = child_run_dir / "run.json"
@@ -401,6 +430,11 @@ def run_gateway_request(
         "timestamp_utc": now.astimezone(timezone.utc).isoformat(),
         "mode": "gateway_v1_local",
         "status": "started",
+        "request_redaction": {
+            "checklist_version": REDACTION_CHECKLIST_VERSION,
+            "applied": False,
+            "fields_redacted": [],
+        },
         "paths": {
             "run_dir": str(run_dir),
             "run_json": str(run_json_path),
@@ -417,7 +451,9 @@ def run_gateway_request(
         loaded_request = (
             _read_json_object(request_json) if request_json is not None else dict(request_payload or {})
         )
-        _write_json(request_out_path, loaded_request)
+        redacted_request, request_redaction = redact_payload(loaded_request, enable_redaction=True)
+        _write_json(request_out_path, redacted_request)
+        run_payload["request_redaction"] = request_redaction
         normalized_request = _normalize_request(loaded_request)
         operation = normalized_request["operation"]
         result_payload, child_runs = _dispatch_operation(
@@ -506,7 +542,12 @@ def run_gateway_request(
         fallback_request_payload: dict[str, Any] = {}
         if request_json is not None:
             fallback_request_payload["request_json"] = str(request_json)
-        _write_json(request_out_path, fallback_request_payload)
+        redacted_fallback_request, fallback_redaction = redact_payload(
+            fallback_request_payload,
+            enable_redaction=True,
+        )
+        _write_json(request_out_path, redacted_fallback_request)
+        run_payload["request_redaction"] = fallback_redaction
 
     _write_json(response_json_path, response_payload)
     _write_json(run_json_path, run_payload)

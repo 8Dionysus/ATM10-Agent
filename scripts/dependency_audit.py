@@ -450,6 +450,9 @@ def _compute_exit_code(
         return 2
     if pip_check_payload.get("status") != "ok":
         return 2
+    security_status = str(security_payload.get("status", "unknown"))
+    if security_status not in {"ok", "skipped"}:
+        return 2
     if security_payload.get("status") == "ok" and int(security_payload.get("vulnerabilities_count", 0)) > 0:
         return 2
     return 0

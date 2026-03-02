@@ -9,11 +9,13 @@ import subprocess
 import sys
 import tempfile
 import threading
+import traceback
 import wave
 from contextlib import asynccontextmanager
+from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, Mapping
 
 import numpy as np
 
@@ -28,10 +30,174 @@ from src.agent_core.tts_runtime import (
     TTSRuntimeError,
     TTSRuntimeService,
 )
+from scripts.gateway_artifact_policy import redact_error_entry
+
+FastAPIRequest = Any
 
 
 def _utc_now() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+TTS_HTTP_DEFAULT_MAX_REQUEST_BODY_BYTES = 262_144
+TTS_HTTP_DEFAULT_MAX_JSON_DEPTH = 8
+TTS_HTTP_DEFAULT_MAX_STRING_LENGTH = 8_192
+TTS_HTTP_DEFAULT_MAX_ARRAY_ITEMS = 256
+TTS_HTTP_DEFAULT_MAX_OBJECT_KEYS = 256
+_SERVICE_TOKEN_HEADER = "X-ATM10-Token"
+_SERVICE_TOKEN_ENV = "ATM10_SERVICE_TOKEN"
+
+
+@dataclass(frozen=True)
+class TTSHTTPPolicy:
+    max_request_body_bytes: int = TTS_HTTP_DEFAULT_MAX_REQUEST_BODY_BYTES
+    max_json_depth: int = TTS_HTTP_DEFAULT_MAX_JSON_DEPTH
+    max_string_length: int = TTS_HTTP_DEFAULT_MAX_STRING_LENGTH
+    max_array_items: int = TTS_HTTP_DEFAULT_MAX_ARRAY_ITEMS
+    max_object_keys: int = TTS_HTTP_DEFAULT_MAX_OBJECT_KEYS
+
+
+class TTSPayloadLimitError(ValueError):
+    def __init__(self, *, error_code: str, message: str) -> None:
+        super().__init__(message)
+        self.error_code = error_code
+
+
+def _append_jsonl(path: Path, payload: Mapping[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("a", encoding="utf-8") as handle:
+        handle.write(json.dumps(payload, ensure_ascii=False) + "\n")
+
+
+def _create_run_dir(runs_dir: Path, now: datetime) -> Path:
+    base_name = now.strftime("%Y%m%d_%H%M%S-tts-service")
+    run_dir = runs_dir / base_name
+    if not run_dir.exists():
+        run_dir.mkdir(parents=True, exist_ok=False)
+        return run_dir
+    suffix = 1
+    while True:
+        candidate = runs_dir / f"{base_name}_{suffix:02d}"
+        if not candidate.exists():
+            candidate.mkdir(parents=True, exist_ok=False)
+            return candidate
+        suffix += 1
+
+
+def _validate_http_policy(policy: TTSHTTPPolicy) -> None:
+    if policy.max_request_body_bytes <= 0:
+        raise ValueError("max_request_body_bytes must be > 0.")
+    if policy.max_json_depth <= 0:
+        raise ValueError("max_json_depth must be > 0.")
+    if policy.max_string_length <= 0:
+        raise ValueError("max_string_length must be > 0.")
+    if policy.max_array_items <= 0:
+        raise ValueError("max_array_items must be > 0.")
+    if policy.max_object_keys <= 0:
+        raise ValueError("max_object_keys must be > 0.")
+
+
+def _resolve_service_token(cli_value: str | None) -> str | None:
+    if cli_value is not None:
+        stripped = cli_value.strip()
+        return stripped or None
+    env_value = os.getenv(_SERVICE_TOKEN_ENV, "").strip()
+    return env_value or None
+
+
+def _is_authorized(request_headers: Mapping[str, Any], *, service_token: str | None) -> bool:
+    if not service_token:
+        return True
+    presented = str(request_headers.get(_SERVICE_TOKEN_HEADER, "")).strip()
+    return presented == service_token
+
+
+def _raise_payload_limit_if_needed(value: Any, *, policy: TTSHTTPPolicy, depth: int = 1) -> None:
+    if depth > policy.max_json_depth:
+        raise TTSPayloadLimitError(
+            error_code="payload_limit_exceeded",
+            message=(
+                "payload_limit_exceeded: "
+                f"max_json_depth={policy.max_json_depth}, observed_depth={depth}"
+            ),
+        )
+    if isinstance(value, str):
+        if len(value) > policy.max_string_length:
+            raise TTSPayloadLimitError(
+                error_code="payload_limit_exceeded",
+                message=(
+                    "payload_limit_exceeded: "
+                    f"max_string_length={policy.max_string_length}, observed_length={len(value)}"
+                ),
+            )
+        return
+    if isinstance(value, list):
+        if len(value) > policy.max_array_items:
+            raise TTSPayloadLimitError(
+                error_code="payload_limit_exceeded",
+                message=(
+                    "payload_limit_exceeded: "
+                    f"max_array_items={policy.max_array_items}, observed_items={len(value)}"
+                ),
+            )
+        for item in value:
+            _raise_payload_limit_if_needed(item, policy=policy, depth=depth + 1)
+        return
+    if isinstance(value, dict):
+        if len(value) > policy.max_object_keys:
+            raise TTSPayloadLimitError(
+                error_code="payload_limit_exceeded",
+                message=(
+                    "payload_limit_exceeded: "
+                    f"max_object_keys={policy.max_object_keys}, observed_keys={len(value)}"
+                ),
+            )
+        for item in value.values():
+            _raise_payload_limit_if_needed(item, policy=policy, depth=depth + 1)
+
+
+def _parse_json_body_bytes(
+    *,
+    body_bytes: bytes,
+    content_length: int | None,
+    policy: TTSHTTPPolicy,
+) -> dict[str, Any]:
+    if content_length is not None and content_length > policy.max_request_body_bytes:
+        raise TTSPayloadLimitError(error_code="payload_too_large", message="payload too large")
+    if len(body_bytes) > policy.max_request_body_bytes:
+        raise TTSPayloadLimitError(error_code="payload_too_large", message="payload too large")
+    try:
+        payload = json.loads(body_bytes.decode("utf-8"))
+    except Exception as exc:
+        raise ValueError(f"JSON parse failed: {exc}") from exc
+    if not isinstance(payload, dict):
+        raise ValueError("JSON body must be an object.")
+    _raise_payload_limit_if_needed(payload, policy=policy)
+    return payload
+
+
+def _internal_error_response(
+    *,
+    run_dir: Path | None,
+    endpoint: str,
+    exc: Exception,
+    stream_event: bool,
+) -> dict[str, Any]:
+    if run_dir is not None:
+        redacted_entry = redact_error_entry(
+            {
+                "timestamp_utc": _utc_now(),
+                "endpoint": endpoint,
+                "error_code": "internal_error",
+                "error": str(exc),
+                "traceback": traceback.format_exc(),
+            },
+            enable_redaction=True,
+        )
+        _append_jsonl(run_dir / "service_errors.jsonl", redacted_entry)
+    if stream_event:
+        return {"event": "error", "error": "internal service error", "error_code": "internal_error"}
+    return {"ok": False, "error": "internal service error", "error_code": "internal_error"}
 
 
 def _disabled_engine(name: str, reason: str) -> CallbackTTSEngine:
@@ -319,12 +485,24 @@ def _request_from_payload(payload: dict[str, Any]) -> TTSRequest:
     )
 
 
-def create_app(service: TTSRuntimeService, *, prewarm: bool) -> Any:
+def create_app(
+    service: TTSRuntimeService,
+    *,
+    prewarm: bool,
+    http_policy: TTSHTTPPolicy | None = None,
+    run_dir: Path | None = None,
+    service_token: str | None = None,
+) -> Any:
+    effective_http_policy = http_policy or TTSHTTPPolicy()
+    _validate_http_policy(effective_http_policy)
+    effective_service_token = _resolve_service_token(service_token)
     try:
-        from fastapi import FastAPI, HTTPException
-        from fastapi.responses import StreamingResponse
+        from fastapi import FastAPI, Request
+        from fastapi.responses import JSONResponse, StreamingResponse
     except Exception as exc:  # pragma: no cover - dependency presence
         raise RuntimeError("FastAPI/uvicorn are required for tts_runtime_service.") from exc
+    global FastAPIRequest
+    FastAPIRequest = Request
 
     @asynccontextmanager
     async def _lifespan(_app: Any):
@@ -339,28 +517,113 @@ def create_app(service: TTSRuntimeService, *, prewarm: bool) -> Any:
     app = FastAPI(title="ATM10 TTS Runtime", version="0.1.0", lifespan=_lifespan)
 
     @app.get("/health")
-    def _health() -> dict[str, Any]:
-        return {"timestamp_utc": _utc_now(), **service.health()}
+    async def _health(http_request: FastAPIRequest) -> Any:
+        if not _is_authorized(http_request.headers, service_token=effective_service_token):
+            return JSONResponse(
+                status_code=401,
+                content={"ok": False, "error": "unauthorized", "error_code": "unauthorized"},
+            )
+        return {
+            "timestamp_utc": _utc_now(),
+            "auth_enabled": bool(effective_service_token),
+            "policy": asdict(effective_http_policy),
+            **service.health(),
+        }
 
     @app.post("/tts")
-    def _tts(payload: dict[str, Any]) -> dict[str, Any]:
+    async def _tts(http_request: FastAPIRequest) -> Any:
+        if not _is_authorized(http_request.headers, service_token=effective_service_token):
+            return JSONResponse(
+                status_code=401,
+                content={"ok": False, "error": "unauthorized", "error_code": "unauthorized"},
+            )
+        raw_body = await http_request.body()
+        try:
+            content_length_raw = http_request.headers.get("content-length")
+            content_length = int(content_length_raw) if content_length_raw is not None else None
+            if content_length is not None and content_length < 0:
+                raise ValueError("invalid Content-Length header")
+            payload = _parse_json_body_bytes(
+                body_bytes=raw_body,
+                content_length=content_length,
+                policy=effective_http_policy,
+            )
+        except TTSPayloadLimitError as exc:
+            return JSONResponse(
+                status_code=413,
+                content={"ok": False, "error": str(exc), "error_code": exc.error_code},
+            )
+        except ValueError as exc:
+            return JSONResponse(
+                status_code=400,
+                content={"ok": False, "error": str(exc), "error_code": "bad_request"},
+            )
         try:
             request = _request_from_payload(payload)
             result = service.submit(request).result(timeout=120.0)
             return {"ok": True, "result": _serialize_result(result)}
         except (ValueError, TTSRuntimeError) as exc:
-            raise HTTPException(status_code=400, detail=str(exc)) from exc
+            return JSONResponse(
+                status_code=400,
+                content={"ok": False, "error": str(exc), "error_code": "bad_request"},
+            )
         except Exception as exc:
-            raise HTTPException(status_code=500, detail=str(exc)) from exc
+            return JSONResponse(
+                status_code=500,
+                content=_internal_error_response(
+                    run_dir=run_dir,
+                    endpoint="/tts",
+                    exc=exc,
+                    stream_event=False,
+                ),
+            )
 
     @app.post("/tts_stream")
-    def _tts_stream(payload: dict[str, Any]) -> StreamingResponse:
+    async def _tts_stream(http_request: FastAPIRequest) -> Any:
+        if not _is_authorized(http_request.headers, service_token=effective_service_token):
+            return JSONResponse(
+                status_code=401,
+                content={"ok": False, "error": "unauthorized", "error_code": "unauthorized"},
+            )
+        raw_body = await http_request.body()
+        try:
+            content_length_raw = http_request.headers.get("content-length")
+            content_length = int(content_length_raw) if content_length_raw is not None else None
+            if content_length is not None and content_length < 0:
+                raise ValueError("invalid Content-Length header")
+            payload = _parse_json_body_bytes(
+                body_bytes=raw_body,
+                content_length=content_length,
+                policy=effective_http_policy,
+            )
+        except TTSPayloadLimitError as exc:
+            return JSONResponse(
+                status_code=413,
+                content={"ok": False, "error": str(exc), "error_code": exc.error_code},
+            )
+        except ValueError as exc:
+            return JSONResponse(
+                status_code=400,
+                content={"ok": False, "error": str(exc), "error_code": "bad_request"},
+            )
+
         try:
             request = _request_from_payload(payload)
         except (ValueError, TTSRuntimeError) as exc:
-            raise HTTPException(status_code=400, detail=str(exc)) from exc
+            return JSONResponse(
+                status_code=400,
+                content={"ok": False, "error": str(exc), "error_code": "bad_request"},
+            )
         except Exception as exc:
-            raise HTTPException(status_code=500, detail=str(exc)) from exc
+            return JSONResponse(
+                status_code=500,
+                content=_internal_error_response(
+                    run_dir=run_dir,
+                    endpoint="/tts_stream",
+                    exc=exc,
+                    stream_event=False,
+                ),
+            )
 
         def _iter_events():
             yield json.dumps({"event": "started", "timestamp_utc": _utc_now()}, ensure_ascii=False) + "\n"
@@ -395,18 +658,13 @@ def create_app(service: TTSRuntimeService, *, prewarm: bool) -> Any:
                 )
                 return
             except Exception as exc:
-                yield (
-                    json.dumps(
-                        {
-                            "event": "error",
-                            "timestamp_utc": _utc_now(),
-                            "error": str(exc),
-                            "error_code": "internal_error",
-                        },
-                        ensure_ascii=False,
-                    )
-                    + "\n"
+                internal_event = _internal_error_response(
+                    run_dir=run_dir,
+                    endpoint="/tts_stream",
+                    exc=exc,
+                    stream_event=True,
                 )
+                yield json.dumps(internal_event, ensure_ascii=False) + "\n"
                 return
             yield (
                 json.dumps(
@@ -430,9 +688,52 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="FastAPI TTS runtime: XTTSv2 + fallback Piper/Silero.")
     parser.add_argument("--host", default="127.0.0.1", help="Bind host (default: 127.0.0.1).")
     parser.add_argument("--port", type=int, default=8780, help="Bind port (default: 8780).")
+    parser.add_argument("--runs-dir", type=Path, default=Path("runs"), help="Run artifact base directory.")
     parser.add_argument("--queue-size", type=int, default=128, help="Queue max size (default: 128).")
     parser.add_argument("--chunk-chars", type=int, default=220, help="Chunk size for long text (default: 220).")
     parser.add_argument("--cache-items", type=int, default=512, help="Phrase cache max entries (default: 512).")
+    parser.add_argument(
+        "--max-request-bytes",
+        type=int,
+        default=TTS_HTTP_DEFAULT_MAX_REQUEST_BODY_BYTES,
+        help=(
+            "Maximum allowed HTTP request body size in bytes "
+            f"(default: {TTS_HTTP_DEFAULT_MAX_REQUEST_BODY_BYTES})."
+        ),
+    )
+    parser.add_argument(
+        "--max-json-depth",
+        type=int,
+        default=TTS_HTTP_DEFAULT_MAX_JSON_DEPTH,
+        help=f"Maximum allowed JSON depth (default: {TTS_HTTP_DEFAULT_MAX_JSON_DEPTH}).",
+    )
+    parser.add_argument(
+        "--max-string-length",
+        type=int,
+        default=TTS_HTTP_DEFAULT_MAX_STRING_LENGTH,
+        help=f"Maximum allowed JSON string length (default: {TTS_HTTP_DEFAULT_MAX_STRING_LENGTH}).",
+    )
+    parser.add_argument(
+        "--max-array-items",
+        type=int,
+        default=TTS_HTTP_DEFAULT_MAX_ARRAY_ITEMS,
+        help=f"Maximum allowed JSON array length (default: {TTS_HTTP_DEFAULT_MAX_ARRAY_ITEMS}).",
+    )
+    parser.add_argument(
+        "--max-object-keys",
+        type=int,
+        default=TTS_HTTP_DEFAULT_MAX_OBJECT_KEYS,
+        help=f"Maximum allowed JSON object key count (default: {TTS_HTTP_DEFAULT_MAX_OBJECT_KEYS}).",
+    )
+    parser.add_argument(
+        "--service-token",
+        type=str,
+        default=None,
+        help=(
+            "Optional shared token for HTTP endpoints. "
+            "When set (or via ATM10_SERVICE_TOKEN), require header X-ATM10-Token."
+        ),
+    )
     parser.add_argument("--no-prewarm", action="store_true", help="Disable prewarm on startup.")
     return parser.parse_args()
 
@@ -449,8 +750,54 @@ def main() -> int:
         chunk_chars=args.chunk_chars,
         queue_size=args.queue_size,
     )
-    app = create_app(service, prewarm=not args.no_prewarm)
-    uvicorn.run(app, host=args.host, port=args.port, log_level="info")
+    http_policy = TTSHTTPPolicy(
+        max_request_body_bytes=args.max_request_bytes,
+        max_json_depth=args.max_json_depth,
+        max_string_length=args.max_string_length,
+        max_array_items=args.max_array_items,
+        max_object_keys=args.max_object_keys,
+    )
+    now = datetime.now(timezone.utc)
+    run_dir = _create_run_dir(args.runs_dir, now=now)
+    run_json_path = run_dir / "run.json"
+    service_token = _resolve_service_token(args.service_token)
+    run_payload: dict[str, Any] = {
+        "timestamp_utc": now.astimezone(timezone.utc).isoformat(),
+        "mode": "tts_runtime_service",
+        "status": "running",
+        "service": {
+            "host": args.host,
+            "port": args.port,
+            "base_url": f"http://{args.host}:{args.port}",
+            "http_policy": asdict(http_policy),
+            "auth": {
+                "enabled": bool(service_token),
+                "header": _SERVICE_TOKEN_HEADER,
+            },
+        },
+        "paths": {
+            "run_dir": str(run_dir),
+            "run_json": str(run_json_path),
+        },
+    }
+    _write_json(run_json_path, run_payload)
+
+    app = create_app(
+        service,
+        prewarm=not args.no_prewarm,
+        http_policy=http_policy,
+        run_dir=run_dir,
+        service_token=service_token,
+    )
+    try:
+        uvicorn.run(app, host=args.host, port=args.port, log_level="info")
+    finally:
+        run_payload["status"] = "stopped"
+        _write_json(run_json_path, run_payload)
+
+    print(f"[tts_runtime_service] run_dir: {run_dir}")
+    print(f"[tts_runtime_service] run_json: {run_json_path}")
+    print(f"[tts_runtime_service] base_url: http://{args.host}:{args.port}")
     return 0
 
 

@@ -317,3 +317,176 @@ def test_tts_endpoint_keeps_non_streaming_submit_path() -> None:
     payload = response.json()
     assert payload["ok"] is True
     assert service.submit_called is True
+
+
+def test_tts_service_maps_payload_too_large_to_413() -> None:
+    from fastapi.testclient import TestClient
+
+    class _FakeService:
+        def start(self) -> None:
+            return
+
+        def stop(self) -> None:
+            return
+
+        def prewarm(self) -> dict[str, dict[str, object]]:
+            return {}
+
+        def health(self) -> dict[str, object]:
+            return {
+                "status": "ok",
+                "worker_alive": True,
+                "queue_size": 0,
+                "cache_items": 0,
+                "prewarm": {},
+            }
+
+        def submit(self, _request):
+            raise AssertionError("submit must not be called for oversized payload")
+
+    app = tts_runtime_service.create_app(
+        _FakeService(),
+        prewarm=False,
+        http_policy=tts_runtime_service.TTSHTTPPolicy(max_request_body_bytes=64),
+    )
+    with TestClient(app) as client:
+        response = client.post("/tts", json={"text": "x" * 1024})
+
+    assert response.status_code == 413
+    payload = response.json()
+    assert payload["error_code"] == "payload_too_large"
+
+
+def test_tts_service_maps_payload_limit_exceeded_to_413() -> None:
+    from fastapi.testclient import TestClient
+
+    class _FakeService:
+        def start(self) -> None:
+            return
+
+        def stop(self) -> None:
+            return
+
+        def prewarm(self) -> dict[str, dict[str, object]]:
+            return {}
+
+        def health(self) -> dict[str, object]:
+            return {
+                "status": "ok",
+                "worker_alive": True,
+                "queue_size": 0,
+                "cache_items": 0,
+                "prewarm": {},
+            }
+
+        def submit(self, _request):
+            raise AssertionError("submit must not be called for invalid payload")
+
+    app = tts_runtime_service.create_app(
+        _FakeService(),
+        prewarm=False,
+        http_policy=tts_runtime_service.TTSHTTPPolicy(max_string_length=4),
+    )
+    with TestClient(app) as client:
+        response = client.post("/tts", json={"text": "12345"})
+
+    assert response.status_code == 413
+    payload = response.json()
+    assert payload["error_code"] == "payload_limit_exceeded"
+
+
+def test_tts_service_requires_auth_token_when_configured() -> None:
+    from fastapi.testclient import TestClient
+
+    class _FakeService:
+        def start(self) -> None:
+            return
+
+        def stop(self) -> None:
+            return
+
+        def prewarm(self) -> dict[str, dict[str, object]]:
+            return {}
+
+        def health(self) -> dict[str, object]:
+            return {
+                "status": "ok",
+                "worker_alive": True,
+                "queue_size": 0,
+                "cache_items": 0,
+                "prewarm": {},
+            }
+
+        def submit(self, _request):
+            raise AssertionError("submit must not be called in auth test")
+
+    app = tts_runtime_service.create_app(
+        _FakeService(),
+        prewarm=False,
+        service_token="test-token",
+    )
+    with TestClient(app) as client:
+        unauthorized_health = client.get("/health")
+        unauthorized_tts = client.post("/tts", json={"text": "hello"})
+        authorized_health = client.get("/health", headers={"X-ATM10-Token": "test-token"})
+
+    assert unauthorized_health.status_code == 401
+    assert unauthorized_health.json()["error_code"] == "unauthorized"
+    assert unauthorized_tts.status_code == 401
+    assert unauthorized_tts.json()["error_code"] == "unauthorized"
+    assert authorized_health.status_code == 200
+
+
+def test_tts_service_sanitizes_internal_error_and_logs_locally(tmp_path: Path) -> None:
+    from fastapi.testclient import TestClient
+
+    class _BoomFuture:
+        def result(self, timeout: float):
+            assert timeout == 120.0
+            raise RuntimeError("token=SUPER_SECRET")
+
+    class _FakeService:
+        def start(self) -> None:
+            return
+
+        def stop(self) -> None:
+            return
+
+        def prewarm(self) -> dict[str, dict[str, object]]:
+            return {}
+
+        def health(self) -> dict[str, object]:
+            return {
+                "status": "ok",
+                "worker_alive": True,
+                "queue_size": 0,
+                "cache_items": 0,
+                "prewarm": {},
+            }
+
+        def submit(self, _request):
+            return _BoomFuture()
+
+    app = tts_runtime_service.create_app(
+        _FakeService(),
+        prewarm=False,
+        run_dir=tmp_path,
+    )
+    with TestClient(app) as client:
+        response = client.post("/tts", json={"text": "hello"})
+
+    payload = response.json()
+    assert response.status_code == 500
+    assert payload == {
+        "ok": False,
+        "error": "internal service error",
+        "error_code": "internal_error",
+    }
+    assert "SUPER_SECRET" not in json.dumps(payload)
+
+    log_path = tmp_path / "service_errors.jsonl"
+    assert log_path.exists()
+    log_payload = json.loads(log_path.read_text(encoding="utf-8").strip().splitlines()[-1])
+    assert log_payload["error_code"] == "internal_error"
+    assert "SUPER_SECRET" not in json.dumps(log_payload)
+    assert log_payload["redaction"]["applied"] is True

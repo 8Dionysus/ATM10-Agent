@@ -26,9 +26,9 @@
 
 ## Session Focus (2026-03-02)
 
-* Перейти на manual запуск `Gateway SLA Readiness Nightly` в режиме `solo+AI`.
-* Зафиксировать calendar-day guardrail (`<=1` учитываемый run на UTC-сутки).
-* Накопить real nightly history для перехода к `allow_switch=true` без synthetic evidence.
+* Закрыть `G2.post` Streamlit progress visibility для operator-loop (`Latest Metrics`: readiness/governance/progress).
+* Уточнить `streamlit_smoke_summary_v1` contract split (`required_missing_sources` vs `optional_missing_sources`) без изменения strict policy для required sources.
+* Синхронизировать source-of-truth docs под Streamlit progress visibility и optional-source policy.
 
 ## WIP Policy
 
@@ -37,7 +37,7 @@
 
 ## Now (WIP <= 3)
 
-* [ ] G2 follow-up (real nightly only): запускать `Gateway SLA Readiness Nightly` вручную через GitHub UI (`workflow_dispatch`, default branch; на `2026-03-02` — `master`) по правилу `<=1` учитываемый run в UTC-сутки, накопить минимум 14 валидных snapshots и пройти governance+transition-гейты (`>=3` ready подряд + `allow_switch=true`) для controlled switch на nightly strict path; bootstrap artifacts не используются как synthetic promotion evidence. Прогресс отслеживать через `runs/nightly-gateway-sla-progress/progress_summary.json` и `runs/nightly-gateway-sla-transition/transition_summary.json`.
+* [ ] G2 follow-up: накопить минимум 14 валидных nightly readiness snapshots и пройти governance-гейт (`>=3` ready подряд) для go/no-go решения по switch в `critical_policy=fail_nightly`; прогресс и remaining-gap отслеживать через `runs/nightly-gateway-sla-progress/progress_summary.json`.
 
 ## Next
 
@@ -61,12 +61,6 @@
 * [x] G2.1 follow-up: добавлен governance checker `gateway_sla_fail_nightly_governance_v1` + nightly go/no-go summary/artifacts (promotion rule `3` ready подряд, switch surface `nightly_only`).
 * [x] G2.2 follow-up: добавлен progress checker `gateway_sla_fail_nightly_progress_v1` + nightly decision-progress summary/artifacts (remaining window/streak, governance/readiness validity counters).
 * [x] G2.post follow-up: в Streamlit `Latest Metrics` добавлен optional progress visibility блок (`readiness/governance/progress`) + smoke contract split `required_missing_sources|optional_missing_sources` без изменения `signal_only` policy.
-* [x] G2.bootstrap follow-up: добавлен `scripts/bootstrap_gateway_sla_nightly_history.py` (default `--iterations 3`) для локального прогона full chain и artifact contract `gateway_sla_bootstrap_summary_v1` в `runs/nightly-gateway-sla-bootstrap/*` без synthetic switch.
-* [x] G2.manual follow-up: зафиксирован manual nightly protocol (`workflow_dispatch` через GitHub UI), calendar-day guardrail и post-run session logging полей перехода (`readiness/governance/progress/transition`).
-* [x] Wave 7 Turbo: добавлен centralized ops policy layer `src/agent_core/ops_policy.py` и выровнены defaults readiness/governance/progress/transition checker-скриптов.
-* [x] Wave 7 Turbo: добавлены `scripts/validate_ops_contracts.py` (`validation_summary_v1`) и `scripts/build_ops_contract_index.py` (`ops_contract_index_v1`) + CI smoke wiring (`runs/ci-ops`).
-* [x] Wave 7 Turbo: добавлен `scripts/check_gateway_sla_fail_nightly_transition.py` (`gateway_sla_fail_nightly_transition_v1`) и conditional strict nightly trend step (`critical_policy=fail_nightly` only when `allow_switch=true`).
-* [x] Wave 7 Turbo: Streamlit `Ops Readiness` расширен transition/freshness данными; `streamlit_smoke_summary_v1` дополнен `ops_readiness_*` полями (aditive-only).
 * [x] KAG Neo4j: поднят rank для `star` до `first_hit_rank=1`.
 * [x] KAG Neo4j: latency retuning после relevance uplift.
 * [x] KAG Neo4j: добавлен `--warmup-runs` в eval + A/B compare script.

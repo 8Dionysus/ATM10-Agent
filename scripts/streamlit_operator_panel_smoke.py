@@ -16,7 +16,11 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from scripts.streamlit_operator_panel import TAB_NAMES, canonical_summary_sources
+from scripts.streamlit_operator_panel import (
+    TAB_NAMES,
+    canonical_fail_nightly_progress_sources,
+    canonical_summary_sources,
+)
 from scripts.streamlit_operator_panel import (
     MOBILE_LAYOUT_BREAKPOINT_PX_DEFAULT,
     MOBILE_LAYOUT_POLICY_SCHEMA,
@@ -219,11 +223,18 @@ def run_streamlit_operator_panel_smoke(
     startup_log_path.write_text("\n".join(output_lines), encoding="utf-8")
 
     tabs_detected = list(TAB_NAMES)
-    missing_sources = [
+    required_missing_sources = [
         str(path)
         for path in canonical_summary_sources(panel_runs_dir).values()
         if not path.is_file()
     ]
+    optional_missing_sources = [
+        str(path)
+        for path in canonical_fail_nightly_progress_sources(panel_runs_dir).values()
+        if not path.is_file()
+    ]
+    # Backward-compatible alias: retains previous semantics for required sources.
+    missing_sources = list(required_missing_sources)
     mobile_policy = mobile_layout_policy(breakpoint_px=compact_breakpoint_px)
     viewport_baseline = {
         "width": int(viewport_width),
@@ -247,7 +258,7 @@ def run_streamlit_operator_panel_smoke(
             f"(viewport={viewport_baseline}, policy={mobile_policy})"
         )
 
-    status_ok = startup_ok and mobile_layout_contract_ok and not missing_sources and not errors
+    status_ok = startup_ok and mobile_layout_contract_ok and not required_missing_sources and not errors
     exit_code = 0 if status_ok else 2
     summary_payload: dict[str, Any] = {
         "schema_version": "streamlit_smoke_summary_v1",
@@ -258,6 +269,8 @@ def run_streamlit_operator_panel_smoke(
         "mobile_layout_policy": mobile_policy,
         "viewport_baseline": viewport_baseline,
         "missing_sources": missing_sources,
+        "required_missing_sources": required_missing_sources,
+        "optional_missing_sources": optional_missing_sources,
         "errors": errors,
         "exit_code": exit_code,
         "paths": {
@@ -278,6 +291,8 @@ def run_streamlit_operator_panel_smoke(
     run_payload["result"] = {
         "startup_ok": startup_ok,
         "missing_sources_count": len(missing_sources),
+        "required_missing_sources_count": len(required_missing_sources),
+        "optional_missing_sources_count": len(optional_missing_sources),
         "exit_code": exit_code,
     }
     _write_json(run_json_path, run_payload)
@@ -364,6 +379,10 @@ def main() -> int:
     print(f"[streamlit_smoke] startup_ok: {summary_payload['startup_ok']}")
     print(f"[streamlit_smoke] mobile_layout_contract_ok: {summary_payload['mobile_layout_contract_ok']}")
     print(f"[streamlit_smoke] missing_sources_count: {len(summary_payload['missing_sources'])}")
+    print(
+        "[streamlit_smoke] optional_missing_sources_count: "
+        f"{len(summary_payload['optional_missing_sources'])}"
+    )
     return int(result["exit_code"])
 
 

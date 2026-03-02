@@ -94,6 +94,21 @@ HISTORY_SOURCE_SPECS: dict[str, dict[str, str | None]] = {
     },
 }
 
+FAIL_NIGHTLY_PROGRESS_SOURCE_SPECS: dict[str, dict[str, tuple[str, ...] | str]] = {
+    "readiness": {
+        "path_parts": ("nightly-gateway-sla-readiness", "readiness_summary.json"),
+        "schema_version": "gateway_sla_fail_nightly_readiness_v1",
+    },
+    "governance": {
+        "path_parts": ("nightly-gateway-sla-governance", "governance_summary.json"),
+        "schema_version": "gateway_sla_fail_nightly_governance_v1",
+    },
+    "progress": {
+        "path_parts": ("nightly-gateway-sla-progress", "progress_summary.json"),
+        "schema_version": "gateway_sla_fail_nightly_progress_v1",
+    },
+}
+
 
 def safe_actions_audit_log_path(runs_dir: Path) -> Path:
     return Path(runs_dir) / "ui-safe-actions" / "safe_actions_audit.jsonl"
@@ -264,6 +279,14 @@ def canonical_summary_sources(runs_dir: Path) -> dict[str, Path]:
     }
 
 
+def canonical_fail_nightly_progress_sources(runs_dir: Path) -> dict[str, Path]:
+    base = Path(runs_dir)
+    return {
+        source: base.joinpath(*tuple(spec["path_parts"]))
+        for source, spec in FAIL_NIGHTLY_PROGRESS_SOURCE_SPECS.items()
+    }
+
+
 def canonical_history_roots(runs_dir: Path) -> dict[str, Path]:
     base = Path(runs_dir)
     return {
@@ -413,6 +436,118 @@ def load_json_object(path: Path) -> tuple[dict[str, Any] | None, str | None]:
     if not isinstance(payload, dict):
         return None, f"json root must be object: {path}"
     return payload, None
+
+
+def _load_optional_contract_payload(
+    source_name: str,
+    path: Path,
+    *,
+    expected_schema_version: str,
+) -> tuple[dict[str, Any] | None, str | None]:
+    payload, load_error = load_json_object(path)
+    if payload is None:
+        return None, load_error
+    observed_schema = str(payload.get("schema_version", "")).strip()
+    if observed_schema != expected_schema_version:
+        return None, (
+            f"{source_name}: schema_version mismatch for {path} "
+            f"(observed={observed_schema!r}, expected={expected_schema_version!r})"
+        )
+    return payload, None
+
+
+def _nested_get(payload: dict[str, Any] | None, *keys: str) -> Any:
+    if payload is None:
+        return None
+    current: Any = payload
+    for key in keys:
+        if not isinstance(current, dict):
+            return None
+        current = current.get(key)
+    return current
+
+
+def _coalesce(*values: Any) -> Any:
+    for value in values:
+        if value is not None:
+            return value
+    return None
+
+
+def _normalize_reason_codes(value: Any) -> list[str]:
+    if isinstance(value, list):
+        return [str(item) for item in value]
+    if isinstance(value, tuple):
+        return [str(item) for item in value]
+    if isinstance(value, str) and value.strip():
+        return [value.strip()]
+    return []
+
+
+def load_fail_nightly_progress_snapshot(
+    runs_dir: Path,
+) -> tuple[dict[str, Any] | None, list[str]]:
+    source_paths = canonical_fail_nightly_progress_sources(runs_dir)
+    warnings: list[str] = []
+    missing_sources: list[str] = []
+    payloads: dict[str, dict[str, Any]] = {}
+
+    for source_name, path in source_paths.items():
+        spec = FAIL_NIGHTLY_PROGRESS_SOURCE_SPECS[source_name]
+        expected_schema = str(spec["schema_version"])
+        payload, load_error = _load_optional_contract_payload(
+            source_name,
+            path,
+            expected_schema_version=expected_schema,
+        )
+        if payload is None:
+            if load_error is not None and load_error.startswith("missing file:"):
+                missing_sources.append(source_name)
+            elif load_error is not None:
+                warnings.append(load_error)
+            continue
+        payloads[source_name] = payload
+
+    if not payloads:
+        return None, warnings
+
+    readiness_payload = payloads.get("readiness")
+    governance_payload = payloads.get("governance")
+    progress_payload = payloads.get("progress")
+
+    target_policy = _coalesce(
+        _nested_get(progress_payload, "recommendation", "target_critical_policy"),
+        _nested_get(governance_payload, "recommendation", "target_critical_policy"),
+        _nested_get(readiness_payload, "recommendation", "target_critical_policy"),
+    )
+    reason_codes = _normalize_reason_codes(
+        _coalesce(
+            _nested_get(progress_payload, "recommendation", "reason_codes"),
+            _nested_get(governance_payload, "recommendation", "reason_codes"),
+            _nested_get(readiness_payload, "recommendation", "reason_codes"),
+        )
+    )
+
+    snapshot: dict[str, Any] = {
+        "schema_version": "streamlit_gateway_fail_nightly_snapshot_v1",
+        "readiness_status": _nested_get(readiness_payload, "readiness_status"),
+        "latest_ready_streak": _coalesce(
+            _nested_get(progress_payload, "observed", "readiness", "latest_ready_streak"),
+            _nested_get(governance_payload, "observed", "latest_ready_streak"),
+        ),
+        "decision_status": _coalesce(
+            _nested_get(progress_payload, "decision_status"),
+            _nested_get(governance_payload, "decision_status"),
+        ),
+        "remaining_for_window": _nested_get(progress_payload, "observed", "readiness", "remaining_for_window"),
+        "remaining_for_streak": _nested_get(progress_payload, "observed", "readiness", "remaining_for_streak"),
+        "target_critical_policy": target_policy,
+        "reason_codes": reason_codes,
+        "available_sources": sorted(payloads.keys()),
+        "missing_sources": sorted(missing_sources),
+        "source_paths": {name: str(path) for name, path in source_paths.items()},
+    }
+    return snapshot, warnings
 
 
 def fetch_gateway_health(gateway_url: str, timeout_sec: float) -> tuple[dict[str, Any] | None, str | None]:
@@ -607,6 +742,33 @@ def _render_latest_metrics_tab(runs_dir: Path, sources: dict[str, Path]) -> None
     rows = build_metrics_rows(sources)
     st.subheader("Latest summary matrix")
     st.dataframe(rows, use_container_width=True)
+
+    st.subheader("Gateway fail_nightly progress")
+    progress_snapshot, progress_warnings = load_fail_nightly_progress_snapshot(runs_dir)
+    if progress_warnings:
+        sample = "\n".join(f"- {item}" for item in progress_warnings[:5])
+        suffix = "" if len(progress_warnings) <= 5 else "\n- ..."
+        st.warning(
+            "Some fail_nightly progress artifacts were skipped due to parse/contract issues "
+            f"({len(progress_warnings)}):\n{sample}{suffix}"
+        )
+    if progress_snapshot is None:
+        st.info("not available yet")
+    else:
+        progress_row = {
+            "readiness_status": progress_snapshot.get("readiness_status"),
+            "latest_ready_streak": progress_snapshot.get("latest_ready_streak"),
+            "decision_status": progress_snapshot.get("decision_status"),
+            "remaining_for_window": progress_snapshot.get("remaining_for_window"),
+            "remaining_for_streak": progress_snapshot.get("remaining_for_streak"),
+            "target_critical_policy": progress_snapshot.get("target_critical_policy"),
+            "reason_codes": ", ".join(progress_snapshot.get("reason_codes") or []),
+            "available_sources": ", ".join(progress_snapshot.get("available_sources") or []),
+            "missing_sources": ", ".join(progress_snapshot.get("missing_sources") or []),
+        }
+        st.dataframe([progress_row], use_container_width=True)
+        st.caption("Progress source paths")
+        st.json(progress_snapshot.get("source_paths"))
 
     st.subheader("Historical snapshots")
     history_roots = canonical_history_roots(runs_dir)

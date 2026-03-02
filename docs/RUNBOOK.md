@@ -67,8 +67,6 @@ python scripts/gateway_v1_http_smoke.py --scenario automation --runs-dir runs/ci
 python scripts/check_gateway_sla.py --http-summary-json runs/ci-smoke-gateway-http-core/gateway_http_smoke_summary.json --summary-json runs/ci-smoke-gateway-sla/gateway_sla_summary.json --profile conservative --policy signal_only --runs-dir runs/ci-smoke-gateway-sla
 python scripts/gateway_sla_trend_snapshot.py --sla-runs-dir runs/ci-smoke-gateway-sla --history-limit 10 --baseline-window 5 --critical-policy signal_only --runs-dir runs/ci-smoke-gateway-sla-trend
 python scripts/streamlit_operator_panel_smoke.py --panel-runs-dir runs --runs-dir runs/ci-smoke-streamlit --summary-json runs/ci-smoke-streamlit/streamlit_smoke_summary.json --gateway-url http://127.0.0.1:8770 --startup-timeout-sec 45 --viewport-width 390 --viewport-height 844 --compact-breakpoint-px 768
-python scripts/validate_ops_contracts.py --profile ci_smoke --runs-dir runs --policy report_only --summary-json runs/ci-ops/validation_summary.json
-python scripts/build_ops_contract_index.py --profile ci_smoke --runs-dir runs --summary-json runs/ci-ops/ops_contract_index.json --stale-after-hours 36
 ```
 
 Ожидаемый результат:
@@ -94,9 +92,6 @@ python scripts/build_ops_contract_index.py --profile ci_smoke --runs-dir runs --
   * `runs/ci-smoke-gateway-sla-trend/<timestamp>-gateway-sla-trend/summary.md`
 * Для streamlit smoke создается machine-readable summary:
   * `runs/ci-smoke-streamlit/streamlit_smoke_summary.json`
-* Для ops contract report-layer создаются machine-readable artifacts:
-  * `runs/ci-ops/validation_summary.json` (`validation_summary_v1`)
-  * `runs/ci-ops/ops_contract_index.json` (`ops_contract_index_v1`)
 
 ## M7.0: Gateway v1 local contract runner
 
@@ -543,169 +538,6 @@ Nightly progress integration:
   * summary section `Gateway SLA Fail-Nightly Progress`,
   * artifacts `runs/nightly-gateway-sla-progress`.
 
-## G2.3: Gateway SLA fail_nightly transition gate (strict switch control)
-
-Transition checker формализует решение `allow_switch=true|false` для включения
-nightly strict trend run (`critical_policy=fail_nightly`) без изменения PR policy.
-
-```powershell
-cd D:\atm10-agent
-.\.venv\Scripts\Activate.ps1
-python scripts/check_gateway_sla_fail_nightly_transition.py --readiness-runs-dir runs/nightly-gateway-sla-readiness --governance-runs-dir runs/nightly-gateway-sla-governance --progress-runs-dir runs/nightly-gateway-sla-progress --readiness-history-limit 60 --governance-history-limit 60 --progress-history-limit 60 --expected-readiness-window 14 --expected-required-baseline-count 5 --expected-max-warn-ratio 0.20 --required-ready-streak 3 --policy report_only --runs-dir runs/nightly-gateway-sla-transition --summary-json runs/nightly-gateway-sla-transition/transition_summary.json
-```
-
-Transition summary contract (`gateway_sla_fail_nightly_transition_v1`):
-
-* `schema_version = gateway_sla_fail_nightly_transition_v1`
-* `status = ok|error`
-* `decision_status = allow|hold`
-* `allow_switch = true|false`
-* `criteria`:
-  * `expected_readiness_window`
-  * `expected_required_baseline_count`
-  * `expected_max_warn_ratio`
-  * `required_ready_streak`
-  * `readiness_history_limit`
-  * `governance_history_limit`
-  * `progress_history_limit`
-* `observed.readiness|governance|progress|aggregated`
-* `latest.readiness|governance|progress`
-* `recommendation`:
-  * `target_critical_policy` (`signal_only|fail_nightly`)
-  * `switch_surface` (`nightly_only`)
-  * `reason_codes`
-* `warnings`
-* `exit_code`
-* `paths.run_dir`, `paths.run_json`, `paths.summary_json`
-
-Switch rules (`allow_switch=true` только при одновременном выполнении):
-
-* latest readiness = `ready`
-* latest governance = `go`
-* latest progress = `go`
-* `readiness.valid_count >= 14`
-* `latest_ready_streak >= 3`
-* `invalid_or_mismatched_count == 0`
-
-Nightly transition integration:
-
-* `.github/workflows/gateway-sla-readiness-nightly.yml` добавляет:
-  * transition step (report_only),
-  * gate resolve step (`GATEWAY_SLA_ALLOW_SWITCH`),
-  * conditional strict step (`gateway_sla_trend_snapshot --critical-policy fail_nightly`, только если gate=true),
-  * summary section `Gateway SLA Fail-Nightly Transition`,
-  * artifacts `runs/nightly-gateway-sla-transition`.
-
-## G2.bootstrap: Gateway SLA nightly history bootstrap (local, signal-first)
-
-Bootstrap нужен для проверки связности full G2 chain локально, когда реальная nightly history
-еще не накоплена в `runs/nightly-gateway-sla-*`.
-
-```powershell
-cd D:\atm10-agent
-.\.venv\Scripts\Activate.ps1
-python scripts/bootstrap_gateway_sla_nightly_history.py --iterations 3 --runs-dir runs --policy report_only
-```
-
-Опционально fail-fast режим:
-
-```powershell
-python scripts/bootstrap_gateway_sla_nightly_history.py --iterations 3 --runs-dir runs --policy fail_on_step_error --strict-stop
-```
-
-Bootstrap summary contract (`gateway_sla_bootstrap_summary_v1`):
-
-* `schema_version = gateway_sla_bootstrap_summary_v1`
-* `status = ok|error`
-* `iterations`
-* `started_at_utc`, `finished_at_utc`
-* `steps[]` (per-iteration `step`, `exit_code`, `summary_paths`)
-* `latest.readiness|governance|progress|transition`
-* `decision.allow_switch|target_critical_policy|reason_codes`
-* `exit_code`
-* `paths.run_dir`, `paths.summary_json`, `paths.summary_md`
-
-Artifacts:
-
-* `runs/nightly-gateway-sla-bootstrap/<timestamp>-bootstrap/bootstrap_summary.json`
-* `runs/nightly-gateway-sla-bootstrap/<timestamp>-bootstrap/summary.md`
-
-Policy:
-
-* Bootstrap не выполняет synthetic promotion.
-* Switch на `critical_policy=fail_nightly` разрешается только по реальной nightly history snapshots.
-
-## G2.manual: Manual nightly launch protocol (solo+AI)
-
-Ручной nightly запуск используется как основной operating mode для G2 accumulation в формате `solo+AI`.
-Workflow источник истины: `.github/workflows/gateway-sla-readiness-nightly.yml` (`workflow_dispatch`).
-
-Scope manual-цикла:
-
-* Только `Gateway SLA Readiness Nightly`.
-* `security-nightly` и `kag-neo4j-guardrail-nightly` не входят в этот цикл.
-
-### Manual dispatch (GitHub UI)
-
-1. Открыть `Actions -> Gateway SLA Readiness Nightly`.
-2. Нажать `Run workflow`.
-3. Branch: default branch репозитория (на `2026-03-02`: `master`).
-4. Запустить run и дождаться завершения workflow.
-
-### Daily cadence rule (calendar-day guardrail)
-
-* Учитывается максимум 1 run на UTC-сутки.
-* Повторный run в те же UTC-сутки разрешен только для recovery после technical failure.
-* Recovery rerun не считается отдельным прогрессовым днем для switch решения.
-
-### Required post-run fields (operator log)
-
-После каждого успешного workflow run фиксировать:
-
-* `readiness_status`
-* `governance.decision_status`
-* `progress.remaining_for_window`
-* `progress.remaining_for_streak`
-* `transition.allow_switch`
-* `transition.reason_codes`
-* `observed.readiness.valid_count`
-* `observed.aggregated.latest_ready_streak`
-
-Source paths внутри nightly artifacts:
-
-* `runs/nightly-gateway-sla-readiness/readiness_summary.json`
-* `runs/nightly-gateway-sla-governance/governance_summary.json`
-* `runs/nightly-gateway-sla-progress/progress_summary.json`
-* `runs/nightly-gateway-sla-transition/transition_summary.json`
-
-### Gate decision baseline
-
-`allow_switch=true` разрешен только при одновременном выполнении:
-
-* readiness=`ready`
-* governance=`go`
-* progress=`go`
-* `readiness.valid_count >= 14`
-* `latest_ready_streak >= 3`
-* `invalid_or_mismatched_count == 0`
-
-Cycle start: `2026-03-02`.
-Earliest stable switch date при идеальном daily прохождении: `2026-03-15` (14 уникальных UTC-дней).
-
-### Failure handling
-
-* Если transition summary не создан: rerun в тот же UTC-день только для восстановления chain.
-* Если summary создан, но `status=error`: зафиксировать reason и продолжить accumulation на следующий UTC-день.
-* При признаках cache drift: не принимать switch decision в этот день; сначала проверить workflow artifacts `runs/nightly-gateway-sla-*`.
-
-### Session log template
-
-Операционный лог вести в `docs/SESSION_*.md` (или daily update section):
-
-| date_utc | run_url | readiness_status | governance_decision_status | progress_remaining_for_window | progress_remaining_for_streak | transition_allow_switch | latest_ready_streak | reason_codes | notes |
-|---|---|---|---|---:|---:|---|---:|---|---|
-| YYYY-MM-DD | https://github.com/<org>/<repo>/actions/runs/<id> | ready/not_ready | go/hold | N | N | true/false | N | code1,code2 | optional |
-
 ## M8.0: Streamlit IA spec (decision-complete, no implementation)
 
 На шаге `M8.0` фиксируем IA-спецификацию без добавления Streamlit runtime-кода.
@@ -751,10 +583,6 @@ python scripts/streamlit_operator_panel_smoke.py --panel-runs-dir runs --runs-di
 * `missing_sources` (backward-compatible alias: required sources only)
 * `required_missing_sources`
 * `optional_missing_sources`
-* `ops_readiness_contract_ok`
-* `ops_readiness_missing_fields`
-* `ops_readiness_warnings`
-* `ops_readiness_snapshot`
 * `errors`
 * `exit_code`
 * `paths.run_dir`, `paths.run_json`, `paths.summary_json`
@@ -847,19 +675,15 @@ Optional progress sources:
 * `runs/nightly-gateway-sla-readiness/readiness_summary.json`
 * `runs/nightly-gateway-sla-governance/governance_summary.json`
 * `runs/nightly-gateway-sla-progress/progress_summary.json`
-* `runs/nightly-gateway-sla-transition/transition_summary.json`
 
 Поддерживаемые контракты:
 
 * `gateway_sla_fail_nightly_readiness_v1`
 * `gateway_sla_fail_nightly_governance_v1`
 * `gateway_sla_fail_nightly_progress_v1`
-* `gateway_sla_fail_nightly_transition_v1`
 
 UI поля progress-блока:
 
-* `allow_switch`
-* `transition_decision_status`
 * `readiness_status`
 * `latest_ready_streak`
 * `decision_status`
@@ -867,7 +691,6 @@ UI поля progress-блока:
 * `remaining_for_streak`
 * `target_critical_policy`
 * `reason_codes`
-* `source_freshness` (`fresh|stale|missing|unknown|invalid`)
 
 Tolerant rendering policy:
 

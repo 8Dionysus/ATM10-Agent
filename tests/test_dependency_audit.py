@@ -124,3 +124,34 @@ def test_dependency_audit_fail_on_critical_returns_nonzero(tmp_path: Path) -> No
     assert result["ok"] is False
     assert result["run_payload"]["exit_code"] == 2
     assert result["findings_payload"]["summary"]["error_count"] >= 1
+
+
+def test_dependency_audit_fail_on_critical_requires_pip_audit_tool(tmp_path: Path) -> None:
+    repo_root = tmp_path / "repo"
+    runs_dir = tmp_path / "runs"
+    requirements_path = repo_root / "requirements.txt"
+    _write_text(repo_root / "scripts" / "app.py", "import numpy\n")
+    _write_text(requirements_path, "numpy>=2.0.0,<3.0.0\n")
+
+    def _runner(command: list[str], _cwd: Path) -> _FakeCompletedProcess:
+        if command[:4] == [command[0], "-m", "pip", "check"]:
+            return _FakeCompletedProcess(returncode=0, stdout="No broken requirements found.\n")
+        if command[:3] == [command[0], "-m", "pip_audit"]:
+            return _FakeCompletedProcess(returncode=1, stderr="No module named pip_audit")
+        raise AssertionError(f"Unexpected command: {command}")
+
+    result = run_dependency_audit(
+        runs_dir=runs_dir,
+        policy="fail_on_critical",
+        with_security_scan=True,
+        requirements_files=[requirements_path],
+        now=datetime(2026, 3, 2, 15, 3, 0, tzinfo=timezone.utc),
+        command_runner=_runner,
+        repo_root=repo_root,
+        scan_roots=[repo_root / "scripts", repo_root / "src", repo_root / "tests"],
+        installed_packages={"numpy"},
+    )
+
+    assert result["security_payload"]["status"] == "warn"
+    assert result["run_payload"]["exit_code"] == 2
+    assert result["ok"] is False

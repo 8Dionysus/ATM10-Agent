@@ -72,7 +72,11 @@ def _redact_value(value: Any, *, path: str, fields_redacted: set[str]) -> Any:
     return value
 
 
-def redact_error_entry(payload: Mapping[str, Any], enable_redaction: bool = True) -> dict[str, Any]:
+def redact_payload(
+    payload: Mapping[str, Any],
+    *,
+    enable_redaction: bool = True,
+) -> tuple[dict[str, Any], dict[str, Any]]:
     source_payload = copy.deepcopy(dict(payload))
     fields_redacted: set[str] = set()
 
@@ -82,11 +86,17 @@ def redact_error_entry(payload: Mapping[str, Any], enable_redaction: bool = True
     else:
         result_payload = source_payload
 
-    result_payload["redaction"] = {
+    metadata = {
         "checklist_version": REDACTION_CHECKLIST_VERSION,
         "applied": bool(enable_redaction),
         "fields_redacted": sorted(fields_redacted),
     }
+    return result_payload, metadata
+
+
+def redact_error_entry(payload: Mapping[str, Any], enable_redaction: bool = True) -> dict[str, Any]:
+    result_payload, metadata = redact_payload(payload, enable_redaction=enable_redaction)
+    result_payload["redaction"] = metadata
     return result_payload
 
 

@@ -42,6 +42,45 @@ def _write_canonical_sources(runs_dir: Path) -> None:
         path.write_text(json.dumps({"status": "ok", "paths": {"run_dir": str(path.parent)}}), encoding="utf-8")
 
 
+def _write_optional_progress_sources(runs_dir: Path) -> None:
+    sources = panel.canonical_fail_nightly_progress_sources(runs_dir)
+    sources["readiness"].parent.mkdir(parents=True, exist_ok=True)
+    sources["governance"].parent.mkdir(parents=True, exist_ok=True)
+    sources["progress"].parent.mkdir(parents=True, exist_ok=True)
+    sources["readiness"].write_text(
+        json.dumps(
+            {
+                "schema_version": "gateway_sla_fail_nightly_readiness_v1",
+                "readiness_status": "ready",
+                "recommendation": {"target_critical_policy": "fail_nightly", "reason_codes": []},
+            }
+        ),
+        encoding="utf-8",
+    )
+    sources["governance"].write_text(
+        json.dumps(
+            {
+                "schema_version": "gateway_sla_fail_nightly_governance_v1",
+                "decision_status": "go",
+                "observed": {"latest_ready_streak": 3},
+                "recommendation": {"target_critical_policy": "fail_nightly", "reason_codes": []},
+            }
+        ),
+        encoding="utf-8",
+    )
+    sources["progress"].write_text(
+        json.dumps(
+            {
+                "schema_version": "gateway_sla_fail_nightly_progress_v1",
+                "decision_status": "go",
+                "observed": {"readiness": {"remaining_for_window": 0, "remaining_for_streak": 0}},
+                "recommendation": {"target_critical_policy": "fail_nightly", "reason_codes": []},
+            }
+        ),
+        encoding="utf-8",
+    )
+
+
 def test_streamlit_operator_panel_smoke_happy_path(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -72,6 +111,37 @@ def test_streamlit_operator_panel_smoke_happy_path(
     assert summary["tabs_detected"] == list(panel.TAB_NAMES)
     assert summary["mobile_layout_contract_ok"] is True
     assert summary["viewport_baseline"] == {"width": 390, "height": 844, "orientation": "portrait"}
+    assert summary["missing_sources"] == []
+    assert summary["required_missing_sources"] == []
+    assert len(summary["optional_missing_sources"]) == 3
+
+
+def test_streamlit_operator_panel_smoke_happy_path_with_optional_sources(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    panel_runs_dir = tmp_path / "panel-runs"
+    _write_canonical_sources(panel_runs_dir)
+    _write_optional_progress_sources(panel_runs_dir)
+
+    fake_process = _FakeProcess()
+    monkeypatch.setattr(
+        smoke,
+        "_launch_streamlit_process",
+        lambda command: (fake_process, ["Local URL: http://127.0.0.1:8501"], _FakeThread()),
+    )
+    monkeypatch.setattr(smoke, "_wait_for_startup", lambda *args, **kwargs: (True, None))
+
+    result = smoke.run_streamlit_operator_panel_smoke(
+        panel_runs_dir=panel_runs_dir,
+        runs_dir=tmp_path / "smoke-runs",
+        summary_json=tmp_path / "smoke-runs" / "summary.json",
+        now=datetime(2026, 2, 27, 22, 0, 30, tzinfo=timezone.utc),
+    )
+    assert result["ok"] is True
+    assert result["exit_code"] == 0
+    summary = result["summary_payload"]
+    assert summary["required_missing_sources"] == []
+    assert summary["optional_missing_sources"] == []
     assert summary["missing_sources"] == []
 
 
@@ -159,6 +229,7 @@ def test_streamlit_operator_panel_smoke_missing_sources_is_error(
     summary = result["summary_payload"]
     assert summary["status"] == "error"
     assert summary["missing_sources"]
+    assert summary["required_missing_sources"] == summary["missing_sources"]
 
 
 def test_streamlit_operator_panel_smoke_summary_has_required_fields(
@@ -189,6 +260,8 @@ def test_streamlit_operator_panel_smoke_summary_has_required_fields(
         "mobile_layout_policy",
         "viewport_baseline",
         "missing_sources",
+        "required_missing_sources",
+        "optional_missing_sources",
         "errors",
         "paths",
         "exit_code",

@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import base64
 import json
+import os
 import sys
 import threading
 import traceback
@@ -73,6 +74,8 @@ VOICE_HTTP_DEFAULT_MAX_JSON_DEPTH = 8
 VOICE_HTTP_DEFAULT_MAX_STRING_LENGTH = 8_192
 VOICE_HTTP_DEFAULT_MAX_ARRAY_ITEMS = 256
 VOICE_HTTP_DEFAULT_MAX_OBJECT_KEYS = 256
+_SERVICE_TOKEN_HEADER = "X-ATM10-Token"
+_SERVICE_TOKEN_ENV = "ATM10_SERVICE_TOKEN"
 
 
 @dataclass(frozen=True)
@@ -101,6 +104,14 @@ def _validate_http_policy(policy: VoiceHTTPPolicy) -> None:
         raise ValueError("max_array_items must be > 0.")
     if policy.max_object_keys <= 0:
         raise ValueError("max_object_keys must be > 0.")
+
+
+def _resolve_service_token(cli_value: str | None) -> str | None:
+    if cli_value is not None:
+        stripped = cli_value.strip()
+        return stripped or None
+    env_value = os.getenv(_SERVICE_TOKEN_ENV, "").strip()
+    return env_value or None
 
 
 def _raise_payload_limit_if_needed(value: Any, *, policy: VoiceHTTPPolicy, depth: int = 1) -> None:
@@ -742,7 +753,11 @@ def process_tts_stream_request(state: VoiceRuntimeState, payload: Mapping[str, A
     return list(iter_tts_stream_events(state, payload))
 
 
-def _create_handler(state: VoiceRuntimeState, http_policy: VoiceHTTPPolicy) -> type[BaseHTTPRequestHandler]:
+def _create_handler(
+    state: VoiceRuntimeState,
+    http_policy: VoiceHTTPPolicy,
+    service_token: str | None = None,
+) -> type[BaseHTTPRequestHandler]:
     class VoiceServiceHandler(BaseHTTPRequestHandler):
         server_version = "ATM10VoiceService/1.0"
 
@@ -753,6 +768,12 @@ def _create_handler(state: VoiceRuntimeState, http_policy: VoiceHTTPPolicy) -> t
             self.send_header("Content-Length", str(len(body)))
             self.end_headers()
             self.wfile.write(body)
+
+        def _is_authorized(self) -> bool:
+            if not service_token:
+                return True
+            presented = str(self.headers.get(_SERVICE_TOKEN_HEADER, "")).strip()
+            return presented == service_token
 
         def _read_json_body(self) -> dict[str, Any]:
             length_raw = self.headers.get("Content-Length")
@@ -825,6 +846,9 @@ def _create_handler(state: VoiceRuntimeState, http_policy: VoiceHTTPPolicy) -> t
                 self._send_json(500, internal_payload)
 
         def do_GET(self) -> None:  # noqa: N802
+            if not self._is_authorized():
+                self._send_json(401, {"ok": False, "error": "unauthorized", "error_code": "unauthorized"})
+                return
             if self.path == "/health":
                 self._send_json(
                     200,
@@ -837,6 +861,9 @@ def _create_handler(state: VoiceRuntimeState, http_policy: VoiceHTTPPolicy) -> t
             self._send_json(404, {"error": "not_found", "path": self.path})
 
         def do_POST(self) -> None:  # noqa: N802
+            if not self._is_authorized():
+                self._send_json(401, {"ok": False, "error": "unauthorized", "error_code": "unauthorized"})
+                return
             try:
                 payload = self._read_json_body()
                 if self.path == "/asr":
@@ -896,6 +923,7 @@ def run_voice_runtime_service(
     asr_warmup_audio: Path | None = None,
     asr_warmup_language: str | None = None,
     http_policy: VoiceHTTPPolicy | None = None,
+    service_token: str | None = None,
     now: datetime | None = None,
 ) -> dict[str, Any]:
     if asr_backend in ARCHIVED_ASR_BACKENDS and not allow_archived_asr_backend:
@@ -907,6 +935,7 @@ def run_voice_runtime_service(
         now = datetime.now(timezone.utc)
     effective_http_policy = http_policy or VoiceHTTPPolicy()
     _validate_http_policy(effective_http_policy)
+    effective_service_token = _resolve_service_token(service_token)
     run_dir = _create_run_dir(runs_dir, now)
     run_json_path = run_dir / "run.json"
     state = VoiceRuntimeState(
@@ -981,6 +1010,10 @@ def run_voice_runtime_service(
             "port": port,
             "base_url": f"http://{host}:{port}",
             "http_policy": asdict(effective_http_policy),
+            "auth": {
+                "enabled": bool(effective_service_token),
+                "header": _SERVICE_TOKEN_HEADER,
+            },
         },
         "models": {
             "asr_backend": asr_backend,
@@ -1005,7 +1038,7 @@ def run_voice_runtime_service(
     }
     _write_json(run_json_path, run_payload)
 
-    handler = _create_handler(state, effective_http_policy)
+    handler = _create_handler(state, effective_http_policy, service_token=effective_service_token)
     server = ThreadingHTTPServer((host, port), handler)
     try:
         server.serve_forever()
@@ -1056,6 +1089,15 @@ def parse_args() -> argparse.Namespace:
         type=int,
         default=VOICE_HTTP_DEFAULT_MAX_OBJECT_KEYS,
         help=f"Maximum allowed JSON object key count (default: {VOICE_HTTP_DEFAULT_MAX_OBJECT_KEYS}).",
+    )
+    parser.add_argument(
+        "--service-token",
+        type=str,
+        default=None,
+        help=(
+            "Optional shared token for HTTP endpoints. "
+            "When set (or via ATM10_SERVICE_TOKEN), require header X-ATM10-Token."
+        ),
     )
     parser.add_argument(
         "--asr-backend",
@@ -1164,6 +1206,7 @@ def main() -> int:
         asr_max_new_tokens=args.asr_max_new_tokens,
         preload_asr=not args.no_preload_asr,
         preload_tts=not args.no_preload_tts,
+        service_token=args.service_token,
     )
     run_dir = result["run_dir"]
     print(f"[voice_runtime_service] run_dir: {run_dir}")
