@@ -47,6 +47,7 @@ def _write_optional_progress_sources(runs_dir: Path) -> None:
     sources["readiness"].parent.mkdir(parents=True, exist_ok=True)
     sources["governance"].parent.mkdir(parents=True, exist_ok=True)
     sources["progress"].parent.mkdir(parents=True, exist_ok=True)
+    sources["transition"].parent.mkdir(parents=True, exist_ok=True)
     sources["readiness"].write_text(
         json.dumps(
             {
@@ -72,8 +73,21 @@ def _write_optional_progress_sources(runs_dir: Path) -> None:
         json.dumps(
             {
                 "schema_version": "gateway_sla_fail_nightly_progress_v1",
+                "status": "ok",
                 "decision_status": "go",
                 "observed": {"readiness": {"remaining_for_window": 0, "remaining_for_streak": 0}},
+                "recommendation": {"target_critical_policy": "fail_nightly", "reason_codes": []},
+            }
+        ),
+        encoding="utf-8",
+    )
+    sources["transition"].write_text(
+        json.dumps(
+            {
+                "schema_version": "gateway_sla_fail_nightly_transition_v1",
+                "status": "ok",
+                "decision_status": "allow",
+                "allow_switch": True,
                 "recommendation": {"target_critical_policy": "fail_nightly", "reason_codes": []},
             }
         ),
@@ -113,7 +127,8 @@ def test_streamlit_operator_panel_smoke_happy_path(
     assert summary["viewport_baseline"] == {"width": 390, "height": 844, "orientation": "portrait"}
     assert summary["missing_sources"] == []
     assert summary["required_missing_sources"] == []
-    assert len(summary["optional_missing_sources"]) == 3
+    assert len(summary["optional_missing_sources"]) == 4
+    assert summary["ops_readiness_contract_ok"] is True
 
 
 def test_streamlit_operator_panel_smoke_happy_path_with_optional_sources(
@@ -143,6 +158,7 @@ def test_streamlit_operator_panel_smoke_happy_path_with_optional_sources(
     assert summary["required_missing_sources"] == []
     assert summary["optional_missing_sources"] == []
     assert summary["missing_sources"] == []
+    assert summary["ops_readiness_contract_ok"] is True
 
 
 def test_streamlit_operator_panel_smoke_timeout_path(
@@ -262,6 +278,10 @@ def test_streamlit_operator_panel_smoke_summary_has_required_fields(
         "missing_sources",
         "required_missing_sources",
         "optional_missing_sources",
+        "ops_readiness_contract_ok",
+        "ops_readiness_missing_fields",
+        "ops_readiness_warnings",
+        "ops_readiness_snapshot",
         "errors",
         "paths",
         "exit_code",

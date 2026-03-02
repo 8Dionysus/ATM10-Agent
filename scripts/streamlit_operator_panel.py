@@ -17,6 +17,10 @@ except Exception:  # pragma: no cover
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+
+from src.agent_core.ops_policy import SOURCE_STALE_AFTER_HOURS
 
 TAB_NAMES = (
     "Stack Health",
@@ -106,6 +110,10 @@ FAIL_NIGHTLY_PROGRESS_SOURCE_SPECS: dict[str, dict[str, tuple[str, ...] | str]] 
     "progress": {
         "path_parts": ("nightly-gateway-sla-progress", "progress_summary.json"),
         "schema_version": "gateway_sla_fail_nightly_progress_v1",
+    },
+    "transition": {
+        "path_parts": ("nightly-gateway-sla-transition", "transition_summary.json"),
+        "schema_version": "gateway_sla_fail_nightly_transition_v1",
     },
 }
 
@@ -484,13 +492,59 @@ def _normalize_reason_codes(value: Any) -> list[str]:
     return []
 
 
+def _parse_iso_datetime(value: Any) -> datetime | None:
+    if not isinstance(value, str) or not value.strip():
+        return None
+    try:
+        return datetime.fromisoformat(value.replace("Z", "+00:00")).astimezone(timezone.utc)
+    except Exception:
+        return None
+
+
+def _extract_payload_timestamp(payload: dict[str, Any] | None) -> datetime | None:
+    if payload is None:
+        return None
+    for field in ("checked_at_utc", "finished_at_utc", "timestamp_utc", "started_at_utc"):
+        parsed = _parse_iso_datetime(payload.get(field))
+        if parsed is not None:
+            return parsed
+    return None
+
+
+def _build_source_freshness(
+    *,
+    source_name: str,
+    payload: dict[str, Any] | None,
+    is_missing: bool,
+    stale_after_hours: float,
+) -> dict[str, Any]:
+    if is_missing:
+        return {"source": source_name, "state": "missing", "age_hours": None, "timestamp_utc": None}
+    if payload is None:
+        return {"source": source_name, "state": "invalid", "age_hours": None, "timestamp_utc": None}
+    timestamp = _extract_payload_timestamp(payload)
+    if timestamp is None:
+        return {"source": source_name, "state": "unknown", "age_hours": None, "timestamp_utc": None}
+    age_hours = max(0.0, (datetime.now(timezone.utc) - timestamp).total_seconds() / 3600.0)
+    state = "fresh" if age_hours <= stale_after_hours else "stale"
+    return {
+        "source": source_name,
+        "state": state,
+        "age_hours": round(age_hours, 3),
+        "timestamp_utc": timestamp.isoformat(),
+    }
+
+
 def load_fail_nightly_progress_snapshot(
     runs_dir: Path,
+    *,
+    stale_after_hours: float = float(SOURCE_STALE_AFTER_HOURS),
 ) -> tuple[dict[str, Any] | None, list[str]]:
     source_paths = canonical_fail_nightly_progress_sources(runs_dir)
     warnings: list[str] = []
     missing_sources: list[str] = []
     payloads: dict[str, dict[str, Any]] = {}
+    source_freshness: dict[str, dict[str, Any]] = {}
 
     for source_name, path in source_paths.items():
         spec = FAIL_NIGHTLY_PROGRESS_SOURCE_SPECS[source_name]
@@ -503,10 +557,28 @@ def load_fail_nightly_progress_snapshot(
         if payload is None:
             if load_error is not None and load_error.startswith("missing file:"):
                 missing_sources.append(source_name)
+                source_freshness[source_name] = _build_source_freshness(
+                    source_name=source_name,
+                    payload=None,
+                    is_missing=True,
+                    stale_after_hours=stale_after_hours,
+                )
             elif load_error is not None:
                 warnings.append(load_error)
+                source_freshness[source_name] = _build_source_freshness(
+                    source_name=source_name,
+                    payload=None,
+                    is_missing=False,
+                    stale_after_hours=stale_after_hours,
+                )
             continue
         payloads[source_name] = payload
+        source_freshness[source_name] = _build_source_freshness(
+            source_name=source_name,
+            payload=payload,
+            is_missing=False,
+            stale_after_hours=stale_after_hours,
+        )
 
     if not payloads:
         return None, warnings
@@ -514,14 +586,17 @@ def load_fail_nightly_progress_snapshot(
     readiness_payload = payloads.get("readiness")
     governance_payload = payloads.get("governance")
     progress_payload = payloads.get("progress")
+    transition_payload = payloads.get("transition")
 
     target_policy = _coalesce(
+        _nested_get(transition_payload, "recommendation", "target_critical_policy"),
         _nested_get(progress_payload, "recommendation", "target_critical_policy"),
         _nested_get(governance_payload, "recommendation", "target_critical_policy"),
         _nested_get(readiness_payload, "recommendation", "target_critical_policy"),
     )
     reason_codes = _normalize_reason_codes(
         _coalesce(
+            _nested_get(transition_payload, "recommendation", "reason_codes"),
             _nested_get(progress_payload, "recommendation", "reason_codes"),
             _nested_get(governance_payload, "recommendation", "reason_codes"),
             _nested_get(readiness_payload, "recommendation", "reason_codes"),
@@ -530,6 +605,8 @@ def load_fail_nightly_progress_snapshot(
 
     snapshot: dict[str, Any] = {
         "schema_version": "streamlit_gateway_fail_nightly_snapshot_v1",
+        "allow_switch": _nested_get(transition_payload, "allow_switch"),
+        "transition_decision_status": _nested_get(transition_payload, "decision_status"),
         "readiness_status": _nested_get(readiness_payload, "readiness_status"),
         "latest_ready_streak": _coalesce(
             _nested_get(progress_payload, "observed", "readiness", "latest_ready_streak"),
@@ -545,6 +622,7 @@ def load_fail_nightly_progress_snapshot(
         "reason_codes": reason_codes,
         "available_sources": sorted(payloads.keys()),
         "missing_sources": sorted(missing_sources),
+        "source_freshness": source_freshness,
         "source_paths": {name: str(path) for name, path in source_paths.items()},
     }
     return snapshot, warnings
@@ -743,19 +821,29 @@ def _render_latest_metrics_tab(runs_dir: Path, sources: dict[str, Path]) -> None
     st.subheader("Latest summary matrix")
     st.dataframe(rows, use_container_width=True)
 
-    st.subheader("Gateway fail_nightly progress")
+    st.subheader("Ops Readiness")
     progress_snapshot, progress_warnings = load_fail_nightly_progress_snapshot(runs_dir)
     if progress_warnings:
         sample = "\n".join(f"- {item}" for item in progress_warnings[:5])
         suffix = "" if len(progress_warnings) <= 5 else "\n- ..."
         st.warning(
-            "Some fail_nightly progress artifacts were skipped due to parse/contract issues "
+            "Some ops readiness artifacts were skipped due to parse/contract issues "
             f"({len(progress_warnings)}):\n{sample}{suffix}"
         )
     if progress_snapshot is None:
         st.info("not available yet")
     else:
+        freshness_payload = progress_snapshot.get("source_freshness")
+        freshness_map = freshness_payload if isinstance(freshness_payload, dict) else {}
+        freshness_labels = []
+        for source_name in sorted(freshness_map):
+            source_entry = freshness_map.get(source_name)
+            if isinstance(source_entry, dict):
+                state = source_entry.get("state")
+                freshness_labels.append(f"{source_name}:{state}")
         progress_row = {
+            "allow_switch": progress_snapshot.get("allow_switch"),
+            "transition_decision_status": progress_snapshot.get("transition_decision_status"),
             "readiness_status": progress_snapshot.get("readiness_status"),
             "latest_ready_streak": progress_snapshot.get("latest_ready_streak"),
             "decision_status": progress_snapshot.get("decision_status"),
@@ -765,8 +853,11 @@ def _render_latest_metrics_tab(runs_dir: Path, sources: dict[str, Path]) -> None
             "reason_codes": ", ".join(progress_snapshot.get("reason_codes") or []),
             "available_sources": ", ".join(progress_snapshot.get("available_sources") or []),
             "missing_sources": ", ".join(progress_snapshot.get("missing_sources") or []),
+            "source_freshness": ", ".join(freshness_labels),
         }
         st.dataframe([progress_row], use_container_width=True)
+        st.caption("Ops readiness source freshness")
+        st.dataframe(list(freshness_map.values()), use_container_width=True)
         st.caption("Progress source paths")
         st.json(progress_snapshot.get("source_paths"))
 

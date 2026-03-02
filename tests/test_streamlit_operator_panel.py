@@ -58,10 +58,11 @@ def test_canonical_summary_sources_returns_expected_paths(tmp_path: Path) -> Non
 
 def test_canonical_fail_nightly_progress_sources_returns_expected_paths(tmp_path: Path) -> None:
     sources = panel.canonical_fail_nightly_progress_sources(tmp_path)
-    assert list(sources.keys()) == ["readiness", "governance", "progress"]
+    assert list(sources.keys()) == ["readiness", "governance", "progress", "transition"]
     assert sources["readiness"] == tmp_path / "nightly-gateway-sla-readiness" / "readiness_summary.json"
     assert sources["governance"] == tmp_path / "nightly-gateway-sla-governance" / "governance_summary.json"
     assert sources["progress"] == tmp_path / "nightly-gateway-sla-progress" / "progress_summary.json"
+    assert sources["transition"] == tmp_path / "nightly-gateway-sla-transition" / "transition_summary.json"
 
 
 def test_load_json_object_handles_missing_and_bad_json(tmp_path: Path) -> None:
@@ -383,10 +384,22 @@ def test_load_fail_nightly_progress_snapshot_happy_path(tmp_path: Path) -> None:
             "recommendation": {"target_critical_policy": "fail_nightly", "reason_codes": []},
         },
     )
+    _write_json(
+        sources["transition"],
+        {
+            "schema_version": "gateway_sla_fail_nightly_transition_v1",
+            "status": "ok",
+            "decision_status": "allow",
+            "allow_switch": True,
+            "recommendation": {"target_critical_policy": "fail_nightly", "reason_codes": []},
+        },
+    )
 
     snapshot, warnings = panel.load_fail_nightly_progress_snapshot(tmp_path)
     assert warnings == []
     assert snapshot is not None
+    assert snapshot["allow_switch"] is True
+    assert snapshot["transition_decision_status"] == "allow"
     assert snapshot["readiness_status"] == "ready"
     assert snapshot["latest_ready_streak"] == 3
     assert snapshot["decision_status"] == "go"
@@ -395,7 +408,8 @@ def test_load_fail_nightly_progress_snapshot_happy_path(tmp_path: Path) -> None:
     assert snapshot["target_critical_policy"] == "fail_nightly"
     assert snapshot["reason_codes"] == []
     assert snapshot["missing_sources"] == []
-    assert snapshot["available_sources"] == ["governance", "progress", "readiness"]
+    assert snapshot["available_sources"] == ["governance", "progress", "readiness", "transition"]
+    assert isinstance(snapshot["source_freshness"], dict)
 
 
 def test_load_fail_nightly_progress_snapshot_invalid_optional_json_is_warning(tmp_path: Path) -> None:
@@ -416,5 +430,6 @@ def test_load_fail_nightly_progress_snapshot_invalid_optional_json_is_warning(tm
     assert snapshot["readiness_status"] == "not_ready"
     assert snapshot["decision_status"] is None
     assert "progress" in snapshot["missing_sources"]
+    assert "transition" in snapshot["missing_sources"]
     assert warnings
     assert any("failed to parse JSON" in item for item in warnings)
