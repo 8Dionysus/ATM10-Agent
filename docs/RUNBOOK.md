@@ -35,7 +35,15 @@ python -m pip install -r requirements-export.txt
 # Dependency audit
 python -m pip install -r requirements-audit.txt
 python scripts/dependency_audit.py --runs-dir runs --policy report_only --with-security-scan true
+
+# Nightly/security gate profile
+python scripts/dependency_audit.py --runs-dir runs/nightly-security-audit --policy fail_on_critical --with-security-scan true
 ```
+
+CI note:
+
+* PR pipeline keeps `report_only` dependency audit signal.
+* Nightly security workflow (`.github/workflows/security-nightly.yml`) runs `fail_on_critical` policy.
 
 ## CI smoke (runnable scripts)
 
@@ -117,7 +125,13 @@ python scripts/gateway_v1_local.py --request-json "C:\path\to\gateway_request.js
 
 * Создается `runs/<timestamp>-gateway-v1/`.
 * Внутри есть `request.json`, `run.json`, `response.json`, `child_runs/`.
+* `request.json` сохраняется в redacted-виде (без plaintext секретов).
+* В `run.json` публикуется `request_redaction` (`applied`, `fields_redacted`, checklist version).
 * `response.json.schema_version = gateway_response_v1`.
+* Для `retrieval_query` + `reranker=qwen3` `payload.reranker_model` ограничен allowlist:
+  * `Qwen/Qwen3-Reranker-0.6B`
+  * `OpenVINO/Qwen3-Reranker-0.6B-fp16-ov`
+  * override только через `ATM10_ALLOW_UNTRUSTED_RERANKER_MODEL=true` (trusted-only).
 
 ### Gateway smoke scenarios
 
@@ -152,6 +166,13 @@ python scripts/gateway_v1_http_service.py --host 127.0.0.1 --port 8770 --runs-di
 python scripts/gateway_v1_http_service.py --host 127.0.0.1 --port 8770 --runs-dir runs\gateway-http --max-request-bytes 262144 --max-json-depth 8 --max-string-length 8192 --max-array-items 256 --max-object-keys 256 --operation-timeout-sec 15.0 --error-log-max-bytes 1048576 --error-log-max-files 5 --artifact-retention-days 14 --enable-error-redaction true
 ```
 
+Опциональный auth-token hardening:
+
+```powershell
+# Token может быть передан флагом или через env ATM10_SERVICE_TOKEN
+python scripts/gateway_v1_http_service.py --host 127.0.0.1 --port 8770 --runs-dir runs\gateway-http --service-token "change-me"
+```
+
 Hardening defaults (`Balanced`):
 
 * `max_request_body_bytes = 262144` (256 KB)
@@ -180,6 +201,7 @@ python -c "import requests; payload={'schema_version':'gateway_request_v1','oper
 HTTP status mapping:
 
 * `response.status=ok` -> `200`
+* `error_code=unauthorized` -> `401`
 * `error_code=invalid_request` -> `400`
 * `error_code=payload_too_large|payload_limit_exceeded` -> `413`
 * `error_code=operation_timeout` -> `504`
@@ -188,6 +210,7 @@ HTTP status mapping:
 Sanitize policy:
 
 * Клиент получает только sanitized envelope (без traceback/внутренних деталей).
+* При включенном `service-token` все HTTP endpoints требуют `X-ATM10-Token`.
 * Перед записью error JSONL применяется redaction checklist `gateway_error_redaction_v1` (key-based + text pattern masking).
 * Error лог ротируется по лимитам (`gateway_http_errors.jsonl`, `gateway_http_errors.1.jsonl`, ...).
 * На startup выполняется retention cleanup:
@@ -802,6 +825,9 @@ python scripts/asr_demo_whisper_genai.py --model-dir models\whisper-large-v3-tur
 # Service start (default backend = whisper_genai)
 python scripts/voice_runtime_service.py --host 127.0.0.1 --port 8765 --asr-model models\whisper-large-v3-turbo-ov
 
+# Optional auth token hardening
+python scripts/voice_runtime_service.py --host 127.0.0.1 --port 8765 --asr-model models\whisper-large-v3-turbo-ov --service-token "change-me"
+
 # Health
 python scripts/voice_runtime_client.py --service-url http://127.0.0.1:8765 health
 
@@ -816,6 +842,7 @@ HTTP hardening defaults (voice service):
 * `max_string_length = 8192`
 * `max_array_items = 256`
 * `max_object_keys = 256`
+* optional `service_token` (`--service-token` или `ATM10_SERVICE_TOKEN`) -> require `X-ATM10-Token`
 
 Payload-limit behavior:
 
@@ -888,7 +915,7 @@ python scripts/benchmark_asr_backends.py `
 cd D:\atm10-agent
 .\.venv\Scripts\Activate.ps1
 python -m pip install fastapi uvicorn
-python scripts/tts_runtime_service.py --host 127.0.0.1 --port 8780
+python scripts/tts_runtime_service.py --host 127.0.0.1 --port 8780 --runs-dir runs\tts-runtime
 ```
 
 Принятый runtime design:
@@ -897,6 +924,8 @@ python scripts/tts_runtime_service.py --host 127.0.0.1 --port 8780
 * Main engine: XTTS v2
 * Fallback engines: Piper, Silero (для `ru` service voice)
 * Techniques: prewarm, queue, chunking, phrase cache, true streaming for `/tts_stream`
+* HTTP hardening: payload limits (`max_request_bytes/json_depth/string/array/object`) + sanitized internal errors
+* Optional auth hardening: `--service-token` или `ATM10_SERVICE_TOKEN` -> require `X-ATM10-Token`
 
 Минимальная конфигурация adapters (env):
 
@@ -941,6 +970,7 @@ Streaming behavior:
 
 * `/tts_stream` отдает NDJSON инкрементально (`started -> audio_chunk -> completed`) без полного pre-buffer.
 * `/tts` остается non-streaming и использует прежний request/response контракт.
+* Internal 500 ответы всегда sanitized; подробности пишутся локально в `runs/<timestamp>-tts-service/service_errors.jsonl`.
 
 ### Voice latency benchmark (historical)
 
