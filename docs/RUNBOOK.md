@@ -580,7 +580,9 @@ python scripts/streamlit_operator_panel_smoke.py --panel-runs-dir runs --runs-di
 * `mobile_layout_contract_ok`
 * `mobile_layout_policy` (`streamlit_mobile_layout_policy_v1`)
 * `viewport_baseline` (`width/height/orientation`)
-* `missing_sources`
+* `missing_sources` (backward-compatible alias: required sources only)
+* `required_missing_sources`
+* `optional_missing_sources`
 * `errors`
 * `exit_code`
 * `paths.run_dir`, `paths.run_json`, `paths.summary_json`
@@ -589,6 +591,11 @@ Exit policy:
 
 * `0` только если `status=ok`.
 * `2` для любого `status=error`.
+* `status=error` только если нарушены strict условия:
+  * startup fail,
+  * mobile layout contract fail,
+  * отсутствуют `required_missing_sources`.
+* `optional_missing_sources` не переводят smoke в `error`; используются как observability signal.
 
 ## M8.post: Streamlit Safe Actions audit trail
 
@@ -657,6 +664,39 @@ Resilience/performance policy:
 * scan cap: максимум `200` candidate run-директорий на source перед применением limit.
 * некорректные run-директории пропускаются; UI показывает warning и продолжает работу.
 * при отсутствии history строк показывается `not available yet`.
+
+## G2.post: Streamlit fail_nightly progress visibility (optional sources)
+
+Во вкладке `Latest Metrics` добавлен отдельный блок `Gateway fail_nightly progress`, который
+агрегирует nightly decision-path артефакты и показывает операционный прогресс до `go|hold`.
+
+Optional progress sources:
+
+* `runs/nightly-gateway-sla-readiness/readiness_summary.json`
+* `runs/nightly-gateway-sla-governance/governance_summary.json`
+* `runs/nightly-gateway-sla-progress/progress_summary.json`
+
+Поддерживаемые контракты:
+
+* `gateway_sla_fail_nightly_readiness_v1`
+* `gateway_sla_fail_nightly_governance_v1`
+* `gateway_sla_fail_nightly_progress_v1`
+
+UI поля progress-блока:
+
+* `readiness_status`
+* `latest_ready_streak`
+* `decision_status`
+* `remaining_for_window`
+* `remaining_for_streak`
+* `target_critical_policy`
+* `reason_codes`
+
+Tolerant rendering policy:
+
+* если optional sources отсутствуют, панель показывает `not available yet`;
+* если optional source битый/contract-mismatch, панель показывает warning и продолжает работу;
+* optional progress sources не входят в strict `missing_sources` smoke-policy.
 
 ## M8.post: Streamlit compact mobile layout baseline
 

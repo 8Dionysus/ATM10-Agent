@@ -26,9 +26,9 @@
 
 ## Session Focus (2026-03-02)
 
-* Закрыть `G2.2` progress-layer для прозрачного трекинга `go/no-go` readiness по реальной nightly истории.
-* Расширить nightly readiness workflow шагом progress + policy summary/artifacts.
-* Синхронизировать source-of-truth docs под `gateway_sla_fail_nightly_progress_v1`.
+* Закрыть `G2.post` Streamlit progress visibility для operator-loop (`Latest Metrics`: readiness/governance/progress).
+* Уточнить `streamlit_smoke_summary_v1` contract split (`required_missing_sources` vs `optional_missing_sources`) без изменения strict policy для required sources.
+* Синхронизировать source-of-truth docs под Streamlit progress visibility и optional-source policy.
 
 ## WIP Policy
 
@@ -60,6 +60,7 @@
 * [x] G2 follow-up: добавлен readiness checker `gateway_sla_fail_nightly_readiness_v1` + nightly workflow с cache-history и summary/artifacts (staged report, без hard-gate).
 * [x] G2.1 follow-up: добавлен governance checker `gateway_sla_fail_nightly_governance_v1` + nightly go/no-go summary/artifacts (promotion rule `3` ready подряд, switch surface `nightly_only`).
 * [x] G2.2 follow-up: добавлен progress checker `gateway_sla_fail_nightly_progress_v1` + nightly decision-progress summary/artifacts (remaining window/streak, governance/readiness validity counters).
+* [x] G2.post follow-up: в Streamlit `Latest Metrics` добавлен optional progress visibility блок (`readiness/governance/progress`) + smoke contract split `required_missing_sources|optional_missing_sources` без изменения `signal_only` policy.
 * [x] KAG Neo4j: поднят rank для `star` до `first_hit_rank=1`.
 * [x] KAG Neo4j: latency retuning после relevance uplift.
 * [x] KAG Neo4j: добавлен `--warmup-runs` в eval + A/B compare script.
