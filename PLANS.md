@@ -148,6 +148,24 @@ Open tasks:
 * Сохранять единый summary-contract подход для core smoke и automation smoke.
 * Поддерживать единый runbook-link helper (`scripts/build_runbook_link.py`) в CI summaries.
 
+#### G6 — Wave 7 Turbo: Stability & Ops (3-week compressed execution)
+
+Goal:
+
+* Выполнить ускоренную solo+AI волну стабилизации без breaking changes и без расширения infra/deps.
+
+Definition of Done:
+
+* `master_available`: nightly path стабильно дает readiness/governance/progress и manual operating protocol без synthetic switch.
+* `release_only`: Wave 7 Turbo расширения (ops policy, ops contract validators/index, transition gate, bootstrap, Streamlit `Ops Readiness`) задокументированы без drift.
+* `planned_resync`: transition/bootstrap/ops-contract layer возвращены в `master` отдельным PR без breaking changes.
+* Source-of-truth docs синхронизированы (`RUNBOOK`, `DECISIONS`, `TODO`, `RELEASE_WAVE7_TURBO`) с явной branch-scope маркировкой.
+
+Open tasks:
+
+* Накопить nightly history в `master_available` контуре (readiness/governance/progress) до readiness window baseline.
+* Закрыть `planned_resync`: вернуть `G2.3 transition` и `G2.bootstrap` в `master`, затем возобновить switch-трекинг по `allow_switch`.
+
 ## Roadmap Horizons
 
 ### 0-30 days

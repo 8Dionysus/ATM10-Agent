@@ -23,6 +23,9 @@
 - Gateway fail_nightly governance: `scripts/check_gateway_sla_fail_nightly_governance.py` (`gateway_sla_fail_nightly_governance_v1`).
 - Gateway fail_nightly progress: `scripts/check_gateway_sla_fail_nightly_progress.py` (`gateway_sla_fail_nightly_progress_v1`).
 - Gateway SLA readiness nightly: `.github/workflows/gateway-sla-readiness-nightly.yml`.
+- Branch scope (`master_available`): nightly chain включает readiness/governance/progress.
+- Branch scope (`release_only`): transition gate, bootstrap, ops policy/index/validator layer.
+- Branch scope (`planned_resync`): вернуть release-only G2.3/G2.bootstrap возможности в `master` отдельным PR.
 - Dependency profiles: `requirements-voice.txt`, `requirements-llm.txt`, `requirements-export.txt`, `requirements-audit.txt`.
 - Dependency audit: `scripts/dependency_audit.py` + report-only CI step (`runs/ci-dependency-audit`, artifact `dependency-audit-report`).
 

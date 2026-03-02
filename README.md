@@ -52,7 +52,8 @@ python scripts/dependency_audit.py --runs-dir runs --policy report_only --with-s
 - KAG Neo4j nightly guardrail path активен: `build -> sync -> eval(sample+hard) -> guardrail-check -> trend snapshot`.
 - Trend snapshot включает rolling-baseline, severity-policy (`signal_only|fail_nightly`) и calibration-aware thresholds (`latency warn=5.0`, `critical=15.0`).
 - Gateway SLA path расширен trend snapshot слоем: `gateway_sla_summary_v1` history -> `gateway_sla_trend_snapshot_v1`.
-- Gateway `fail_nightly` rollout остается staged: readiness + governance (`go|hold`) работают в nightly, без hard-gate в `pytest` smoke.
+- Gateway `fail_nightly` rollout (`master_available`) остается staged: readiness + governance + progress работают в nightly, без hard-gate в `pytest` smoke.
+- Gateway transition/bootstrap слой (`release_only`) не считается активным в default branch до `planned_resync`.
 
 ## Где смотреть детали
 
