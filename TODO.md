@@ -17,18 +17,18 @@
 * `docs/RUNBOOK.md` — runnable команды и операционные профили.
 * `docs/ARCHIVED_TRACKS.md` — archived/recoverable направления.
 
-## Status Snapshot (as of 2026-02-27)
+## Status Snapshot (as of 2026-03-02)
 
 * M0/M1/M2/M3 базово закрыты.
 * `python -m pytest` green (см. последний session snapshot и CI).
 * Active ASR path: `whisper_genai`; `qwen_asr` — archived/recoverable opt-in.
 * KAG Neo4j path валидирован (`build -> sync -> query -> eval`, hard-cases uplift + latency tuning).
 
-## Session Focus (2026-02-27)
+## Session Focus (2026-03-02)
 
-* Закрыть `M7.post`: добавить SLA/observability baseline поверх gateway smoke summaries.
-* Зафиксировать machine-readable SLA summary contract `gateway_sla_summary_v1` и CI wiring.
-* Подготовить переход к `M8.post` (UX/operability follow-ups для Streamlit panel).
+* Закрыть `G2.1` governance-layer для формального `go/no-go` решения по switch в `critical_policy=fail_nightly`.
+* Расширить nightly readiness workflow шагом governance + policy summary/artifacts.
+* Синхронизировать source-of-truth docs под `gateway_sla_fail_nightly_governance_v1`.
 
 ## WIP Policy
 
@@ -37,12 +37,11 @@
 
 ## Now (WIP <= 3)
 
-* [ ] M8.post: добавить post-M8.1 UX/operability улучшения (compact mobile layout).
+* [ ] G2 follow-up: накопить минимум 14 валидных nightly readiness snapshots и пройти governance-гейт (`>=3` ready подряд) для go/no-go решения по switch в `critical_policy=fail_nightly`.
 
 ## Next
 
-* [ ] G1 follow-up: при следующем новом `intent_type` применить checklist `M6.19` (fixture + smoke + strict contract-check + summary/artifacts + e2e test).
-* [ ] G2 follow-up: переоценить readiness для `critical_policy=fail_nightly` после накопления стабильной nightly истории.
+* [ ] G3 follow-up: при следующем новом `intent_type` применить checklist `M6.19` (fixture + smoke + strict contract-check + summary/artifacts + e2e test).
 * [ ] G5 follow-up: расширять machine-readable summaries для новых smoke entrypoints по умолчанию.
 
 ## Blocked
@@ -55,6 +54,11 @@
 
 * [x] M8.post: во вкладке `Latest Metrics` добавлен historical view с filters (`source/status/limit`) по timestamp run snapshots из `runs/ci-smoke-*` (без внешней БД).
 * [x] M8.post: в Streamlit `Safe Actions` добавлен traceable audit trail (`Last safe action`, `Recent safe actions`, JSONL лог `runs/.../ui-safe-actions/safe_actions_audit.jsonl`).
+* [x] M8.post: добавлен compact mobile layout policy (`breakpoint=768`) + regression smoke baseline (`viewport 390x844`, machine-readable `mobile_layout_contract_ok`).
+* [x] G1 follow-up: добавлен `gateway_sla_trend_snapshot_v1` (rolling baseline + breach drift) + CI summary/artifacts wiring поверх `gateway_sla_summary_v1`.
+* [x] G1.1 follow-up: введен hardening policy-layer для gateway HTTP errors (`retention=14d`, rotation `1MB x 5`, redaction `gateway_error_redaction_v1`) без изменения публичного gateway API контракта.
+* [x] G2 follow-up: добавлен readiness checker `gateway_sla_fail_nightly_readiness_v1` + nightly workflow с cache-history и summary/artifacts (staged report, без hard-gate).
+* [x] G2.1 follow-up: добавлен governance checker `gateway_sla_fail_nightly_governance_v1` + nightly go/no-go summary/artifacts (promotion rule `3` ready подряд, switch surface `nightly_only`).
 * [x] KAG Neo4j: поднят rank для `star` до `first_hit_rank=1`.
 * [x] KAG Neo4j: latency retuning после relevance uplift.
 * [x] KAG Neo4j: добавлен `--warmup-runs` в eval + A/B compare script.

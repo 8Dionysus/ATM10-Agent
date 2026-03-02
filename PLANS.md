@@ -79,7 +79,6 @@ Definition of Done:
 Open tasks:
 
 * Ужесточить policy вокруг gateway artifacts/errors (`retention`, rotation policy, redaction checklist для error logs).
-* Добавить SLA trend snapshot поверх `gateway_sla_summary_v1` (rolling baseline + breach drift сигнал).
 * Зафиксировать unified startup sequence (gateway HTTP + existing runnable services) в runbook с минимальным operator profile.
 
 #### G2 — M8 Streamlit Operator Panel (Combo A UI)
@@ -100,7 +99,7 @@ Definition of Done:
 
 Open tasks:
 
-* Добавить compact mobile layout policy и regression smoke-check для viewport baseline.
+* Поддерживать no-drift policy для panel contracts (`history filters`, `safe action audit trail`, `compact mobile baseline`) при будущих UX изменениях.
 
 #### G3 — M6.1 Automation Safe Loop (ongoing)
 
@@ -154,8 +153,7 @@ Open tasks:
 ### 0-30 days
 
 * Перевести `gateway_sla_summary_v1` из signal-only baseline в управляемый tightening plan (`conservative -> moderate`) на исторических данных.
-* Расширить Streamlit post-`M8.1` UX/operability слой (history filters + action audit trail).
-* Добавить compact/mobile baseline и соответствующий regression smoke-check для panel UI.
+* Расширить Streamlit post-`M8.1` UX/operability слой следующими operator сценариями поверх уже внедренных `history filters`/`audit trail`/`compact mobile baseline`.
 
 ### 30-60 days
 

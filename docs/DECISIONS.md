@@ -167,3 +167,21 @@
 * Для `M8.post` во вкладке `Latest Metrics` выбран file-based historical view без внешней БД: история собирается из timestamp run-директорий в canonical `runs/ci-smoke-*` roots.
 * В historical view зафиксированы operator filters `source/status/limit` (defaults: all, `ok|error`, `10`), а также scan cap `200` candidate run-директорий на source для контроля latency UI.
 * Некорректные historical run artifacts не блокируют панель: строки с contract/parse mismatch пропускаются, оператор получает warning summary, UI остается no-crash.
+
+## 2026-03-01
+
+* Для закрытия `M8.post` в `scripts/streamlit_operator_panel.py` принят explicit compact mobile layout policy с default `compact_breakpoint_px=768` и baseline viewport `390x844` (portrait), реализованный CSS-слоем без изменения tab-IA/guardrails.
+* `scripts/streamlit_operator_panel_smoke.py` расширен mobile regression-check контрактом: summary `streamlit_smoke_summary_v1` теперь включает `mobile_layout_contract_ok`, `mobile_layout_policy`, `viewport_baseline`; нарушение baseline трактуется как `status=error`, `exit_code=2`.
+* Для удержания стабильности CI выбран contract-first mobile smoke подход (policy + viewport invariants) вместо screenshot/DOM-assert path, чтобы избежать flaky UI-зависимостей при сохранении machine-readable сигнала регрессий.
+* Для `G1` добавлен history-friendly режим `scripts/check_gateway_sla.py --runs-dir`: checker теперь пишет timestamp run (`run.json`) и history copy `gateway_sla_summary.json` без изменения базового latest summary контракта.
+* Для `G1` добавлен новый trend слой `scripts/gateway_sla_trend_snapshot.py` с контрактом `gateway_sla_trend_snapshot_v1` (rolling baseline по `error_rate/timeout_rate/latency_p95` + `breach_drift` + `critical_policy signal_only|fail_nightly`).
+* Для CI smoke (`.github/workflows/pytest.yml`) принята модель `signal-first` для SLA trend: snapshot всегда публикуется в artifacts/step summary, а fail по trend severity включается только explicit `critical_policy=fail_nightly`.
+* Для `G1.1` принят hardening policy-layer для gateway HTTP artifacts/errors без изменения публичного `gateway_request_v1/gateway_response_v1`: retention `14d`, error-log rotation `1 MB x 5 files`, redaction `gateway_error_redaction_v1`.
+* В `scripts/gateway_v1_http_service.py` startup cleanup обязателен и ограничен gateway scope (`gateway_http_errors*.jsonl`, `*-gateway-v1*` в `runs_dir`), чтобы убрать unbounded artifact growth без затрагивания других подсистем.
+* Internal error JSONL contract расширен metadata-полями `redaction` и `retention_policy`; клиентский HTTP response по-прежнему остается sanitized (`internal_error_sanitized`) без traceback leakage.
+* Для `G2` принят staged rollout readiness-перехода на `critical_policy=fail_nightly`: в текущей итерации внедряется только report-layer (`report_only`), без hard fail-gate в CI.
+* Источник истории для readiness formalized как nightly cache (`runs/nightly-gateway-sla-history`, `runs/nightly-gateway-sla-trend-history`), чтобы решение опиралось на накапливаемые ежедневные snapshots, а не на одноразовый локальный run.
+* Readiness baseline зафиксирован как conservative bar: `readiness_window=14`, `required_baseline_count=5`, `critical_count=0`, `warn_ratio<=0.20`, `invalid_or_error_count=0`; hard switch на `fail_nightly` выносится в отдельный follow-up после накопления истории.
+* Для `G2.1` добавлен отдельный governance-layer (`gateway_sla_fail_nightly_governance_v1`) для формального `go|hold` решения по switch в `fail_nightly`.
+* Promotion rule зафиксирован как `3` подряд nightly `readiness_status=ready`; при этом в рассматриваемом history slice `invalid_or_mismatched_count` должен быть `0`.
+* Rollout surface для будущего switch зафиксирован как `nightly_only`: `pytest.yml` остается `signal_only` до отдельного explicit решения.

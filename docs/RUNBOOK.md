@@ -39,8 +39,9 @@ python scripts/gateway_v1_smoke.py --scenario core --runs-dir runs/ci-smoke-gate
 python scripts/gateway_v1_smoke.py --scenario automation --runs-dir runs/ci-smoke-gateway-automation --summary-json runs/ci-smoke-gateway-automation/gateway_smoke_summary.json
 python scripts/gateway_v1_http_smoke.py --scenario core --runs-dir runs/ci-smoke-gateway-http-core --summary-json runs/ci-smoke-gateway-http-core/gateway_http_smoke_summary.json
 python scripts/gateway_v1_http_smoke.py --scenario automation --runs-dir runs/ci-smoke-gateway-http-automation --summary-json runs/ci-smoke-gateway-http-automation/gateway_http_smoke_summary.json
-python scripts/check_gateway_sla.py --http-summary-json runs/ci-smoke-gateway-http-core/gateway_http_smoke_summary.json --summary-json runs/ci-smoke-gateway-sla/gateway_sla_summary.json --profile conservative --policy signal_only
-python scripts/streamlit_operator_panel_smoke.py --panel-runs-dir runs --runs-dir runs/ci-smoke-streamlit --summary-json runs/ci-smoke-streamlit/streamlit_smoke_summary.json --gateway-url http://127.0.0.1:8770 --startup-timeout-sec 45
+python scripts/check_gateway_sla.py --http-summary-json runs/ci-smoke-gateway-http-core/gateway_http_smoke_summary.json --summary-json runs/ci-smoke-gateway-sla/gateway_sla_summary.json --profile conservative --policy signal_only --runs-dir runs/ci-smoke-gateway-sla
+python scripts/gateway_sla_trend_snapshot.py --sla-runs-dir runs/ci-smoke-gateway-sla --history-limit 10 --baseline-window 5 --critical-policy signal_only --runs-dir runs/ci-smoke-gateway-sla-trend
+python scripts/streamlit_operator_panel_smoke.py --panel-runs-dir runs --runs-dir runs/ci-smoke-streamlit --summary-json runs/ci-smoke-streamlit/streamlit_smoke_summary.json --gateway-url http://127.0.0.1:8770 --startup-timeout-sec 45 --viewport-width 390 --viewport-height 844 --compact-breakpoint-px 768
 ```
 
 Ожидаемый результат:
@@ -61,6 +62,9 @@ python scripts/streamlit_operator_panel_smoke.py --panel-runs-dir runs --runs-di
   * `runs/ci-smoke-gateway-http-automation/gateway_http_smoke_summary.json`
 * Для gateway SLA check создается machine-readable summary:
   * `runs/ci-smoke-gateway-sla/gateway_sla_summary.json`
+* Для gateway SLA trend snapshot создаются machine-readable artifacts:
+  * `runs/ci-smoke-gateway-sla-trend/<timestamp>-gateway-sla-trend/gateway_sla_trend_snapshot.json`
+  * `runs/ci-smoke-gateway-sla-trend/<timestamp>-gateway-sla-trend/summary.md`
 * Для streamlit smoke создается machine-readable summary:
   * `runs/ci-smoke-streamlit/streamlit_smoke_summary.json`
 
@@ -128,7 +132,7 @@ python scripts/gateway_v1_http_service.py --host 127.0.0.1 --port 8770 --runs-di
 Запуск с override policy (пример):
 
 ```powershell
-python scripts/gateway_v1_http_service.py --host 127.0.0.1 --port 8770 --runs-dir runs\gateway-http --max-request-bytes 262144 --max-json-depth 8 --max-string-length 8192 --max-array-items 256 --max-object-keys 256 --operation-timeout-sec 15.0
+python scripts/gateway_v1_http_service.py --host 127.0.0.1 --port 8770 --runs-dir runs\gateway-http --max-request-bytes 262144 --max-json-depth 8 --max-string-length 8192 --max-array-items 256 --max-object-keys 256 --operation-timeout-sec 15.0 --error-log-max-bytes 1048576 --error-log-max-files 5 --artifact-retention-days 14 --enable-error-redaction true
 ```
 
 Hardening defaults (`Balanced`):
@@ -139,6 +143,10 @@ Hardening defaults (`Balanced`):
 * `max_array_items = 256`
 * `max_object_keys = 256`
 * `operation_timeout_sec = 15.0`
+* `error_log_max_bytes = 1048576` (1 MB)
+* `error_log_max_files = 5`
+* `artifact_retention_days = 14`
+* `enable_error_redaction = true`
 
 Проверка transport health:
 
@@ -163,7 +171,14 @@ HTTP status mapping:
 Sanitize policy:
 
 * Клиент получает только sanitized envelope (без traceback/внутренних деталей).
-* Детали исключений пишутся локально в `runs/.../gateway_http_errors.jsonl`.
+* Перед записью error JSONL применяется redaction checklist `gateway_error_redaction_v1` (key-based + text pattern masking).
+* Error лог ротируется по лимитам (`gateway_http_errors.jsonl`, `gateway_http_errors.1.jsonl`, ...).
+* На startup выполняется retention cleanup:
+  * `gateway_http_errors*.jsonl`
+  * директории `runs/.../*-gateway-v1*` старше retention window.
+* В каждой JSONL записи добавляются machine-readable metadata:
+  * `redaction.checklist_version|applied|fields_redacted`
+  * `retention_policy.artifact_retention_days|error_log_max_bytes|error_log_max_files`.
 
 ### HTTP smoke scenarios
 
@@ -230,6 +245,184 @@ Exit policy:
 * `fail_on_breach`: `2` при `sla_status=breach`.
 * Любая execution/contract ошибка checker: `2`.
 
+History mode (`--runs-dir`):
+
+* При передаче `--runs-dir` checker создает `runs/<timestamp>-gateway-sla-check/`.
+* В run-директории пишутся:
+  * `run.json`
+  * `gateway_sla_summary.json` (history copy для trend scanner).
+* Основной `--summary-json` продолжает работать как latest summary path для CI.
+
+## M7.post: Gateway SLA trend snapshot (rolling baseline + breach drift)
+
+Trend layer рассчитывается поверх history из `gateway_sla_summary_v1` без изменения базового SLA контракта.
+
+```powershell
+cd D:\atm10-agent
+.\.venv\Scripts\Activate.ps1
+python scripts/gateway_sla_trend_snapshot.py --sla-runs-dir runs\ci-smoke-gateway-sla --history-limit 10 --baseline-window 5 --critical-policy signal_only --runs-dir runs\ci-smoke-gateway-sla-trend
+```
+
+Trend snapshot contract (`gateway_sla_trend_snapshot_v1`):
+
+* `status = ok|error`
+* `history_limit`, `baseline_window`
+* `latest` (latest valid SLA summary row)
+* `rolling_baseline`:
+  * `metrics_mean`
+  * `delta_latest_minus_baseline`
+  * `regression_flags` (`error_rate|timeout_rate|latency_p95` statuses + severities)
+* `breach_drift`:
+  * `latest_is_breach`
+  * `baseline_breach_rate`
+  * `delta_breach_rate`
+  * `breach_rate_status`
+  * `breach_rate_severity`
+* `critical_policy`:
+  * `mode = signal_only|fail_nightly`
+  * `has_critical_regression`
+  * `should_fail_nightly`
+* `paths.run_dir`, `paths.run_json`, `paths.trend_snapshot_json`, `paths.summary_md`
+* `exit_code`
+
+Exit policy:
+
+* `signal_only`: `0` при валидном snapshot, даже при регрессиях.
+* `fail_nightly`: `2`, если обнаружена `critical` severity.
+
+## G2: Gateway SLA fail_nightly readiness (staged report)
+
+Readiness слой оценивает готовность перехода trend policy с `signal_only` на `fail_nightly`
+без включения hard-gate в этой итерации.
+
+```powershell
+cd D:\atm10-agent
+.\.venv\Scripts\Activate.ps1
+python scripts/check_gateway_sla_fail_nightly_readiness.py --trend-runs-dir runs\nightly-gateway-sla-trend-history --history-limit 30 --readiness-window 14 --required-baseline-count 5 --max-warn-ratio 0.20 --policy report_only --runs-dir runs\nightly-gateway-sla-readiness --summary-json runs\nightly-gateway-sla-readiness\readiness_summary.json
+```
+
+Readiness summary contract (`gateway_sla_fail_nightly_readiness_v1`):
+
+* `schema_version = gateway_sla_fail_nightly_readiness_v1`
+* `status = ok|error`
+* `readiness_status = ready|not_ready`
+* `criteria`:
+  * `readiness_window`
+  * `required_baseline_count`
+  * `max_warn_ratio`
+  * `window_observed`
+* `window_summary`:
+  * `critical_count`
+  * `warn_count`
+  * `none_count`
+  * `warn_ratio`
+  * `insufficient_history_count`
+  * `invalid_or_error_count`
+* `latest`
+* `recommendation.target_critical_policy` (`signal_only|fail_nightly`)
+* `recommendation.reason_codes`
+* `policy`
+* `exit_code`
+* `warnings`
+* `paths.run_dir`, `paths.run_json`, `paths.summary_json`
+
+Readiness rules (conservative bar):
+
+* Используются валидные trend snapshots (`gateway_sla_trend_snapshot_v1`, `status=ok`).
+* Берутся последние `N=14` валидных snapshots после `history_limit=30`.
+* Переход считается `ready`, только если одновременно:
+  * `window_observed >= 14`
+  * `critical_count == 0`
+  * `warn_ratio <= 0.20`
+  * `insufficient_history_count == 0`
+  * `invalid_or_error_count == 0`
+* Snapshot severity считается как max:
+  * `rolling_baseline.regression_flags.max_regression_severity`
+  * `breach_drift.breach_rate_severity`
+
+Exit policy:
+
+* `report_only`: `0` при `status=ok` даже если `readiness_status=not_ready`; `2` только на execution/contract error.
+* `fail_if_not_ready`: `2` при `status=error` или `readiness_status=not_ready`.
+
+Nightly workflow:
+
+* `.github/workflows/gateway-sla-readiness-nightly.yml`
+* История SLA/trend сохраняется между nightly запусками через cache:
+  * `runs/nightly-gateway-sla-history`
+  * `runs/nightly-gateway-sla-trend-history`
+* Nightly публикует:
+  * `runs/nightly-gateway-sla-readiness/readiness_summary.json`
+  * summary section `Gateway SLA Fail-Nightly Readiness`
+  * artifacts `runs/nightly-gateway-*`.
+
+## G2.1: Gateway SLA fail_nightly governance (go/no-go)
+
+Governance слой формализует решение `go|hold` для переключения trend policy на `fail_nightly`
+после накопления nightly readiness history.
+
+```powershell
+cd D:\atm10-agent
+.\.venv\Scripts\Activate.ps1
+python scripts/check_gateway_sla_fail_nightly_governance.py --readiness-runs-dir runs\nightly-gateway-sla-readiness --history-limit 60 --required-ready-streak 3 --expected-readiness-window 14 --expected-required-baseline-count 5 --expected-max-warn-ratio 0.20 --policy report_only --runs-dir runs\nightly-gateway-sla-governance --summary-json runs\nightly-gateway-sla-governance\governance_summary.json
+```
+
+Governance summary contract (`gateway_sla_fail_nightly_governance_v1`):
+
+* `schema_version = gateway_sla_fail_nightly_governance_v1`
+* `status = ok|error`
+* `decision_status = go|hold`
+* `policy = report_only|fail_if_not_go`
+* `criteria`:
+  * `required_ready_streak`
+  * `expected_readiness_window`
+  * `expected_required_baseline_count`
+  * `expected_max_warn_ratio`
+  * `history_limit`
+* `observed`:
+  * `window_observed`
+  * `valid_readiness_count`
+  * `invalid_or_mismatched_count`
+  * `latest_readiness_status`
+  * `latest_ready_streak`
+  * `ready_count_in_history`
+* `recommendation`:
+  * `target_critical_policy` (`signal_only|fail_nightly`)
+  * `switch_surface` (`nightly_only`)
+  * `reason_codes`
+* `exit_code`
+* `warnings`
+* `paths.run_dir`, `paths.run_json`, `paths.summary_json`
+
+Go/hold rules:
+
+* Source-of-truth: валидные `gateway_sla_fail_nightly_readiness_v1` summaries из `**/readiness_summary.json`.
+* Для valid row требуется:
+  * `status=ok`
+  * `readiness_status in {ready, not_ready}`
+  * criteria match:
+    * `readiness_window == 14`
+    * `required_baseline_count == 5`
+    * `max_warn_ratio == 0.20` (float epsilon check)
+* После `history_limit=60` берется хвост истории.
+* `decision_status=go` только если:
+  * latest readiness = `ready`
+  * latest ready streak `>= 3`
+  * `invalid_or_mismatched_count == 0`
+* Иначе `decision_status=hold`.
+
+Exit policy:
+
+* `report_only`: `0` при `status=ok` независимо от `go|hold`; `2` только на execution/contract error.
+* `fail_if_not_go`: `2` при `decision_status=hold` или `status=error`.
+
+Nightly governance integration:
+
+* `.github/workflows/gateway-sla-readiness-nightly.yml` добавляет:
+  * governance step (report_only),
+  * summary section `Gateway SLA Fail-Nightly Governance`,
+  * artifacts `runs/nightly-gateway-sla-governance`.
+
 ## M8.0: Streamlit IA spec (decision-complete, no implementation)
 
 На шаге `M8.0` фиксируем IA-спецификацию без добавления Streamlit runtime-кода.
@@ -260,7 +453,7 @@ python -m streamlit run scripts/streamlit_operator_panel.py -- --runs-dir runs -
 ```powershell
 cd D:\atm10-agent
 .\.venv\Scripts\Activate.ps1
-python scripts/streamlit_operator_panel_smoke.py --panel-runs-dir runs --runs-dir runs/ci-smoke-streamlit --summary-json runs/ci-smoke-streamlit/streamlit_smoke_summary.json --gateway-url http://127.0.0.1:8770 --startup-timeout-sec 45
+python scripts/streamlit_operator_panel_smoke.py --panel-runs-dir runs --runs-dir runs/ci-smoke-streamlit --summary-json runs/ci-smoke-streamlit/streamlit_smoke_summary.json --gateway-url http://127.0.0.1:8770 --startup-timeout-sec 45 --viewport-width 390 --viewport-height 844 --compact-breakpoint-px 768
 ```
 
 Ожидаемый result contract (`streamlit_smoke_summary_v1`):
@@ -269,6 +462,9 @@ python scripts/streamlit_operator_panel_smoke.py --panel-runs-dir runs --runs-di
 * `status = ok|error`
 * `startup_ok`
 * `tabs_detected`
+* `mobile_layout_contract_ok`
+* `mobile_layout_policy` (`streamlit_mobile_layout_policy_v1`)
+* `viewport_baseline` (`width/height/orientation`)
 * `missing_sources`
 * `errors`
 * `exit_code`
@@ -346,6 +542,24 @@ Resilience/performance policy:
 * scan cap: максимум `200` candidate run-директорий на source перед применением limit.
 * некорректные run-директории пропускаются; UI показывает warning и продолжает работу.
 * при отсутствии history строк показывается `not available yet`.
+
+## M8.post: Streamlit compact mobile layout baseline
+
+В панели закреплен compact mobile layout policy без изменения IA-табов и safe action guardrails.
+
+Policy defaults:
+
+* `compact_breakpoint_px = 768`
+* baseline viewport для smoke-check: `390x844` (portrait)
+* compact-режим включает:
+  * уменьшенные paddings контейнера
+  * stack header controls в одну колонку
+  * horizontal scroll fallback для dataframes
+
+Regression smoke-check:
+
+* `scripts/streamlit_operator_panel_smoke.py` валидирует mobile policy контракт и baseline viewport.
+* При нарушении mobile baseline (`viewport > breakpoint` или `landscape`) smoke возвращает `status=error`, `exit_code=2`.
 
 ## Qwen3 stack (OpenVINO-first)
 
