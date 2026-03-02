@@ -26,9 +26,9 @@
 
 ## Session Focus (2026-03-02)
 
-* Закрыть `G2.1` governance-layer для формального `go/no-go` решения по switch в `critical_policy=fail_nightly`.
-* Расширить nightly readiness workflow шагом governance + policy summary/artifacts.
-* Синхронизировать source-of-truth docs под `gateway_sla_fail_nightly_governance_v1`.
+* Закрыть `G2.2` progress-layer для прозрачного трекинга `go/no-go` readiness по реальной nightly истории.
+* Расширить nightly readiness workflow шагом progress + policy summary/artifacts.
+* Синхронизировать source-of-truth docs под `gateway_sla_fail_nightly_progress_v1`.
 
 ## WIP Policy
 
@@ -37,7 +37,7 @@
 
 ## Now (WIP <= 3)
 
-* [ ] G2 follow-up: накопить минимум 14 валидных nightly readiness snapshots и пройти governance-гейт (`>=3` ready подряд) для go/no-go решения по switch в `critical_policy=fail_nightly`.
+* [ ] G2 follow-up: накопить минимум 14 валидных nightly readiness snapshots и пройти governance-гейт (`>=3` ready подряд) для go/no-go решения по switch в `critical_policy=fail_nightly`; прогресс и remaining-gap отслеживать через `runs/nightly-gateway-sla-progress/progress_summary.json`.
 
 ## Next
 
@@ -59,6 +59,7 @@
 * [x] G1.1 follow-up: введен hardening policy-layer для gateway HTTP errors (`retention=14d`, rotation `1MB x 5`, redaction `gateway_error_redaction_v1`) без изменения публичного gateway API контракта.
 * [x] G2 follow-up: добавлен readiness checker `gateway_sla_fail_nightly_readiness_v1` + nightly workflow с cache-history и summary/artifacts (staged report, без hard-gate).
 * [x] G2.1 follow-up: добавлен governance checker `gateway_sla_fail_nightly_governance_v1` + nightly go/no-go summary/artifacts (promotion rule `3` ready подряд, switch surface `nightly_only`).
+* [x] G2.2 follow-up: добавлен progress checker `gateway_sla_fail_nightly_progress_v1` + nightly decision-progress summary/artifacts (remaining window/streak, governance/readiness validity counters).
 * [x] KAG Neo4j: поднят rank для `star` до `first_hit_rank=1`.
 * [x] KAG Neo4j: latency retuning после relevance uplift.
 * [x] KAG Neo4j: добавлен `--warmup-runs` в eval + A/B compare script.

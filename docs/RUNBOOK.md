@@ -388,9 +388,12 @@ Exit policy:
 Nightly workflow:
 
 * `.github/workflows/gateway-sla-readiness-nightly.yml`
-* История SLA/trend сохраняется между nightly запусками через cache:
+* История SLA/trend/readiness/governance/progress сохраняется между nightly запусками через cache:
   * `runs/nightly-gateway-sla-history`
   * `runs/nightly-gateway-sla-trend-history`
+  * `runs/nightly-gateway-sla-readiness`
+  * `runs/nightly-gateway-sla-governance`
+  * `runs/nightly-gateway-sla-progress`
 * Nightly публикует:
   * `runs/nightly-gateway-sla-readiness/readiness_summary.json`
   * summary section `Gateway SLA Fail-Nightly Readiness`
@@ -462,6 +465,78 @@ Nightly governance integration:
   * governance step (report_only),
   * summary section `Gateway SLA Fail-Nightly Governance`,
   * artifacts `runs/nightly-gateway-sla-governance`.
+
+## G2.2: Gateway SLA fail_nightly progress summary (nightly decision tracking)
+
+Progress слой агрегирует readiness+governance историю и показывает, сколько еще
+nightly сигналов нужно до потенциального `go` решения.
+
+```powershell
+cd D:\atm10-agent
+.\.venv\Scripts\Activate.ps1
+python scripts/check_gateway_sla_fail_nightly_progress.py --readiness-runs-dir runs\nightly-gateway-sla-readiness --governance-runs-dir runs\nightly-gateway-sla-governance --readiness-history-limit 60 --governance-history-limit 60 --expected-readiness-window 14 --expected-required-baseline-count 5 --expected-max-warn-ratio 0.20 --required-ready-streak 3 --policy report_only --runs-dir runs\nightly-gateway-sla-progress --summary-json runs\nightly-gateway-sla-progress\progress_summary.json
+```
+
+Progress summary contract (`gateway_sla_fail_nightly_progress_v1`):
+
+* `schema_version = gateway_sla_fail_nightly_progress_v1`
+* `status = ok|error`
+* `decision_status = go|hold`
+* `policy = report_only|fail_if_not_go`
+* `criteria`:
+  * `expected_readiness_window`
+  * `expected_required_baseline_count`
+  * `expected_max_warn_ratio`
+  * `required_ready_streak`
+  * `readiness_history_limit`
+  * `governance_history_limit`
+* `observed.readiness`:
+  * `valid_count`
+  * `invalid_or_mismatched_count`
+  * `latest_status`
+  * `latest_window_observed`
+  * `latest_ready_streak`
+  * `ready_count_in_history`
+  * `remaining_for_window`
+  * `remaining_for_streak`
+* `observed.governance`:
+  * `valid_count`
+  * `invalid_or_mismatched_count`
+  * `latest_decision_status`
+  * `latest_ready_streak`
+  * `go_count_in_history`
+* `latest.readiness`, `latest.governance`
+* `recommendation`:
+  * `target_critical_policy` (`signal_only|fail_nightly`)
+  * `switch_surface` (`nightly_only`)
+  * `reason_codes`
+* `exit_code`
+* `warnings`
+* `paths.run_dir`, `paths.run_json`, `paths.summary_json`
+
+Progress rules:
+
+* Source-of-truth: валидные readiness/governance summaries:
+  * `gateway_sla_fail_nightly_readiness_v1` из `**/readiness_summary.json`
+  * `gateway_sla_fail_nightly_governance_v1` из `**/governance_summary.json`
+* Для valid rows обязательно criteria match с ожидаемым baseline
+  (`window=14`, `required_baseline_count=5`, `max_warn_ratio=0.20`, `required_ready_streak=3`).
+* `decision_status=go` только если latest governance = `go`
+  и `invalid_or_mismatched_count(governance)=0`.
+* `remaining_for_window` и `remaining_for_streak` считаются по latest readiness/history
+  и используются как операционный индикатор прогресса.
+
+Exit policy:
+
+* `report_only`: `0` при `status=ok` независимо от `go|hold`; `2` только на execution/contract error.
+* `fail_if_not_go`: `2` при `decision_status=hold` или `status=error`.
+
+Nightly progress integration:
+
+* `.github/workflows/gateway-sla-readiness-nightly.yml` добавляет:
+  * progress step (report_only),
+  * summary section `Gateway SLA Fail-Nightly Progress`,
+  * artifacts `runs/nightly-gateway-sla-progress`.
 
 ## M8.0: Streamlit IA spec (decision-complete, no implementation)
 
