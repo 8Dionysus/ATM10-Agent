@@ -10,10 +10,10 @@ jobs:
     runs-on: windows-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
 
       - name: Setup Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
         with:
           python-version: "3.12"
 
@@ -23,12 +23,15 @@ jobs:
           pip install -r requirements-dev.txt
 
       - name: Restore cache - Gateway SLA history
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@0400d5f644dc74513175e3cd8d07132dd4860809
         with:
           path: |
             runs/nightly-gateway-sla-history
             runs/nightly-gateway-sla-trend-history
             runs/nightly-gateway-sla-readiness
+            runs/nightly-gateway-sla-governance
+            runs/nightly-gateway-sla-progress
+            runs/nightly-gateway-sla-transition
           key: gateway-sla-history-v1-${{ github.run_id }}
           restore-keys: |
             gateway-sla-history-v1-
@@ -52,6 +55,31 @@ jobs:
       - name: Governance - Gateway SLA fail_nightly go/no-go (report_only)
         run: |
           python scripts/check_gateway_sla_fail_nightly_governance.py --readiness-runs-dir runs/nightly-gateway-sla-readiness --history-limit 60 --required-ready-streak 3 --expected-readiness-window 14 --expected-required-baseline-count 5 --expected-max-warn-ratio 0.20 --policy report_only --runs-dir runs/nightly-gateway-sla-governance --summary-json runs/nightly-gateway-sla-governance/governance_summary.json
+
+      - name: Progress - Gateway SLA fail_nightly decision progress (report_only)
+        run: |
+          python scripts/check_gateway_sla_fail_nightly_progress.py --readiness-runs-dir runs/nightly-gateway-sla-readiness --governance-runs-dir runs/nightly-gateway-sla-governance --readiness-history-limit 60 --governance-history-limit 60 --expected-readiness-window 14 --expected-required-baseline-count 5 --expected-max-warn-ratio 0.20 --required-ready-streak 3 --policy report_only --runs-dir runs/nightly-gateway-sla-progress --summary-json runs/nightly-gateway-sla-progress/progress_summary.json
+
+      - name: Transition - Gateway SLA fail_nightly switch gate (report_only)
+        run: |
+          python scripts/check_gateway_sla_fail_nightly_transition.py --readiness-runs-dir runs/nightly-gateway-sla-readiness --governance-runs-dir runs/nightly-gateway-sla-governance --progress-runs-dir runs/nightly-gateway-sla-progress --readiness-history-limit 60 --governance-history-limit 60 --progress-history-limit 60 --expected-readiness-window 14 --expected-required-baseline-count 5 --expected-max-warn-ratio 0.20 --required-ready-streak 3 --policy report_only --runs-dir runs/nightly-gateway-sla-transition --summary-json runs/nightly-gateway-sla-transition/transition_summary.json
+
+      - name: Resolve - Gateway SLA transition gate
+        shell: pwsh
+        run: |
+          $transition = Get-Content "runs/nightly-gateway-sla-transition/transition_summary.json" | ConvertFrom-Json
+          $allowSwitch = $false
+          if ($transition.allow_switch -eq $true) {
+            $allowSwitch = $true
+          }
+          Add-Content -Path $env:GITHUB_ENV -Value "GATEWAY_SLA_ALLOW_SWITCH=$allowSwitch"
+          Add-Content -Path $env:GITHUB_ENV -Value "GATEWAY_SLA_TRANSITION_DECISION=$($transition.decision_status)"
+          Add-Content -Path $env:GITHUB_ENV -Value "GATEWAY_SLA_TRANSITION_STATUS=$($transition.status)"
+
+      - name: Smoke - Gateway SLA trend snapshot (fail_nightly strict gate)
+        if: env.GATEWAY_SLA_ALLOW_SWITCH == 'True'
+        run: |
+          python scripts/gateway_sla_trend_snapshot.py --sla-runs-dir runs/nightly-gateway-sla-history --history-limit 30 --baseline-window 5 --critical-policy fail_nightly --runs-dir runs/nightly-gateway-sla-trend-history
 
       - name: Summary - Gateway SLA fail_nightly readiness
         shell: pwsh
@@ -94,19 +122,60 @@ jobs:
           )
           $lines -join "`n" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
 
+      - name: Summary - Gateway SLA fail_nightly progress
+        shell: pwsh
+        run: |
+          $progress = Get-Content "runs/nightly-gateway-sla-progress/progress_summary.json" | ConvertFrom-Json
+          $ready = $progress.observed.readiness
+          $governance = $progress.observed.governance
+          $reasonCodes = if ($null -eq $progress.recommendation.reason_codes) { "-" } else { ($progress.recommendation.reason_codes -join ", ") }
+          $lines = @(
+            "## Gateway SLA Fail-Nightly Progress",
+            "",
+            "| status | decision_status | readiness_valid_count | remaining_for_window | remaining_for_streak | governance_valid_count | latest_governance_status | target_policy |",
+            "|---|---|---:|---:|---:|---:|---|---|",
+            "| $($progress.status) | $($progress.decision_status) | $($ready.valid_count) | $($ready.remaining_for_window) | $($ready.remaining_for_streak) | $($governance.valid_count) | $($governance.latest_decision_status) | $($progress.recommendation.target_critical_policy) |",
+            "",
+            "- `reason_codes`: $reasonCodes",
+            "- `progress_summary_json`: runs/nightly-gateway-sla-progress/progress_summary.json"
+          )
+          $lines -join "`n" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
+
+      - name: Summary - Gateway SLA fail_nightly transition
+        shell: pwsh
+        run: |
+          $transition = Get-Content "runs/nightly-gateway-sla-transition/transition_summary.json" | ConvertFrom-Json
+          $observed = $transition.observed
+          $reasonCodes = if ($null -eq $transition.recommendation.reason_codes) { "-" } else { ($transition.recommendation.reason_codes -join ", ") }
+          $lines = @(
+            "## Gateway SLA Fail-Nightly Transition",
+            "",
+            "| status | decision_status | allow_switch | readiness_valid_count | latest_ready_streak | invalid_or_mismatched_count | target_policy |",
+            "|---|---|---|---:|---:|---:|---|",
+            "| $($transition.status) | $($transition.decision_status) | $($transition.allow_switch) | $($observed.readiness.valid_count) | $($observed.aggregated.latest_ready_streak) | $($observed.aggregated.invalid_or_mismatched_count) | $($transition.recommendation.target_critical_policy) |",
+            "",
+            "- `reason_codes`: $reasonCodes",
+            "- `strict_gate_executed`: $env:GATEWAY_SLA_ALLOW_SWITCH",
+            "- `transition_summary_json`: runs/nightly-gateway-sla-transition/transition_summary.json"
+          )
+          $lines -join "`n" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
+
       - name: Save cache - Gateway SLA history
         if: always()
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@0400d5f644dc74513175e3cd8d07132dd4860809
         with:
           path: |
             runs/nightly-gateway-sla-history
             runs/nightly-gateway-sla-trend-history
             runs/nightly-gateway-sla-readiness
+            runs/nightly-gateway-sla-governance
+            runs/nightly-gateway-sla-progress
+            runs/nightly-gateway-sla-transition
           key: gateway-sla-history-v1-${{ github.run_id }}
 
       - name: Upload artifact - Gateway SLA readiness nightly runs
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: gateway-sla-readiness-nightly-runs
           path: |
@@ -115,3 +184,5 @@ jobs:
             runs/nightly-gateway-sla-trend-history
             runs/nightly-gateway-sla-readiness
             runs/nightly-gateway-sla-governance
+            runs/nightly-gateway-sla-progress
+            runs/nightly-gateway-sla-transition
