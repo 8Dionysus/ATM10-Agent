@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 import traceback
 from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeoutError
@@ -25,6 +26,8 @@ from scripts.gateway_v1_local import run_gateway_request
 RESPONSE_SCHEMA_VERSION = "gateway_response_v1"
 FastAPIRequest = Any
 _GATEWAY_REQUEST_EXECUTOR_MAX_WORKERS = 4
+_SERVICE_TOKEN_HEADER = "X-ATM10-Token"
+_SERVICE_TOKEN_ENV = "ATM10_SERVICE_TOKEN"
 
 
 @dataclass(frozen=True)
@@ -95,6 +98,25 @@ def _validate_policy(policy: GatewayHTTPPolicy) -> None:
         raise ValueError("artifact_retention_days must be >= 0.")
 
 
+def _resolve_service_token(cli_value: str | None) -> str | None:
+    if cli_value is not None:
+        stripped = cli_value.strip()
+        return stripped or None
+    env_value = os.getenv(_SERVICE_TOKEN_ENV, "").strip()
+    return env_value or None
+
+
+def _is_authorized(
+    request_headers: Mapping[str, Any],
+    *,
+    service_token: str | None,
+) -> bool:
+    if not service_token:
+        return True
+    presented_token = str(request_headers.get(_SERVICE_TOKEN_HEADER, "")).strip()
+    return presented_token == service_token
+
+
 def _utc_now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
@@ -107,6 +129,8 @@ def map_gateway_http_status(response_payload: Mapping[str, Any]) -> int:
         return 400
     if error_code in {"payload_too_large", "payload_limit_exceeded"}:
         return 413
+    if error_code == "unauthorized":
+        return 401
     if error_code == "operation_timeout":
         return 504
     if error_code in {"operation_failed", "gateway_dispatch_failed"}:
@@ -210,9 +234,15 @@ def _build_request_context(payload: Mapping[str, Any] | None) -> dict[str, Any]:
     return context
 
 
-def create_app(*, runs_dir: Path, policy: GatewayHTTPPolicy | None = None) -> Any:
+def create_app(
+    *,
+    runs_dir: Path,
+    policy: GatewayHTTPPolicy | None = None,
+    service_token: str | None = None,
+) -> Any:
     effective_policy = policy or GatewayHTTPPolicy()
     _validate_policy(effective_policy)
+    effective_service_token = _resolve_service_token(service_token)
     _ = cleanup_old_gateway_artifacts(
         runs_dir=runs_dir,
         retention_days=effective_policy.artifact_retention_days,
@@ -241,17 +271,36 @@ def create_app(*, runs_dir: Path, policy: GatewayHTTPPolicy | None = None) -> An
     app = FastAPI(title="ATM10 Gateway v1 HTTP", version="0.1.0", lifespan=_lifespan)
 
     @app.get("/healthz")
-    def _healthz() -> dict[str, Any]:
+    def _healthz(request: FastAPIRequest) -> Any:
+        if not _is_authorized(request.headers, service_token=effective_service_token):
+            response = _build_response(
+                operation="unknown",
+                status="error",
+                error_code="unauthorized",
+                error="unauthorized",
+                result=None,
+            )
+            return JSONResponse(status_code=map_gateway_http_status(response), content=response)
         return {
             "timestamp_utc": _utc_now(),
             "status": "ok",
             "service": "gateway_v1_http_service",
             "runs_dir": str(runs_dir),
+            "auth_enabled": bool(effective_service_token),
             "policy": asdict(effective_policy),
         }
 
     @app.post("/v1/gateway")
     async def _gateway(request: FastAPIRequest) -> Any:
+        if not _is_authorized(request.headers, service_token=effective_service_token):
+            response = _build_response(
+                operation="unknown",
+                status="error",
+                error_code="unauthorized",
+                error="unauthorized",
+                result=None,
+            )
+            return JSONResponse(status_code=map_gateway_http_status(response), content=response)
         request_payload: dict[str, Any] = {}
         raw_body = b""
         try:
@@ -443,6 +492,15 @@ def parse_args() -> argparse.Namespace:
         default=True,
         help="Enable redaction for gateway HTTP error logs (default: true).",
     )
+    parser.add_argument(
+        "--service-token",
+        type=str,
+        default=None,
+        help=(
+            "Optional shared token for HTTP endpoints. "
+            "When set (or via ATM10_SERVICE_TOKEN), require header X-ATM10-Token."
+        ),
+    )
     return parser.parse_args()
 
 
@@ -460,7 +518,7 @@ def main() -> int:
         artifact_retention_days=args.artifact_retention_days,
         enable_error_redaction=args.enable_error_redaction,
     )
-    app = create_app(runs_dir=args.runs_dir, policy=policy)
+    app = create_app(runs_dir=args.runs_dir, policy=policy, service_token=args.service_token)
     try:
         import uvicorn
     except Exception as exc:  # pragma: no cover - dependency presence

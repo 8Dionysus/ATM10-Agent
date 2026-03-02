@@ -123,6 +123,54 @@ def test_voice_handler_maps_payload_limit_exceeded_to_413() -> None:
     assert payload["error_code"] == "payload_limit_exceeded"
 
 
+def test_voice_handler_requires_auth_token_when_configured() -> None:
+    class _FakeState:
+        def health_payload(self) -> dict[str, object]:
+            return {"status": "ok"}
+
+    handler_cls = voice_runtime_service._create_handler(
+        _FakeState(),
+        voice_runtime_service.VoiceHTTPPolicy(),
+        service_token="test-token",
+    )
+    handler = handler_cls.__new__(handler_cls)
+    handler.path = "/health"
+    handler.headers = {}
+    captured: dict[str, object] = {}
+    handler._send_json = lambda code, payload: captured.update({"code": code, "payload": payload})
+
+    handler.do_GET()
+
+    assert captured["code"] == 401
+    payload = captured["payload"]
+    assert isinstance(payload, dict)
+    assert payload["error_code"] == "unauthorized"
+
+
+def test_voice_handler_allows_authorized_health_request() -> None:
+    class _FakeState:
+        def health_payload(self) -> dict[str, object]:
+            return {"status": "ok"}
+
+    handler_cls = voice_runtime_service._create_handler(
+        _FakeState(),
+        voice_runtime_service.VoiceHTTPPolicy(),
+        service_token="test-token",
+    )
+    handler = handler_cls.__new__(handler_cls)
+    handler.path = "/health"
+    handler.headers = {"X-ATM10-Token": "test-token"}
+    captured: dict[str, object] = {}
+    handler._send_json = lambda code, payload: captured.update({"code": code, "payload": payload})
+
+    handler.do_GET()
+
+    assert captured["code"] == 200
+    payload = captured["payload"]
+    assert isinstance(payload, dict)
+    assert payload["status"] == "ok"
+
+
 def test_process_asr_request_returns_transcription(tmp_path: Path) -> None:
     class _FakeASRClient:
         def transcribe_path(self, *, audio_path: Path, context: str, language: str | None) -> dict[str, str]:
