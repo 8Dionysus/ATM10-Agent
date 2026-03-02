@@ -2,22 +2,9 @@ from __future__ import annotations
 
 import argparse
 import json
-import sys
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Mapping
-
-REPO_ROOT = Path(__file__).resolve().parents[1]
-if str(REPO_ROOT) not in sys.path:
-    sys.path.insert(0, str(REPO_ROOT))
-
-from src.agent_core.ops_policy import (
-    MAX_WARN_RATIO,
-    READINESS_WINDOW,
-    REQUIRED_BASELINE_COUNT,
-    REQUIRED_READY_STREAK,
-    SWITCH_SURFACE,
-)
 
 _POLICIES: tuple[str, ...] = ("report_only", "fail_if_not_go")
 _READINESS_FILE_NAME = "readiness_summary.json"
@@ -143,10 +130,10 @@ def run_gateway_sla_fail_nightly_governance(
     *,
     readiness_runs_dir: Path = Path("runs") / "nightly-gateway-sla-readiness",
     history_limit: int = 60,
-    required_ready_streak: int = REQUIRED_READY_STREAK,
-    expected_readiness_window: int = READINESS_WINDOW,
-    expected_required_baseline_count: int = REQUIRED_BASELINE_COUNT,
-    expected_max_warn_ratio: float = MAX_WARN_RATIO,
+    required_ready_streak: int = 3,
+    expected_readiness_window: int = 14,
+    expected_required_baseline_count: int = 5,
+    expected_max_warn_ratio: float = 0.20,
     policy: str = "report_only",
     runs_dir: Path = Path("runs") / "nightly-gateway-sla-governance",
     summary_json: Path | None = None,
@@ -254,7 +241,7 @@ def run_gateway_sla_fail_nightly_governance(
             "latest": latest,
             "recommendation": {
                 "target_critical_policy": "fail_nightly" if decision_go else "signal_only",
-                "switch_surface": SWITCH_SURFACE,
+                "switch_surface": "nightly_only",
                 "reason_codes": reason_codes,
             },
             "exit_code": exit_code,
@@ -310,7 +297,7 @@ def run_gateway_sla_fail_nightly_governance(
             "latest": None,
             "recommendation": {
                 "target_critical_policy": "signal_only",
-                "switch_surface": SWITCH_SURFACE,
+                "switch_surface": "nightly_only",
                 "reason_codes": ["governance_evaluation_failed"],
             },
             "exit_code": 2,
@@ -356,25 +343,25 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--required-ready-streak",
         type=int,
-        default=REQUIRED_READY_STREAK,
+        default=3,
         help="Minimum trailing ready streak required for go decision.",
     )
     parser.add_argument(
         "--expected-readiness-window",
         type=int,
-        default=READINESS_WINDOW,
+        default=14,
         help="Expected readiness window for valid readiness summaries.",
     )
     parser.add_argument(
         "--expected-required-baseline-count",
         type=int,
-        default=REQUIRED_BASELINE_COUNT,
+        default=5,
         help="Expected required_baseline_count for valid readiness summaries.",
     )
     parser.add_argument(
         "--expected-max-warn-ratio",
         type=float,
-        default=MAX_WARN_RATIO,
+        default=0.20,
         help="Expected max_warn_ratio for valid readiness summaries.",
     )
     parser.add_argument(

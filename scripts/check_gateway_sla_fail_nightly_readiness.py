@@ -2,16 +2,9 @@ from __future__ import annotations
 
 import argparse
 import json
-import sys
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Mapping
-
-REPO_ROOT = Path(__file__).resolve().parents[1]
-if str(REPO_ROOT) not in sys.path:
-    sys.path.insert(0, str(REPO_ROOT))
-
-from src.agent_core.ops_policy import MAX_WARN_RATIO, READINESS_WINDOW, REQUIRED_BASELINE_COUNT
 
 _SEVERITY_RANK = {"none": 0, "warn": 1, "critical": 2}
 _SEVERITIES: tuple[str, ...] = ("none", "warn", "critical")
@@ -147,9 +140,9 @@ def run_gateway_sla_fail_nightly_readiness(
     *,
     trend_runs_dir: Path = Path("runs") / "nightly-gateway-sla-trend-history",
     history_limit: int = 30,
-    readiness_window: int = READINESS_WINDOW,
-    required_baseline_count: int = REQUIRED_BASELINE_COUNT,
-    max_warn_ratio: float = MAX_WARN_RATIO,
+    readiness_window: int = 14,
+    required_baseline_count: int = 5,
+    max_warn_ratio: float = 0.20,
     policy: str = "report_only",
     runs_dir: Path = Path("runs") / "nightly-gateway-sla-readiness",
     summary_json: Path | None = None,
@@ -345,19 +338,19 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--readiness-window",
         type=int,
-        default=READINESS_WINDOW,
+        default=14,
         help="Latest valid snapshots used for readiness decision.",
     )
     parser.add_argument(
         "--required-baseline-count",
         type=int,
-        default=REQUIRED_BASELINE_COUNT,
+        default=5,
         help="Minimum rolling baseline count per snapshot in readiness window.",
     )
     parser.add_argument(
         "--max-warn-ratio",
         type=float,
-        default=MAX_WARN_RATIO,
+        default=0.20,
         help="Maximum allowed warn ratio in readiness window.",
     )
     parser.add_argument(

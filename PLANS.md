@@ -148,24 +148,6 @@ Open tasks:
 * Сохранять единый summary-contract подход для core smoke и automation smoke.
 * Поддерживать единый runbook-link helper (`scripts/build_runbook_link.py`) в CI summaries.
 
-#### G6 — Wave 7 Turbo: Stability & Ops (3-week compressed execution)
-
-Goal:
-
-* Выполнить ускоренную solo+AI волну стабилизации без breaking changes и без расширения infra/deps.
-
-Definition of Done:
-
-* Policy thresholds централизованы и используются checker-скриптами без drift.
-* CI smoke публикует `validation_summary_v1` + `ops_contract_index_v1`.
-* Nightly readiness workflow включает transition gate (`gateway_sla_fail_nightly_transition_v1`) и условный strict step (`critical_policy=fail_nightly`) только при `allow_switch=true`.
-* Streamlit `Latest Metrics` показывает `Ops Readiness` (`allow_switch`, `remaining_*`, `reason_codes`, `source_freshness`) без crash на missing optional sources.
-* Source-of-truth docs синхронизированы (`RUNBOOK`, `DECISIONS`, `TODO`, `RELEASE_WAVE7_TURBO`).
-
-Open tasks:
-
-* Накопить nightly history до устойчивого `allow_switch=true` перед фактическим tightening по strict path.
-
 ## Roadmap Horizons
 
 ### 0-30 days

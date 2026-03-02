@@ -20,7 +20,6 @@ from scripts.streamlit_operator_panel import (
     TAB_NAMES,
     canonical_fail_nightly_progress_sources,
     canonical_summary_sources,
-    load_fail_nightly_progress_snapshot,
 )
 from scripts.streamlit_operator_panel import (
     MOBILE_LAYOUT_BREAKPOINT_PX_DEFAULT,
@@ -234,24 +233,6 @@ def run_streamlit_operator_panel_smoke(
         for path in canonical_fail_nightly_progress_sources(panel_runs_dir).values()
         if not path.is_file()
     ]
-    ops_readiness_snapshot, ops_readiness_warnings = load_fail_nightly_progress_snapshot(panel_runs_dir)
-    ops_readiness_required_fields = (
-        "allow_switch",
-        "latest_ready_streak",
-        "remaining_for_window",
-        "remaining_for_streak",
-        "target_critical_policy",
-        "reason_codes",
-        "source_freshness",
-    )
-    ops_readiness_missing_fields: list[str] = []
-    if isinstance(ops_readiness_snapshot, dict):
-        ops_readiness_missing_fields = [
-            field for field in ops_readiness_required_fields if field not in ops_readiness_snapshot
-        ]
-    ops_readiness_contract_ok = (
-        ops_readiness_snapshot is None or len(ops_readiness_missing_fields) == 0
-    )
     # Backward-compatible alias: retains previous semantics for required sources.
     missing_sources = list(required_missing_sources)
     mobile_policy = mobile_layout_policy(breakpoint_px=compact_breakpoint_px)
@@ -276,19 +257,8 @@ def run_streamlit_operator_panel_smoke(
             "mobile layout regression: viewport baseline is outside compact policy "
             f"(viewport={viewport_baseline}, policy={mobile_policy})"
         )
-    if not ops_readiness_contract_ok:
-        errors.append(
-            "ops readiness snapshot is missing required fields: "
-            + ", ".join(ops_readiness_missing_fields)
-        )
 
-    status_ok = (
-        startup_ok
-        and mobile_layout_contract_ok
-        and ops_readiness_contract_ok
-        and not required_missing_sources
-        and not errors
-    )
+    status_ok = startup_ok and mobile_layout_contract_ok and not required_missing_sources and not errors
     exit_code = 0 if status_ok else 2
     summary_payload: dict[str, Any] = {
         "schema_version": "streamlit_smoke_summary_v1",
@@ -301,10 +271,6 @@ def run_streamlit_operator_panel_smoke(
         "missing_sources": missing_sources,
         "required_missing_sources": required_missing_sources,
         "optional_missing_sources": optional_missing_sources,
-        "ops_readiness_contract_ok": ops_readiness_contract_ok,
-        "ops_readiness_missing_fields": ops_readiness_missing_fields,
-        "ops_readiness_warnings": ops_readiness_warnings,
-        "ops_readiness_snapshot": ops_readiness_snapshot,
         "errors": errors,
         "exit_code": exit_code,
         "paths": {
@@ -327,7 +293,6 @@ def run_streamlit_operator_panel_smoke(
         "missing_sources_count": len(missing_sources),
         "required_missing_sources_count": len(required_missing_sources),
         "optional_missing_sources_count": len(optional_missing_sources),
-        "ops_readiness_contract_ok": ops_readiness_contract_ok,
         "exit_code": exit_code,
     }
     _write_json(run_json_path, run_payload)

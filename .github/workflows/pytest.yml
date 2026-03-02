@@ -139,14 +139,6 @@ jobs:
         run: |
           python scripts/streamlit_operator_panel_smoke.py --panel-runs-dir runs --runs-dir runs/ci-smoke-streamlit --summary-json runs/ci-smoke-streamlit/streamlit_smoke_summary.json --gateway-url http://127.0.0.1:8770 --startup-timeout-sec 45
 
-      - name: Report - Ops contract validation (ci_smoke)
-        run: |
-          python scripts/validate_ops_contracts.py --profile ci_smoke --runs-dir runs --policy report_only --summary-json runs/ci-ops/validation_summary.json
-
-      - name: Report - Ops contract index (ci_smoke)
-        run: |
-          python scripts/build_ops_contract_index.py --profile ci_smoke --runs-dir runs --summary-json runs/ci-ops/ops_contract_index.json --stale-after-hours 36
-
       - name: Summary - Core smoke summaries
         shell: pwsh
         run: |
@@ -255,24 +247,6 @@ jobs:
           )
           $lines -join "`n" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
 
-      - name: Summary - Ops contract validation/index
-        shell: pwsh
-        run: |
-          $validation = Get-Content "runs/ci-ops/validation_summary.json" | ConvertFrom-Json
-          $index = Get-Content "runs/ci-ops/ops_contract_index.json" | ConvertFrom-Json
-          $freshness = $index.totals.freshness
-          $lines = @(
-            "## Ops Contract Validation/Index",
-            "",
-            "| validation_status | validation_errors | validation_warnings | sources_checked | fresh | stale | missing | unknown | invalid |",
-            "|---|---:|---:|---:|---:|---:|---:|---:|---:|",
-            "| $($validation.status) | $($validation.totals.error_count) | $($validation.totals.warning_count) | $($validation.totals.checked_count) | $($freshness.fresh) | $($freshness.stale) | $($freshness.missing) | $($freshness.unknown) | $($freshness.invalid) |",
-            "",
-            "- `validation_summary_json`: runs/ci-ops/validation_summary.json",
-            "- `ops_contract_index_json`: runs/ci-ops/ops_contract_index.json"
-          )
-          $lines -join "`n" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
-
       - name: Summary - Automation smoke contracts
         shell: pwsh
         run: |
@@ -318,7 +292,6 @@ jobs:
             runs/ci-smoke-gateway-sla/gateway_sla_summary.json
             runs/ci-smoke-gateway-sla-trend
             runs/ci-smoke-streamlit/streamlit_smoke_summary.json
-            runs/ci-ops
 
       - name: Upload artifact - Dependency audit
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
