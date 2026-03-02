@@ -10,10 +10,10 @@ jobs:
     runs-on: windows-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
 
       - name: Setup Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
         with:
           python-version: "3.12"
 
@@ -23,7 +23,7 @@ jobs:
           pip install -r requirements-dev.txt
 
       - name: Restore cache - Gateway SLA history
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@0400d5f644dc74513175e3cd8d07132dd4860809
         with:
           path: |
             runs/nightly-gateway-sla-history
@@ -96,7 +96,7 @@ jobs:
 
       - name: Save cache - Gateway SLA history
         if: always()
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@0400d5f644dc74513175e3cd8d07132dd4860809
         with:
           path: |
             runs/nightly-gateway-sla-history
@@ -106,7 +106,7 @@ jobs:
 
       - name: Upload artifact - Gateway SLA readiness nightly runs
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: gateway-sla-readiness-nightly-runs
           path: |
