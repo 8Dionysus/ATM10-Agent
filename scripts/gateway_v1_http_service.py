@@ -14,6 +14,11 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
+from scripts.gateway_artifact_policy import (
+    cleanup_old_gateway_artifacts,
+    redact_error_entry,
+    rotate_jsonl,
+)
 from scripts.gateway_v1_local import run_gateway_request
 
 RESPONSE_SCHEMA_VERSION = "gateway_response_v1"
@@ -28,12 +33,64 @@ class GatewayHTTPPolicy:
     max_array_items: int = 256
     max_object_keys: int = 256
     operation_timeout_sec: float = 15.0
+    error_log_max_bytes: int = 1_048_576
+    error_log_max_files: int = 5
+    artifact_retention_days: int = 14
+    enable_error_redaction: bool = True
 
 
 def _append_jsonl(path: Path, payload: Mapping[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("a", encoding="utf-8") as handle:
         handle.write(json.dumps(payload, ensure_ascii=False) + "\n")
+
+
+def _parse_bool_flag(raw_value: str) -> bool:
+    normalized = str(raw_value).strip().lower()
+    if normalized in {"1", "true", "yes", "y", "on"}:
+        return True
+    if normalized in {"0", "false", "no", "n", "off"}:
+        return False
+    raise argparse.ArgumentTypeError("Expected one of: true|false|1|0|yes|no.")
+
+
+def _append_gateway_error_entry(
+    *,
+    runs_dir: Path,
+    policy: GatewayHTTPPolicy,
+    payload: Mapping[str, Any],
+) -> None:
+    error_log_path = runs_dir / "gateway_http_errors.jsonl"
+    redacted_payload = redact_error_entry(payload, enable_redaction=policy.enable_error_redaction)
+    redacted_payload["retention_policy"] = {
+        "artifact_retention_days": policy.artifact_retention_days,
+        "error_log_max_bytes": policy.error_log_max_bytes,
+        "error_log_max_files": policy.error_log_max_files,
+    }
+    rotate_jsonl(error_log_path, max_bytes=policy.error_log_max_bytes, max_files=policy.error_log_max_files)
+    _append_jsonl(error_log_path, redacted_payload)
+    rotate_jsonl(error_log_path, max_bytes=policy.error_log_max_bytes, max_files=policy.error_log_max_files)
+
+
+def _validate_policy(policy: GatewayHTTPPolicy) -> None:
+    if policy.max_request_body_bytes <= 0:
+        raise ValueError("max_request_body_bytes must be > 0.")
+    if policy.max_json_depth <= 0:
+        raise ValueError("max_json_depth must be > 0.")
+    if policy.max_string_length <= 0:
+        raise ValueError("max_string_length must be > 0.")
+    if policy.max_array_items <= 0:
+        raise ValueError("max_array_items must be > 0.")
+    if policy.max_object_keys <= 0:
+        raise ValueError("max_object_keys must be > 0.")
+    if policy.operation_timeout_sec <= 0:
+        raise ValueError("operation_timeout_sec must be > 0.")
+    if policy.error_log_max_bytes <= 0:
+        raise ValueError("error_log_max_bytes must be > 0.")
+    if policy.error_log_max_files <= 0:
+        raise ValueError("error_log_max_files must be > 0.")
+    if policy.artifact_retention_days < 0:
+        raise ValueError("artifact_retention_days must be >= 0.")
 
 
 def _utc_now() -> str:
@@ -153,6 +210,11 @@ def _build_request_context(payload: Mapping[str, Any] | None) -> dict[str, Any]:
 
 def create_app(*, runs_dir: Path, policy: GatewayHTTPPolicy | None = None) -> Any:
     effective_policy = policy or GatewayHTTPPolicy()
+    _validate_policy(effective_policy)
+    _ = cleanup_old_gateway_artifacts(
+        runs_dir=runs_dir,
+        retention_days=effective_policy.artifact_retention_days,
+    )
     try:
         from fastapi import FastAPI, Request
         from fastapi.responses import JSONResponse
@@ -264,19 +326,25 @@ def create_app(*, runs_dir: Path, policy: GatewayHTTPPolicy | None = None) -> An
                 content=response_payload,
             )
         except Exception as exc:  # pragma: no cover - defensive path
-            _append_jsonl(
-                runs_dir / "gateway_http_errors.jsonl",
-                {
-                    "timestamp_utc": _utc_now(),
-                    "path": "/v1/gateway",
-                    "error_code": "internal_error_sanitized",
-                    "error": str(exc),
-                    "operation": operation,
-                    "request_body_bytes": len(raw_body),
-                    "request_context": _build_request_context(request_payload if request_payload else None),
-                    "traceback": traceback.format_exc(),
-                },
-            )
+            try:
+                _append_gateway_error_entry(
+                    runs_dir=runs_dir,
+                    policy=effective_policy,
+                    payload={
+                        "timestamp_utc": _utc_now(),
+                        "path": "/v1/gateway",
+                        "error_code": "internal_error_sanitized",
+                        "error": str(exc),
+                        "operation": operation,
+                        "request_body_bytes": len(raw_body),
+                        "request_context": _build_request_context(
+                            request_payload if request_payload else None
+                        ),
+                        "traceback": traceback.format_exc(),
+                    },
+                )
+            except Exception:
+                pass
             response = _build_response(
                 operation=operation,
                 status="error",
@@ -335,6 +403,30 @@ def parse_args() -> argparse.Namespace:
         default=15.0,
         help="Gateway operation timeout in seconds (default: 15.0).",
     )
+    parser.add_argument(
+        "--error-log-max-bytes",
+        type=int,
+        default=1_048_576,
+        help="Maximum size per gateway_http_errors JSONL file before rotation (default: 1048576).",
+    )
+    parser.add_argument(
+        "--error-log-max-files",
+        type=int,
+        default=5,
+        help="Maximum number of rotated gateway_http_errors JSONL files (default: 5).",
+    )
+    parser.add_argument(
+        "--artifact-retention-days",
+        type=int,
+        default=14,
+        help="Retention window in days for gateway error logs and gateway run artifacts (default: 14).",
+    )
+    parser.add_argument(
+        "--enable-error-redaction",
+        type=_parse_bool_flag,
+        default=True,
+        help="Enable redaction for gateway HTTP error logs (default: true).",
+    )
     return parser.parse_args()
 
 
@@ -347,6 +439,10 @@ def main() -> int:
         max_array_items=args.max_array_items,
         max_object_keys=args.max_object_keys,
         operation_timeout_sec=args.operation_timeout_sec,
+        error_log_max_bytes=args.error_log_max_bytes,
+        error_log_max_files=args.error_log_max_files,
+        artifact_retention_days=args.artifact_retention_days,
+        enable_error_redaction=args.enable_error_redaction,
     )
     app = create_app(runs_dir=args.runs_dir, policy=policy)
     try:

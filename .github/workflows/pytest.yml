@@ -108,7 +108,22 @@ jobs:
 
       - name: Smoke - Gateway SLA check (signal_only)
         run: |
-          python scripts/check_gateway_sla.py --http-summary-json runs/ci-smoke-gateway-http-core/gateway_http_smoke_summary.json --summary-json runs/ci-smoke-gateway-sla/gateway_sla_summary.json --profile conservative --policy signal_only
+          python scripts/check_gateway_sla.py --http-summary-json runs/ci-smoke-gateway-http-core/gateway_http_smoke_summary.json --summary-json runs/ci-smoke-gateway-sla/gateway_sla_summary.json --profile conservative --policy signal_only --runs-dir runs/ci-smoke-gateway-sla
+
+      - name: Smoke - Gateway SLA trend snapshot
+        run: |
+          python scripts/gateway_sla_trend_snapshot.py --sla-runs-dir runs/ci-smoke-gateway-sla --history-limit 10 --baseline-window 5 --critical-policy signal_only --runs-dir runs/ci-smoke-gateway-sla-trend
+
+      - name: Resolve - Gateway SLA trend paths
+        shell: pwsh
+        run: |
+          $trendSnapshot = Get-ChildItem -Path "runs/ci-smoke-gateway-sla-trend" -Recurse -Filter "gateway_sla_trend_snapshot.json" | Sort-Object FullName | Select-Object -Last 1
+          $trendSummary = Get-ChildItem -Path "runs/ci-smoke-gateway-sla-trend" -Recurse -Filter "summary.md" | Sort-Object FullName | Select-Object -Last 1
+          if ($null -eq $trendSnapshot -or $null -eq $trendSummary) {
+            throw "gateway SLA trend artifacts not found"
+          }
+          Add-Content -Path $env:GITHUB_ENV -Value "GATEWAY_SLA_TREND_SNAPSHOT_JSON=$($trendSnapshot.FullName)"
+          Add-Content -Path $env:GITHUB_ENV -Value "GATEWAY_SLA_TREND_SUMMARY_MD=$($trendSummary.FullName)"
 
       - name: Smoke - Streamlit operator panel (no-crash)
         run: |
@@ -181,6 +196,32 @@ jobs:
           )
           $lines -join "`n" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
 
+      - name: Summary - Gateway SLA trend
+        shell: pwsh
+        run: |
+          $trend = Get-Content $env:GATEWAY_SLA_TREND_SNAPSHOT_JSON | ConvertFrom-Json
+          $rolling = $trend.rolling_baseline
+          $flags = $rolling.regression_flags
+          $breach = $trend.breach_drift
+          $critical = $trend.critical_policy
+          function FmtOpt([object]$value) {
+            if ($null -eq $value) { return "-" }
+            $text = "$value".Trim()
+            if ([string]::IsNullOrEmpty($text)) { return "-" }
+            return $text
+          }
+          $lines = @(
+            "## Gateway SLA Trend Summary",
+            "",
+            "| status | latest_sla_status | baseline_count | error_rate_status | timeout_rate_status | latency_p95_status | breach_rate_status | max_severity | should_fail_nightly |",
+            "|---|---|---:|---|---|---|---|---|---|",
+            "| $($trend.status) | $(FmtOpt $trend.latest.sla_status) | $(FmtOpt $rolling.count) | $(FmtOpt $flags.error_rate_status) | $(FmtOpt $flags.timeout_rate_status) | $(FmtOpt $flags.latency_p95_status) | $(FmtOpt $breach.breach_rate_status) | $(FmtOpt $flags.max_regression_severity) | $(FmtOpt $critical.should_fail_nightly) |",
+            "",
+            "- `trend_snapshot_json`: $env:GATEWAY_SLA_TREND_SNAPSHOT_JSON",
+            "- `trend_summary_md`: $env:GATEWAY_SLA_TREND_SUMMARY_MD"
+          )
+          $lines -join "`n" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
+
       - name: Summary - Streamlit smoke summary
         shell: pwsh
         run: |
@@ -239,4 +280,5 @@ jobs:
             runs/ci-smoke-gateway-http-core/gateway_http_smoke_summary.json
             runs/ci-smoke-gateway-http-automation/gateway_http_smoke_summary.json
             runs/ci-smoke-gateway-sla/gateway_sla_summary.json
+            runs/ci-smoke-gateway-sla-trend
             runs/ci-smoke-streamlit/streamlit_smoke_summary.json

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Mapping
 
@@ -159,3 +160,32 @@ def test_check_gateway_sla_cli_help_exits_zero(monkeypatch: pytest.MonkeyPatch) 
     with pytest.raises(SystemExit) as exc:
         checker.parse_args()
     assert exc.value.code == 0
+
+
+def test_check_gateway_sla_with_runs_dir_writes_history_copy_and_run_json(tmp_path: Path) -> None:
+    http_summary_path = tmp_path / "gateway_http_smoke_summary.json"
+    summary_out_path = tmp_path / "gateway_sla_summary.json"
+    runs_dir = tmp_path / "sla-runs"
+    rows = [
+        {"latency_ms": 100.0, "error_code": None, "status": "ok", "ok": True},
+        {"latency_ms": 130.0, "error_code": None, "status": "ok", "ok": True},
+    ]
+    _write_http_smoke_summary(http_summary_path, request_rows=rows, failed_requests_count=0)
+
+    result = checker.run_gateway_sla_check(
+        http_summary_json=http_summary_path,
+        summary_json=summary_out_path,
+        profile="conservative",
+        policy="signal_only",
+        runs_dir=runs_dir,
+        now=datetime(2026, 3, 1, 12, 0, 0, tzinfo=timezone.utc),
+    )
+    assert result["exit_code"] == 0
+    run_dir = result["run_dir"]
+    assert run_dir == runs_dir / "20260301_120000-gateway-sla-check"
+    assert (run_dir / "run.json").is_file()
+    assert (run_dir / "gateway_sla_summary.json").is_file()
+    assert summary_out_path.is_file()
+    run_payload = json.loads((run_dir / "run.json").read_text(encoding="utf-8"))
+    assert run_payload["status"] == "ok"
+    assert run_payload["result"]["exit_code"] == 0

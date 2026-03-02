@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 import json
+import os
 import sys
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import pytest
@@ -20,6 +21,11 @@ def _fixture_path(name: str) -> Path:
     return Path(__file__).parent / "fixtures" / name
 
 
+def _set_mtime(path: Path, dt: datetime) -> None:
+    ts = dt.timestamp()
+    os.utime(path, (ts, ts))
+
+
 def test_gateway_v1_http_service_healthz_ok(tmp_path: Path) -> None:
     policy = gateway_http.GatewayHTTPPolicy(
         max_request_body_bytes=10_000,
@@ -28,6 +34,10 @@ def test_gateway_v1_http_service_healthz_ok(tmp_path: Path) -> None:
         max_array_items=10,
         max_object_keys=10,
         operation_timeout_sec=9.0,
+        error_log_max_bytes=4_096,
+        error_log_max_files=7,
+        artifact_retention_days=30,
+        enable_error_redaction=False,
     )
     app = gateway_http.create_app(runs_dir=tmp_path / "runs", policy=policy)
     with TestClient(app) as client:
@@ -43,6 +53,10 @@ def test_gateway_v1_http_service_healthz_ok(tmp_path: Path) -> None:
         "max_array_items": 10,
         "max_object_keys": 10,
         "operation_timeout_sec": 9.0,
+        "error_log_max_bytes": 4_096,
+        "error_log_max_files": 7,
+        "artifact_retention_days": 30,
+        "enable_error_redaction": False,
     }
 
 
@@ -288,6 +302,66 @@ def test_gateway_v1_http_service_internal_error_sanitized(
     assert last_log["request_context"]["operation"] == "health"
     assert last_log["request_body_bytes"] > 0
     assert "RuntimeError: sensitive boom" in last_log["traceback"]
+    assert last_log["redaction"]["checklist_version"] == "gateway_error_redaction_v1"
+    assert last_log["redaction"]["applied"] is True
+    assert "fields_redacted" in last_log["redaction"]
+    assert last_log["retention_policy"] == {
+        "artifact_retention_days": 14,
+        "error_log_max_bytes": 1_048_576,
+        "error_log_max_files": 5,
+    }
+
+
+def test_gateway_v1_http_service_internal_error_log_rotation(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    def _boom(*args, **kwargs):
+        raise RuntimeError("token=very-long-secret-token-for-rotation-check")
+
+    monkeypatch.setattr(gateway_http, "run_gateway_request", _boom)
+    policy = gateway_http.GatewayHTTPPolicy(error_log_max_bytes=350, error_log_max_files=3)
+    app = gateway_http.create_app(runs_dir=tmp_path / "runs", policy=policy)
+    with TestClient(app) as client:
+        for _ in range(12):
+            response = client.post(
+                "/v1/gateway",
+                json={
+                    "schema_version": "gateway_request_v1",
+                    "operation": "health",
+                    "payload": {},
+                },
+            )
+            assert response.status_code == 500
+
+    log_files = sorted((tmp_path / "runs").glob("gateway_http_errors*.jsonl"))
+    assert 1 <= len(log_files) <= 3
+    assert any(path.name.endswith(".1.jsonl") for path in log_files)
+
+
+def test_gateway_v1_http_service_startup_retention_cleanup(tmp_path: Path) -> None:
+    runs_dir = tmp_path / "runs"
+    runs_dir.mkdir(parents=True)
+
+    old_time = datetime.now(timezone.utc) - timedelta(days=30)
+    old_error_log = runs_dir / "gateway_http_errors.1.jsonl"
+    old_error_log.write_text("{\"old\":true}\n", encoding="utf-8")
+    old_gateway_run_dir = runs_dir / "20250101_010101-gateway-v1"
+    old_gateway_run_dir.mkdir(parents=True)
+    old_other_run_dir = runs_dir / "20250101_010101-phase-a"
+    old_other_run_dir.mkdir(parents=True)
+
+    _set_mtime(old_error_log, old_time)
+    _set_mtime(old_gateway_run_dir, old_time)
+    _set_mtime(old_other_run_dir, old_time)
+
+    app = gateway_http.create_app(
+        runs_dir=runs_dir,
+        policy=gateway_http.GatewayHTTPPolicy(artifact_retention_days=14),
+    )
+    with TestClient(app) as client:
+        response = client.get("/healthz")
+    assert response.status_code == 200
+    assert not old_error_log.exists()
+    assert not old_gateway_run_dir.exists()
+    assert old_other_run_dir.exists()
 
 
 def test_gateway_v1_http_service_contract_compat_with_cli(tmp_path: Path) -> None:

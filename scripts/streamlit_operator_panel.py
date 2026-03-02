@@ -25,6 +25,10 @@ TAB_NAMES = (
     "Safe Actions",
 )
 
+MOBILE_LAYOUT_POLICY_SCHEMA = "streamlit_mobile_layout_policy_v1"
+MOBILE_LAYOUT_BREAKPOINT_PX_DEFAULT = 768
+MOBILE_BASELINE_VIEWPORT = {"width": 390, "height": 844}
+
 SAFE_ACTIONS: dict[str, dict[str, str]] = {
     "gateway_local_core": {
         "script": "scripts/gateway_v1_smoke.py",
@@ -191,6 +195,56 @@ def load_safe_action_audit(runs_dir: Path, limit: int = 10) -> list[dict[str, An
 
 def _utc_now() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+def mobile_layout_policy(*, breakpoint_px: int = MOBILE_LAYOUT_BREAKPOINT_PX_DEFAULT) -> dict[str, Any]:
+    normalized_breakpoint = max(int(breakpoint_px), 320)
+    return {
+        "schema_version": MOBILE_LAYOUT_POLICY_SCHEMA,
+        "compact_breakpoint_px": normalized_breakpoint,
+        "mobile_baseline_viewport": dict(MOBILE_BASELINE_VIEWPORT),
+        "compact_fields": [
+            "header controls stack in one column",
+            "reduced horizontal paddings",
+            "dataframes scroll horizontally",
+        ],
+    }
+
+
+def build_compact_mobile_css(*, breakpoint_px: int = MOBILE_LAYOUT_BREAKPOINT_PX_DEFAULT) -> str:
+    normalized_breakpoint = max(int(breakpoint_px), 320)
+    return (
+        "<style>\n"
+        "@media (max-width: "
+        f"{normalized_breakpoint}px"
+        ") {\n"
+        "  [data-testid=\"stAppViewContainer\"] .main .block-container {\n"
+        "    padding-top: 0.75rem;\n"
+        "    padding-bottom: 1rem;\n"
+        "    padding-left: 0.75rem;\n"
+        "    padding-right: 0.75rem;\n"
+        "  }\n"
+        "  [data-testid=\"stHorizontalBlock\"] {\n"
+        "    display: flex;\n"
+        "    flex-direction: column;\n"
+        "    gap: 0.5rem;\n"
+        "  }\n"
+        "  [data-testid=\"column\"] {\n"
+        "    width: 100% !important;\n"
+        "    min-width: 0;\n"
+        "  }\n"
+        "  [data-testid=\"stDataFrame\"] {\n"
+        "    overflow-x: auto;\n"
+        "  }\n"
+        "}\n"
+        "</style>"
+    )
+
+
+def apply_compact_mobile_layout(*, breakpoint_px: int = MOBILE_LAYOUT_BREAKPOINT_PX_DEFAULT) -> None:
+    if st is None:
+        return
+    st.markdown(build_compact_mobile_css(breakpoint_px=breakpoint_px), unsafe_allow_html=True)
 
 
 def canonical_summary_sources(runs_dir: Path) -> dict[str, Path]:
@@ -509,6 +563,12 @@ def parse_panel_args(argv: list[str] | None = None) -> argparse.Namespace:
         default=3.0,
         help="Gateway health timeout in seconds (default: 3.0).",
     )
+    parser.add_argument(
+        "--compact-breakpoint-px",
+        type=int,
+        default=MOBILE_LAYOUT_BREAKPOINT_PX_DEFAULT,
+        help=f"Compact mobile breakpoint in px (default: {MOBILE_LAYOUT_BREAKPOINT_PX_DEFAULT}).",
+    )
     args, _unknown = parser.parse_known_args(argv)
     return args
 
@@ -638,6 +698,7 @@ def render_panel(args: argparse.Namespace) -> None:
         raise RuntimeError("streamlit is required. Install dependency and re-run.")
 
     st.set_page_config(page_title="ATM10 Operator Panel", layout="wide")
+    apply_compact_mobile_layout(breakpoint_px=args.compact_breakpoint_px)
     st.title("ATM10 Operator Panel v0")
 
     if "runs_dir" not in st.session_state:

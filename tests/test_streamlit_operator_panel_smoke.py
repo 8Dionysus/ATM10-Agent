@@ -70,6 +70,8 @@ def test_streamlit_operator_panel_smoke_happy_path(
     assert summary["status"] == "ok"
     assert summary["startup_ok"] is True
     assert summary["tabs_detected"] == list(panel.TAB_NAMES)
+    assert summary["mobile_layout_contract_ok"] is True
+    assert summary["viewport_baseline"] == {"width": 390, "height": 844, "orientation": "portrait"}
     assert summary["missing_sources"] == []
 
 
@@ -183,12 +185,45 @@ def test_streamlit_operator_panel_smoke_summary_has_required_fields(
         "status",
         "startup_ok",
         "tabs_detected",
+        "mobile_layout_contract_ok",
+        "mobile_layout_policy",
+        "viewport_baseline",
         "missing_sources",
         "errors",
         "paths",
         "exit_code",
     ):
         assert field in summary
+
+
+def test_streamlit_operator_panel_smoke_mobile_contract_violation_is_error(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    panel_runs_dir = tmp_path / "panel-runs"
+    _write_canonical_sources(panel_runs_dir)
+    fake_process = _FakeProcess()
+    monkeypatch.setattr(
+        smoke,
+        "_launch_streamlit_process",
+        lambda command: (fake_process, ["Local URL: http://127.0.0.1:8501"], _FakeThread()),
+    )
+    monkeypatch.setattr(smoke, "_wait_for_startup", lambda *args, **kwargs: (True, None))
+
+    result = smoke.run_streamlit_operator_panel_smoke(
+        panel_runs_dir=panel_runs_dir,
+        runs_dir=tmp_path / "smoke-runs",
+        summary_json=tmp_path / "smoke-runs" / "summary.json",
+        viewport_width=900,
+        viewport_height=500,
+        compact_breakpoint_px=768,
+        now=datetime(2026, 2, 27, 22, 5, 0, tzinfo=timezone.utc),
+    )
+    assert result["ok"] is False
+    assert result["exit_code"] == 2
+    summary = result["summary_payload"]
+    assert summary["status"] == "error"
+    assert summary["mobile_layout_contract_ok"] is False
+    assert summary["errors"]
 
 
 def test_streamlit_operator_panel_smoke_cli_help_exits_zero(

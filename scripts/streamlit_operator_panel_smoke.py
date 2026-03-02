@@ -17,6 +17,11 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from scripts.streamlit_operator_panel import TAB_NAMES, canonical_summary_sources
+from scripts.streamlit_operator_panel import (
+    MOBILE_LAYOUT_BREAKPOINT_PX_DEFAULT,
+    MOBILE_LAYOUT_POLICY_SCHEMA,
+    mobile_layout_policy,
+)
 
 
 def _utc_now() -> str:
@@ -155,6 +160,9 @@ def run_streamlit_operator_panel_smoke(
     gateway_url: str = "http://127.0.0.1:8770",
     startup_timeout_sec: float = 45.0,
     gateway_timeout_sec: float = 3.0,
+    viewport_width: int = 390,
+    viewport_height: int = 844,
+    compact_breakpoint_px: int = MOBILE_LAYOUT_BREAKPOINT_PX_DEFAULT,
     now: datetime | None = None,
 ) -> dict[str, Any]:
     if now is None:
@@ -216,20 +224,39 @@ def run_streamlit_operator_panel_smoke(
         for path in canonical_summary_sources(panel_runs_dir).values()
         if not path.is_file()
     ]
+    mobile_policy = mobile_layout_policy(breakpoint_px=compact_breakpoint_px)
+    viewport_baseline = {
+        "width": int(viewport_width),
+        "height": int(viewport_height),
+        "orientation": "portrait" if int(viewport_height) >= int(viewport_width) else "landscape",
+    }
+    mobile_layout_contract_ok = (
+        mobile_policy.get("schema_version") == MOBILE_LAYOUT_POLICY_SCHEMA
+        and viewport_baseline["width"] <= int(mobile_policy.get("compact_breakpoint_px", 0))
+        and viewport_baseline["orientation"] == "portrait"
+    )
 
     errors: list[str] = []
     if startup_error is not None:
         errors.append(startup_error)
     if tabs_detected != list(TAB_NAMES):
         errors.append("tabs_detected does not match required TAB_NAMES")
+    if not mobile_layout_contract_ok:
+        errors.append(
+            "mobile layout regression: viewport baseline is outside compact policy "
+            f"(viewport={viewport_baseline}, policy={mobile_policy})"
+        )
 
-    status_ok = startup_ok and not missing_sources and not errors
+    status_ok = startup_ok and mobile_layout_contract_ok and not missing_sources and not errors
     exit_code = 0 if status_ok else 2
     summary_payload: dict[str, Any] = {
         "schema_version": "streamlit_smoke_summary_v1",
         "status": "ok" if status_ok else "error",
         "startup_ok": startup_ok,
         "tabs_detected": tabs_detected,
+        "mobile_layout_contract_ok": mobile_layout_contract_ok,
+        "mobile_layout_policy": mobile_policy,
+        "viewport_baseline": viewport_baseline,
         "missing_sources": missing_sources,
         "errors": errors,
         "exit_code": exit_code,
@@ -296,6 +323,24 @@ def parse_args() -> argparse.Namespace:
         default=3.0,
         help="Gateway timeout passed to panel (default: 3.0).",
     )
+    parser.add_argument(
+        "--viewport-width",
+        type=int,
+        default=390,
+        help="Viewport width baseline for compact mobile regression-check (default: 390).",
+    )
+    parser.add_argument(
+        "--viewport-height",
+        type=int,
+        default=844,
+        help="Viewport height baseline for compact mobile regression-check (default: 844).",
+    )
+    parser.add_argument(
+        "--compact-breakpoint-px",
+        type=int,
+        default=MOBILE_LAYOUT_BREAKPOINT_PX_DEFAULT,
+        help=f"Compact mobile breakpoint in px (default: {MOBILE_LAYOUT_BREAKPOINT_PX_DEFAULT}).",
+    )
     return parser.parse_args()
 
 
@@ -308,12 +353,16 @@ def main() -> int:
         gateway_url=args.gateway_url,
         startup_timeout_sec=args.startup_timeout_sec,
         gateway_timeout_sec=args.gateway_timeout_sec,
+        viewport_width=args.viewport_width,
+        viewport_height=args.viewport_height,
+        compact_breakpoint_px=args.compact_breakpoint_px,
     )
     summary_payload = result["summary_payload"]
     print(f"[streamlit_smoke] run_dir: {result['run_dir']}")
     print(f"[streamlit_smoke] summary_json: {summary_payload['paths']['summary_json']}")
     print(f"[streamlit_smoke] status: {summary_payload['status']}")
     print(f"[streamlit_smoke] startup_ok: {summary_payload['startup_ok']}")
+    print(f"[streamlit_smoke] mobile_layout_contract_ok: {summary_payload['mobile_layout_contract_ok']}")
     print(f"[streamlit_smoke] missing_sources_count: {len(summary_payload['missing_sources'])}")
     return int(result["exit_code"])
 

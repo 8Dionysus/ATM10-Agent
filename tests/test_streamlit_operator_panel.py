@@ -83,6 +83,21 @@ def test_tab_names_exact() -> None:
     )
 
 
+def test_mobile_layout_policy_defaults() -> None:
+    policy = panel.mobile_layout_policy()
+    assert policy["schema_version"] == panel.MOBILE_LAYOUT_POLICY_SCHEMA
+    assert policy["compact_breakpoint_px"] == panel.MOBILE_LAYOUT_BREAKPOINT_PX_DEFAULT
+    assert policy["mobile_baseline_viewport"] == panel.MOBILE_BASELINE_VIEWPORT
+
+
+def test_build_compact_mobile_css_contains_breakpoint_and_selectors() -> None:
+    css = panel.build_compact_mobile_css(breakpoint_px=640)
+    assert "@media (max-width: 640px)" in css
+    assert "[data-testid=\"stHorizontalBlock\"]" in css
+    assert "[data-testid=\"column\"]" in css
+    assert "[data-testid=\"stDataFrame\"]" in css
+
+
 def test_resolve_safe_action_rejects_unknown(tmp_path: Path) -> None:
     with pytest.raises(ValueError):
         panel.resolve_safe_action("not_allowed", tmp_path)

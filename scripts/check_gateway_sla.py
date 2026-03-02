@@ -35,6 +35,21 @@ def _write_json(path: Path, payload: Mapping[str, Any]) -> None:
     path.write_text(json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8")
 
 
+def _create_run_dir(runs_dir: Path, now: datetime) -> Path:
+    base_name = now.strftime("%Y%m%d_%H%M%S-gateway-sla-check")
+    run_dir = runs_dir / base_name
+    if not run_dir.exists():
+        run_dir.mkdir(parents=True, exist_ok=False)
+        return run_dir
+    suffix = 1
+    while True:
+        candidate = runs_dir / f"{base_name}_{suffix:02d}"
+        if not candidate.exists():
+            candidate.mkdir(parents=True, exist_ok=False)
+            return candidate
+        suffix += 1
+
+
 def _read_json_object(path: Path) -> dict[str, Any]:
     if not path.is_file():
         raise FileNotFoundError(f"HTTP smoke summary not found: {path}")
@@ -143,11 +158,42 @@ def run_gateway_sla_check(
     summary_json: Path,
     profile: str = "conservative",
     policy: str = "signal_only",
+    runs_dir: Path | None = None,
+    now: datetime | None = None,
 ) -> dict[str, Any]:
     if profile not in _THRESHOLD_PROFILES:
         raise ValueError(f"Unsupported profile: {profile!r}")
     if policy not in {"signal_only", "fail_on_breach"}:
         raise ValueError(f"Unsupported policy: {policy!r}")
+    if now is None:
+        now = datetime.now(timezone.utc)
+
+    run_dir: Path | None = None
+    run_json_path: Path | None = None
+    history_summary_json: Path | None = None
+    run_payload: dict[str, Any] | None = None
+    if runs_dir is not None:
+        run_dir = _create_run_dir(runs_dir, now=now)
+        run_json_path = run_dir / "run.json"
+        history_summary_json = run_dir / "gateway_sla_summary.json"
+        run_payload = {
+            "timestamp_utc": now.astimezone(timezone.utc).isoformat(),
+            "mode": "gateway_sla_check",
+            "status": "started",
+            "params": {
+                "http_summary_json": str(http_summary_json),
+                "summary_json": str(summary_json),
+                "profile": profile,
+                "policy": policy,
+            },
+            "paths": {
+                "run_dir": str(run_dir),
+                "run_json": str(run_json_path),
+                "summary_json": str(summary_json),
+                "history_summary_json": str(history_summary_json),
+            },
+        }
+        _write_json(run_json_path, run_payload)
 
     thresholds = dict(_THRESHOLD_PROFILES[profile])
     summary_payload: dict[str, Any] = {
@@ -177,6 +223,10 @@ def run_gateway_sla_check(
         "error": None,
     }
     exit_code = 2
+    if run_dir is not None and run_json_path is not None and history_summary_json is not None:
+        summary_payload["paths"]["run_dir"] = str(run_dir)
+        summary_payload["paths"]["run_json"] = str(run_json_path)
+        summary_payload["paths"]["history_summary_json"] = str(history_summary_json)
 
     try:
         http_summary = _read_json_object(http_summary_json)
@@ -204,10 +254,23 @@ def run_gateway_sla_check(
 
     summary_payload["exit_code"] = exit_code
     _write_json(summary_json, summary_payload)
+    if history_summary_json is not None:
+        _write_json(history_summary_json, summary_payload)
+
+    if run_payload is not None and run_json_path is not None:
+        run_payload["status"] = summary_payload["status"]
+        run_payload["result"] = {
+            "sla_status": summary_payload["sla_status"],
+            "exit_code": exit_code,
+        }
+        _write_json(run_json_path, run_payload)
+
     return {
         "ok": summary_payload["status"] == "ok",
         "exit_code": exit_code,
         "summary_payload": summary_payload,
+        "run_dir": run_dir,
+        "run_payload": run_payload,
     }
 
 
@@ -239,6 +302,12 @@ def parse_args() -> argparse.Namespace:
         default="signal_only",
         help="Exit policy for SLA breach (default: signal_only).",
     )
+    parser.add_argument(
+        "--runs-dir",
+        type=Path,
+        default=None,
+        help="Optional run artifact base directory for timestamped history copy/run.json.",
+    )
     return parser.parse_args()
 
 
@@ -249,6 +318,7 @@ def main() -> int:
         summary_json=args.summary_json,
         profile=args.profile,
         policy=args.policy,
+        runs_dir=args.runs_dir,
     )
     summary_payload = result["summary_payload"]
     print(f"[check_gateway_sla] summary_json: {summary_payload['paths']['summary_json']}")
