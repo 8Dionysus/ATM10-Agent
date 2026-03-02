@@ -1,0 +1,117 @@
+name: Gateway SLA Readiness Nightly
+
+on:
+  schedule:
+    - cron: "35 3 * * *"
+  workflow_dispatch:
+
+jobs:
+  gateway_sla_readiness:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-dev.txt
+
+      - name: Restore cache - Gateway SLA history
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            runs/nightly-gateway-sla-history
+            runs/nightly-gateway-sla-trend-history
+            runs/nightly-gateway-sla-readiness
+          key: gateway-sla-history-v1-${{ github.run_id }}
+          restore-keys: |
+            gateway-sla-history-v1-
+
+      - name: Smoke - Gateway v1 HTTP (core scenario)
+        run: |
+          python scripts/gateway_v1_http_smoke.py --scenario core --runs-dir runs/nightly-gateway-http-core --summary-json runs/nightly-gateway-http-core/gateway_http_smoke_summary.json
+
+      - name: Smoke - Gateway SLA check (signal_only)
+        run: |
+          python scripts/check_gateway_sla.py --http-summary-json runs/nightly-gateway-http-core/gateway_http_smoke_summary.json --summary-json runs/nightly-gateway-sla-history/gateway_sla_summary.json --profile conservative --policy signal_only --runs-dir runs/nightly-gateway-sla-history
+
+      - name: Smoke - Gateway SLA trend snapshot (signal_only)
+        run: |
+          python scripts/gateway_sla_trend_snapshot.py --sla-runs-dir runs/nightly-gateway-sla-history --history-limit 30 --baseline-window 5 --critical-policy signal_only --runs-dir runs/nightly-gateway-sla-trend-history
+
+      - name: Readiness - Gateway SLA fail_nightly (report_only)
+        run: |
+          python scripts/check_gateway_sla_fail_nightly_readiness.py --trend-runs-dir runs/nightly-gateway-sla-trend-history --history-limit 30 --readiness-window 14 --required-baseline-count 5 --max-warn-ratio 0.20 --policy report_only --runs-dir runs/nightly-gateway-sla-readiness --summary-json runs/nightly-gateway-sla-readiness/readiness_summary.json
+
+      - name: Governance - Gateway SLA fail_nightly go/no-go (report_only)
+        run: |
+          python scripts/check_gateway_sla_fail_nightly_governance.py --readiness-runs-dir runs/nightly-gateway-sla-readiness --history-limit 60 --required-ready-streak 3 --expected-readiness-window 14 --expected-required-baseline-count 5 --expected-max-warn-ratio 0.20 --policy report_only --runs-dir runs/nightly-gateway-sla-governance --summary-json runs/nightly-gateway-sla-governance/governance_summary.json
+
+      - name: Summary - Gateway SLA fail_nightly readiness
+        shell: pwsh
+        run: |
+          $readiness = Get-Content "runs/nightly-gateway-sla-readiness/readiness_summary.json" | ConvertFrom-Json
+          $window = $readiness.window_summary
+          $criteria = $readiness.criteria
+          $reasonCodes = if ($null -eq $readiness.recommendation.reason_codes) { "-" } else { ($readiness.recommendation.reason_codes -join ", ") }
+          $lines = @(
+            "## Gateway SLA Fail-Nightly Readiness",
+            "",
+            "| status | readiness_status | window_observed | critical_count | warn_count | warn_ratio | invalid_or_error_count | target_policy |",
+            "|---|---|---:|---:|---:|---:|---:|---|",
+            "| $($readiness.status) | $($readiness.readiness_status) | $($criteria.window_observed) | $($window.critical_count) | $($window.warn_count) | $($window.warn_ratio) | $($window.invalid_or_error_count) | $($readiness.recommendation.target_critical_policy) |",
+            "",
+            "- `required_baseline_count`: $($criteria.required_baseline_count)",
+            "- `max_warn_ratio`: $($criteria.max_warn_ratio)",
+            "- `reason_codes`: $reasonCodes",
+            "- `readiness_summary_json`: runs/nightly-gateway-sla-readiness/readiness_summary.json"
+          )
+          $lines -join "`n" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
+
+      - name: Summary - Gateway SLA fail_nightly governance
+        shell: pwsh
+        run: |
+          $governance = Get-Content "runs/nightly-gateway-sla-governance/governance_summary.json" | ConvertFrom-Json
+          $criteria = $governance.criteria
+          $observed = $governance.observed
+          $reasonCodes = if ($null -eq $governance.recommendation.reason_codes) { "-" } else { ($governance.recommendation.reason_codes -join ", ") }
+          $lines = @(
+            "## Gateway SLA Fail-Nightly Governance",
+            "",
+            "| status | decision_status | latest_ready_streak | required_ready_streak | invalid_or_mismatched_count | target_policy |",
+            "|---|---|---:|---:|---:|---|",
+            "| $($governance.status) | $($governance.decision_status) | $($observed.latest_ready_streak) | $($criteria.required_ready_streak) | $($observed.invalid_or_mismatched_count) | $($governance.recommendation.target_critical_policy) |",
+            "",
+            "- `switch_surface`: $($governance.recommendation.switch_surface)",
+            "- `reason_codes`: $reasonCodes",
+            "- `governance_summary_json`: runs/nightly-gateway-sla-governance/governance_summary.json"
+          )
+          $lines -join "`n" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
+
+      - name: Save cache - Gateway SLA history
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            runs/nightly-gateway-sla-history
+            runs/nightly-gateway-sla-trend-history
+            runs/nightly-gateway-sla-readiness
+          key: gateway-sla-history-v1-${{ github.run_id }}
+
+      - name: Upload artifact - Gateway SLA readiness nightly runs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gateway-sla-readiness-nightly-runs
+          path: |
+            runs/nightly-gateway-http-core
+            runs/nightly-gateway-sla-history
+            runs/nightly-gateway-sla-trend-history
+            runs/nightly-gateway-sla-readiness
+            runs/nightly-gateway-sla-governance
