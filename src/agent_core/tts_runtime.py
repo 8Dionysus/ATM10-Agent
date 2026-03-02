@@ -8,7 +8,7 @@ import wave
 from collections import OrderedDict
 from concurrent.futures import Future
 from dataclasses import dataclass
-from typing import Any, Callable
+from typing import Any, Callable, Iterator
 
 import numpy as np
 
@@ -209,17 +209,18 @@ class TTSRuntimeService:
 
         raise TTSRuntimeError(f"No TTS engine succeeded. Errors: {errors}")
 
-    def synthesize(self, request: TTSRequest) -> dict[str, Any]:
+    def iter_synthesize(self, request: TTSRequest) -> Iterator[TTSChunk]:
         text_chunks = split_text_into_chunks(
             request.text,
             max_chars=request.chunk_chars or self.max_chunk_chars,
         )
         if not text_chunks:
             raise ValueError("text must be non-empty.")
-
-        chunks: list[TTSChunk] = []
         for index, chunk_text in enumerate(text_chunks):
-            chunks.append(self._synthesize_chunk(request=request, index=index, chunk_text=chunk_text))
+            yield self._synthesize_chunk(request=request, index=index, chunk_text=chunk_text)
+
+    def synthesize(self, request: TTSRequest) -> dict[str, Any]:
+        chunks = list(self.iter_synthesize(request))
 
         return {
             "chunk_count": len(chunks),
@@ -290,4 +291,3 @@ class TTSRuntimeService:
             "cache_items": self.cache.size(),
             "prewarm": prewarm,
         }
-

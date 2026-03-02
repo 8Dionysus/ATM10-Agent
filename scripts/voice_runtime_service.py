@@ -7,6 +7,7 @@ import sys
 import threading
 import traceback
 import wave
+from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -67,6 +68,105 @@ def _utc_now() -> str:
 SUPPORTED_TTS_RUNTIMES = ("auto", "qwen3", DEFAULT_FAST_TTS_RUNTIME)
 SUPPORTED_ASR_BACKENDS = ("qwen_asr", "whisper_genai")
 ARCHIVED_ASR_BACKENDS = ("qwen_asr",)
+VOICE_HTTP_DEFAULT_MAX_REQUEST_BODY_BYTES = 262_144
+VOICE_HTTP_DEFAULT_MAX_JSON_DEPTH = 8
+VOICE_HTTP_DEFAULT_MAX_STRING_LENGTH = 8_192
+VOICE_HTTP_DEFAULT_MAX_ARRAY_ITEMS = 256
+VOICE_HTTP_DEFAULT_MAX_OBJECT_KEYS = 256
+
+
+@dataclass(frozen=True)
+class VoiceHTTPPolicy:
+    max_request_body_bytes: int = VOICE_HTTP_DEFAULT_MAX_REQUEST_BODY_BYTES
+    max_json_depth: int = VOICE_HTTP_DEFAULT_MAX_JSON_DEPTH
+    max_string_length: int = VOICE_HTTP_DEFAULT_MAX_STRING_LENGTH
+    max_array_items: int = VOICE_HTTP_DEFAULT_MAX_ARRAY_ITEMS
+    max_object_keys: int = VOICE_HTTP_DEFAULT_MAX_OBJECT_KEYS
+
+
+class VoicePayloadLimitError(ValueError):
+    def __init__(self, *, error_code: str, message: str) -> None:
+        super().__init__(message)
+        self.error_code = error_code
+
+
+def _validate_http_policy(policy: VoiceHTTPPolicy) -> None:
+    if policy.max_request_body_bytes <= 0:
+        raise ValueError("max_request_body_bytes must be > 0.")
+    if policy.max_json_depth <= 0:
+        raise ValueError("max_json_depth must be > 0.")
+    if policy.max_string_length <= 0:
+        raise ValueError("max_string_length must be > 0.")
+    if policy.max_array_items <= 0:
+        raise ValueError("max_array_items must be > 0.")
+    if policy.max_object_keys <= 0:
+        raise ValueError("max_object_keys must be > 0.")
+
+
+def _raise_payload_limit_if_needed(value: Any, *, policy: VoiceHTTPPolicy, depth: int = 1) -> None:
+    if depth > policy.max_json_depth:
+        raise VoicePayloadLimitError(
+            error_code="payload_limit_exceeded",
+            message=(
+                "payload_limit_exceeded: "
+                f"max_json_depth={policy.max_json_depth}, observed_depth={depth}"
+            ),
+        )
+    if isinstance(value, str):
+        if len(value) > policy.max_string_length:
+            raise VoicePayloadLimitError(
+                error_code="payload_limit_exceeded",
+                message=(
+                    "payload_limit_exceeded: "
+                    f"max_string_length={policy.max_string_length}, observed_length={len(value)}"
+                ),
+            )
+        return
+    if isinstance(value, list):
+        if len(value) > policy.max_array_items:
+            raise VoicePayloadLimitError(
+                error_code="payload_limit_exceeded",
+                message=(
+                    "payload_limit_exceeded: "
+                    f"max_array_items={policy.max_array_items}, observed_items={len(value)}"
+                ),
+            )
+        for item in value:
+            _raise_payload_limit_if_needed(item, policy=policy, depth=depth + 1)
+        return
+    if isinstance(value, dict):
+        if len(value) > policy.max_object_keys:
+            raise VoicePayloadLimitError(
+                error_code="payload_limit_exceeded",
+                message=(
+                    "payload_limit_exceeded: "
+                    f"max_object_keys={policy.max_object_keys}, observed_keys={len(value)}"
+                ),
+            )
+        for item in value.values():
+            _raise_payload_limit_if_needed(item, policy=policy, depth=depth + 1)
+
+
+def _parse_json_body_bytes(
+    *,
+    body_bytes: bytes,
+    content_length: int | None,
+    policy: VoiceHTTPPolicy,
+) -> dict[str, Any]:
+    if content_length is not None and content_length > policy.max_request_body_bytes:
+        raise VoicePayloadLimitError(error_code="payload_too_large", message="payload too large")
+    if len(body_bytes) > policy.max_request_body_bytes:
+        raise VoicePayloadLimitError(error_code="payload_too_large", message="payload too large")
+
+    try:
+        parsed = json.loads(body_bytes.decode("utf-8"))
+    except Exception as exc:
+        raise ValueError(f"JSON parse failed: {exc}") from exc
+    if not isinstance(parsed, dict):
+        raise ValueError("JSON body must be an object.")
+
+    _raise_payload_limit_if_needed(parsed, policy=policy)
+    return parsed
 
 
 def _create_asr_warmup_silence_wav(*, run_dir: Path, sample_rate: int = 16000, duration_sec: float = 0.8) -> Path:
@@ -505,7 +605,7 @@ def _parse_tts_payload(
     return text, speaker, language, instruct, out_wav_path
 
 
-def process_tts_stream_request(state: VoiceRuntimeState, payload: Mapping[str, Any]) -> list[dict[str, Any]]:
+def iter_tts_stream_events(state: VoiceRuntimeState, payload: Mapping[str, Any]):
     text, speaker, language, instruct, out_wav_path = _parse_tts_payload(state, payload)
 
     chunk_ms_raw = payload.get("chunk_ms", 200)
@@ -523,6 +623,19 @@ def process_tts_stream_request(state: VoiceRuntimeState, payload: Mapping[str, A
     sample_rate: int | None = None
     first_chunk_latency_sec: float | None = None
     streaming_mode = "fallback_chunked"
+    chunk_index = 0
+
+    yield {
+        "event": "started",
+        "timestamp_utc": _utc_now(),
+        "text": text,
+        "speaker_selected": selected_speaker,
+        "language": language,
+        "chunk_ms": chunk_ms,
+        "requested_tts_runtime": requested_runtime,
+        "fallback_used": fallback_used,
+        "fallback_reason": fallback_reason,
+    }
 
     if requested_runtime != DEFAULT_FAST_TTS_RUNTIME:
         try:
@@ -541,8 +654,21 @@ def process_tts_stream_request(state: VoiceRuntimeState, payload: Mapping[str, A
                     sample_rate = int(chunk_sample_rate)
                 if first_chunk_latency_sec is None:
                     first_chunk_latency_sec = perf_counter() - t0
-                collected_chunks.append(np.asarray(chunk, dtype=np.float32).reshape(-1))
+                normalized_chunk = np.asarray(chunk, dtype=np.float32).reshape(-1)
+                collected_chunks.append(normalized_chunk)
                 streaming_mode = mode
+                pcm16_b64 = base64.b64encode(_waveform_to_pcm16_bytes(normalized_chunk)).decode("ascii")
+                yield {
+                    "event": "audio_chunk",
+                    "timestamp_utc": _utc_now(),
+                    "chunk_index": chunk_index,
+                    "sample_rate": int(sample_rate),
+                    "num_samples": int(normalized_chunk.shape[0]),
+                    "first_chunk_latency_sec": first_chunk_latency_sec,
+                    "streaming_mode": streaming_mode,
+                    "pcm16_b64": pcm16_b64,
+                }
+                chunk_index += 1
         except VoiceRuntimeUnavailableError as exc:
             if requested_runtime == "qwen3":
                 raise
@@ -562,7 +688,20 @@ def process_tts_stream_request(state: VoiceRuntimeState, payload: Mapping[str, A
         for chunk in _iter_waveform_chunks(waveform=waveform, chunk_ms=chunk_ms, sample_rate=sample_rate):
             if first_chunk_latency_sec is None:
                 first_chunk_latency_sec = perf_counter() - t0
-            collected_chunks.append(chunk)
+            normalized_chunk = np.asarray(chunk, dtype=np.float32).reshape(-1)
+            collected_chunks.append(normalized_chunk)
+            pcm16_b64 = base64.b64encode(_waveform_to_pcm16_bytes(normalized_chunk)).decode("ascii")
+            yield {
+                "event": "audio_chunk",
+                "timestamp_utc": _utc_now(),
+                "chunk_index": chunk_index,
+                "sample_rate": int(sample_rate),
+                "num_samples": int(normalized_chunk.shape[0]),
+                "first_chunk_latency_sec": first_chunk_latency_sec,
+                "streaming_mode": "ovms_file_chunked",
+                "pcm16_b64": pcm16_b64,
+            }
+            chunk_index += 1
         if not collected_chunks:
             raise RuntimeError("Fast fallback TTS produced empty waveform.")
         streaming_mode = "ovms_file_chunked"
@@ -575,63 +714,35 @@ def process_tts_stream_request(state: VoiceRuntimeState, payload: Mapping[str, A
     assert sample_rate is not None
     waveform = np.concatenate(collected_chunks)
 
-    events: list[dict[str, Any]] = [
-        {
-            "event": "started",
-            "timestamp_utc": _utc_now(),
-            "text": text,
-            "speaker_selected": selected_speaker,
-            "language": language,
-            "chunk_ms": chunk_ms,
-            "requested_tts_runtime": requested_runtime,
-            "fallback_used": fallback_used,
-            "fallback_reason": fallback_reason,
-        }
-    ]
-
-    for chunk_index, chunk in enumerate(collected_chunks):
-        pcm16_b64 = base64.b64encode(_waveform_to_pcm16_bytes(chunk)).decode("ascii")
-        events.append(
-            {
-                "event": "audio_chunk",
-                "timestamp_utc": _utc_now(),
-                "chunk_index": chunk_index,
-                "sample_rate": int(sample_rate),
-                "num_samples": int(chunk.shape[0]),
-                "first_chunk_latency_sec": first_chunk_latency_sec,
-                "streaming_mode": streaming_mode,
-                "pcm16_b64": pcm16_b64,
-            }
-        )
-
     total_synthesis_sec = perf_counter() - t0
     audio_duration_sec = float(waveform.shape[0]) / float(sample_rate)
     rtf = total_synthesis_sec / audio_duration_sec if audio_duration_sec > 0 else None
-    events.append(
-        {
-            "event": "completed",
-            "timestamp_utc": _utc_now(),
-            "text": text,
-            "speaker_selected": selected_speaker,
-            "language": language,
-            "streaming_mode": streaming_mode,
-            "requested_tts_runtime": requested_runtime,
-            "tts_runtime": "qwen3" if streaming_mode != "ovms_file_chunked" else DEFAULT_FAST_TTS_RUNTIME,
-            "fallback_used": fallback_used,
-            "fallback_reason": fallback_reason,
-            "sample_rate": int(sample_rate),
-            "num_samples": int(waveform.shape[0]),
-            "audio_duration_sec": audio_duration_sec,
-            "first_chunk_latency_sec": first_chunk_latency_sec,
-            "total_synthesis_sec": total_synthesis_sec,
-            "rtf": rtf,
-            "audio_out_wav": str(out_wav_path),
-        }
-    )
-    return events
+    yield {
+        "event": "completed",
+        "timestamp_utc": _utc_now(),
+        "text": text,
+        "speaker_selected": selected_speaker,
+        "language": language,
+        "streaming_mode": streaming_mode,
+        "requested_tts_runtime": requested_runtime,
+        "tts_runtime": "qwen3" if streaming_mode != "ovms_file_chunked" else DEFAULT_FAST_TTS_RUNTIME,
+        "fallback_used": fallback_used,
+        "fallback_reason": fallback_reason,
+        "sample_rate": int(sample_rate),
+        "num_samples": int(waveform.shape[0]),
+        "audio_duration_sec": audio_duration_sec,
+        "first_chunk_latency_sec": first_chunk_latency_sec,
+        "total_synthesis_sec": total_synthesis_sec,
+        "rtf": rtf,
+        "audio_out_wav": str(out_wav_path),
+    }
 
 
-def _create_handler(state: VoiceRuntimeState) -> type[BaseHTTPRequestHandler]:
+def process_tts_stream_request(state: VoiceRuntimeState, payload: Mapping[str, Any]) -> list[dict[str, Any]]:
+    return list(iter_tts_stream_events(state, payload))
+
+
+def _create_handler(state: VoiceRuntimeState, http_policy: VoiceHTTPPolicy) -> type[BaseHTTPRequestHandler]:
     class VoiceServiceHandler(BaseHTTPRequestHandler):
         server_version = "ATM10VoiceService/1.0"
 
@@ -647,14 +758,18 @@ def _create_handler(state: VoiceRuntimeState) -> type[BaseHTTPRequestHandler]:
             length_raw = self.headers.get("Content-Length")
             if length_raw is None:
                 raise ValueError("Content-Length header is required.")
-            length = int(length_raw)
+            try:
+                length = int(length_raw)
+            except ValueError as exc:
+                raise ValueError("malformed Content-Length header") from exc
             if length <= 0:
                 raise ValueError("Request body must be non-empty JSON.")
             raw = self.rfile.read(length)
-            parsed = json.loads(raw.decode("utf-8"))
-            if not isinstance(parsed, dict):
-                raise ValueError("JSON body must be an object.")
-            return parsed
+            return _parse_json_body_bytes(
+                body_bytes=raw,
+                content_length=length,
+                policy=http_policy,
+            )
 
         def _start_ndjson(self, code: int = 200) -> None:
             self.send_response(code)
@@ -669,10 +784,12 @@ def _create_handler(state: VoiceRuntimeState) -> type[BaseHTTPRequestHandler]:
         def _send_tts_stream(self, payload: Mapping[str, Any]) -> None:
             headers_started = False
             try:
-                events = process_tts_stream_request(state, payload)
+                events_iter = iter_tts_stream_events(state, payload)
+                first_event = next(events_iter)
                 self._start_ndjson(200)
                 headers_started = True
-                for event in events:
+                self._write_ndjson_event(first_event)
+                for event in events_iter:
                     self._write_ndjson_event(event)
             except (ValueError, FileNotFoundError) as exc:
                 if headers_started:
@@ -709,7 +826,13 @@ def _create_handler(state: VoiceRuntimeState) -> type[BaseHTTPRequestHandler]:
 
         def do_GET(self) -> None:  # noqa: N802
             if self.path == "/health":
-                self._send_json(200, state.health_payload())
+                self._send_json(
+                    200,
+                    {
+                        **state.health_payload(),
+                        "policy": asdict(http_policy),
+                    },
+                )
                 return
             self._send_json(404, {"error": "not_found", "path": self.path})
 
@@ -728,6 +851,8 @@ def _create_handler(state: VoiceRuntimeState) -> type[BaseHTTPRequestHandler]:
                     self._send_tts_stream(payload)
                     return
                 self._send_json(404, {"error": "not_found", "path": self.path})
+            except VoicePayloadLimitError as exc:
+                self._send_json(413, {"ok": False, "error": str(exc), "error_code": exc.error_code})
             except (ValueError, FileNotFoundError) as exc:
                 self._send_json(400, {"ok": False, "error": str(exc), "error_code": "bad_request"})
             except VoiceRuntimeUnavailableError as exc:
@@ -770,6 +895,7 @@ def run_voice_runtime_service(
     asr_warmup_request: bool = False,
     asr_warmup_audio: Path | None = None,
     asr_warmup_language: str | None = None,
+    http_policy: VoiceHTTPPolicy | None = None,
     now: datetime | None = None,
 ) -> dict[str, Any]:
     if asr_backend in ARCHIVED_ASR_BACKENDS and not allow_archived_asr_backend:
@@ -779,6 +905,8 @@ def run_voice_runtime_service(
         )
     if now is None:
         now = datetime.now(timezone.utc)
+    effective_http_policy = http_policy or VoiceHTTPPolicy()
+    _validate_http_policy(effective_http_policy)
     run_dir = _create_run_dir(runs_dir, now)
     run_json_path = run_dir / "run.json"
     state = VoiceRuntimeState(
@@ -852,6 +980,7 @@ def run_voice_runtime_service(
             "host": host,
             "port": port,
             "base_url": f"http://{host}:{port}",
+            "http_policy": asdict(effective_http_policy),
         },
         "models": {
             "asr_backend": asr_backend,
@@ -876,7 +1005,7 @@ def run_voice_runtime_service(
     }
     _write_json(run_json_path, run_payload)
 
-    handler = _create_handler(state)
+    handler = _create_handler(state, effective_http_policy)
     server = ThreadingHTTPServer((host, port), handler)
     try:
         server.serve_forever()
@@ -895,6 +1024,39 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--host", default="127.0.0.1", help="Bind host (default: 127.0.0.1).")
     parser.add_argument("--port", type=int, default=8765, help="Bind port (default: 8765).")
     parser.add_argument("--runs-dir", type=Path, default=Path("runs"), help="Run artifact base directory.")
+    parser.add_argument(
+        "--max-request-bytes",
+        type=int,
+        default=VOICE_HTTP_DEFAULT_MAX_REQUEST_BODY_BYTES,
+        help=(
+            "Maximum allowed HTTP request body size in bytes "
+            f"(default: {VOICE_HTTP_DEFAULT_MAX_REQUEST_BODY_BYTES})."
+        ),
+    )
+    parser.add_argument(
+        "--max-json-depth",
+        type=int,
+        default=VOICE_HTTP_DEFAULT_MAX_JSON_DEPTH,
+        help=f"Maximum allowed JSON depth (default: {VOICE_HTTP_DEFAULT_MAX_JSON_DEPTH}).",
+    )
+    parser.add_argument(
+        "--max-string-length",
+        type=int,
+        default=VOICE_HTTP_DEFAULT_MAX_STRING_LENGTH,
+        help=f"Maximum allowed JSON string length (default: {VOICE_HTTP_DEFAULT_MAX_STRING_LENGTH}).",
+    )
+    parser.add_argument(
+        "--max-array-items",
+        type=int,
+        default=VOICE_HTTP_DEFAULT_MAX_ARRAY_ITEMS,
+        help=f"Maximum allowed JSON array length (default: {VOICE_HTTP_DEFAULT_MAX_ARRAY_ITEMS}).",
+    )
+    parser.add_argument(
+        "--max-object-keys",
+        type=int,
+        default=VOICE_HTTP_DEFAULT_MAX_OBJECT_KEYS,
+        help=f"Maximum allowed JSON object key count (default: {VOICE_HTTP_DEFAULT_MAX_OBJECT_KEYS}).",
+    )
     parser.add_argument(
         "--asr-backend",
         type=str,
@@ -971,6 +1133,13 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> int:
     args = parse_args()
+    http_policy = VoiceHTTPPolicy(
+        max_request_body_bytes=args.max_request_bytes,
+        max_json_depth=args.max_json_depth,
+        max_string_length=args.max_string_length,
+        max_array_items=args.max_array_items,
+        max_object_keys=args.max_object_keys,
+    )
     asr_model_id = args.asr_model
     if args.asr_backend == "whisper_genai" and asr_model_id == DEFAULT_QWEN3_ASR_MODEL:
         asr_model_id = DEFAULT_WHISPER_GENAI_MODEL_DIR
@@ -988,6 +1157,7 @@ def main() -> int:
         asr_warmup_request=args.asr_warmup_request,
         asr_warmup_audio=args.asr_warmup_audio,
         asr_warmup_language=args.asr_warmup_language,
+        http_policy=http_policy,
         tts_model_id=args.tts_model,
         device_map=args.device_map,
         dtype=args.dtype,

@@ -7,7 +7,7 @@
 - Проект: `atm10-agent`
 - Target platform: Windows 11 + PowerShell 7
 - Target Python: 3.11+ (проверено на 3.12.10)
-- Текущий status tests: `285 passed` (`python -m pytest`)
+- Текущий status tests: `python -m pytest` green (актуальный snapshot: CI + `docs/SESSION_2026-03-02.md`).
 
 ## Active capabilities
 
@@ -22,6 +22,8 @@
 - Gateway fail_nightly readiness: `scripts/check_gateway_sla_fail_nightly_readiness.py` (`gateway_sla_fail_nightly_readiness_v1`).
 - Gateway fail_nightly governance: `scripts/check_gateway_sla_fail_nightly_governance.py` (`gateway_sla_fail_nightly_governance_v1`).
 - Gateway SLA readiness nightly: `.github/workflows/gateway-sla-readiness-nightly.yml`.
+- Dependency profiles: `requirements-voice.txt`, `requirements-llm.txt`, `requirements-export.txt`, `requirements-audit.txt`.
+- Dependency audit: `scripts/dependency_audit.py` + report-only CI step (`runs/ci-dependency-audit`, artifact `dependency-audit-report`).
 
 ## Canonical docs
 

@@ -236,7 +236,7 @@ def test_gateway_v1_http_service_timeout_returns_504(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     def _slow_dispatch(*args, **kwargs):
-        time.sleep(0.05)
+        time.sleep(0.25)
         return {
             "ok": True,
             "run_dir": tmp_path / "runs" / "slow",
@@ -253,9 +253,10 @@ def test_gateway_v1_http_service_timeout_returns_504(
         }
 
     monkeypatch.setattr(gateway_http, "run_gateway_request", _slow_dispatch)
-    policy = gateway_http.GatewayHTTPPolicy(operation_timeout_sec=0.001)
+    policy = gateway_http.GatewayHTTPPolicy(operation_timeout_sec=0.01)
     app = gateway_http.create_app(runs_dir=tmp_path / "runs", policy=policy)
     with TestClient(app) as client:
+        started = time.perf_counter()
         response = client.post(
             "/v1/gateway",
             json={
@@ -264,10 +265,12 @@ def test_gateway_v1_http_service_timeout_returns_504(
                 "payload": {},
             },
         )
+        elapsed_sec = time.perf_counter() - started
     payload = response.json()
     assert response.status_code == 504
     assert payload["status"] == "error"
     assert payload["error_code"] == "operation_timeout"
+    assert elapsed_sec < 0.20
 
 
 def test_gateway_v1_http_service_internal_error_sanitized(

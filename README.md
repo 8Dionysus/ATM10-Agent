@@ -24,9 +24,30 @@ python scripts/phase_a_smoke.py
 python -m pytest
 ```
 
+## Dependency profiles
+
+```powershell
+# Base runtime + test tools
+pip install -r requirements.txt
+pip install -r requirements-dev.txt
+
+# Voice optional profile
+pip install -r requirements-voice.txt
+
+# LLM optional profile
+pip install -r requirements-llm.txt
+
+# Export optional profile
+pip install -r requirements-export.txt
+
+# Dependency audit tooling
+pip install -r requirements-audit.txt
+python scripts/dependency_audit.py --runs-dir runs --policy report_only --with-security-scan true
+```
+
 ## Current status (as of 2026-03-02)
 
-- `python -m pytest` green (`285 passed`).
+- `python -m pytest` green (см. CI и `docs/SESSION_2026-03-02.md` для актуального snapshot).
 - Active ASR path: `whisper_genai`; `qwen_asr` — archived/recoverable opt-in.
 - KAG Neo4j nightly guardrail path активен: `build -> sync -> eval(sample+hard) -> guardrail-check -> trend snapshot`.
 - Trend snapshot включает rolling-baseline, severity-policy (`signal_only|fail_nightly`) и calibration-aware thresholds (`latency warn=5.0`, `critical=15.0`).

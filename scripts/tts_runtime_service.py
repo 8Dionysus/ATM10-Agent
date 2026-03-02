@@ -10,6 +10,7 @@ import sys
 import tempfile
 import threading
 import wave
+from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -285,6 +286,20 @@ def _serialize_result(result: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _coerce_bool_value(value: Any, *, field_name: str) -> bool:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, int) and value in {0, 1}:
+        return bool(value)
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        if normalized in {"1", "true", "yes", "y", "on"}:
+            return True
+        if normalized in {"0", "false", "no", "n", "off"}:
+            return False
+    raise ValueError(f"{field_name} must be boolean or one of true|false|1|0.")
+
+
 def _request_from_payload(payload: dict[str, Any]) -> TTSRequest:
     text = str(payload.get("text", "")).strip()
     if not text:
@@ -292,7 +307,7 @@ def _request_from_payload(payload: dict[str, Any]) -> TTSRequest:
     language = str(payload.get("language", "en")).strip() or "en"
     speaker_value = payload.get("speaker")
     speaker = str(speaker_value).strip() if isinstance(speaker_value, str) and speaker_value.strip() else None
-    service_voice = bool(payload.get("service_voice", False))
+    service_voice = _coerce_bool_value(payload.get("service_voice", False), field_name="service_voice")
     chunk_chars_value = payload.get("chunk_chars")
     chunk_chars = int(chunk_chars_value) if isinstance(chunk_chars_value, int) and chunk_chars_value > 0 else None
     return TTSRequest(
@@ -311,17 +326,17 @@ def create_app(service: TTSRuntimeService, *, prewarm: bool) -> Any:
     except Exception as exc:  # pragma: no cover - dependency presence
         raise RuntimeError("FastAPI/uvicorn are required for tts_runtime_service.") from exc
 
-    app = FastAPI(title="ATM10 TTS Runtime", version="0.1.0")
-
-    @app.on_event("startup")
-    def _on_startup() -> None:
+    @asynccontextmanager
+    async def _lifespan(_app: Any):
         service.start()
         if prewarm:
             service.prewarm()
+        try:
+            yield
+        finally:
+            service.stop()
 
-    @app.on_event("shutdown")
-    def _on_shutdown() -> None:
-        service.stop()
+    app = FastAPI(title="ATM10 TTS Runtime", version="0.1.0", lifespan=_lifespan)
 
     @app.get("/health")
     def _health() -> dict[str, Any]:
@@ -342,8 +357,6 @@ def create_app(service: TTSRuntimeService, *, prewarm: bool) -> Any:
     def _tts_stream(payload: dict[str, Any]) -> StreamingResponse:
         try:
             request = _request_from_payload(payload)
-            result = service.submit(request).result(timeout=120.0)
-            serialized = _serialize_result(result)
         except (ValueError, TTSRuntimeError) as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         except Exception as exc:
@@ -351,15 +364,57 @@ def create_app(service: TTSRuntimeService, *, prewarm: bool) -> Any:
 
         def _iter_events():
             yield json.dumps({"event": "started", "timestamp_utc": _utc_now()}, ensure_ascii=False) + "\n"
-            for chunk in serialized["chunks"]:
-                yield json.dumps({"event": "audio_chunk", **chunk}, ensure_ascii=False) + "\n"
+            chunk_count = 0
+            cache_hits = 0
+            try:
+                for chunk in service.iter_synthesize(request):
+                    chunk_count += 1
+                    if chunk.cached:
+                        cache_hits += 1
+                    chunk_payload = {
+                        "index": chunk.index,
+                        "text": chunk.text,
+                        "engine": chunk.engine,
+                        "sample_rate": chunk.sample_rate,
+                        "cached": chunk.cached,
+                        "audio_wav_b64": base64.b64encode(chunk.audio_wav_bytes).decode("ascii"),
+                    }
+                    yield json.dumps({"event": "audio_chunk", **chunk_payload}, ensure_ascii=False) + "\n"
+            except (ValueError, TTSRuntimeError) as exc:
+                yield (
+                    json.dumps(
+                        {
+                            "event": "error",
+                            "timestamp_utc": _utc_now(),
+                            "error": str(exc),
+                            "error_code": "bad_request",
+                        },
+                        ensure_ascii=False,
+                    )
+                    + "\n"
+                )
+                return
+            except Exception as exc:
+                yield (
+                    json.dumps(
+                        {
+                            "event": "error",
+                            "timestamp_utc": _utc_now(),
+                            "error": str(exc),
+                            "error_code": "internal_error",
+                        },
+                        ensure_ascii=False,
+                    )
+                    + "\n"
+                )
+                return
             yield (
                 json.dumps(
                     {
                         "event": "completed",
                         "timestamp_utc": _utc_now(),
-                        "chunk_count": serialized["chunk_count"],
-                        "cache_hits": serialized["cache_hits"],
+                        "chunk_count": chunk_count,
+                        "cache_hits": cache_hits,
                     },
                     ensure_ascii=False,
                 )

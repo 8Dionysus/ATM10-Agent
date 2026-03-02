@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import base64
 import io
+import json
 import sys
 import types
 import wave
@@ -28,6 +29,25 @@ def test_request_from_payload_validates_text() -> None:
     assert request.speaker == "voice_a"
     assert request.service_voice is True
     assert request.chunk_chars == 180
+
+
+@pytest.mark.parametrize(
+    ("raw_value", "expected"),
+    [
+        ("true", True),
+        ("false", False),
+        ("1", True),
+        ("0", False),
+    ],
+)
+def test_request_from_payload_coerces_service_voice_string(raw_value: str, expected: bool) -> None:
+    request = tts_runtime_service._request_from_payload({"text": "hello", "service_voice": raw_value})
+    assert request.service_voice is expected
+
+
+def test_request_from_payload_rejects_invalid_service_voice() -> None:
+    with pytest.raises(ValueError, match="service_voice"):
+        tts_runtime_service._request_from_payload({"text": "hello", "service_voice": "maybe"})
 
 
 def test_serialize_result_encodes_audio_wav_b64() -> None:
@@ -185,3 +205,115 @@ def test_build_silero_engine_uses_remote_with_opt_in_and_pinned_ref(monkeypatch:
     assert wav_bytes.startswith(b"RIFF")
     assert captured["repo_or_dir"] == "snakers4/silero-models:v4.1.0"
     assert captured["source"] == "github"
+
+
+def test_tts_stream_endpoint_uses_iter_synthesize_without_submit() -> None:
+    from fastapi.testclient import TestClient
+
+    class _FakeService:
+        def start(self) -> None:
+            return
+
+        def stop(self) -> None:
+            return
+
+        def prewarm(self) -> dict[str, dict[str, object]]:
+            return {}
+
+        def health(self) -> dict[str, object]:
+            return {
+                "status": "ok",
+                "worker_alive": True,
+                "queue_size": 0,
+                "cache_items": 0,
+                "prewarm": {},
+            }
+
+        def submit(self, _request):
+            raise AssertionError("submit must not be used for /tts_stream")
+
+        def iter_synthesize(self, _request):
+            yield TTSChunk(
+                index=0,
+                text="hello",
+                engine="xtts_v2",
+                sample_rate=22050,
+                audio_wav_bytes=b"RIFFfake",
+                cached=False,
+            )
+
+    app = tts_runtime_service.create_app(_FakeService(), prewarm=False)
+    with TestClient(app) as client:
+        response = client.post("/tts_stream", json={"text": "hello"})
+
+    assert response.status_code == 200
+    events = [json.loads(line) for line in response.text.splitlines() if line.strip()]
+    assert [event["event"] for event in events] == ["started", "audio_chunk", "completed"]
+    assert events[1]["text"] == "hello"
+    assert events[1]["audio_wav_b64"] == base64.b64encode(b"RIFFfake").decode("ascii")
+
+
+def test_tts_endpoint_keeps_non_streaming_submit_path() -> None:
+    from fastapi.testclient import TestClient
+
+    class _FakeFuture:
+        def __init__(self, payload: dict[str, object]) -> None:
+            self._payload = payload
+
+        def result(self, timeout: float) -> dict[str, object]:
+            assert timeout == 120.0
+            return self._payload
+
+    class _FakeService:
+        def __init__(self) -> None:
+            self.submit_called = False
+
+        def start(self) -> None:
+            return
+
+        def stop(self) -> None:
+            return
+
+        def prewarm(self) -> dict[str, dict[str, object]]:
+            return {}
+
+        def health(self) -> dict[str, object]:
+            return {
+                "status": "ok",
+                "worker_alive": True,
+                "queue_size": 0,
+                "cache_items": 0,
+                "prewarm": {},
+            }
+
+        def submit(self, _request):
+            self.submit_called = True
+            payload = {
+                "chunk_count": 1,
+                "cache_hits": 0,
+                "router_chain": ["xtts_v2"],
+                "chunks": [
+                    TTSChunk(
+                        index=0,
+                        text="hello",
+                        engine="xtts_v2",
+                        sample_rate=22050,
+                        audio_wav_bytes=b"RIFFfake",
+                        cached=False,
+                    )
+                ],
+            }
+            return _FakeFuture(payload)
+
+        def iter_synthesize(self, _request):
+            raise AssertionError("iter_synthesize must not be used for /tts")
+
+    service = _FakeService()
+    app = tts_runtime_service.create_app(service, prewarm=False)
+    with TestClient(app) as client:
+        response = client.post("/tts", json={"text": "hello"})
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["ok"] is True
+    assert service.submit_called is True

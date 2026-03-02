@@ -20,6 +20,23 @@ python -m pip install -r requirements-dev.txt
 python -m pytest
 ```
 
+## Dependency Profiles
+
+```powershell
+# Base runtime + tests
+python -m pip install -r requirements.txt
+python -m pip install -r requirements-dev.txt
+
+# Optional profiles
+python -m pip install -r requirements-voice.txt
+python -m pip install -r requirements-llm.txt
+python -m pip install -r requirements-export.txt
+
+# Dependency audit
+python -m pip install -r requirements-audit.txt
+python scripts/dependency_audit.py --runs-dir runs --policy report_only --with-security-scan true
+```
+
 ## CI smoke (runnable scripts)
 
 ```powershell
@@ -792,6 +809,20 @@ python scripts/voice_runtime_client.py --service-url http://127.0.0.1:8765 healt
 python scripts/voice_runtime_client.py --service-url http://127.0.0.1:8765 asr --audio-in "C:\path\to\sample.wav"
 ```
 
+HTTP hardening defaults (voice service):
+
+* `max_request_body_bytes = 262144`
+* `max_json_depth = 8`
+* `max_string_length = 8192`
+* `max_array_items = 256`
+* `max_object_keys = 256`
+
+Payload-limit behavior:
+
+* `payload_too_large` -> HTTP `413`
+* `payload_limit_exceeded` -> HTTP `413`
+* обычные валидационные ошибки payload -> HTTP `400`
+
 Примечание (security): в HTTP payload для `/tts` и `/tts_stream` поле `out_wav_path` должно быть только именем файла (без absolute path и директорий). Сервис всегда пишет TTS WAV в свой `runs/<timestamp>-voice-service/tts_outputs/`.
 
 ### Long-lived voice runtime service (Whisper GenAI + NPU ASR)
@@ -799,6 +830,9 @@ python scripts/voice_runtime_client.py --service-url http://127.0.0.1:8765 asr -
 ```powershell
 # Service start with Whisper v3 Turbo OpenVINO model
 python scripts/voice_runtime_service.py --host 127.0.0.1 --port 8765 --asr-backend whisper_genai --asr-model models\whisper-large-v3-turbo-ov --asr-device NPU --asr-task transcribe --asr-warmup-request --asr-warmup-language en --no-preload-asr --no-preload-tts
+
+# Same profile with explicit HTTP limits
+python scripts/voice_runtime_service.py --host 127.0.0.1 --port 8765 --asr-backend whisper_genai --asr-model models\whisper-large-v3-turbo-ov --asr-device NPU --asr-task transcribe --max-request-bytes 262144 --max-json-depth 8 --max-string-length 8192 --max-array-items 256 --max-object-keys 256
 
 # Same profile via helper start script
 pwsh -File scripts\start_voice_whisper_npu.ps1 -BindHost 127.0.0.1 -Port 8765 -AsrModelDir "models\whisper-large-v3-turbo-ov" -WarmupLanguage en
@@ -862,7 +896,7 @@ python scripts/tts_runtime_service.py --host 127.0.0.1 --port 8780
 * Router: FastAPI
 * Main engine: XTTS v2
 * Fallback engines: Piper, Silero (для `ru` service voice)
-* Techniques: prewarm, queue, chunking, phrase cache
+* Techniques: prewarm, queue, chunking, phrase cache, true streaming for `/tts_stream`
 
 Минимальная конфигурация adapters (env):
 
@@ -903,6 +937,11 @@ python scripts/tts_runtime_client.py --service-url http://127.0.0.1:8780 tts --t
 python scripts/tts_runtime_client.py --service-url http://127.0.0.1:8780 tts-stream --text "служебное сообщение" --language ru --service-voice
 ```
 
+Streaming behavior:
+
+* `/tts_stream` отдает NDJSON инкрементально (`started -> audio_chunk -> completed`) без полного pre-buffer.
+* `/tts` остается non-streaming и использует прежний request/response контракт.
+
 ### Voice latency benchmark (historical)
 
 Исторические артефакты `Qwen3-TTS` оставлены для reference в `runs/*qwen3-tts*`.
@@ -914,12 +953,15 @@ python scripts/tts_runtime_client.py --service-url http://127.0.0.1:8780 tts-str
 cd D:\atm10-agent
 .\.venv\Scripts\Activate.ps1
 python scripts/phase_a_smoke.py
+# Strict mode (no fallback to stub)
+python scripts/phase_a_smoke.py --vlm-provider openai --strict-vlm
 ```
 
 Ожидаемый результат:
 
 * Создается `runs/<timestamp>/`.
 * Внутри есть `screenshot.png`, `run.json`, `response.json`.
+* В strict-mode при ошибке VLM `run.json` и `response.json` все равно сохраняются перед non-zero exit.
 
 ## M2: FTB Quests normalization
 

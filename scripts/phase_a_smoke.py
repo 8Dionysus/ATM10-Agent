@@ -122,6 +122,7 @@ def run_phase_a_smoke(
         },
     }
 
+    response_payload: dict[str, Any]
     try:
         vlm = _build_vlm_client(
             provider=resolved_provider,
@@ -134,11 +135,20 @@ def run_phase_a_smoke(
             prompt=prompt,
         )
     except Exception as exc:
+        run_payload["vlm"]["provider_failed"] = resolved_provider
+        run_payload["vlm"]["fallback_reason"] = str(exc)
         if not allow_vlm_fallback or resolved_provider == "stub":
+            response_payload = {
+                "provider": resolved_provider,
+                "summary": "",
+                "next_steps": [],
+                "error": str(exc),
+                "error_code": "vlm_provider_failed",
+            }
+            run_json_path.write_text(json.dumps(run_payload, indent=2), encoding="utf-8")
+            response_json_path.write_text(json.dumps(response_payload, indent=2), encoding="utf-8")
             raise
         run_payload["vlm"]["fallback_used"] = True
-        run_payload["vlm"]["fallback_reason"] = str(exc)
-        run_payload["vlm"]["provider_failed"] = resolved_provider
         run_payload["vlm"]["resolved"] = "stub"
         vlm = DeterministicStubVLM()
         response_payload = vlm.analyze_image(

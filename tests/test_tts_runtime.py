@@ -88,6 +88,31 @@ def test_phrase_cache_avoids_duplicate_engine_calls() -> None:
     assert second["cache_hits"] == 1
 
 
+def test_iter_synthesize_yields_first_chunk_without_waiting_for_full_request() -> None:
+    calls: list[str] = []
+
+    def _xtts_synthesize(text: str, _language: str, _speaker: str | None):
+        calls.append(text)
+        return make_silence_wav_bytes(duration_ms=120), 22050
+
+    service = TTSRuntimeService(
+        xtts_engine=CallbackTTSEngine(name="xtts_v2", synthesize_fn=_xtts_synthesize),
+        piper_engine=None,
+        silero_engine=None,
+        cache=PhraseCache(max_items=16),
+    )
+
+    iterator = service.iter_synthesize(TTSRequest(text="alpha beta gamma", chunk_chars=5))
+    first_chunk = next(iterator)
+
+    assert first_chunk.text == "alpha"
+    assert calls == ["alpha"]
+
+    rest = list(iterator)
+    assert [item.text for item in rest] == ["beta", "gamma"]
+    assert calls == ["alpha", "beta", "gamma"]
+
+
 def test_queue_submit_processes_request() -> None:
     service = TTSRuntimeService(
         xtts_engine=CallbackTTSEngine(

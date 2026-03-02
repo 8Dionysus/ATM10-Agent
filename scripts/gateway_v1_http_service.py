@@ -5,6 +5,7 @@ import json
 import sys
 import traceback
 from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeoutError
+from contextlib import asynccontextmanager
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -23,6 +24,7 @@ from scripts.gateway_v1_local import run_gateway_request
 
 RESPONSE_SCHEMA_VERSION = "gateway_response_v1"
 FastAPIRequest = Any
+_GATEWAY_REQUEST_EXECUTOR_MAX_WORKERS = 4
 
 
 @dataclass(frozen=True)
@@ -224,7 +226,19 @@ def create_app(*, runs_dir: Path, policy: GatewayHTTPPolicy | None = None) -> An
     global FastAPIRequest
     FastAPIRequest = Request
 
-    app = FastAPI(title="ATM10 Gateway v1 HTTP", version="0.1.0")
+    @asynccontextmanager
+    async def _lifespan(app_instance: Any):
+        app_instance.state.gateway_request_executor = ThreadPoolExecutor(
+            max_workers=_GATEWAY_REQUEST_EXECUTOR_MAX_WORKERS
+        )
+        try:
+            yield
+        finally:
+            executor = getattr(app_instance.state, "gateway_request_executor", None)
+            if executor is not None:
+                executor.shutdown(wait=False, cancel_futures=True)
+
+    app = FastAPI(title="ATM10 Gateway v1 HTTP", version="0.1.0", lifespan=_lifespan)
 
     @app.get("/healthz")
     def _healthz() -> dict[str, Any]:
@@ -302,24 +316,26 @@ def create_app(*, runs_dir: Path, policy: GatewayHTTPPolicy | None = None) -> An
 
         operation = _extract_operation(request_payload)
         try:
-            with ThreadPoolExecutor(max_workers=1) as pool:
-                future = pool.submit(
-                    run_gateway_request,
-                    request_payload=request_payload,
-                    runs_dir=runs_dir,
+            executor = getattr(app.state, "gateway_request_executor", None)
+            if executor is None:
+                raise RuntimeError("gateway_request_executor is not initialized.")
+            future = executor.submit(
+                run_gateway_request,
+                request_payload=request_payload,
+                runs_dir=runs_dir,
+            )
+            try:
+                gateway_result = future.result(timeout=effective_policy.operation_timeout_sec)
+            except FutureTimeoutError:
+                future.cancel()
+                response = _build_response(
+                    operation=operation,
+                    status="error",
+                    error_code="operation_timeout",
+                    error="gateway operation timed out",
+                    result=None,
                 )
-                try:
-                    gateway_result = future.result(timeout=effective_policy.operation_timeout_sec)
-                except FutureTimeoutError:
-                    future.cancel()
-                    response = _build_response(
-                        operation=operation,
-                        status="error",
-                        error_code="operation_timeout",
-                        error="gateway operation timed out",
-                        result=None,
-                    )
-                    return JSONResponse(status_code=map_gateway_http_status(response), content=response)
+                return JSONResponse(status_code=map_gateway_http_status(response), content=response)
             response_payload = gateway_result["response_payload"]
             return JSONResponse(
                 status_code=map_gateway_http_status(response_payload),

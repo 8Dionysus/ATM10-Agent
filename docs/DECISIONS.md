@@ -185,3 +185,15 @@
 * Для `G2.1` добавлен отдельный governance-layer (`gateway_sla_fail_nightly_governance_v1`) для формального `go|hold` решения по switch в `fail_nightly`.
 * Promotion rule зафиксирован как `3` подряд nightly `readiness_status=ready`; при этом в рассматриваемом history slice `invalid_or_mismatched_count` должен быть `0`.
 * Rollout surface для будущего switch зафиксирован как `nightly_only`: `pytest.yml` остается `signal_only` до отдельного explicit решения.
+
+## 2026-03-02
+
+* В `scripts/gateway_v1_http_service.py` timeout-path переведен на lifecycle executor (startup/shutdown) вместо per-request `with ThreadPoolExecutor(...)`, чтобы `operation_timeout` возвращался немедленно и не ждал завершения slow-task в request scope.
+* В `scripts/phase_a_smoke.py` зафиксирован fail-safe artifact contract для strict VLM path: при provider ошибке (без fallback) `run.json` и `response.json` всегда сохраняются до повторного выброса исключения.
+* Для `scripts/voice_runtime_service.py` принят hardening profile входящего payload (`max_request_body_bytes/json_depth/string/array/object`) с явным mapping `payload_too_large|payload_limit_exceeded -> HTTP 413`; policy публикуется в `/health` и в run artifacts.
+* Для `scripts/voice_runtime_service.py` и `scripts/tts_runtime_service.py` `/tts_stream` переведен на true streaming (инкрементальная выдача NDJSON `started -> audio_chunk -> completed` без полного pre-buffer), при этом `/tts` оставлен в прежнем non-streaming контракте.
+* Lifecycle hooks в scripts/gateway_v1_http_service.py и scripts/tts_runtime_service.py мигрированы с FastAPI on_event(startup/shutdown) на lifespan (asynccontextmanager) без изменения HTTP/CLI контрактов.
+* Изменение non-breaking и нацелено на устранение FastAPI deprecation warnings по on_event.
+* Для dependency management принят split-profile подход без перехода на `pyproject extras`: добавлены `requirements-voice.txt`, `requirements-llm.txt`, `requirements-export.txt` и `requirements-audit.txt`, при этом базовый runtime профиль сохранен в `requirements.txt`.
+* Введен machine-readable dependency audit entrypoint `scripts/dependency_audit.py` с artifact contract (`dependency_inventory.json`, `dependency_findings.json`, `security_audit.json`, `summary.md`, `run.json`) в `runs/<timestamp>-dependency-audit/`.
+* Для CI принят report-only policy dependency/security audit: результаты публикуются как artifacts и summary signal, но не блокируют `pytest` pipeline на warn/error findings в текущей итерации.

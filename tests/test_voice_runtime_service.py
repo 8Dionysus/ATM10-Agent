@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import io
 import json
 import sys
 from datetime import datetime, timezone
@@ -10,6 +11,116 @@ import numpy as np
 import pytest
 
 import scripts.voice_runtime_service as voice_runtime_service
+
+
+def _make_post_handler(
+    *,
+    path: str,
+    body: bytes,
+    policy: voice_runtime_service.VoiceHTTPPolicy,
+) -> tuple[object, dict[str, object]]:
+    class _FakeState:
+        def health_payload(self) -> dict[str, object]:
+            return {"status": "ok"}
+
+    handler_cls = voice_runtime_service._create_handler(_FakeState(), policy)
+    handler = handler_cls.__new__(handler_cls)
+    handler.path = path
+    handler.headers = {"Content-Length": str(len(body))}
+    handler.rfile = io.BytesIO(body)
+    captured: dict[str, object] = {}
+
+    def _send_json(code: int, payload: dict[str, object]) -> None:
+        captured["code"] = code
+        captured["payload"] = payload
+
+    handler._send_json = _send_json
+    return handler, captured
+
+
+def test_parse_json_body_bytes_accepts_valid_payload() -> None:
+    policy = voice_runtime_service.VoiceHTTPPolicy()
+    body = json.dumps({"text": "hello", "language": "en"}).encode("utf-8")
+    parsed = voice_runtime_service._parse_json_body_bytes(
+        body_bytes=body,
+        content_length=len(body),
+        policy=policy,
+    )
+    assert parsed["text"] == "hello"
+    assert parsed["language"] == "en"
+
+
+def test_parse_json_body_bytes_rejects_payload_too_large() -> None:
+    policy = voice_runtime_service.VoiceHTTPPolicy(max_request_body_bytes=16)
+    body = json.dumps({"text": "x" * 64}).encode("utf-8")
+    with pytest.raises(voice_runtime_service.VoicePayloadLimitError) as exc:
+        voice_runtime_service._parse_json_body_bytes(
+            body_bytes=body,
+            content_length=len(body),
+            policy=policy,
+        )
+    assert exc.value.error_code == "payload_too_large"
+
+
+@pytest.mark.parametrize(
+    ("policy", "payload"),
+    [
+        (
+            voice_runtime_service.VoiceHTTPPolicy(max_json_depth=3),
+            {"a": {"b": {"c": {"d": 1}}}},
+        ),
+        (
+            voice_runtime_service.VoiceHTTPPolicy(max_string_length=4),
+            {"text": "12345"},
+        ),
+        (
+            voice_runtime_service.VoiceHTTPPolicy(max_array_items=2),
+            {"items": [1, 2, 3]},
+        ),
+        (
+            voice_runtime_service.VoiceHTTPPolicy(max_object_keys=2),
+            {"a": 1, "b": 2, "c": 3},
+        ),
+    ],
+)
+def test_parse_json_body_bytes_rejects_payload_limit_exceeded(
+    policy: voice_runtime_service.VoiceHTTPPolicy,
+    payload: dict[str, object],
+) -> None:
+    body = json.dumps(payload).encode("utf-8")
+    with pytest.raises(voice_runtime_service.VoicePayloadLimitError) as exc:
+        voice_runtime_service._parse_json_body_bytes(
+            body_bytes=body,
+            content_length=len(body),
+            policy=policy,
+        )
+    assert exc.value.error_code == "payload_limit_exceeded"
+
+
+def test_voice_handler_maps_payload_too_large_to_413() -> None:
+    policy = voice_runtime_service.VoiceHTTPPolicy(max_request_body_bytes=16)
+    body = json.dumps({"text": "x" * 64}).encode("utf-8")
+    handler, captured = _make_post_handler(path="/tts", body=body, policy=policy)
+
+    handler.do_POST()
+
+    assert captured["code"] == 413
+    payload = captured["payload"]
+    assert isinstance(payload, dict)
+    assert payload["error_code"] == "payload_too_large"
+
+
+def test_voice_handler_maps_payload_limit_exceeded_to_413() -> None:
+    policy = voice_runtime_service.VoiceHTTPPolicy(max_string_length=4)
+    body = json.dumps({"text": "12345"}).encode("utf-8")
+    handler, captured = _make_post_handler(path="/tts", body=body, policy=policy)
+
+    handler.do_POST()
+
+    assert captured["code"] == 413
+    payload = captured["payload"]
+    assert isinstance(payload, dict)
+    assert payload["error_code"] == "payload_limit_exceeded"
 
 
 def test_process_asr_request_returns_transcription(tmp_path: Path) -> None:
@@ -385,6 +496,50 @@ def test_process_tts_stream_request_emits_chunk_events(
     assert captured["path"] == output_path
     assert captured["sample_rate"] == 16000
     assert captured["num_samples"] == 5
+
+
+def test_voice_handler_tts_stream_writes_events_incrementally(monkeypatch: pytest.MonkeyPatch) -> None:
+    timeline: list[str] = []
+
+    def _fake_iter_tts_stream_events(state: object, payload: dict[str, object]):
+        del state, payload
+        timeline.append("gen:ready_started")
+        yield {"event": "started"}
+        timeline.append("gen:after_started")
+        yield {"event": "audio_chunk", "chunk_index": 0}
+        timeline.append("gen:after_audio_chunk")
+        yield {"event": "completed"}
+
+    monkeypatch.setattr(
+        voice_runtime_service,
+        "iter_tts_stream_events",
+        _fake_iter_tts_stream_events,
+    )
+
+    class _FakeState:
+        def health_payload(self) -> dict[str, object]:
+            return {"status": "ok"}
+
+    handler_cls = voice_runtime_service._create_handler(
+        _FakeState(),
+        voice_runtime_service.VoiceHTTPPolicy(),
+    )
+    handler = handler_cls.__new__(handler_cls)
+    handler.path = "/tts_stream"
+    handler.rfile = io.BytesIO(json.dumps({"text": "hello"}).encode("utf-8"))
+    handler.headers = {"Content-Length": str(len(handler.rfile.getvalue()))}
+    handler.wfile = io.BytesIO()
+
+    handler._start_ndjson = lambda code=200: timeline.append(f"start_ndjson:{code}")
+    handler._write_ndjson_event = lambda payload: timeline.append(f"write:{payload['event']}")
+    handler._send_json = lambda code, payload: timeline.append(f"send_json:{code}:{payload.get('error_code')}")
+
+    handler.do_POST()
+
+    assert "send_json" not in " ".join(timeline)
+    assert timeline.index("write:started") < timeline.index("gen:after_started")
+    assert timeline.index("write:audio_chunk") < timeline.index("gen:after_audio_chunk")
+    assert timeline[-1] == "write:completed"
 
 
 def test_run_voice_runtime_service_writes_stopped_status(

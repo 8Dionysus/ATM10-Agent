@@ -1,0 +1,4 @@
+-r requirements.txt
+torch>=2.2.0,<3.0.0
+transformers>=4.57.0,<5.0.0
+openvino-genai>=2025.4.0,<2026.0.0
