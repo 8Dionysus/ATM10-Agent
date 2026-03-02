@@ -5,6 +5,7 @@
 Wave 6 собирает уже реализованный security hardening в release-ready пакет без новых продуктовых фич.
 Контекст и evidence берутся из канонических источников:
 
+- `docs/RELEASE_WAVE6.md`
 - `docs/RUNBOOK.md`
 - `docs/DECISIONS.md`
 - `runs/20260302_144210-wave6-release/release_summary.json`
