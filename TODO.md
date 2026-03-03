@@ -60,6 +60,7 @@
 * [x] G2 follow-up: добавлен readiness checker `gateway_sla_fail_nightly_readiness_v1` + nightly workflow с cache-history и summary/artifacts (staged report, без hard-gate).
 * [x] G2.1 follow-up: добавлен governance checker `gateway_sla_fail_nightly_governance_v1` + nightly go/no-go summary/artifacts (promotion rule `3` ready подряд, switch surface `nightly_only`).
 * [x] G2.2 follow-up: добавлен progress checker `gateway_sla_fail_nightly_progress_v1` + nightly decision-progress summary/artifacts (remaining window/streak, governance/readiness validity counters).
+* [x] G2.manual follow-up: в `master` добавлен UTC preflight helper `scripts/check_gateway_sla_manual_preflight.py` (`gateway_sla_manual_preflight_v1`) для проверки calendar-day guardrail перед ручным `workflow_dispatch`.
 * [x] G2.post follow-up: в Streamlit `Latest Metrics` добавлен optional progress visibility блок (`readiness/governance/progress`) + smoke contract split `required_missing_sources|optional_missing_sources` без изменения `signal_only` policy.
 * [x] KAG Neo4j: поднят rank для `star` до `first_hit_rank=1`.
 * [x] KAG Neo4j: latency retuning после relevance uplift.

@@ -215,3 +215,4 @@
 * Для history collectors в governance/progress/transition зафиксировано anti-double-count правило: при наличии history copies top-level latest alias исключается из history scan; при legacy layout допускается fallback на top-level latest alias.
 * Backfill старых G2 summary runs не выполняется: валидное accumulation окно для `valid_count` начинается с первого nightly run после merge этого hotfix.
 * Для `G3/M6.19` добавлен новый automation intent template `open_world_map` (keyboard-only) без изменения публичного `automation_plan_v1` контракта: rollout включает canonical fixture, CI smoke+strict contract-check, summary/artifact wiring и e2e regression tests.
+* Для `G2.manual` в `master` добавлен API-driven preflight helper `scripts/check_gateway_sla_manual_preflight.py` с контрактом `gateway_sla_manual_preflight_v1`; перед manual `workflow_dispatch` decision `allow/block` теперь формализован machine-readable summary без side effects.

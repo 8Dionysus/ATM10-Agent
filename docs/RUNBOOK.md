@@ -551,6 +551,48 @@ Nightly progress integration:
   * summary section `Gateway SLA Fail-Nightly Progress`,
   * artifacts `runs/nightly-gateway-sla-progress`.
 
+## G2.manual: UTC preflight перед manual `workflow_dispatch`
+
+Helper проверяет calendar-day guardrail до ручного запуска nightly workflow.
+Важно: скрипт не запускает dispatch, только выдает decision summary.
+
+```powershell
+cd D:\atm10-agent
+.\.venv\Scripts\Activate.ps1
+python scripts/check_gateway_sla_manual_preflight.py --repo 8Dionysus/ATM10-Agent --workflow gateway-sla-readiness-nightly.yml --branch master --event workflow_dispatch --max-runs-per-utc-day 1 --token-env GITHUB_TOKEN --policy report_only --runs-dir runs/nightly-gateway-sla-preflight --summary-json runs/nightly-gateway-sla-preflight/preflight_summary.json
+```
+
+Preflight summary contract (`gateway_sla_manual_preflight_v1`):
+
+* `schema_version = gateway_sla_manual_preflight_v1`
+* `status = ok|error`
+* `policy = report_only|fail_if_blocked`
+* `inputs`:
+  * `repo`, `workflow`, `branch`, `event`
+  * `max_runs_per_utc_day`
+  * `per_page`
+  * `token_env`
+* `observed`:
+  * `workflow_runs_observed`
+  * `today_dispatch_count`
+  * `latest_dispatch_run`
+* `decision`:
+  * `accounted_dispatch_allowed`
+  * `decision_status` (`allow_accounted_dispatch|block_accounted_dispatch|error`)
+  * `next_accounted_dispatch_at_utc`
+  * `reason_codes`
+* `warnings`
+* `error`
+* `exit_code`
+* `paths.run_dir`, `paths.run_json`, `paths.summary_json`
+
+Decision interpretation:
+
+* `accounted_dispatch_allowed=true` -> можно выполнять следующий учитываемый dispatch в текущие UTC-сутки.
+* `accounted_dispatch_allowed=false` + `reason_codes=["utc_day_quota_exhausted"]` ->
+  новый учитываемый run блокируется до `next_accounted_dispatch_at_utc`.
+* `policy=fail_if_blocked` возвращает `exit_code=2`, когда guardrail блокирует запуск.
+
 ## G2.3: Gateway SLA fail_nightly transition gate (strict switch control)
 
 Transition checker восстанавливает формальный switch-gate для nightly strict path
