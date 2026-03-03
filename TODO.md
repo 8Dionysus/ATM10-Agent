@@ -63,6 +63,7 @@
 * [x] G2.manual follow-up: в `master` добавлен UTC preflight helper `scripts/check_gateway_sla_manual_preflight.py` (`gateway_sla_manual_preflight_v1`) для проверки calendar-day guardrail перед ручным `workflow_dispatch`.
 * [x] G2.manual follow-up: добавлен unified cycle-summary helper `scripts/check_gateway_sla_manual_cycle_summary.py` (`gateway_sla_manual_cycle_summary_v1`) для operator-loop (`preflight + readiness/governance/progress/transition`) в одном machine-readable файле.
 * [x] G2.manual follow-up: добавлен local manual nightly wrapper `scripts/run_gateway_sla_manual_nightly.py` (`gateway_sla_manual_nightly_runner_v1`) с local artifact UTC guardrail (`1 accounted run/day`), recovery-path без progression credit и fail-fast chain policy.
+* [x] G2.manual follow-up: добавлен local cadence brief helper `scripts/check_gateway_sla_manual_cadence_brief.py` (`gateway_sla_manual_cadence_brief_v1`) с `attention_state` и UTC forecast (`window/streak ETA`) для ежедневного operator-loop без изменения policy.
 * [x] G2.post follow-up: в Streamlit `Latest Metrics` добавлен optional progress visibility блок (`readiness/governance/progress`) + smoke contract split `required_missing_sources|optional_missing_sources` без изменения `signal_only` policy.
 * [x] KAG Neo4j: поднят rank для `star` до `first_hit_rank=1`.
 * [x] KAG Neo4j: latency retuning после relevance uplift.

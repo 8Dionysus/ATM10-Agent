@@ -690,6 +690,63 @@ Guardrail source-of-truth:
 * Recovery допускается только если `readiness/governance/progress` summaries валидны (`status=ok`),
   а `transition_summary.json` отсутствует или невалиден.
 
+## G2.manual: local cadence brief (daily operator status/ETA)
+
+Read-only helper строит единый daily brief для локального solo+AI цикла:
+можно ли делать следующий учитываемый запуск сейчас, какой attention-state, и минимальный ETA до go-candidate.
+
+```powershell
+cd D:\atm10-agent
+.\.venv\Scripts\Activate.ps1
+python scripts/check_gateway_sla_manual_cadence_brief.py --runs-dir runs --policy report_only --summary-json runs/nightly-gateway-sla-manual-cadence/cadence_brief.json
+```
+
+Cadence brief contract (`gateway_sla_manual_cadence_brief_v1`):
+
+* `schema_version = gateway_sla_manual_cadence_brief_v1`
+* `status = ok|error`
+* `policy = report_only|fail_if_attention_required`
+* `sources`:
+  * `manual_runner|manual_cycle|readiness|governance|progress|transition`
+  * status per source: `present|missing|invalid`
+  * required sources: `manual_cycle`, `progress`
+* `decision` (source-of-truth: `manual_cycle_summary.decision`):
+  * `accounted_dispatch_allowed`
+  * `decision_status`
+  * `next_accounted_dispatch_at_utc`
+  * `reason_codes`
+* `observed`:
+  * `remaining_for_window`
+  * `remaining_for_streak`
+  * `readiness_status`
+  * `governance_decision_status`
+  * `transition_allow_switch`
+* `attention_state`:
+  * `source_repair_required|wait_for_utc_reset|run_recovery_only|ready_for_accounted_run|unknown`
+* `forecast`:
+  * `min_accounted_runs_to_window`
+  * `min_accounted_runs_to_streak`
+  * `next_accounted_dispatch_at_utc`
+  * `earliest_window_ready_at_utc`
+  * `earliest_streak_ready_at_utc`
+  * `earliest_go_candidate_at_utc`
+* `warnings`
+* `error`
+* `exit_code`
+* `paths.run_dir`, `paths.run_json`, `paths.summary_json`
+
+Exit policy:
+
+* `report_only`: `0` при `status=ok`; `2` только при `status=error`.
+* `fail_if_attention_required`: `2` при `attention_state in {source_repair_required, wait_for_utc_reset, run_recovery_only, unknown}` или `status=error`.
+
+Operator interpretation:
+
+* `attention_state=ready_for_accounted_run` -> можно запускать следующий учитываемый cycle.
+* `attention_state=wait_for_utc_reset` -> ждать `forecast.next_accounted_dispatch_at_utc`.
+* `attention_state=run_recovery_only` -> допускается только recovery-path без progression credit.
+* `attention_state=source_repair_required` -> сначала восстановить required summaries (`manual_cycle`, `progress`).
+
 ## G2.3: Gateway SLA fail_nightly transition gate (strict switch control)
 
 Transition checker восстанавливает формальный switch-gate для nightly strict path
