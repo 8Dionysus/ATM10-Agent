@@ -205,3 +205,9 @@
 * Nightly workflow `.github/workflows/gateway-sla-readiness-nightly.yml` расширен progress step + summary section `Gateway SLA Fail-Nightly Progress`; cache/artifact wiring теперь сохраняет не только history/trend/readiness, но и `runs/nightly-gateway-sla-governance`, `runs/nightly-gateway-sla-progress` для устойчивого накопления decision-history.
 * Для `G2` operator UX добавлен `Latest Metrics` progress-блок в `scripts/streamlit_operator_panel.py` (optional sources: readiness/governance/progress); отсутствие nightly progress артефактов трактуется как `not available yet`, а не как UI failure.
 * `streamlit_smoke_summary_v1` расширен аддитивно: введены `required_missing_sources` и `optional_missing_sources`, при этом legacy `missing_sources` сохранен как alias required-sources; strict smoke policy (`missing => error`) остается только для required canonical CI sources.
+
+## 2026-03-03
+
+* На `master` восстановлен G2.3 transition-layer в nightly workflow после drift от revert (`bb36672`): возвращены transition step, gate resolve, conditional strict trend step, transition summary и cache/artifact wiring `runs/nightly-gateway-sla-transition`.
+* Восстановлен runtime/test guardrail для transition-контракта: `scripts/check_gateway_sla_fail_nightly_transition.py`, `src/agent_core/ops_policy.py`, `tests/test_check_gateway_sla_fail_nightly_transition.py`, `tests/test_gateway_sla_readiness_nightly_workflow.py`.
+* Recovery policy уточнена: если при успешном UTC-run отсутствует `transition_summary.json`, разрешен один recovery rerun в те же UTC-сутки, но без progression credit для switch evidence.
