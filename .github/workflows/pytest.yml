@@ -100,6 +100,14 @@ jobs:
         run: |
           python scripts/check_automation_smoke_contract.py --mode intent_chain --runs-dir runs/ci-smoke-automation-chain-inventory --min-action-count 3 --min-step-count 4 --expected-intent-type check_inventory_tool --require-trace-id --require-intent-id --summary-json runs/ci-smoke-automation-chain-inventory/contract_summary.json
 
+      - name: Smoke - Automation intent chain (world map fixture)
+        run: |
+          python scripts/automation_intent_chain_smoke.py --intent-json tests/fixtures/intent_open_world_map.json --runs-dir runs/ci-smoke-automation-chain-open-world-map
+
+      - name: Validate - Automation intent chain contract (world map fixture)
+        run: |
+          python scripts/check_automation_smoke_contract.py --mode intent_chain --runs-dir runs/ci-smoke-automation-chain-open-world-map --min-action-count 3 --min-step-count 4 --expected-intent-type open_world_map --require-trace-id --require-intent-id --summary-json runs/ci-smoke-automation-chain-open-world-map/contract_summary.json
+
       - name: Smoke - Gateway v1 (core scenario)
         run: |
           python scripts/gateway_v1_smoke.py --scenario core --runs-dir runs/ci-smoke-gateway-core --summary-json runs/ci-smoke-gateway-core/gateway_smoke_summary.json
@@ -253,6 +261,7 @@ jobs:
           $dry = Get-Content "runs/ci-smoke-automation-dry-run/contract_summary.json" | ConvertFrom-Json
           $chainQuest = Get-Content "runs/ci-smoke-automation-chain/contract_summary.json" | ConvertFrom-Json
           $chainInventory = Get-Content "runs/ci-smoke-automation-chain-inventory/contract_summary.json" | ConvertFrom-Json
+          $chainWorldMap = Get-Content "runs/ci-smoke-automation-chain-open-world-map/contract_summary.json" | ConvertFrom-Json
           $runbookUrl = python scripts/build_runbook_link.py --anchor "m68-troubleshooting-automation-smoke-contract-failures-ci"
           function FmtOpt([object]$value) {
             if ($null -eq $value) { return "-" }
@@ -268,6 +277,7 @@ jobs:
             "| dry_run | $($dry.status) | $($dry.observed.action_count) | $($dry.observed.step_count) | - | $(FmtOpt $dry.observed.trace_id) | $(FmtOpt $dry.observed.intent_id) |",
             "| intent_chain_open_quest_book | $($chainQuest.status) | $($chainQuest.observed.action_count) | $($chainQuest.observed.step_count) | $($chainQuest.observed.intent_type) | $(FmtOpt $chainQuest.observed.trace_id) | $(FmtOpt $chainQuest.observed.intent_id) |",
             "| intent_chain_check_inventory_tool | $($chainInventory.status) | $($chainInventory.observed.action_count) | $($chainInventory.observed.step_count) | $($chainInventory.observed.intent_type) | $(FmtOpt $chainInventory.observed.trace_id) | $(FmtOpt $chainInventory.observed.intent_id) |",
+            "| intent_chain_open_world_map | $($chainWorldMap.status) | $($chainWorldMap.observed.action_count) | $($chainWorldMap.observed.step_count) | $($chainWorldMap.observed.intent_type) | $(FmtOpt $chainWorldMap.observed.trace_id) | $(FmtOpt $chainWorldMap.observed.intent_id) |",
             "",
             "### Quick Links",
             "- Troubleshooting: [RUNBOOK M6.8]($runbookUrl)"
@@ -285,6 +295,7 @@ jobs:
             runs/ci-smoke-automation-dry-run/contract_summary.json
             runs/ci-smoke-automation-chain/contract_summary.json
             runs/ci-smoke-automation-chain-inventory/contract_summary.json
+            runs/ci-smoke-automation-chain-open-world-map/contract_summary.json
             runs/ci-smoke-gateway-core/gateway_smoke_summary.json
             runs/ci-smoke-gateway-automation/gateway_smoke_summary.json
             runs/ci-smoke-gateway-http-core/gateway_http_smoke_summary.json

@@ -60,6 +60,8 @@ python scripts/automation_intent_chain_smoke.py --intent-json tests/fixtures/int
 python scripts/check_automation_smoke_contract.py --mode intent_chain --runs-dir runs/ci-smoke-automation-chain --min-action-count 3 --min-step-count 4 --expected-intent-type open_quest_book --require-trace-id --require-intent-id --summary-json runs/ci-smoke-automation-chain/contract_summary.json
 python scripts/automation_intent_chain_smoke.py --intent-json tests/fixtures/intent_check_inventory_tool.json --runs-dir runs/ci-smoke-automation-chain-inventory
 python scripts/check_automation_smoke_contract.py --mode intent_chain --runs-dir runs/ci-smoke-automation-chain-inventory --min-action-count 3 --min-step-count 4 --expected-intent-type check_inventory_tool --require-trace-id --require-intent-id --summary-json runs/ci-smoke-automation-chain-inventory/contract_summary.json
+python scripts/automation_intent_chain_smoke.py --intent-json tests/fixtures/intent_open_world_map.json --runs-dir runs/ci-smoke-automation-chain-open-world-map
+python scripts/check_automation_smoke_contract.py --mode intent_chain --runs-dir runs/ci-smoke-automation-chain-open-world-map --min-action-count 3 --min-step-count 4 --expected-intent-type open_world_map --require-trace-id --require-intent-id --summary-json runs/ci-smoke-automation-chain-open-world-map/contract_summary.json
 python scripts/gateway_v1_smoke.py --scenario core --runs-dir runs/ci-smoke-gateway-core --summary-json runs/ci-smoke-gateway-core/gateway_smoke_summary.json
 python scripts/gateway_v1_smoke.py --scenario automation --runs-dir runs/ci-smoke-gateway-automation --summary-json runs/ci-smoke-gateway-automation/gateway_smoke_summary.json
 python scripts/gateway_v1_http_smoke.py --scenario core --runs-dir runs/ci-smoke-gateway-http-core --summary-json runs/ci-smoke-gateway-http-core/gateway_http_smoke_summary.json
@@ -79,6 +81,7 @@ python scripts/streamlit_operator_panel_smoke.py --panel-runs-dir runs --runs-di
   * `runs/ci-smoke-automation-dry-run/contract_summary.json`
   * `runs/ci-smoke-automation-chain/contract_summary.json`
   * `runs/ci-smoke-automation-chain-inventory/contract_summary.json`
+  * `runs/ci-smoke-automation-chain-open-world-map/contract_summary.json`
 * Для gateway smoke шагов создаются machine-readable summaries:
   * `runs/ci-smoke-gateway-core/gateway_smoke_summary.json`
   * `runs/ci-smoke-gateway-automation/gateway_smoke_summary.json`
@@ -1516,6 +1519,7 @@ cd D:\atm10-agent
 .\.venv\Scripts\Activate.ps1
 python scripts/automation_intent_chain_smoke.py --intent-json "tests/fixtures/intent_open_quest_book.json"
 python scripts/automation_intent_chain_smoke.py --intent-json "tests/fixtures/intent_check_inventory_tool.json"
+python scripts/automation_intent_chain_smoke.py --intent-json "tests/fixtures/intent_open_world_map.json"
 ```
 
 Ожидаемый результат:
@@ -1541,6 +1545,7 @@ Intent-chain smoke contract:
 ```powershell
 python scripts/check_automation_smoke_contract.py --mode intent_chain --runs-dir runs/ci-smoke-automation-chain --min-action-count 3 --min-step-count 4 --expected-intent-type open_quest_book --require-trace-id --require-intent-id
 python scripts/check_automation_smoke_contract.py --mode intent_chain --runs-dir runs/ci-smoke-automation-chain-inventory --min-action-count 3 --min-step-count 4 --expected-intent-type check_inventory_tool --require-trace-id --require-intent-id
+python scripts/check_automation_smoke_contract.py --mode intent_chain --runs-dir runs/ci-smoke-automation-chain-open-world-map --min-action-count 3 --min-step-count 4 --expected-intent-type open_world_map --require-trace-id --require-intent-id
 ```
 
 Machine-readable summary output:
@@ -1549,6 +1554,7 @@ Machine-readable summary output:
 python scripts/check_automation_smoke_contract.py --mode dry_run --runs-dir runs/ci-smoke-automation-dry-run --min-action-count 3 --min-step-count 4 --summary-json runs/ci-smoke-automation-dry-run/contract_summary.json
 python scripts/check_automation_smoke_contract.py --mode intent_chain --runs-dir runs/ci-smoke-automation-chain --min-action-count 3 --min-step-count 4 --expected-intent-type open_quest_book --require-trace-id --require-intent-id --summary-json runs/ci-smoke-automation-chain/contract_summary.json
 python scripts/check_automation_smoke_contract.py --mode intent_chain --runs-dir runs/ci-smoke-automation-chain-inventory --min-action-count 3 --min-step-count 4 --expected-intent-type check_inventory_tool --require-trace-id --require-intent-id --summary-json runs/ci-smoke-automation-chain-inventory/contract_summary.json
+python scripts/check_automation_smoke_contract.py --mode intent_chain --runs-dir runs/ci-smoke-automation-chain-open-world-map --min-action-count 3 --min-step-count 4 --expected-intent-type open_world_map --require-trace-id --require-intent-id --summary-json runs/ci-smoke-automation-chain-open-world-map/contract_summary.json
 ```
 
 Ожидаемый результат:
@@ -1589,7 +1595,7 @@ Policy checklist для каждого нового `intent_type`:
    * `violations` содержит конкретный контракт, который не выполнен.
 3. Сверить минимальные пороги в workflow:
    * `min_action_count=3`, `min_step_count=4`
-   * для chain дополнительно `expected_intent_type=open_quest_book`
+   * для chain дополнительно `expected_intent_type` для соответствующего fixture (`open_quest_book`, `check_inventory_tool`, `open_world_map`)
 4. Перезапустить локально те же команды CI:
    * `automation_dry_run` + `check_automation_smoke_contract --mode dry_run`
    * `automation_intent_chain_smoke` + `check_automation_smoke_contract --mode intent_chain`
@@ -1597,5 +1603,5 @@ Policy checklist для каждого нового `intent_type`:
    * убедиться, что smoke script завершился `status=ok` в `run.json`
    * проверить, что пути в `--runs-dir` совпадают между smoke step и check step
 6. Если проблема в `intent_type`:
-   * проверить fixture `tests/fixtures/intent_open_quest_book.json`
+   * проверить fixture (`tests/fixtures/intent_open_quest_book.json`, `tests/fixtures/intent_check_inventory_tool.json`, `tests/fixtures/intent_open_world_map.json`)
    * проверить `automation_plan.json.context.intent_type` в chain run artifacts

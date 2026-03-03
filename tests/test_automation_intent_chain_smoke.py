@@ -102,6 +102,34 @@ def test_automation_intent_chain_smoke_runs_inventory_fixture(tmp_path: Path) ->
     assert plan_payload["context"]["intent_type"] == "check_inventory_tool"
 
 
+def test_automation_intent_chain_smoke_runs_world_map_fixture(tmp_path: Path) -> None:
+    intent_json = tmp_path / "intent_world_map.json"
+    intent_json.write_text(
+        json.dumps(_fixture_payload("intent_open_world_map.json"), ensure_ascii=False),
+        encoding="utf-8",
+    )
+
+    result = chain_smoke.run_automation_intent_chain_smoke(
+        intent_json=intent_json,
+        runs_dir=tmp_path / "runs",
+        now=datetime(2026, 3, 3, 12, 1, 0, tzinfo=timezone.utc),
+    )
+
+    run_payload = json.loads((result["run_dir"] / "run.json").read_text(encoding="utf-8"))
+    summary_payload = json.loads((result["run_dir"] / "chain_summary.json").read_text(encoding="utf-8"))
+    plan_payload = json.loads((result["run_dir"] / "automation_plan.json").read_text(encoding="utf-8"))
+
+    assert result["ok"] is True
+    assert run_payload["status"] == "ok"
+    assert run_payload["result"]["intent_type"] == "open_world_map"
+    assert run_payload["result"]["action_count"] == 3
+    assert run_payload["result"]["step_count"] == 4
+    assert summary_payload["intent_adapter"]["intent_type"] == "open_world_map"
+    assert summary_payload["automation_dry_run"]["step_count"] == 4
+    assert plan_payload["context"]["intent_type"] == "open_world_map"
+    assert plan_payload["planning"]["intent_type"] == "open_world_map"
+
+
 def test_automation_intent_chain_smoke_rejects_invalid_intent(tmp_path: Path) -> None:
     intent_json = tmp_path / "bad_intent.json"
     intent_json.write_text(

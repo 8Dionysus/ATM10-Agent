@@ -96,6 +96,7 @@
 * [x] M6.17: в intent-chain CI contract-check включен `--require-trace-id` (canonical fixtures), отсутствие trace id теперь fail-fast.
 * [x] M6.18: в intent-chain CI contract-check включен `--require-intent-id` (canonical fixtures), отсутствие intent id теперь fail-fast.
 * [x] M6.19: в `docs/RUNBOOK.md` зафиксирован policy-чеклист rollout новых `intent_type` (fixture + smoke + strict contract-check + summary/artifacts + test).
+* [x] G3 follow-up: выполнен rollout нового `intent_type=open_world_map` по checklist `M6.19` (fixture + smoke + strict contract-check + summary/artifacts + e2e test).
 * [x] G3: для core CI smoke (`phase_a_smoke`, `retrieve_demo`, `eval_retrieval`) добавлен единый machine-readable summary контракт через `scripts/collect_smoke_run_summary.py` + artifact upload в `pytest` workflow.
 * [x] G2: зафиксирован policy для `critical` trend severity — baseline `signal_only` (nightly signal без fail), с explicit opt-in `fail_nightly` через `--critical-policy`.
 * [x] G2: по локальной истории `kag-neo4j-eval` откалиброваны latency severity thresholds в trend snapshot (`warn=5.0 ms`, `critical=15.0 ms`) для снижения noisy regression-сигналов.

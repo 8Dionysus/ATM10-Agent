@@ -32,6 +32,15 @@ _INTENT_TEMPLATES: dict[str, dict[str, Any]] = {
             {"id": "wait_tooltip_render", "type": "wait", "duration_ms": 120},
         ],
     },
+    "open_world_map": {
+        "goal": "open world map and focus current position",
+        "tags": ["map", "navigation"],
+        "actions": [
+            {"id": "open_world_map", "type": "key_tap", "key": "m"},
+            {"id": "wait_world_map_ui", "type": "wait", "duration_ms": 200, "repeats": 2},
+            {"id": "focus_player_marker", "type": "key_tap", "key": "space"},
+        ],
+    },
 }
 
 

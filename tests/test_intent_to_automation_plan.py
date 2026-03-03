@@ -48,6 +48,36 @@ def test_intent_to_automation_plan_builds_expected_payload(tmp_path: Path) -> No
     assert len(plan_payload["actions"]) == 3
 
 
+def test_intent_to_automation_plan_builds_world_map_template(tmp_path: Path) -> None:
+    intent_json = tmp_path / "intent_world_map.json"
+    intent_json.write_text(
+        json.dumps(_fixture_payload("intent_open_world_map.json"), ensure_ascii=False),
+        encoding="utf-8",
+    )
+
+    result = intent_adapter.run_intent_to_automation_plan(
+        intent_json=intent_json,
+        runs_dir=tmp_path / "runs",
+        now=datetime(2026, 3, 3, 12, 0, 0, tzinfo=timezone.utc),
+    )
+
+    run_payload = json.loads((result["run_dir"] / "run.json").read_text(encoding="utf-8"))
+    plan_payload = json.loads((result["run_dir"] / "automation_plan.json").read_text(encoding="utf-8"))
+
+    assert result["ok"] is True
+    assert run_payload["result"]["intent_type"] == "open_world_map"
+    assert run_payload["result"]["action_count"] == 3
+    assert run_payload["result"]["trace_id"] == "trace-open-world-map-001"
+    assert plan_payload["context"]["intent_type"] == "open_world_map"
+    assert plan_payload["planning"]["intent_type"] == "open_world_map"
+    assert plan_payload["planning"]["intent_id"] == "intent-open-world-map-001"
+    assert plan_payload["planning"]["trace_id"] == "trace-open-world-map-001"
+    assert len(plan_payload["actions"]) == 3
+    action_types = [str(item["type"]) for item in plan_payload["actions"]]
+    assert action_types == ["key_tap", "wait", "key_tap"]
+    assert all(action_type in {"key_tap", "wait"} for action_type in action_types)
+
+
 def test_intent_to_automation_plan_propagates_trace_metadata(tmp_path: Path) -> None:
     intent_json = tmp_path / "intent_with_trace.json"
     intent_json.write_text(

@@ -1,0 +1,11 @@
+{
+  "schema_version": "automation_intent_v1",
+  "intent_type": "open_world_map",
+  "intent_id": "intent-open-world-map-001",
+  "trace_id": "trace-open-world-map-001",
+  "priority": "normal",
+  "source": "voice_intent",
+  "note": "open full map before route planning",
+  "tags": ["map", "navigation"],
+  "constraints": ["dry_run_only"]
+}

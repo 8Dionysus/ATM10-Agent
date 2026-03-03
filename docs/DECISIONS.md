@@ -214,3 +214,4 @@
 * Для G2 consistency зафиксирован dual-write pattern в nightly checkers (`readiness/governance/progress/transition`): каждый run пишет top-level latest alias и history copy в `run_dir/<summary>.json`.
 * Для history collectors в governance/progress/transition зафиксировано anti-double-count правило: при наличии history copies top-level latest alias исключается из history scan; при legacy layout допускается fallback на top-level latest alias.
 * Backfill старых G2 summary runs не выполняется: валидное accumulation окно для `valid_count` начинается с первого nightly run после merge этого hotfix.
+* Для `G3/M6.19` добавлен новый automation intent template `open_world_map` (keyboard-only) без изменения публичного `automation_plan_v1` контракта: rollout включает canonical fixture, CI smoke+strict contract-check, summary/artifact wiring и e2e regression tests.
