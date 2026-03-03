@@ -105,6 +105,32 @@ def test_readiness_happy_path_ready(tmp_path: Path) -> None:
     assert summary["recommendation"]["target_critical_policy"] == "fail_nightly"
 
 
+def test_readiness_writes_latest_and_history_summary_outputs(tmp_path: Path) -> None:
+    trend_root = tmp_path / "trend-history"
+    readiness_root = tmp_path / "readiness-runs"
+    latest_summary_path = readiness_root / "readiness_summary.json"
+    _seed_history(
+        trend_root,
+        count=14,
+        start=datetime(2026, 3, 1, 0, 0, 0, tzinfo=timezone.utc),
+        baseline_count=5,
+    )
+
+    result = readiness_checker.run_gateway_sla_fail_nightly_readiness(
+        trend_runs_dir=trend_root,
+        runs_dir=readiness_root,
+        summary_json=latest_summary_path,
+    )
+    summary = result["summary_payload"]
+    history_summary_path = Path(summary["paths"]["history_summary_json"])
+
+    assert Path(summary["paths"]["summary_json"]) == latest_summary_path
+    assert latest_summary_path.is_file()
+    assert history_summary_path.is_file()
+    assert history_summary_path.parent == result["run_dir"]
+    assert json.loads(history_summary_path.read_text(encoding="utf-8"))["schema_version"] == summary["schema_version"]
+
+
 def test_readiness_not_ready_when_insufficient_window(tmp_path: Path) -> None:
     trend_root = tmp_path / "trend-history"
     start = datetime(2026, 3, 1, 0, 0, 0, tzinfo=timezone.utc)

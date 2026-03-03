@@ -211,3 +211,6 @@
 * На `master` восстановлен G2.3 transition-layer в nightly workflow после drift от revert (`bb36672`): возвращены transition step, gate resolve, conditional strict trend step, transition summary и cache/artifact wiring `runs/nightly-gateway-sla-transition`.
 * Восстановлен runtime/test guardrail для transition-контракта: `scripts/check_gateway_sla_fail_nightly_transition.py`, `src/agent_core/ops_policy.py`, `tests/test_check_gateway_sla_fail_nightly_transition.py`, `tests/test_gateway_sla_readiness_nightly_workflow.py`.
 * Recovery policy уточнена: если при успешном UTC-run отсутствует `transition_summary.json`, разрешен один recovery rerun в те же UTC-сутки, но без progression credit для switch evidence.
+* Для G2 consistency зафиксирован dual-write pattern в nightly checkers (`readiness/governance/progress/transition`): каждый run пишет top-level latest alias и history copy в `run_dir/<summary>.json`.
+* Для history collectors в governance/progress/transition зафиксировано anti-double-count правило: при наличии history copies top-level latest alias исключается из history scan; при legacy layout допускается fallback на top-level latest alias.
+* Backfill старых G2 summary runs не выполняется: валидное accumulation окно для `valid_count` начинается с первого nightly run после merge этого hotfix.
