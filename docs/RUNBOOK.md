@@ -593,6 +593,54 @@ Decision interpretation:
   новый учитываемый run блокируется до `next_accounted_dispatch_at_utc`.
 * `policy=fail_if_blocked` возвращает `exit_code=2`, когда guardrail блокирует запуск.
 
+## G2.manual: unified manual-cycle summary (`preflight + readiness/governance/progress/transition`)
+
+Helper агрегирует preflight и текущие nightly summaries в единый machine-readable snapshot для operator-loop.
+Скрипт side-effect free: dispatch не запускается.
+
+```powershell
+cd D:\atm10-agent
+.\.venv\Scripts\Activate.ps1
+python scripts/check_gateway_sla_manual_cycle_summary.py --runs-dir runs --policy report_only --summary-json runs/nightly-gateway-sla-manual-cycle/manual_cycle_summary.json
+```
+
+Unified summary contract (`gateway_sla_manual_cycle_summary_v1`):
+
+* `schema_version = gateway_sla_manual_cycle_summary_v1`
+* `status = ok|error`
+* `checked_at_utc`
+* `policy = report_only|fail_if_blocked`
+* `sources`:
+  * `preflight|readiness|governance|progress|transition`
+  * для каждого source: `path`, `status` (`present|missing|invalid`), schema/status metadata
+  * `preflight` — required source; `readiness/governance/progress/transition` — optional sources
+* `observed`:
+  * `preflight.workflow_runs_observed|today_dispatch_count|latest_dispatch_run`
+  * `readiness_status`
+  * `governance_decision_status`
+  * `progress.remaining_for_window|remaining_for_streak|decision_status`
+  * `transition.allow_switch|reason_codes|decision_status`
+* `decision` (из preflight):
+  * `accounted_dispatch_allowed`
+  * `decision_status`
+  * `next_accounted_dispatch_at_utc`
+  * `reason_codes`
+* `warnings`
+* `error`
+* `exit_code`
+* `paths.run_dir`, `paths.run_json`, `paths.summary_json`
+
+Exit policy:
+
+* `report_only`: `0`, если preflight валиден (даже при block decision); `2` только при `status=error`.
+* `fail_if_blocked`: `2`, если `accounted_dispatch_allowed=false` или `status=error`.
+
+Decision interpretation:
+
+* `decision.accounted_dispatch_allowed=true` -> можно выполнять следующий учитываемый dispatch.
+* `decision.accounted_dispatch_allowed=false` -> dispatch блокирован до `decision.next_accounted_dispatch_at_utc`.
+* Optional source missing/invalid не ломает summary, но отражается в `sources.*.status` и `warnings`.
+
 ## G2.3: Gateway SLA fail_nightly transition gate (strict switch control)
 
 Transition checker восстанавливает формальный switch-gate для nightly strict path
