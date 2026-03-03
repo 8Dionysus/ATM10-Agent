@@ -10,6 +10,7 @@ _SEVERITY_RANK = {"none": 0, "warn": 1, "critical": 2}
 _SEVERITIES: tuple[str, ...] = ("none", "warn", "critical")
 _POLICIES: tuple[str, ...] = ("report_only", "fail_if_not_ready")
 _TREND_FILE_NAME = "gateway_sla_trend_snapshot.json"
+_READINESS_FILE_NAME = "readiness_summary.json"
 
 
 def _utc_now() -> str:
@@ -163,7 +164,8 @@ def run_gateway_sla_fail_nightly_readiness(
 
     run_dir = _create_run_dir(runs_dir, now=now)
     run_json_path = run_dir / "run.json"
-    summary_out_path = summary_json if summary_json is not None else (runs_dir / "readiness_summary.json")
+    summary_out_path = summary_json if summary_json is not None else (runs_dir / _READINESS_FILE_NAME)
+    history_summary_path = run_dir / _READINESS_FILE_NAME
 
     run_payload: dict[str, Any] = {
         "timestamp_utc": now.astimezone(timezone.utc).isoformat(),
@@ -181,6 +183,7 @@ def run_gateway_sla_fail_nightly_readiness(
             "run_dir": str(run_dir),
             "run_json": str(run_json_path),
             "summary_json": str(summary_out_path),
+            "history_summary_json": str(history_summary_path),
         },
     }
     _write_json(run_json_path, run_payload)
@@ -254,9 +257,11 @@ def run_gateway_sla_fail_nightly_readiness(
                 "run_dir": str(run_dir),
                 "run_json": str(run_json_path),
                 "summary_json": str(summary_out_path),
+                "history_summary_json": str(history_summary_path),
             },
         }
-        _write_json(summary_out_path, summary_payload)
+        for output_path in {summary_out_path, history_summary_path}:
+            _write_json(output_path, summary_payload)
 
         run_payload["status"] = "ok"
         run_payload["result"] = {
@@ -307,9 +312,11 @@ def run_gateway_sla_fail_nightly_readiness(
                 "run_dir": str(run_dir),
                 "run_json": str(run_json_path),
                 "summary_json": str(summary_out_path),
+                "history_summary_json": str(history_summary_path),
             },
         }
-        _write_json(summary_out_path, summary_payload)
+        for output_path in {summary_out_path, history_summary_path}:
+            _write_json(output_path, summary_payload)
         run_payload["status"] = "error"
         run_payload["error_code"] = "gateway_sla_fail_readiness_failed"
         run_payload["error"] = str(exc)

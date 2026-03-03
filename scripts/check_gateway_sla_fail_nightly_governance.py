@@ -8,6 +8,7 @@ from typing import Any, Mapping
 
 _POLICIES: tuple[str, ...] = ("report_only", "fail_if_not_go")
 _READINESS_FILE_NAME = "readiness_summary.json"
+_GOVERNANCE_FILE_NAME = "governance_summary.json"
 _EPSILON = 1e-9
 
 
@@ -41,6 +42,14 @@ def _parse_iso_datetime(value: Any) -> datetime:
     return datetime.fromisoformat(value.replace("Z", "+00:00"))
 
 
+def _collect_summary_paths(*, runs_dir: Path, file_name: str) -> list[Path]:
+    all_paths = sorted(runs_dir.glob(f"**/{file_name}"), key=lambda item: str(item))
+    nested_paths = [path for path in all_paths if path.parent != runs_dir]
+    if nested_paths:
+        return nested_paths
+    return all_paths
+
+
 def _criteria_match(
     *,
     criteria: Mapping[str, Any],
@@ -69,7 +78,7 @@ def _collect_readiness_rows(
     if not readiness_runs_dir.exists():
         return [], 0, [f"readiness_runs_dir does not exist: {readiness_runs_dir}"]
 
-    paths = sorted(readiness_runs_dir.glob(f"**/{_READINESS_FILE_NAME}"), key=lambda item: str(item))
+    paths = _collect_summary_paths(runs_dir=readiness_runs_dir, file_name=_READINESS_FILE_NAME)
     if history_limit > 0 and len(paths) > history_limit:
         paths = paths[-history_limit:]
 
@@ -156,7 +165,8 @@ def run_gateway_sla_fail_nightly_governance(
 
     run_dir = _create_run_dir(runs_dir, now=now)
     run_json_path = run_dir / "run.json"
-    summary_out_path = summary_json if summary_json is not None else (runs_dir / "governance_summary.json")
+    summary_out_path = summary_json if summary_json is not None else (runs_dir / _GOVERNANCE_FILE_NAME)
+    history_summary_path = run_dir / _GOVERNANCE_FILE_NAME
 
     run_payload: dict[str, Any] = {
         "timestamp_utc": now.astimezone(timezone.utc).isoformat(),
@@ -175,6 +185,7 @@ def run_gateway_sla_fail_nightly_governance(
             "run_dir": str(run_dir),
             "run_json": str(run_json_path),
             "summary_json": str(summary_out_path),
+            "history_summary_json": str(history_summary_path),
         },
     }
     _write_json(run_json_path, run_payload)
@@ -251,9 +262,11 @@ def run_gateway_sla_fail_nightly_governance(
                 "run_dir": str(run_dir),
                 "run_json": str(run_json_path),
                 "summary_json": str(summary_out_path),
+                "history_summary_json": str(history_summary_path),
             },
         }
-        _write_json(summary_out_path, summary_payload)
+        for output_path in {summary_out_path, history_summary_path}:
+            _write_json(output_path, summary_payload)
 
         run_payload["status"] = "ok"
         run_payload["result"] = {
@@ -307,9 +320,11 @@ def run_gateway_sla_fail_nightly_governance(
                 "run_dir": str(run_dir),
                 "run_json": str(run_json_path),
                 "summary_json": str(summary_out_path),
+                "history_summary_json": str(history_summary_path),
             },
         }
-        _write_json(summary_out_path, summary_payload)
+        for output_path in {summary_out_path, history_summary_path}:
+            _write_json(output_path, summary_payload)
         run_payload["status"] = "error"
         run_payload["error_code"] = "gateway_sla_fail_governance_failed"
         run_payload["error"] = str(exc)

@@ -98,6 +98,77 @@ def test_governance_happy_path_go(tmp_path: Path) -> None:
     assert summary["recommendation"]["target_critical_policy"] == "fail_nightly"
 
 
+def test_governance_writes_latest_and_history_summary_outputs(tmp_path: Path) -> None:
+    readiness_root = tmp_path / "readiness-runs"
+    governance_root = tmp_path / "governance-runs"
+    latest_summary_path = governance_root / "governance_summary.json"
+    _seed_readiness_history(
+        readiness_root,
+        start=datetime(2026, 3, 1, 0, 0, 0, tzinfo=timezone.utc),
+        statuses=["ready", "ready", "ready"],
+    )
+
+    result = governance_checker.run_gateway_sla_fail_nightly_governance(
+        readiness_runs_dir=readiness_root,
+        required_ready_streak=3,
+        runs_dir=governance_root,
+        summary_json=latest_summary_path,
+    )
+    summary = result["summary_payload"]
+    history_summary_path = Path(summary["paths"]["history_summary_json"])
+
+    assert Path(summary["paths"]["summary_json"]) == latest_summary_path
+    assert latest_summary_path.is_file()
+    assert history_summary_path.is_file()
+    assert history_summary_path.parent == result["run_dir"]
+    assert json.loads(history_summary_path.read_text(encoding="utf-8"))["schema_version"] == summary["schema_version"]
+
+
+def test_governance_ignores_top_level_latest_alias_when_history_rows_exist(tmp_path: Path) -> None:
+    readiness_root = tmp_path / "readiness-runs"
+    _seed_readiness_history(
+        readiness_root,
+        start=datetime(2026, 3, 1, 0, 0, 0, tzinfo=timezone.utc),
+        statuses=["ready", "ready"],
+    )
+    _write_readiness_summary(
+        readiness_root / "readiness_summary.json",
+        checked_at_utc="2026-03-20T00:00:00+00:00",
+        readiness_status="not_ready",
+    )
+
+    result = governance_checker.run_gateway_sla_fail_nightly_governance(
+        readiness_runs_dir=readiness_root,
+        required_ready_streak=2,
+        runs_dir=tmp_path / "governance-runs",
+    )
+    summary = result["summary_payload"]
+
+    assert summary["decision_status"] == "go"
+    assert summary["observed"]["valid_readiness_count"] == 2
+    assert summary["observed"]["latest_readiness_status"] == "ready"
+
+
+def test_governance_uses_top_level_latest_alias_as_legacy_fallback(tmp_path: Path) -> None:
+    readiness_root = tmp_path / "readiness-runs"
+    _write_readiness_summary(
+        readiness_root / "readiness_summary.json",
+        checked_at_utc="2026-03-20T00:00:00+00:00",
+        readiness_status="ready",
+    )
+
+    result = governance_checker.run_gateway_sla_fail_nightly_governance(
+        readiness_runs_dir=readiness_root,
+        required_ready_streak=1,
+        runs_dir=tmp_path / "governance-runs",
+    )
+    summary = result["summary_payload"]
+
+    assert summary["decision_status"] == "go"
+    assert summary["observed"]["valid_readiness_count"] == 1
+    assert summary["observed"]["latest_readiness_status"] == "ready"
+
+
 def test_governance_hold_when_latest_not_ready(tmp_path: Path) -> None:
     readiness_root = tmp_path / "readiness-runs"
     _seed_readiness_history(

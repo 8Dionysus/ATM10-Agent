@@ -140,6 +140,108 @@ def test_transition_happy_path_allow_switch(tmp_path: Path) -> None:
     assert summary["recommendation"]["reason_codes"] == []
 
 
+def test_transition_writes_latest_and_history_summary_outputs(tmp_path: Path) -> None:
+    seed_root = tmp_path / "seed"
+    transition_root = tmp_path / "transition-runs"
+    latest_summary_path = transition_root / "transition_summary.json"
+    _seed_history(seed_root, datetime(2026, 3, 1, 0, 0, 0, tzinfo=timezone.utc), 14)
+
+    result = transition_checker.run_gateway_sla_fail_nightly_transition(
+        readiness_runs_dir=seed_root / "readiness",
+        governance_runs_dir=seed_root / "governance",
+        progress_runs_dir=seed_root / "progress",
+        policy="report_only",
+        runs_dir=transition_root,
+        summary_json=latest_summary_path,
+    )
+    summary = result["summary_payload"]
+    history_summary_path = Path(summary["paths"]["history_summary_json"])
+
+    assert Path(summary["paths"]["summary_json"]) == latest_summary_path
+    assert latest_summary_path.is_file()
+    assert history_summary_path.is_file()
+    assert history_summary_path.parent == result["run_dir"]
+    assert json.loads(history_summary_path.read_text(encoding="utf-8"))["schema_version"] == summary["schema_version"]
+
+
+def test_transition_ignores_top_level_aliases_when_history_rows_exist(tmp_path: Path) -> None:
+    seed_root = tmp_path / "seed"
+    _seed_history(seed_root, datetime(2026, 3, 1, 0, 0, 0, tzinfo=timezone.utc), 14)
+    _write_readiness(
+        seed_root / "readiness" / "readiness_summary.json",
+        checked_at=datetime(2026, 3, 20, 0, 0, 0, tzinfo=timezone.utc),
+        readiness_status="not_ready",
+        window_observed=14,
+    )
+    _write_governance(
+        seed_root / "governance" / "governance_summary.json",
+        checked_at=datetime(2026, 3, 20, 0, 0, 0, tzinfo=timezone.utc),
+        decision_status="hold",
+        latest_ready_streak=0,
+    )
+    _write_progress(
+        seed_root / "progress" / "progress_summary.json",
+        checked_at=datetime(2026, 3, 20, 0, 0, 0, tzinfo=timezone.utc),
+        decision_status="hold",
+        latest_ready_streak=0,
+        remaining_for_window=10,
+        remaining_for_streak=3,
+    )
+
+    result = transition_checker.run_gateway_sla_fail_nightly_transition(
+        readiness_runs_dir=seed_root / "readiness",
+        governance_runs_dir=seed_root / "governance",
+        progress_runs_dir=seed_root / "progress",
+        policy="report_only",
+        runs_dir=tmp_path / "transition-runs",
+    )
+    summary = result["summary_payload"]
+
+    assert summary["allow_switch"] is True
+    assert summary["observed"]["readiness"]["valid_count"] == 14
+    assert summary["observed"]["governance"]["valid_count"] == 1
+    assert summary["observed"]["progress"]["valid_count"] == 1
+
+
+def test_transition_uses_top_level_aliases_as_legacy_fallback(tmp_path: Path) -> None:
+    seed_root = tmp_path / "seed"
+    _write_readiness(
+        seed_root / "readiness" / "readiness_summary.json",
+        checked_at=datetime(2026, 3, 20, 0, 0, 0, tzinfo=timezone.utc),
+        readiness_status="ready",
+        window_observed=14,
+    )
+    _write_governance(
+        seed_root / "governance" / "governance_summary.json",
+        checked_at=datetime(2026, 3, 20, 0, 0, 0, tzinfo=timezone.utc),
+        decision_status="go",
+        latest_ready_streak=3,
+    )
+    _write_progress(
+        seed_root / "progress" / "progress_summary.json",
+        checked_at=datetime(2026, 3, 20, 0, 0, 0, tzinfo=timezone.utc),
+        decision_status="go",
+        latest_ready_streak=3,
+        remaining_for_window=0,
+        remaining_for_streak=0,
+    )
+
+    result = transition_checker.run_gateway_sla_fail_nightly_transition(
+        readiness_runs_dir=seed_root / "readiness",
+        governance_runs_dir=seed_root / "governance",
+        progress_runs_dir=seed_root / "progress",
+        policy="report_only",
+        runs_dir=tmp_path / "transition-runs",
+    )
+    summary = result["summary_payload"]
+
+    assert summary["allow_switch"] is False
+    assert summary["observed"]["readiness"]["valid_count"] == 1
+    assert summary["observed"]["governance"]["valid_count"] == 1
+    assert summary["observed"]["progress"]["valid_count"] == 1
+    assert "readiness_valid_count_below_window" in summary["recommendation"]["reason_codes"]
+
+
 def test_transition_hold_when_latest_not_ready(tmp_path: Path) -> None:
     seed_root = tmp_path / "seed"
     _seed_history(seed_root, datetime(2026, 3, 1, 0, 0, 0, tzinfo=timezone.utc), 14)

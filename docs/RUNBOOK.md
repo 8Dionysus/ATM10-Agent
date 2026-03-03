@@ -439,7 +439,11 @@ Governance summary contract (`gateway_sla_fail_nightly_governance_v1`):
 
 Go/hold rules:
 
-* Source-of-truth: валидные `gateway_sla_fail_nightly_readiness_v1` summaries из `**/readiness_summary.json`.
+* Source-of-truth:
+  * latest alias: `runs/nightly-gateway-sla-readiness/readiness_summary.json`
+  * history rows: `runs/nightly-gateway-sla-readiness/<timestamp>-gateway-sla-fail-readiness/readiness_summary.json`
+  * при наличии history rows top-level latest alias исключается из history scan (чтобы не было double-count);
+    если history rows еще нет, используется legacy fallback по top-level latest alias.
 * Для valid row требуется:
   * `status=ok`
   * `readiness_status in {ready, not_ready}`
@@ -517,8 +521,14 @@ Progress summary contract (`gateway_sla_fail_nightly_progress_v1`):
 Progress rules:
 
 * Source-of-truth: валидные readiness/governance summaries:
-  * `gateway_sla_fail_nightly_readiness_v1` из `**/readiness_summary.json`
-  * `gateway_sla_fail_nightly_governance_v1` из `**/governance_summary.json`
+  * latest aliases:
+    * `runs/nightly-gateway-sla-readiness/readiness_summary.json`
+    * `runs/nightly-gateway-sla-governance/governance_summary.json`
+  * history rows:
+    * `runs/nightly-gateway-sla-readiness/<timestamp>-gateway-sla-fail-readiness/readiness_summary.json`
+    * `runs/nightly-gateway-sla-governance/<timestamp>-gateway-sla-governance/governance_summary.json`
+  * при наличии history rows top-level latest aliases исключаются из history scan; при legacy layout
+    (history rows еще нет) используется fallback на top-level latest aliases.
 * Для valid rows обязательно criteria match с ожидаемым baseline
   (`window=14`, `required_baseline_count=5`, `max_warn_ratio=0.20`, `required_ready_streak=3`).
 * `decision_status=go` только если latest governance = `go`
@@ -563,6 +573,16 @@ Recovery rule (calendar-day guardrail compatible):
 * Если в успешном UTC-run отсутствует `runs/nightly-gateway-sla-transition/transition_summary.json`,
   разрешен один recovery rerun в те же UTC-сутки для восстановления chain.
 * Recovery rerun не считается отдельным progression-днем для switch evidence.
+
+History consistency hotfix (`2026-03-03`):
+
+* Каждый checker (`readiness/governance/progress/transition`) пишет dual outputs за запуск:
+  * latest alias в `runs/nightly-gateway-sla-*/<summary>.json`;
+  * history copy в `run_dir/<summary>.json`.
+* Progress/transition collectors считают `valid_count` по history rows, не включая top-level latest alias
+  при наличии history copies.
+* Backfill для старых запусков не делается: валидное accumulation окно для `valid_count` считается
+  с первого nightly run после merge hotfix.
 
 ## M8.0: Streamlit IA spec (decision-complete, no implementation)
 
