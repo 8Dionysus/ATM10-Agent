@@ -641,6 +641,55 @@ Decision interpretation:
 * `decision.accounted_dispatch_allowed=false` -> dispatch блокирован до `decision.next_accounted_dispatch_at_utc`.
 * Optional source missing/invalid не ломает summary, но отражается в `sources.*.status` и `warnings`.
 
+## G2.manual: local manual nightly runner (solo+AI, no workflow_dispatch)
+
+Wrapper запускает локальный nightly-chain как единый manual entrypoint с UTC guardrail
+(`max 1 accounted run/day`) и recovery-mode без progression credit.
+
+```powershell
+cd D:\atm10-agent
+.\.venv\Scripts\Activate.ps1
+python scripts/run_gateway_sla_manual_nightly.py --runs-dir runs --policy report_only --max-runs-per-utc-day 1 --allow-recovery-rerun true --summary-json runs/nightly-gateway-sla-manual-runner/manual_nightly_summary.json --preflight-summary-json runs/nightly-gateway-sla-preflight/local_preflight_summary.json --manual-cycle-summary-json runs/nightly-gateway-sla-manual-cycle/manual_cycle_summary.json
+```
+
+Runner summary contract (`gateway_sla_manual_nightly_runner_v1`):
+
+* `schema_version = gateway_sla_manual_nightly_runner_v1`
+* `status = ok|error`
+* `policy = report_only|fail_if_blocked`
+* `execution_mode = accounted|recovery|blocked|error`
+* `guardrail`:
+  * `decision_status`
+  * `accounted_dispatch_allowed`
+  * `recovery_rerun_allowed`
+  * `max_runs_per_utc_day`
+* `steps[]`:
+  * `id`, `status`, `exit_code`, `started_at_utc`, `finished_at_utc`, `paths`, `error`
+* `decision` (из local preflight `gateway_sla_manual_preflight_v1`):
+  * `accounted_dispatch_allowed`
+  * `recovery_rerun_allowed`
+  * `decision_status` (`allow_accounted_dispatch|allow_recovery_rerun|block_accounted_dispatch|error`)
+  * `next_accounted_dispatch_at_utc`
+  * `reason_codes`
+* `warnings`
+* `error`
+* `exit_code`
+* `paths.run_dir`, `paths.run_json`, `paths.summary_json`, `paths.preflight_summary_json`, `paths.manual_cycle_summary_json`
+
+Execution behavior:
+
+* `accounted`: full chain (`gateway_http_core -> sla_signal -> trend_signal -> readiness -> governance -> progress -> transition`).
+* `recovery`: только `transition` + `manual_cycle_summary` (без progression credit).
+* `blocked`: chain шаги не выполняются, но всегда обновляется `manual_cycle_summary` с local preflight.
+* `fail-fast`: при `status=error` любого шага wrapper останавливает chain и возвращает `exit_code=2`.
+
+Guardrail source-of-truth:
+
+* Учитываемые runs считаются по history `runs/nightly-gateway-sla-manual-runner/*/run.json`
+  только с `result.progression_credit=true`.
+* Recovery допускается только если `readiness/governance/progress` summaries валидны (`status=ok`),
+  а `transition_summary.json` отсутствует или невалиден.
+
 ## G2.3: Gateway SLA fail_nightly transition gate (strict switch control)
 
 Transition checker восстанавливает формальный switch-gate для nightly strict path
