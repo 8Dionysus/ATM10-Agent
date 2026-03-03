@@ -17,18 +17,18 @@
 * `docs/RUNBOOK.md` — runnable команды и операционные профили.
 * `docs/ARCHIVED_TRACKS.md` — archived/recoverable направления.
 
-## Status Snapshot (as of 2026-03-02)
+## Status Snapshot (as of 2026-03-03)
 
 * M0/M1/M2/M3 базово закрыты.
 * `python -m pytest` green (см. последний session snapshot и CI).
 * Active ASR path: `whisper_genai`; `qwen_asr` — archived/recoverable opt-in.
 * KAG Neo4j path валидирован (`build -> sync -> query -> eval`, hard-cases uplift + latency tuning).
 
-## Session Focus (2026-03-02)
+## Session Focus (2026-03-03)
 
-* Закрыть `G2.post` Streamlit progress visibility для operator-loop (`Latest Metrics`: readiness/governance/progress).
-* Уточнить `streamlit_smoke_summary_v1` contract split (`required_missing_sources` vs `optional_missing_sources`) без изменения strict policy для required sources.
-* Синхронизировать source-of-truth docs под Streamlit progress visibility и optional-source policy.
+* Закрыть git/docs housekeeping после rollout `open_world_map` и синхронизировать source-of-truth ссылки на актуальную сессию.
+* Продолжить `G2` follow-up по nightly readiness accumulation (`window=14`, governance streak gate).
+* Держать `G5` follow-up: расширять machine-readable summaries для новых smoke entrypoints по умолчанию.
 
 ## WIP Policy
 
@@ -41,7 +41,7 @@
 
 ## Next
 
-* [ ] G3 follow-up: при следующем новом `intent_type` применить checklist `M6.19` (fixture + smoke + strict contract-check + summary/artifacts + e2e test).
+* [ ] G3 follow-up (next intent template): при добавлении следующего нового `intent_type` применить checklist `M6.19` (fixture + smoke + strict contract-check + summary/artifacts + e2e test).
 * [ ] G5 follow-up: расширять machine-readable summaries для новых smoke entrypoints по умолчанию.
 
 ## Blocked

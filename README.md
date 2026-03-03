@@ -8,7 +8,7 @@
 - `PLANS.md` — цели, milestones, DoD, риски.
 - `docs/RUNBOOK.md` — runnable команды и операционные профили.
 - `docs/DECISIONS.md` — архитектурные решения.
-- `docs/SESSION_2026-03-02.md` — текущий session snapshot.
+- `docs/SESSION_2026-03-03.md` — текущий session snapshot.
 - `docs/SOURCE_OF_TRUTH.md` — роли документов.
 
 ## Quickstart (Phase A smoke)
@@ -45,14 +45,15 @@ pip install -r requirements-audit.txt
 python scripts/dependency_audit.py --runs-dir runs --policy report_only --with-security-scan true
 ```
 
-## Current status (as of 2026-03-02)
+## Current status (as of 2026-03-03)
 
-- `python -m pytest` green (см. CI и `docs/SESSION_2026-03-02.md` для актуального snapshot).
+- `python -m pytest` green (см. CI и `docs/SESSION_2026-03-03.md` для актуального snapshot).
 - Active ASR path: `whisper_genai`; `qwen_asr` — archived/recoverable opt-in.
 - KAG Neo4j nightly guardrail path активен: `build -> sync -> eval(sample+hard) -> guardrail-check -> trend snapshot`.
 - Trend snapshot включает rolling-baseline, severity-policy (`signal_only|fail_nightly`) и calibration-aware thresholds (`latency warn=5.0`, `critical=15.0`).
 - Gateway SLA path расширен trend snapshot слоем: `gateway_sla_summary_v1` history -> `gateway_sla_trend_snapshot_v1`.
 - Gateway `fail_nightly` rollout остается staged: readiness + governance (`go|hold`) работают в nightly, без hard-gate в `pytest` smoke.
+- Automation safe loop расширен: `intent_type=open_world_map` добавлен и закрыт по checklist `M6.19`.
 
 ## Где смотреть детали
 
