@@ -538,6 +538,32 @@ Nightly progress integration:
   * summary section `Gateway SLA Fail-Nightly Progress`,
   * artifacts `runs/nightly-gateway-sla-progress`.
 
+## G2.3: Gateway SLA fail_nightly transition gate (strict switch control)
+
+Transition checker восстанавливает формальный switch-gate для nightly strict path
+без изменения PR/CI `signal_only` policy.
+
+```powershell
+cd D:\atm10-agent
+.\.venv\Scripts\Activate.ps1
+python scripts/check_gateway_sla_fail_nightly_transition.py --readiness-runs-dir runs/nightly-gateway-sla-readiness --governance-runs-dir runs/nightly-gateway-sla-governance --progress-runs-dir runs/nightly-gateway-sla-progress --readiness-history-limit 60 --governance-history-limit 60 --progress-history-limit 60 --expected-readiness-window 14 --expected-required-baseline-count 5 --expected-max-warn-ratio 0.20 --required-ready-streak 3 --policy report_only --runs-dir runs/nightly-gateway-sla-transition --summary-json runs/nightly-gateway-sla-transition/transition_summary.json
+```
+
+Nightly transition integration:
+
+* `.github/workflows/gateway-sla-readiness-nightly.yml` добавляет:
+  * step `Transition - Gateway SLA fail_nightly switch gate (report_only)`,
+  * step `Resolve - Gateway SLA transition gate`,
+  * conditional strict step `gateway_sla_trend_snapshot --critical-policy fail_nightly` только при `allow_switch=true`,
+  * summary section `Gateway SLA Fail-Nightly Transition`,
+  * cache/artifact path `runs/nightly-gateway-sla-transition`.
+
+Recovery rule (calendar-day guardrail compatible):
+
+* Если в успешном UTC-run отсутствует `runs/nightly-gateway-sla-transition/transition_summary.json`,
+  разрешен один recovery rerun в те же UTC-сутки для восстановления chain.
+* Recovery rerun не считается отдельным progression-днем для switch evidence.
+
 ## M8.0: Streamlit IA spec (decision-complete, no implementation)
 
 На шаге `M8.0` фиксируем IA-спецификацию без добавления Streamlit runtime-кода.
