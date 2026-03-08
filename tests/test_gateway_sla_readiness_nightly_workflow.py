@@ -24,8 +24,14 @@ def test_gateway_sla_readiness_nightly_contains_transition_wiring() -> None:
     assert "Summary - Gateway SLA fail_nightly transition" in text
     assert "runs/nightly-gateway-sla-progress/progress_summary.json" in text
     assert "runs/nightly-gateway-sla-transition/transition_summary.json" in text
-    assert "if: env.GATEWAY_SLA_ALLOW_SWITCH == 'True'" in text
     assert "--critical-policy fail_nightly" in text
+    assert "Resolve - Gateway SLA transition gate" not in text
+
+    strict_gate_block = _extract_step_block(
+        text,
+        "Smoke - Gateway SLA trend snapshot (fail_nightly strict gate)",
+    )
+    assert "if:" not in strict_gate_block
 
     restore_cache_block = _extract_step_block(text, "Restore cache - Gateway SLA history")
     save_cache_block = _extract_step_block(text, "Save cache - Gateway SLA history")

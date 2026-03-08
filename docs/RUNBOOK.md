@@ -747,10 +747,10 @@ Operator interpretation:
 * `attention_state=run_recovery_only` -> допускается только recovery-path без progression credit.
 * `attention_state=source_repair_required` -> сначала восстановить required summaries (`manual_cycle`, `progress`).
 
-## G2.3: Gateway SLA fail_nightly transition gate (strict switch control)
+## G2.3: Gateway SLA fail_nightly transition telemetry + strict nightly gate
 
-Transition checker восстанавливает формальный switch-gate для nightly strict path
-без изменения PR/CI `signal_only` policy.
+Transition checker сохраняет формальный decision telemetry для readiness/governance/progress,
+а nightly strict gate исполняется стабильно (`fail_nightly`) без изменения PR/CI `signal_only` policy.
 
 ```powershell
 cd D:\atm10-agent
@@ -762,8 +762,7 @@ Nightly transition integration:
 
 * `.github/workflows/gateway-sla-readiness-nightly.yml` добавляет:
   * step `Transition - Gateway SLA fail_nightly switch gate (report_only)`,
-  * step `Resolve - Gateway SLA transition gate`,
-  * conditional strict step `gateway_sla_trend_snapshot --critical-policy fail_nightly` только при `allow_switch=true`,
+  * stable strict step `gateway_sla_trend_snapshot --critical-policy fail_nightly` на каждом nightly run,
   * summary section `Gateway SLA Fail-Nightly Transition`,
   * cache/artifact path `runs/nightly-gateway-sla-transition`.
 
@@ -782,6 +781,71 @@ History consistency hotfix (`2026-03-03`):
   при наличии history copies.
 * Backfill для старых запусков не делается: валидное accumulation окно для `valid_count` считается
   с первого nightly run после merge hotfix.
+
+## G2 Stable Strict Nightly (active policy)
+
+Operational цель: держать nightly strict enforcement (`critical_policy=fail_nightly`) как
+стабильный operating mode без изменения runtime API, используя `readiness/governance/progress/transition`
+как telemetry/remediation слой.
+
+Update (`2026-03-03`, manual switch override):
+
+* Nightly strict gate включен стабильно: `gateway_sla_trend_snapshot --critical-policy fail_nightly`
+  выполняется на каждом nightly run.
+* `readiness/governance/progress/transition` остаются decision telemetry слоем (reason-codes/remaining gap),
+  а не runtime gate condition.
+* `pytest.yml` остается `signal_only` (`nightly_only` strict enforcement surface).
+
+Historical baseline (locked on `2026-03-03` before stable strict switch):
+
+* `python -m pytest -q`: `383 passed`.
+* `progress.remaining_for_window = 12`.
+* `progress.remaining_for_streak = 3`.
+* `transition.allow_switch = false`.
+* `transition.decision_status = hold`.
+* `cadence.forecast.earliest_go_candidate_at_utc = 2026-03-14T16:56:45.954644+00:00`.
+
+Historical note:
+
+* Этот baseline относится к conservative gate-фазе и сохраняется только для traceability.
+* После manual switch override nightly strict gate больше не зависит от `transition.allow_switch`.
+
+### Daily loop (primary = nightly, fallback = manual)
+
+Primary mode:
+
+* использовать `.github/workflows/gateway-sla-readiness-nightly.yml` (cron `35 3 * * *`).
+
+Fallback mode (если nightly run пропущен/недоступен):
+
+```powershell
+cd D:\atm10-agent
+.\.venv\Scripts\Activate.ps1
+python scripts/run_gateway_sla_manual_nightly.py --runs-dir runs --policy report_only --summary-json runs/nightly-gateway-sla-manual-runner/manual_nightly_summary.json
+python scripts/check_gateway_sla_manual_cycle_summary.py --runs-dir runs --policy report_only --summary-json runs/nightly-gateway-sla-manual-cycle/manual_cycle_summary.json
+python scripts/check_gateway_sla_manual_cadence_brief.py --runs-dir runs --policy report_only --summary-json runs/nightly-gateway-sla-manual-cadence/cadence_brief.json
+```
+
+Daily acceptance checks:
+
+* latest summaries `status=ok`:
+  * `runs/nightly-gateway-sla-readiness/readiness_summary.json`
+  * `runs/nightly-gateway-sla-governance/governance_summary.json`
+  * `runs/nightly-gateway-sla-progress/progress_summary.json`
+  * `runs/nightly-gateway-sla-transition/transition_summary.json`
+  * `runs/nightly-gateway-sla-manual-cadence/cadence_brief.json`
+* `invalid_or_mismatched_count == 0` (governance/progress/transition).
+* `remaining_for_window` убывает по accounted run.
+* `next_accounted_dispatch_at_utc` не нарушает guardrail `1 accounted run / UTC day`.
+
+### Post-switch monitoring
+
+* В nightly-loop обязательны:
+  * strict trend gate (`fail_nightly`);
+  * decision telemetry summaries (`readiness/governance/progress/transition`).
+* При nightly fail фиксируется remediation backlog (3-5 `G2`-only пункта) в session/TODO docs.
+* `transition.allow_switch` и related reason-codes используются только для diagnostics/traceability
+  и не блокируют запуск strict nightly.
 
 ## M8.0: Streamlit IA spec (decision-complete, no implementation)
 

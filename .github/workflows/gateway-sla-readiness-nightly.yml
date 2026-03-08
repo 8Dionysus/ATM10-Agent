@@ -64,20 +64,7 @@ jobs:
         run: |
           python scripts/check_gateway_sla_fail_nightly_transition.py --readiness-runs-dir runs/nightly-gateway-sla-readiness --governance-runs-dir runs/nightly-gateway-sla-governance --progress-runs-dir runs/nightly-gateway-sla-progress --readiness-history-limit 60 --governance-history-limit 60 --progress-history-limit 60 --expected-readiness-window 14 --expected-required-baseline-count 5 --expected-max-warn-ratio 0.20 --required-ready-streak 3 --policy report_only --runs-dir runs/nightly-gateway-sla-transition --summary-json runs/nightly-gateway-sla-transition/transition_summary.json
 
-      - name: Resolve - Gateway SLA transition gate
-        shell: pwsh
-        run: |
-          $transition = Get-Content "runs/nightly-gateway-sla-transition/transition_summary.json" | ConvertFrom-Json
-          $allowSwitch = $false
-          if ($transition.allow_switch -eq $true) {
-            $allowSwitch = $true
-          }
-          Add-Content -Path $env:GITHUB_ENV -Value "GATEWAY_SLA_ALLOW_SWITCH=$allowSwitch"
-          Add-Content -Path $env:GITHUB_ENV -Value "GATEWAY_SLA_TRANSITION_DECISION=$($transition.decision_status)"
-          Add-Content -Path $env:GITHUB_ENV -Value "GATEWAY_SLA_TRANSITION_STATUS=$($transition.status)"
-
       - name: Smoke - Gateway SLA trend snapshot (fail_nightly strict gate)
-        if: env.GATEWAY_SLA_ALLOW_SWITCH == 'True'
         run: |
           python scripts/gateway_sla_trend_snapshot.py --sla-runs-dir runs/nightly-gateway-sla-history --history-limit 30 --baseline-window 5 --critical-policy fail_nightly --runs-dir runs/nightly-gateway-sla-trend-history
 
@@ -155,7 +142,8 @@ jobs:
             "| $($transition.status) | $($transition.decision_status) | $($transition.allow_switch) | $($observed.readiness.valid_count) | $($observed.aggregated.latest_ready_streak) | $($observed.aggregated.invalid_or_mismatched_count) | $($transition.recommendation.target_critical_policy) |",
             "",
             "- `reason_codes`: $reasonCodes",
-            "- `strict_gate_executed`: $env:GATEWAY_SLA_ALLOW_SWITCH",
+            "- `strict_gate_executed`: true",
+            "- `strict_gate_policy`: fail_nightly",
             "- `transition_summary_json`: runs/nightly-gateway-sla-transition/transition_summary.json"
           )
           $lines -join "`n" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append

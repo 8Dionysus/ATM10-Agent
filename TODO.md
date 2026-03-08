@@ -23,12 +23,20 @@
 * `python -m pytest` green (см. последний session snapshot и CI).
 * Active ASR path: `whisper_genai`; `qwen_asr` — archived/recoverable opt-in.
 * KAG Neo4j path валидирован (`build -> sync -> query -> eval`, hard-cases uplift + latency tuning).
+* `G2` baseline lock (Phase 0):
+  * `readiness_status=not_ready`, `window_observed=2`;
+  * `governance.decision_status=hold`;
+  * `progress.remaining_for_window=12`, `progress.remaining_for_streak=3`;
+  * `transition.allow_switch=false`, `transition.decision_status=hold`.
+* Nightly strict policy (manual switch):
+  * `.github/workflows/gateway-sla-readiness-nightly.yml` выполняет `gateway_sla_trend_snapshot --critical-policy fail_nightly` стабильно на каждом nightly run;
+  * `pytest.yml` остается в `signal_only` (`nightly_only` enforcement surface).
 
 ## Session Focus (2026-03-03)
 
-* Закрыть git/docs housekeeping после rollout `open_world_map` и синхронизировать source-of-truth ссылки на актуальную сессию.
-* Продолжить `G2` follow-up по nightly readiness accumulation (`window=14`, governance streak gate).
-* Держать `G5` follow-up: расширять machine-readable summaries для новых smoke entrypoints по умолчанию.
+* Зафиксировать manual switch: nightly strict gate `critical_policy=fail_nightly` включен на постоянной основе.
+* Вести `G2` как monitoring/remediation трек после switch (readiness/governance/progress/transition остаются decision telemetry).
+* Держать fallback-режим через local manual cycle (`manual_nightly -> cycle_summary -> cadence_brief`) для пропущенных nightly runs.
 
 ## WIP Policy
 
@@ -37,12 +45,14 @@
 
 ## Now (WIP <= 3)
 
-* [ ] G2 follow-up: накопить минимум 14 валидных nightly readiness snapshots и пройти governance-гейт (`>=3` ready подряд) для go/no-go решения по switch в `critical_policy=fail_nightly`; прогресс и remaining-gap отслеживать через `runs/nightly-gateway-sla-progress/progress_summary.json`.
+* [ ] `G2 strict nightly monitoring` (primary, only active track): ежедневно проверять latest summaries (`readiness/governance/progress/transition/cadence`) и reason-codes после включения постоянного `fail_nightly` gate.
+* [ ] `G2 remediation loop`: при nightly fail формировать/закрывать remediation backlog (3-5 `G2`-only пунктов) до возврата к стабильному strict-проходу.
+* [ ] `G2 telemetry integrity`: подтверждать `status=ok`, `invalid_or_mismatched_count==0`, корректный UTC guardrail (`no double-count/day`) и сохранение dual-write/anti-double-count инвариантов.
 
 ## Next
 
-* [ ] G3 follow-up (next intent template): при добавлении следующего нового `intent_type` применить checklist `M6.19` (fixture + smoke + strict contract-check + summary/artifacts + e2e test).
-* [ ] G5 follow-up: расширять machine-readable summaries для новых smoke entrypoints по умолчанию.
+* [ ] После стабилизации strict nightly вернуться к `G3 follow-up` (next intent template): при добавлении следующего нового `intent_type` применить checklist `M6.19` (fixture + smoke + strict contract-check + summary/artifacts + e2e test).
+* [ ] После стабилизации strict nightly вернуться к `G5 follow-up`: расширять machine-readable summaries для новых smoke entrypoints по умолчанию.
 
 ## Blocked
 
@@ -52,6 +62,8 @@
 
 ## Done This Week
 
+* [x] `G2 switch override`: по явному operator-запросу включен стабильный nightly strict gate (`--critical-policy fail_nightly`) без условия `allow_switch`; transition summary сохранен как telemetry слой.
+* [x] `G2 Conservative Gate`: зафиксирован Phase 0 baseline (`pytest=383`, `remaining_for_window=12`, `remaining_for_streak=3`, `allow_switch=false`) и execution policy `G2-only until go/no-go` в `TODO/RUNBOOK/DECISIONS/SESSION`.
 * [x] M8.post: во вкладке `Latest Metrics` добавлен historical view с filters (`source/status/limit`) по timestamp run snapshots из `runs/ci-smoke-*` (без внешней БД).
 * [x] M8.post: в Streamlit `Safe Actions` добавлен traceable audit trail (`Last safe action`, `Recent safe actions`, JSONL лог `runs/.../ui-safe-actions/safe_actions_audit.jsonl`).
 * [x] M8.post: добавлен compact mobile layout policy (`breakpoint=768`) + regression smoke baseline (`viewport 390x844`, machine-readable `mobile_layout_contract_ok`).
