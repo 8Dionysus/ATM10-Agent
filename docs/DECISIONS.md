@@ -227,3 +227,15 @@
 * `transition.allow_switch` после override сохраняется как telemetry-поле для decision traceability и не блокирует исполнение nightly strict step.
 * Surface policy сохраняется: enforcement только в nightly workflow; `pytest.yml` остается `signal_only`.
 * Override выполнен без изменения runtime API (`gateway_request_v1`, `gateway_response_v1`, HTTP endpoints) и без изменения schema-version G2 summary contracts.
+
+## 2026-03-08
+
+* Для post-switch remediation добавлен read-only helper `scripts/check_gateway_sla_fail_nightly_remediation.py` с контрактом `gateway_sla_fail_nightly_remediation_v1`: он агрегирует только latest published summaries (`readiness/governance/progress/transition` + optional `manual_cadence`) и не пересчитывает history заново.
+* Remediation backlog нормализуется в фиксированные deterministic buckets (`telemetry_integrity`, `regression_investigation`, `window_accumulation`, `ready_streak_stabilization`, `manual_guardrail`) и ограничивается максимум 5 candidate items, чтобы nightly triage оставался reviewable.
+* Exit policy для remediation helper зафиксирован как `report_only|fail_if_remediation_required`; fail-policy возвращает `exit_code=2` при broken required sources или непустом remediation backlog, не меняя runtime API, Streamlit surface и nightly workflow.
+
+## 2026-03-12
+
+* `G2.5` подключает remediation snapshot в primary nightly workflow как diagnostic-only слой: `.github/workflows/gateway-sla-readiness-nightly.yml` запускает `check_gateway_sla_fail_nightly_remediation.py --policy report_only`, но не добавляет новый hard fail surface сверх strict `gateway_sla_trend_snapshot --critical-policy fail_nightly`.
+* Workflow-level remediation source-of-truth зафиксирован как `runs/nightly-gateway-sla-remediation/remediation_summary.json`; cache/artifact wiring для этого пути сохраняется наравне с `readiness/governance/progress/transition`.
+* Для сохранения triage-контекста при red nightly G2 summary sections публикуются с `always()` semantics и обязаны оставаться missing-safe, чтобы `GITHUB_STEP_SUMMARY` не терял diagnostics после strict fail.

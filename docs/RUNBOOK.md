@@ -833,6 +833,7 @@ Daily acceptance checks:
   * `runs/nightly-gateway-sla-governance/governance_summary.json`
   * `runs/nightly-gateway-sla-progress/progress_summary.json`
   * `runs/nightly-gateway-sla-transition/transition_summary.json`
+  * `runs/nightly-gateway-sla-remediation/remediation_summary.json`
   * `runs/nightly-gateway-sla-manual-cadence/cadence_brief.json`
 * `invalid_or_mismatched_count == 0` (governance/progress/transition).
 * `remaining_for_window` убывает по accounted run.
@@ -842,10 +843,77 @@ Daily acceptance checks:
 
 * В nightly-loop обязательны:
   * strict trend gate (`fail_nightly`);
-  * decision telemetry summaries (`readiness/governance/progress/transition`).
-* При nightly fail фиксируется remediation backlog (3-5 `G2`-only пункта) в session/TODO docs.
+  * decision telemetry summaries (`readiness/governance/progress/transition`);
+  * remediation snapshot (`runs/nightly-gateway-sla-remediation/remediation_summary.json`).
+* При nightly fail source-of-truth для triage — workflow-published `remediation_summary.json`; `candidate_items` разворачиваются в 3-5 `G2`-only пункта в session/TODO docs.
 * `transition.allow_switch` и related reason-codes используются только для diagnostics/traceability
   и не блокируют запуск strict nightly.
+
+## G2.4: Gateway SLA fail_nightly remediation snapshot
+
+Read-only helper собирает latest G2 summaries в единый remediation snapshot и machine-readable backlog-кандидаты
+без пересчета history и без изменения runtime/API/UI surface.
+
+```powershell
+cd D:\atm10-agent
+.\.venv\Scripts\Activate.ps1
+python scripts/check_gateway_sla_fail_nightly_remediation.py --runs-dir runs --policy report_only --summary-json runs/nightly-gateway-sla-remediation/remediation_summary.json
+```
+
+Remediation contract (`gateway_sla_fail_nightly_remediation_v1`):
+
+* `schema_version = gateway_sla_fail_nightly_remediation_v1`
+* `status = ok|error`
+* `policy = report_only|fail_if_remediation_required`
+* `sources`:
+  * `readiness|governance|progress|transition|manual_cadence`
+  * status per source: `present|missing|invalid`
+  * required sources: `readiness`, `governance`, `progress`, `transition`
+  * `manual_cadence` — optional enrichment source
+* `observed`:
+  * `readiness_status`
+  * `governance_decision_status`
+  * `progress_decision_status`
+  * `transition_allow_switch`
+  * `remaining_for_window`
+  * `remaining_for_streak`
+  * optional `attention_state`
+* `reason_codes`:
+  * deduplicated union из latest `recommendation.reason_codes` и `manual_cadence.decision.reason_codes`
+* `candidate_items`:
+  * детерминированный список backlog candidates
+  * поля элемента: `id`, `priority`, `summary`, `source_refs`
+  * buckets: `telemetry_integrity`, `regression_investigation`, `window_accumulation`, `ready_streak_stabilization`, `manual_guardrail`
+  * максимум `5` items на snapshot
+* `warnings`
+* `error`
+* `exit_code`
+* `paths.run_dir`, `paths.run_json`, `paths.summary_json`, `paths.history_summary_json`
+
+Artifacts:
+
+* latest alias: `runs/nightly-gateway-sla-remediation/remediation_summary.json`
+* history copy: `runs/nightly-gateway-sla-remediation/<timestamp>-gateway-sla-fail-remediation/remediation_summary.json`
+* run metadata: `runs/nightly-gateway-sla-remediation/<timestamp>-gateway-sla-fail-remediation/run.json`
+
+Nightly integration:
+
+* `.github/workflows/gateway-sla-readiness-nightly.yml` запускает remediation helper в режиме `report_only`.
+* Workflow публикует summary section `Gateway SLA Fail-Nightly Remediation`.
+* Cache/artifact wiring сохраняет `runs/nightly-gateway-sla-remediation` вместе с остальными G2 nightly paths.
+* G2 summary sections используют `always()` semantics, чтобы diagnostics не терялись при red nightly после strict `fail_nightly`.
+
+Exit policy:
+
+* `report_only`: `0`, если remediation snapshot собран успешно; `2` только при `status=error`.
+* `fail_if_remediation_required`: `2`, если broken required sources или `candidate_items` непустой; также `2` при `status=error`.
+
+Operator usage:
+
+* Для nightly triage использовать workflow-published `runs/nightly-gateway-sla-remediation/remediation_summary.json` как canonical draft backlog.
+* Прямой локальный запуск helper остается fallback path для ручной перепроверки или пропущенного nightly run.
+* Если snapshot green (`candidate_items=[]`), дополнительных remediation пунктов не требуется.
+* Если snapshot не green, разворачивать `candidate_items` в 3-5 `G2`-only пункта с ссылкой на соответствующие source artifacts.
 
 ## M8.0: Streamlit IA spec (decision-complete, no implementation)
 

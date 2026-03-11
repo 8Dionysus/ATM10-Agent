@@ -1,13 +1,13 @@
 # MANIFEST.md
 
-Актуально на: 2026-03-03
+Актуально на: 2026-03-12
 
 ## Snapshot
 
 - Проект: `atm10-agent`
 - Target platform: Windows 11 + PowerShell 7
 - Target Python: 3.11+ (проверено на 3.12.10)
-- Текущий status tests: `python -m pytest` green (актуальный snapshot: CI + `docs/SESSION_2026-03-03.md`).
+- Текущий status tests: `python -m pytest` green (актуальный snapshot: CI + `docs/SESSION_2026-03-12.md`).
 
 ## Active capabilities
 
@@ -23,7 +23,8 @@
 - Gateway fail_nightly readiness: `scripts/check_gateway_sla_fail_nightly_readiness.py` (`gateway_sla_fail_nightly_readiness_v1`).
 - Gateway fail_nightly governance: `scripts/check_gateway_sla_fail_nightly_governance.py` (`gateway_sla_fail_nightly_governance_v1`).
 - Gateway fail_nightly progress: `scripts/check_gateway_sla_fail_nightly_progress.py` (`gateway_sla_fail_nightly_progress_v1`).
-- Gateway SLA readiness nightly: `.github/workflows/gateway-sla-readiness-nightly.yml`.
+- Gateway fail_nightly remediation: `scripts/check_gateway_sla_fail_nightly_remediation.py` (`gateway_sla_fail_nightly_remediation_v1`).
+- Gateway SLA readiness nightly: `.github/workflows/gateway-sla-readiness-nightly.yml` с `readiness/governance/progress/transition/remediation` summary/artifact wiring.
 - Dependency profiles: `requirements-voice.txt`, `requirements-llm.txt`, `requirements-export.txt`, `requirements-audit.txt`.
 - Dependency audit: `scripts/dependency_audit.py` + report-only CI step (`runs/ci-dependency-audit`, artifact `dependency-audit-report`).
 
@@ -33,7 +34,7 @@
 - Goals/milestones: `PLANS.md`
 - Runnable commands: `docs/RUNBOOK.md`
 - Architecture decisions: `docs/DECISIONS.md`
-- Session history: `docs/SESSION_2026-03-03.md`
+- Session history: `docs/SESSION_2026-03-12.md`
 - Doc roles/policy: `docs/SOURCE_OF_TRUTH.md`
 - Archived tracks: `docs/ARCHIVED_TRACKS.md`
 

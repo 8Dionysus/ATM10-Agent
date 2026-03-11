@@ -32,6 +32,7 @@ jobs:
             runs/nightly-gateway-sla-governance
             runs/nightly-gateway-sla-progress
             runs/nightly-gateway-sla-transition
+            runs/nightly-gateway-sla-remediation
           key: gateway-sla-history-v1-${{ github.run_id }}
           restore-keys: |
             gateway-sla-history-v1-
@@ -64,88 +65,188 @@ jobs:
         run: |
           python scripts/check_gateway_sla_fail_nightly_transition.py --readiness-runs-dir runs/nightly-gateway-sla-readiness --governance-runs-dir runs/nightly-gateway-sla-governance --progress-runs-dir runs/nightly-gateway-sla-progress --readiness-history-limit 60 --governance-history-limit 60 --progress-history-limit 60 --expected-readiness-window 14 --expected-required-baseline-count 5 --expected-max-warn-ratio 0.20 --required-ready-streak 3 --policy report_only --runs-dir runs/nightly-gateway-sla-transition --summary-json runs/nightly-gateway-sla-transition/transition_summary.json
 
+      - name: Remediation - Gateway SLA fail_nightly snapshot (report_only)
+        if: always()
+        run: |
+          python scripts/check_gateway_sla_fail_nightly_remediation.py --runs-dir runs --policy report_only --summary-json runs/nightly-gateway-sla-remediation/remediation_summary.json
+
       - name: Smoke - Gateway SLA trend snapshot (fail_nightly strict gate)
         run: |
           python scripts/gateway_sla_trend_snapshot.py --sla-runs-dir runs/nightly-gateway-sla-history --history-limit 30 --baseline-window 5 --critical-policy fail_nightly --runs-dir runs/nightly-gateway-sla-trend-history
 
       - name: Summary - Gateway SLA fail_nightly readiness
+        if: always()
         shell: pwsh
         run: |
-          $readiness = Get-Content "runs/nightly-gateway-sla-readiness/readiness_summary.json" | ConvertFrom-Json
-          $window = $readiness.window_summary
-          $criteria = $readiness.criteria
-          $reasonCodes = if ($null -eq $readiness.recommendation.reason_codes) { "-" } else { ($readiness.recommendation.reason_codes -join ", ") }
-          $lines = @(
-            "## Gateway SLA Fail-Nightly Readiness",
-            "",
-            "| status | readiness_status | window_observed | critical_count | warn_count | warn_ratio | invalid_or_error_count | target_policy |",
-            "|---|---|---:|---:|---:|---:|---:|---|",
-            "| $($readiness.status) | $($readiness.readiness_status) | $($criteria.window_observed) | $($window.critical_count) | $($window.warn_count) | $($window.warn_ratio) | $($window.invalid_or_error_count) | $($readiness.recommendation.target_critical_policy) |",
-            "",
-            "- `required_baseline_count`: $($criteria.required_baseline_count)",
-            "- `max_warn_ratio`: $($criteria.max_warn_ratio)",
-            "- `reason_codes`: $reasonCodes",
-            "- `readiness_summary_json`: runs/nightly-gateway-sla-readiness/readiness_summary.json"
-          )
+          $path = "runs/nightly-gateway-sla-readiness/readiness_summary.json"
+          if (-not (Test-Path $path)) {
+            $lines = @(
+              "## Gateway SLA Fail-Nightly Readiness",
+              "",
+              "| status | readiness_status | window_observed | critical_count | warn_count | warn_ratio | invalid_or_error_count | target_policy |",
+              "|---|---|---:|---:|---:|---:|---:|---|",
+              "| missing | - | - | - | - | - | - | - |",
+              "",
+              "- `readiness_summary_json`: $path (missing)"
+            )
+          } else {
+            $readiness = Get-Content $path | ConvertFrom-Json
+            $window = $readiness.window_summary
+            $criteria = $readiness.criteria
+            $reasonCodes = if ($null -eq $readiness.recommendation.reason_codes) { "-" } else { ($readiness.recommendation.reason_codes -join ", ") }
+            $lines = @(
+              "## Gateway SLA Fail-Nightly Readiness",
+              "",
+              "| status | readiness_status | window_observed | critical_count | warn_count | warn_ratio | invalid_or_error_count | target_policy |",
+              "|---|---|---:|---:|---:|---:|---:|---|",
+              "| $($readiness.status) | $($readiness.readiness_status) | $($criteria.window_observed) | $($window.critical_count) | $($window.warn_count) | $($window.warn_ratio) | $($window.invalid_or_error_count) | $($readiness.recommendation.target_critical_policy) |",
+              "",
+              "- `required_baseline_count`: $($criteria.required_baseline_count)",
+              "- `max_warn_ratio`: $($criteria.max_warn_ratio)",
+              "- `reason_codes`: $reasonCodes",
+              "- `readiness_summary_json`: $path"
+            )
+          }
           $lines -join "`n" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
 
       - name: Summary - Gateway SLA fail_nightly governance
+        if: always()
         shell: pwsh
         run: |
-          $governance = Get-Content "runs/nightly-gateway-sla-governance/governance_summary.json" | ConvertFrom-Json
-          $criteria = $governance.criteria
-          $observed = $governance.observed
-          $reasonCodes = if ($null -eq $governance.recommendation.reason_codes) { "-" } else { ($governance.recommendation.reason_codes -join ", ") }
-          $lines = @(
-            "## Gateway SLA Fail-Nightly Governance",
-            "",
-            "| status | decision_status | latest_ready_streak | required_ready_streak | invalid_or_mismatched_count | target_policy |",
-            "|---|---|---:|---:|---:|---|",
-            "| $($governance.status) | $($governance.decision_status) | $($observed.latest_ready_streak) | $($criteria.required_ready_streak) | $($observed.invalid_or_mismatched_count) | $($governance.recommendation.target_critical_policy) |",
-            "",
-            "- `switch_surface`: $($governance.recommendation.switch_surface)",
-            "- `reason_codes`: $reasonCodes",
-            "- `governance_summary_json`: runs/nightly-gateway-sla-governance/governance_summary.json"
-          )
+          $path = "runs/nightly-gateway-sla-governance/governance_summary.json"
+          if (-not (Test-Path $path)) {
+            $lines = @(
+              "## Gateway SLA Fail-Nightly Governance",
+              "",
+              "| status | decision_status | latest_ready_streak | required_ready_streak | invalid_or_mismatched_count | target_policy |",
+              "|---|---|---:|---:|---:|---|",
+              "| missing | - | - | - | - | - |",
+              "",
+              "- `governance_summary_json`: $path (missing)"
+            )
+          } else {
+            $governance = Get-Content $path | ConvertFrom-Json
+            $criteria = $governance.criteria
+            $observed = $governance.observed
+            $reasonCodes = if ($null -eq $governance.recommendation.reason_codes) { "-" } else { ($governance.recommendation.reason_codes -join ", ") }
+            $lines = @(
+              "## Gateway SLA Fail-Nightly Governance",
+              "",
+              "| status | decision_status | latest_ready_streak | required_ready_streak | invalid_or_mismatched_count | target_policy |",
+              "|---|---|---:|---:|---:|---|",
+              "| $($governance.status) | $($governance.decision_status) | $($observed.latest_ready_streak) | $($criteria.required_ready_streak) | $($observed.invalid_or_mismatched_count) | $($governance.recommendation.target_critical_policy) |",
+              "",
+              "- `switch_surface`: $($governance.recommendation.switch_surface)",
+              "- `reason_codes`: $reasonCodes",
+              "- `governance_summary_json`: $path"
+            )
+          }
           $lines -join "`n" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
 
       - name: Summary - Gateway SLA fail_nightly progress
+        if: always()
         shell: pwsh
         run: |
-          $progress = Get-Content "runs/nightly-gateway-sla-progress/progress_summary.json" | ConvertFrom-Json
-          $ready = $progress.observed.readiness
-          $governance = $progress.observed.governance
-          $reasonCodes = if ($null -eq $progress.recommendation.reason_codes) { "-" } else { ($progress.recommendation.reason_codes -join ", ") }
-          $lines = @(
-            "## Gateway SLA Fail-Nightly Progress",
-            "",
-            "| status | decision_status | readiness_valid_count | remaining_for_window | remaining_for_streak | governance_valid_count | latest_governance_status | target_policy |",
-            "|---|---|---:|---:|---:|---:|---|---|",
-            "| $($progress.status) | $($progress.decision_status) | $($ready.valid_count) | $($ready.remaining_for_window) | $($ready.remaining_for_streak) | $($governance.valid_count) | $($governance.latest_decision_status) | $($progress.recommendation.target_critical_policy) |",
-            "",
-            "- `reason_codes`: $reasonCodes",
-            "- `progress_summary_json`: runs/nightly-gateway-sla-progress/progress_summary.json"
-          )
+          $path = "runs/nightly-gateway-sla-progress/progress_summary.json"
+          if (-not (Test-Path $path)) {
+            $lines = @(
+              "## Gateway SLA Fail-Nightly Progress",
+              "",
+              "| status | decision_status | readiness_valid_count | remaining_for_window | remaining_for_streak | governance_valid_count | latest_governance_status | target_policy |",
+              "|---|---|---:|---:|---:|---:|---|---|",
+              "| missing | - | - | - | - | - | - | - |",
+              "",
+              "- `progress_summary_json`: $path (missing)"
+            )
+          } else {
+            $progress = Get-Content $path | ConvertFrom-Json
+            $ready = $progress.observed.readiness
+            $governance = $progress.observed.governance
+            $reasonCodes = if ($null -eq $progress.recommendation.reason_codes) { "-" } else { ($progress.recommendation.reason_codes -join ", ") }
+            $lines = @(
+              "## Gateway SLA Fail-Nightly Progress",
+              "",
+              "| status | decision_status | readiness_valid_count | remaining_for_window | remaining_for_streak | governance_valid_count | latest_governance_status | target_policy |",
+              "|---|---|---:|---:|---:|---:|---|---|",
+              "| $($progress.status) | $($progress.decision_status) | $($ready.valid_count) | $($ready.remaining_for_window) | $($ready.remaining_for_streak) | $($governance.valid_count) | $($governance.latest_decision_status) | $($progress.recommendation.target_critical_policy) |",
+              "",
+              "- `reason_codes`: $reasonCodes",
+              "- `progress_summary_json`: $path"
+            )
+          }
           $lines -join "`n" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
 
       - name: Summary - Gateway SLA fail_nightly transition
+        if: always()
         shell: pwsh
         run: |
-          $transition = Get-Content "runs/nightly-gateway-sla-transition/transition_summary.json" | ConvertFrom-Json
-          $observed = $transition.observed
-          $reasonCodes = if ($null -eq $transition.recommendation.reason_codes) { "-" } else { ($transition.recommendation.reason_codes -join ", ") }
-          $lines = @(
-            "## Gateway SLA Fail-Nightly Transition",
-            "",
-            "| status | decision_status | allow_switch | readiness_valid_count | latest_ready_streak | invalid_or_mismatched_count | target_policy |",
-            "|---|---|---|---:|---:|---:|---|",
-            "| $($transition.status) | $($transition.decision_status) | $($transition.allow_switch) | $($observed.readiness.valid_count) | $($observed.aggregated.latest_ready_streak) | $($observed.aggregated.invalid_or_mismatched_count) | $($transition.recommendation.target_critical_policy) |",
-            "",
-            "- `reason_codes`: $reasonCodes",
-            "- `strict_gate_executed`: true",
-            "- `strict_gate_policy`: fail_nightly",
-            "- `transition_summary_json`: runs/nightly-gateway-sla-transition/transition_summary.json"
-          )
+          $path = "runs/nightly-gateway-sla-transition/transition_summary.json"
+          if (-not (Test-Path $path)) {
+            $lines = @(
+              "## Gateway SLA Fail-Nightly Transition",
+              "",
+              "| status | decision_status | allow_switch | readiness_valid_count | latest_ready_streak | invalid_or_mismatched_count | target_policy |",
+              "|---|---|---|---:|---:|---:|---|",
+              "| missing | - | - | - | - | - | - |",
+              "",
+              "- `strict_gate_executed`: true",
+              "- `strict_gate_policy`: fail_nightly",
+              "- `transition_summary_json`: $path (missing)"
+            )
+          } else {
+            $transition = Get-Content $path | ConvertFrom-Json
+            $observed = $transition.observed
+            $reasonCodes = if ($null -eq $transition.recommendation.reason_codes) { "-" } else { ($transition.recommendation.reason_codes -join ", ") }
+            $lines = @(
+              "## Gateway SLA Fail-Nightly Transition",
+              "",
+              "| status | decision_status | allow_switch | readiness_valid_count | latest_ready_streak | invalid_or_mismatched_count | target_policy |",
+              "|---|---|---|---:|---:|---:|---|",
+              "| $($transition.status) | $($transition.decision_status) | $($transition.allow_switch) | $($observed.readiness.valid_count) | $($observed.aggregated.latest_ready_streak) | $($observed.aggregated.invalid_or_mismatched_count) | $($transition.recommendation.target_critical_policy) |",
+              "",
+              "- `reason_codes`: $reasonCodes",
+              "- `strict_gate_executed`: true",
+              "- `strict_gate_policy`: fail_nightly",
+              "- `transition_summary_json`: $path"
+            )
+          }
+          $lines -join "`n" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
+
+      - name: Summary - Gateway SLA fail_nightly remediation
+        if: always()
+        shell: pwsh
+        run: |
+          $path = "runs/nightly-gateway-sla-remediation/remediation_summary.json"
+          if (-not (Test-Path $path)) {
+            $lines = @(
+              "## Gateway SLA Fail-Nightly Remediation",
+              "",
+              "| status | candidate_item_count | candidate_item_ids | reason_codes | summary_json |",
+              "|---|---:|---|---|---|",
+              "| missing | 0 | - | - | $path (missing) |",
+              "",
+              "- remediation backlog not available because the summary artifact is missing"
+            )
+          } else {
+            $remediation = Get-Content $path | ConvertFrom-Json
+            $candidateItems = @($remediation.candidate_items)
+            $candidateIds = if ($candidateItems.Count -eq 0) { "-" } else { (($candidateItems | ForEach-Object { $_.id }) -join ", ") }
+            $reasonCodes = if ($null -eq $remediation.reason_codes) { "-" } else { ($remediation.reason_codes -join ", ") }
+            $backlogNote = if ($candidateItems.Count -eq 0) {
+              "- remediation backlog is not required for this nightly snapshot"
+            } else {
+              "- canonical draft backlog buckets: $candidateIds"
+            }
+            $lines = @(
+              "## Gateway SLA Fail-Nightly Remediation",
+              "",
+              "| status | candidate_item_count | candidate_item_ids | reason_codes | summary_json |",
+              "|---|---:|---|---|---|",
+              "| $($remediation.status) | $($candidateItems.Count) | $candidateIds | $reasonCodes | $path |",
+              "",
+              $backlogNote
+            )
+          }
           $lines -join "`n" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
 
       - name: Save cache - Gateway SLA history
@@ -159,6 +260,7 @@ jobs:
             runs/nightly-gateway-sla-governance
             runs/nightly-gateway-sla-progress
             runs/nightly-gateway-sla-transition
+            runs/nightly-gateway-sla-remediation
           key: gateway-sla-history-v1-${{ github.run_id }}
 
       - name: Upload artifact - Gateway SLA readiness nightly runs
@@ -174,3 +276,4 @@ jobs:
             runs/nightly-gateway-sla-governance
             runs/nightly-gateway-sla-progress
             runs/nightly-gateway-sla-transition
+            runs/nightly-gateway-sla-remediation
