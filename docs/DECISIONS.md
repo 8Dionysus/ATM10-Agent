@@ -242,3 +242,9 @@
 * Для `G2.post3` добавлен отдельный integrity-layer `scripts/check_gateway_sla_fail_nightly_integrity.py` с контрактом `gateway_sla_fail_nightly_integrity_v1`: он сводит required source health, telemetry counters, dual-write/anti-double-count и UTC guardrail в единый machine-readable verdict `clean|attention`.
 * Integrity-layer остается strictly diagnostic: nightly workflow публикует `runs/nightly-gateway-sla-integrity/integrity_summary.json` и summary section `Gateway SLA Fail-Nightly Integrity`, но не добавляет новый hard fail surface сверх уже активного strict trend gate.
 * Во Streamlit `Latest Metrics` integrity snapshot трактуется как optional published source: отсутствие артефакта дает `not available yet`, а parse/contract drift показывает warning без падения UI и без ужесточения smoke policy для required sources.
+
+## 2026-03-13
+
+* Для локального `G2` operator-loop добавлен preferred single-cycle entrypoint `scripts/run_gateway_sla_operating_cycle.py` с контрактом `gateway_sla_operating_cycle_v1`: helper переиспользует fresh same-UTC latest summaries и уходит в fixed-order manual fallback только если required sources missing, stale или invalid.
+* Во Streamlit `Latest Metrics` `operating_cycle_summary.json` трактуется как primary read-only triage snapshot для `G2`; supporting `progress/remediation/integrity` блоки сохраняются ниже, а `Safe Actions` сознательно остаются smoke-only и не запускают `scripts/run_gateway_sla_operating_cycle.py`.
+* `scripts/streamlit_operator_panel_smoke.py` получает ранний dependency preflight для `streamlit`: missing dependency классифицируется как `runtime_missing_dependency` до subprocess launch, пишет repair hint в `streamlit_startup.log` и возвращает обычный `streamlit_smoke_summary_v1` с `status=error`, `startup_ok=false`, `exit_code=2`.
