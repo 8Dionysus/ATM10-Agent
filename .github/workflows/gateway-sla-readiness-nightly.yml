@@ -33,6 +33,7 @@ jobs:
             runs/nightly-gateway-sla-progress
             runs/nightly-gateway-sla-transition
             runs/nightly-gateway-sla-remediation
+            runs/nightly-gateway-sla-integrity
           key: gateway-sla-history-v1-${{ github.run_id }}
           restore-keys: |
             gateway-sla-history-v1-
@@ -69,6 +70,11 @@ jobs:
         if: always()
         run: |
           python scripts/check_gateway_sla_fail_nightly_remediation.py --runs-dir runs --policy report_only --summary-json runs/nightly-gateway-sla-remediation/remediation_summary.json
+
+      - name: Integrity - Gateway SLA fail_nightly invariants (report_only)
+        if: always()
+        run: |
+          python scripts/check_gateway_sla_fail_nightly_integrity.py --runs-dir runs --policy report_only --summary-json runs/nightly-gateway-sla-integrity/integrity_summary.json
 
       - name: Smoke - Gateway SLA trend snapshot (fail_nightly strict gate)
         run: |
@@ -249,6 +255,38 @@ jobs:
           }
           $lines -join "`n" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
 
+      - name: Summary - Gateway SLA fail_nightly integrity
+        if: always()
+        shell: pwsh
+        run: |
+          $path = "runs/nightly-gateway-sla-integrity/integrity_summary.json"
+          if (-not (Test-Path $path)) {
+            $lines = @(
+              "## Gateway SLA Fail-Nightly Integrity",
+              "",
+              "| status | integrity_status | telemetry_ok | dual_write_ok | anti_double_count_ok | utc_guardrail_status | summary_json |",
+              "|---|---|---|---|---|---|---|",
+              "| missing | - | - | - | - | - | $path (missing) |",
+              "",
+              "- `reason_codes`: -"
+            )
+          } else {
+            $integrity = Get-Content $path | ConvertFrom-Json
+            $observed = $integrity.observed
+            $decision = $integrity.decision
+            $reasonCodes = if ($null -eq $decision.reason_codes) { "-" } else { ($decision.reason_codes -join ", ") }
+            $lines = @(
+              "## Gateway SLA Fail-Nightly Integrity",
+              "",
+              "| status | integrity_status | telemetry_ok | dual_write_ok | anti_double_count_ok | utc_guardrail_status | summary_json |",
+              "|---|---|---|---|---|---|---|",
+              "| $($integrity.status) | $($decision.integrity_status) | $($observed.telemetry_ok) | $($observed.dual_write_ok) | $($observed.anti_double_count_ok) | $($observed.utc_guardrail_status) | $path |",
+              "",
+              "- `reason_codes`: $reasonCodes"
+            )
+          }
+          $lines -join "`n" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
+
       - name: Save cache - Gateway SLA history
         if: always()
         uses: actions/cache/save@0400d5f644dc74513175e3cd8d07132dd4860809
@@ -261,6 +299,7 @@ jobs:
             runs/nightly-gateway-sla-progress
             runs/nightly-gateway-sla-transition
             runs/nightly-gateway-sla-remediation
+            runs/nightly-gateway-sla-integrity
           key: gateway-sla-history-v1-${{ github.run_id }}
 
       - name: Upload artifact - Gateway SLA readiness nightly runs
@@ -277,3 +316,4 @@ jobs:
             runs/nightly-gateway-sla-progress
             runs/nightly-gateway-sla-transition
             runs/nightly-gateway-sla-remediation
+            runs/nightly-gateway-sla-integrity

@@ -18,6 +18,7 @@ if str(REPO_ROOT) not in sys.path:
 
 from scripts.streamlit_operator_panel import (
     TAB_NAMES,
+    canonical_fail_nightly_integrity_source,
     canonical_fail_nightly_remediation_source,
     canonical_fail_nightly_progress_sources,
     canonical_summary_sources,
@@ -237,6 +238,9 @@ def run_streamlit_operator_panel_smoke(
     remediation_path = canonical_fail_nightly_remediation_source(panel_runs_dir)
     if not remediation_path.is_file():
         optional_missing_sources.append(str(remediation_path))
+    integrity_path = canonical_fail_nightly_integrity_source(panel_runs_dir)
+    if not integrity_path.is_file():
+        optional_missing_sources.append(str(integrity_path))
     # Backward-compatible alias: retains previous semantics for required sources.
     missing_sources = list(required_missing_sources)
     mobile_policy = mobile_layout_policy(breakpoint_px=compact_breakpoint_px)

@@ -834,8 +834,10 @@ Daily acceptance checks:
   * `runs/nightly-gateway-sla-progress/progress_summary.json`
   * `runs/nightly-gateway-sla-transition/transition_summary.json`
   * `runs/nightly-gateway-sla-remediation/remediation_summary.json`
+  * `runs/nightly-gateway-sla-integrity/integrity_summary.json`
   * `runs/nightly-gateway-sla-manual-cadence/cadence_brief.json`
 * `invalid_or_mismatched_count == 0` (governance/progress/transition).
+* `integrity_status=clean` или, как минимум, отсутствие `required_sources_unhealthy`/`dual_write_invariant_broken`/`anti_double_count_invariant_broken`.
 * `remaining_for_window` убывает по accounted run.
 * `next_accounted_dispatch_at_utc` не нарушает guardrail `1 accounted run / UTC day`.
 
@@ -845,6 +847,7 @@ Daily acceptance checks:
   * strict trend gate (`fail_nightly`);
   * decision telemetry summaries (`readiness/governance/progress/transition`);
   * remediation snapshot (`runs/nightly-gateway-sla-remediation/remediation_summary.json`).
+  * integrity snapshot (`runs/nightly-gateway-sla-integrity/integrity_summary.json`).
 * При nightly fail source-of-truth для triage — workflow-published `remediation_summary.json`; `candidate_items` разворачиваются в 3-5 `G2`-only пункта в session/TODO docs.
 * `transition.allow_switch` и related reason-codes используются только для diagnostics/traceability
   и не блокируют запуск strict nightly.
@@ -914,6 +917,88 @@ Operator usage:
 * Прямой локальный запуск helper остается fallback path для ручной перепроверки или пропущенного nightly run.
 * Если snapshot green (`candidate_items=[]`), дополнительных remediation пунктов не требуется.
 * Если snapshot не green, разворачивать `candidate_items` в 3-5 `G2`-only пункта с ссылкой на соответствующие source artifacts.
+
+## G2.post3: Gateway SLA fail_nightly integrity snapshot
+
+Integrity helper агрегирует latest nightly summaries и проверяет operator-facing invariants без добавления нового hard fail surface.
+
+```powershell
+cd D:\atm10-agent
+.\.venv\Scripts\Activate.ps1
+python scripts/check_gateway_sla_fail_nightly_integrity.py --runs-dir runs --policy report_only --summary-json runs/nightly-gateway-sla-integrity/integrity_summary.json
+```
+
+Integrity contract (`gateway_sla_fail_nightly_integrity_v1`):
+
+* `schema_version = gateway_sla_fail_nightly_integrity_v1`
+* `status = ok|error`
+* `policy = report_only`
+* `sources`:
+  * `readiness|governance|progress|transition|remediation|manual_cadence`
+  * status per source: `present|missing|invalid`
+  * required sources: `readiness`, `governance`, `progress`, `transition`, `remediation`
+  * `manual_cadence` остается optional source для UTC guardrail validation
+* `observed`:
+  * `telemetry_ok`
+  * `dual_write_ok`
+  * `anti_double_count_ok`
+  * `utc_guardrail_status = ok|attention|not_available`
+  * `utc_guardrail_ok = true|false|null`
+  * `utc_guardrail` (`attention_state`, `decision_status`, `accounted_dispatch_allowed`, `next_accounted_dispatch_at_utc`, `reason_codes`)
+  * `invalid_counts`:
+    * `governance`
+    * `progress_readiness`
+    * `progress_governance`
+    * `transition_aggregated`
+* `decision`:
+  * `integrity_status = clean|attention`
+  * `reason_codes`
+* `warnings`
+* `error`
+* `exit_code`
+* `paths.run_dir`, `paths.run_json`, `paths.summary_json`, `paths.history_summary_json`
+
+Checked invariants:
+
+* required source schemas/statuses must be valid
+* telemetry counters must stay `0`:
+  * `governance.observed.invalid_or_mismatched_count`
+  * `progress.observed.readiness.invalid_or_mismatched_count`
+  * `progress.observed.governance.invalid_or_mismatched_count`
+  * `transition.observed.aggregated.invalid_or_mismatched_count`
+* dual-write invariants:
+  * `paths.run_json` exists
+  * `paths.history_summary_json` exists
+  * history copy lives under `run_dir`
+  * history copy matches latest alias by `schema_version/status`
+* anti-double-count invariants:
+  * `history_summary_json` differs from top-level latest alias
+  * history copy remains the canonical nested summary for collectors
+* UTC guardrail:
+  * если `manual_cadence` доступен, helper проверяет согласованность `attention_state`, `decision.accounted_dispatch_allowed`, `decision.next_accounted_dispatch_at_utc` и `decision.reason_codes`
+  * если `manual_cadence` отсутствует, выставляется `utc_guardrail_status=not_available` и warning без fail
+
+Artifacts:
+
+* latest alias: `runs/nightly-gateway-sla-integrity/integrity_summary.json`
+* history copy: `runs/nightly-gateway-sla-integrity/<timestamp>-gateway-sla-fail-integrity/integrity_summary.json`
+* run metadata: `runs/nightly-gateway-sla-integrity/<timestamp>-gateway-sla-fail-integrity/run.json`
+
+Nightly integration:
+
+* `.github/workflows/gateway-sla-readiness-nightly.yml` запускает integrity helper в режиме `report_only`
+* workflow публикует summary section `Gateway SLA Fail-Nightly Integrity`
+* cache/artifact wiring сохраняет `runs/nightly-gateway-sla-integrity` вместе с остальными G2 nightly paths
+
+Exit policy:
+
+* `report_only`: `0`, если integrity snapshot собран успешно; `2` только при `status=error`
+
+Operator usage:
+
+* Использовать integrity snapshot как быстрый machine-readable verdict для `G2 telemetry integrity` daily check.
+* `integrity_status=attention` сам по себе не добавляет новый hard gate, но должен попадать в nightly/manual triage.
+* При наличии `dual_write` или `anti_double_count` reason-codes сначала чинить telemetry/artifact path, потом трактовать remediation backlog.
 
 ## M8.0: Streamlit IA spec (decision-complete, no implementation)
 
@@ -1115,6 +1200,44 @@ Tolerant rendering policy:
 * если remediation snapshot отсутствует, панель показывает `not available yet`;
 * если remediation snapshot битый/contract-mismatch, панель показывает warning и продолжает работу;
 * remediation source входит в `optional_missing_sources`, но не входит в strict `missing_sources` smoke-policy.
+
+## G2.post3: Streamlit fail_nightly integrity visibility
+
+Во вкладке `Latest Metrics` добавлен блок `Gateway fail_nightly integrity`, который показывает сводный verdict
+по telemetry, dual-write/anti-double-count и UTC guardrail invariants.
+
+Optional integrity source:
+
+* `runs/nightly-gateway-sla-integrity/integrity_summary.json`
+
+Поддерживаемый контракт:
+
+* `gateway_sla_fail_nightly_integrity_v1`
+
+UI поля integrity-блока:
+
+* `status`
+* `integrity_status`
+* `telemetry_ok`
+* `dual_write_ok`
+* `anti_double_count_ok`
+* `utc_guardrail_status`
+* `governance_invalid`
+* `progress_readiness_invalid`
+* `progress_governance_invalid`
+* `transition_aggregated_invalid`
+* `reason_codes`
+
+Artifact panels:
+
+* отдельный JSON panel по `utc_guardrail`
+* compact artifact panel с `checked_at_utc` и `summary_json`
+
+Tolerant rendering policy:
+
+* если integrity snapshot отсутствует, панель показывает `not available yet`
+* если integrity snapshot битый/contract-mismatch, панель показывает warning и продолжает работу
+* integrity source входит в `optional_missing_sources`, но не входит в strict `missing_sources` smoke-policy
 
 ## M8.post: Streamlit compact mobile layout baseline
 
