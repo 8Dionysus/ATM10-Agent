@@ -126,6 +126,7 @@ Required widgets:
 * Summary matrix table по canonical smoke sources
 * Status badge per source (`ok|error|missing`)
 * Compact trend snapshot (latest only, без historical charts в v0)
+* Optional `G2 operating cycle` snapshot как primary operator-facing triage summary
 
 Inputs (canonical sources):
 
@@ -137,15 +138,24 @@ Inputs (canonical sources):
 * `runs/ci-smoke-gateway-http-core/gateway_http_smoke_summary.json`
 * `runs/ci-smoke-gateway-http-automation/gateway_http_smoke_summary.json`
 
+Supporting optional operator sources:
+
+* `runs/nightly-gateway-sla-operating-cycle/operating_cycle_summary.json`
+* `runs/nightly-gateway-sla-progress/progress_summary.json`
+* `runs/nightly-gateway-sla-remediation/remediation_summary.json`
+* `runs/nightly-gateway-sla-integrity/integrity_summary.json`
+
 Displayed fields:
 
 * Core: `status`, `observed.results_count`, `observed.query_count`, `observed.mean_mrr_at_k`
 * Gateway local: `status`, `request_count`
 * Gateway HTTP: `status`, `request_count`, `failed_requests_count`
+* G2 operating cycle: `cycle.source`, `operating_mode`, `used_manual_fallback`, `manual_execution_mode`, `manual_decision_status`, `remaining_for_window`, `remaining_for_streak`, `integrity_status`, `attention_state`, `earliest_go_candidate_at_utc`, `next_action_hint`
 
 Artifact link rules:
 
 * Для каждой строки должен быть link на исходный summary JSON.
+* Для `G2 operating cycle` summary JSON обязателен; `triage_brief.md` optional и при отсутствии не переводит UI в error.
 
 Refresh policy:
 
@@ -169,6 +179,7 @@ Inputs:
 * Local script entrypoints:
   * `scripts/gateway_v1_http_smoke.py`
   * `scripts/gateway_v1_smoke.py`
+* `scripts/run_gateway_sla_operating_cycle.py` не входит в `Safe Actions` v0; он читается только как summary source в `Latest Metrics`
 
 Displayed fields:
 
@@ -244,7 +255,7 @@ Flow A (happy): daily check
 1. Operator открывает panel.
 2. Нажимает `Refresh`.
 3. В `Stack Health` видит `status=ok`.
-4. В `Latest Metrics` видит `ok` по gateway/core sources.
+4. В `Latest Metrics` видит `ok` по gateway/core sources и, если доступен, свежий `G2 operating cycle` snapshot.
 5. При необходимости открывает `Run Explorer` и переходит по link в `run.json`.
 
 Flow B (failure): gateway HTTP regression
@@ -265,6 +276,7 @@ Flow C (safe action rerun)
 ## Safe actions guardrails
 
 * Разрешены только safe smoke-trigger commands.
+* `G2 operating cycle` не добавляется в action selector, пока surface остается smoke-only.
 * Запрещены любые real keyboard/mouse/game-state mutation действия.
 * Любой action должен быть traceable через artifacts в `runs/...`.
 * UI не должен скрывать команду запуска; operator должен видеть exact command string.
