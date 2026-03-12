@@ -826,6 +826,61 @@ python scripts/check_gateway_sla_manual_cycle_summary.py --runs-dir runs --polic
 python scripts/check_gateway_sla_manual_cadence_brief.py --runs-dir runs --policy report_only --summary-json runs/nightly-gateway-sla-manual-cadence/cadence_brief.json
 ```
 
+Single-cycle local operator helper:
+
+```powershell
+cd D:\atm10-agent
+.\.venv\Scripts\Activate.ps1
+python scripts/run_gateway_sla_operating_cycle.py --runs-dir runs --policy report_only --summary-json runs/nightly-gateway-sla-operating-cycle/operating_cycle_summary.json --brief-md runs/nightly-gateway-sla-operating-cycle/triage_brief.md
+```
+
+Operating cycle contract (`gateway_sla_operating_cycle_v1`):
+
+* `schema_version = gateway_sla_operating_cycle_v1`
+* `status = ok|error`
+* `policy = report_only`
+* `precheck.required_sources_fresh_current_utc_day = true|false`
+* `precheck.manual_snapshot_reused = true|false`
+* `cycle.source = nightly|manual|unknown`
+* `cycle.operating_mode = reuse_fresh_latest|manual_fallback|error`
+* `cycle.used_manual_fallback = true|false`
+* `cycle.manual_execution_mode`, `cycle.manual_decision_status`, `cycle.next_accounted_dispatch_at_utc`
+* `sources.readiness|governance|progress|transition|remediation|integrity|cadence`
+  * `status = present|missing|invalid`
+  * `fresh_for_current_utc_day = true|false`
+  * `checked_at_utc`
+* `triage`:
+  * `readiness_status`
+  * `governance_decision_status`
+  * `progress_decision_status`
+  * `remaining_for_window`
+  * `remaining_for_streak`
+  * `transition_allow_switch`
+  * `candidate_item_ids`
+  * `reason_codes`
+  * `integrity_status`
+  * `integrity_reason_codes`
+  * `invalid_counts`
+  * `attention_state`
+  * `earliest_go_candidate_at_utc`
+* `interpretation`:
+  * `telemetry_repair_required`
+  * `remediation_backlog_primary`
+  * `blocked_manual_gate`
+  * `next_action_hint`
+* `paths.summary_json`, `paths.history_summary_json`, `paths.brief_md`, `paths.history_brief_md`
+
+Behavior:
+
+* Если required latest summaries свежие за текущие UTC-сутки, helper переиспользует existing latest aliases и не запускает новый `manual_nightly`.
+* Если свежий latest snapshot совпадает по времени с local manual cluster, helper помечает `cycle.source=manual` и сохраняет `operating_mode=reuse_fresh_latest`.
+* Если required sources missing/stale/invalid, helper запускает fallback в фиксированном порядке:
+  * `run_gateway_sla_manual_nightly.py`
+  * `check_gateway_sla_manual_cadence_brief.py`
+  * `check_gateway_sla_fail_nightly_remediation.py`
+  * `check_gateway_sla_fail_nightly_integrity.py`
+* Порядок fallback фиксирован: `cadence` должен быть обновлен до `remediation/integrity`, чтобы optional source `manual_cadence` был консистентен в том же цикле.
+
 Daily acceptance checks:
 
 * latest summaries `status=ok`:
@@ -1033,6 +1088,19 @@ cd D:\atm10-agent
 python scripts/streamlit_operator_panel_smoke.py --panel-runs-dir runs --runs-dir runs/ci-smoke-streamlit --summary-json runs/ci-smoke-streamlit/streamlit_smoke_summary.json --gateway-url http://127.0.0.1:8770 --startup-timeout-sec 45 --viewport-width 390 --viewport-height 844 --compact-breakpoint-px 768
 ```
 
+Dependency preflight:
+
+* `scripts/streamlit_operator_panel_smoke.py` сначала проверяет import availability `streamlit` в активном interpreter.
+* Если dependency отсутствует, smoke не запускает subprocess и сразу пишет обычный `streamlit_smoke_summary_v1` с:
+  * `status=error`
+  * `startup_ok=false`
+  * `exit_code=2`
+  * `required_missing_sources=[]`
+  * `optional_missing_sources=[]`
+* `streamlit_startup.log` в этом случае содержит repair hint:
+  * `python -m pip install -r requirements.txt`
+* `run.json` получает `error_code=runtime_missing_dependency`.
+
 Ожидаемый result contract (`streamlit_smoke_summary_v1`):
 
 * `schema_version = streamlit_smoke_summary_v1`
@@ -1058,6 +1126,23 @@ Exit policy:
   * mobile layout contract fail,
   * отсутствуют `required_missing_sources`.
 * `optional_missing_sources` не переводят smoke в `error`; используются как observability signal.
+* В optional surface входят operator-facing G2 summaries (`progress`, `remediation`, `integrity`, `operating_cycle`), если они еще не опубликованы в выбранном `runs_dir`.
+
+Manual operator-check:
+
+```powershell
+cd D:\atm10-agent
+.\.venv\Scripts\Activate.ps1
+python -m pip show streamlit
+python -m streamlit run scripts/streamlit_operator_panel.py -- --runs-dir runs --gateway-url http://127.0.0.1:8770
+```
+
+Operator procedure:
+
+* success criterion: в терминале появляется Streamlit banner `You can now view your Streamlit app in your browser.` и строка `Local URL: ...`
+* если на first-run появляется onboarding prompt `Email:`, отправить пустую строку и продолжить до banner
+* после фиксации banner остановить процесс через `Ctrl+C`
+* сохранить terminal output в `runs/ci-smoke-streamlit/<timestamp>-manual-operator-check.log`
 
 ## M8.post: Streamlit Safe Actions audit trail
 
@@ -1238,6 +1323,51 @@ Tolerant rendering policy:
 * если integrity snapshot отсутствует, панель показывает `not available yet`
 * если integrity snapshot битый/contract-mismatch, панель показывает warning и продолжает работу
 * integrity source входит в `optional_missing_sources`, но не входит в strict `missing_sources` smoke-policy
+
+## G2.post4: Streamlit operating cycle visibility
+
+Во вкладке `Latest Metrics` добавлен верхний read-only блок `G2 operating cycle`, который
+читает единый operator snapshot из local helper без запуска нового цикла из UI.
+
+Optional operating-cycle source:
+
+* `runs/nightly-gateway-sla-operating-cycle/operating_cycle_summary.json`
+
+Поддерживаемый контракт:
+
+* `gateway_sla_operating_cycle_v1`
+
+UI поля operating-cycle блока:
+
+* `cycle_source`
+* `operating_mode`
+* `used_manual_fallback`
+* `manual_execution_mode`
+* `manual_decision_status`
+* `readiness_status`
+* `governance_decision_status`
+* `progress_decision_status`
+* `remaining_for_window`
+* `remaining_for_streak`
+* `transition_allow_switch`
+* `candidate_item_count`
+* `integrity_status`
+* `attention_state`
+* `earliest_go_candidate_at_utc`
+* `next_accounted_dispatch_at_utc`
+* `next_action_hint`
+
+Artifact panels:
+
+* compact artifact panel с `checked_at_utc`, `summary_json`, `brief_md`
+* отсутствие `brief_md` считается soft-info и не переводит block в warning/error
+* optional JSON panel по `invalid_counts`, если они присутствуют в triage
+
+Guardrails:
+
+* блок только читает опубликованный summary и не запускает `scripts/run_gateway_sla_operating_cycle.py`
+* `Safe Actions` остаются smoke-only и не расширяются этим helper
+* operating-cycle source входит в `optional_missing_sources`, но не входит в strict `missing_sources` smoke-policy
 
 ## M8.post: Streamlit compact mobile layout baseline
 

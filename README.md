@@ -8,7 +8,7 @@
 - `PLANS.md` — цели, milestones, DoD, риски.
 - `docs/RUNBOOK.md` — runnable команды и операционные профили.
 - `docs/DECISIONS.md` — архитектурные решения.
-- `docs/SESSION_2026-03-12.md` — текущий session snapshot.
+- `docs/SESSION_2026-03-13.md` — текущий session snapshot.
 - `docs/SOURCE_OF_TRUTH.md` — роли документов.
 
 ## Quickstart (Phase A smoke)
@@ -45,9 +45,9 @@ pip install -r requirements-audit.txt
 python scripts/dependency_audit.py --runs-dir runs --policy report_only --with-security-scan true
 ```
 
-## Current status (as of 2026-03-12)
+## Current status (as of 2026-03-13)
 
-- `python -m pytest` green (см. CI и `docs/SESSION_2026-03-12.md` для актуального snapshot).
+- `python -m pytest` green (см. CI и `docs/SESSION_2026-03-13.md` для актуального snapshot).
 - Active ASR path: `whisper_genai`; `qwen_asr` — archived/recoverable opt-in.
 - KAG Neo4j nightly guardrail path активен: `build -> sync -> eval(sample+hard) -> guardrail-check -> trend snapshot`.
 - Trend snapshot включает rolling-baseline, severity-policy (`signal_only|fail_nightly`) и calibration-aware thresholds (`latency warn=5.0`, `critical=15.0`).
@@ -55,7 +55,10 @@ python scripts/dependency_audit.py --runs-dir runs --policy report_only --with-s
 - Gateway strict nightly path активен: nightly workflow публикует `readiness/governance/progress/transition/remediation/integrity`, при этом `pytest.yml` остается `signal_only`.
 - Remediation snapshot интегрирован в nightly: source-of-truth для triage — `runs/nightly-gateway-sla-remediation/remediation_summary.json`.
 - Integrity snapshot интегрирован в nightly: machine-readable verdict для telemetry/dual-write/UTC guardrail — `runs/nightly-gateway-sla-integrity/integrity_summary.json`.
-- Streamlit operator panel показывает workflow-published `fail_nightly progress`, `remediation` и `integrity` snapshots во вкладке `Latest Metrics` как human-facing triage surface.
+- Local fallback `G2` triage loop refreshed stale summaries on `2026-03-12T21:53:16Z`: `manual_nightly=accounted`, `remaining_for_window=11`, `remaining_for_streak=3`, `integrity_status=clean`.
+- Для одного локального operator pass теперь есть `scripts/run_gateway_sla_operating_cycle.py`: он переиспользует fresh same-UTC latest summaries и не тратит новый accounted run, если snapshot уже актуален.
+- Streamlit operator panel показывает `G2 operating cycle` snapshot как primary triage surface во вкладке `Latest Metrics`, а `fail_nightly progress/remediation/integrity` остаются supporting drilldown.
+- `Safe Actions` в Streamlit по-прежнему остаются smoke-only и не запускают `G2 operating cycle` helper.
 - Automation safe loop расширен: `intent_type=open_world_map` добавлен и закрыт по checklist `M6.19`.
 
 ## Где смотреть детали
