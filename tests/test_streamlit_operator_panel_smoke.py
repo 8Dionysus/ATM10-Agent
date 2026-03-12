@@ -79,6 +79,30 @@ def _write_optional_progress_sources(runs_dir: Path) -> None:
         ),
         encoding="utf-8",
     )
+    remediation_path = panel.canonical_fail_nightly_remediation_source(runs_dir)
+    remediation_path.parent.mkdir(parents=True, exist_ok=True)
+    remediation_path.write_text(
+        json.dumps(
+            {
+                "schema_version": "gateway_sla_fail_nightly_remediation_v1",
+                "status": "ok",
+                "policy": "report_only",
+                "checked_at_utc": "2026-03-12T08:00:00+00:00",
+                "observed": {
+                    "readiness_status": "ready",
+                    "governance_decision_status": "go",
+                    "progress_decision_status": "go",
+                    "transition_allow_switch": True,
+                    "remaining_for_window": 0,
+                    "remaining_for_streak": 0,
+                },
+                "reason_codes": [],
+                "candidate_items": [],
+                "paths": {"summary_json": str(remediation_path)},
+            }
+        ),
+        encoding="utf-8",
+    )
 
 
 def test_streamlit_operator_panel_smoke_happy_path(
@@ -113,7 +137,8 @@ def test_streamlit_operator_panel_smoke_happy_path(
     assert summary["viewport_baseline"] == {"width": 390, "height": 844, "orientation": "portrait"}
     assert summary["missing_sources"] == []
     assert summary["required_missing_sources"] == []
-    assert len(summary["optional_missing_sources"]) == 3
+    assert len(summary["optional_missing_sources"]) == 4
+    assert str(panel.canonical_fail_nightly_remediation_source(panel_runs_dir)) in summary["optional_missing_sources"]
 
 
 def test_streamlit_operator_panel_smoke_happy_path_with_optional_sources(

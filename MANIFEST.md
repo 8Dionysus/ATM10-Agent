@@ -25,6 +25,7 @@
 - Gateway fail_nightly progress: `scripts/check_gateway_sla_fail_nightly_progress.py` (`gateway_sla_fail_nightly_progress_v1`).
 - Gateway fail_nightly remediation: `scripts/check_gateway_sla_fail_nightly_remediation.py` (`gateway_sla_fail_nightly_remediation_v1`).
 - Gateway SLA readiness nightly: `.github/workflows/gateway-sla-readiness-nightly.yml` с `readiness/governance/progress/transition/remediation` summary/artifact wiring.
+- Streamlit operator panel: `scripts/streamlit_operator_panel.py` + `scripts/streamlit_operator_panel_smoke.py`, включая `Latest Metrics` visibility для published `fail_nightly progress/remediation` snapshots.
 - Dependency profiles: `requirements-voice.txt`, `requirements-llm.txt`, `requirements-export.txt`, `requirements-audit.txt`.
 - Dependency audit: `scripts/dependency_audit.py` + report-only CI step (`runs/ci-dependency-audit`, artifact `dependency-audit-report`).
 

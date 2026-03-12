@@ -26,6 +26,7 @@
 * `G2` nightly strict path активен:
   * `.github/workflows/gateway-sla-readiness-nightly.yml` публикует `readiness/governance/progress/transition/remediation`;
   * `pytest.yml` остается в `signal_only` (`nightly_only` enforcement surface).
+* Streamlit `Latest Metrics` показывает published `fail_nightly progress` и `remediation` snapshots как operator-facing triage surface без изменения nightly policy.
 * Latest local `G2` remediation snapshot:
   * `readiness_status=not_ready`, `governance.decision_status=hold`;
   * `progress.remaining_for_window=12`, `progress.remaining_for_streak=3`;
@@ -34,6 +35,7 @@
 ## Session Focus (2026-03-12)
 
 * Вести `G2` как monitoring/remediation трек после switch, используя workflow-published `remediation_summary.json` как primary triage source.
+* Держать Streamlit `Latest Metrics` синхронизированным с workflow-published remediation snapshot как human-facing read-model для nightly triage.
 * Держать fallback-режим через local manual cycle (`manual_nightly -> cycle_summary -> cadence_brief`) для пропущенных nightly runs.
 * Держать human-facing docs синхронизированными с `docs/SESSION_2026-03-12.md` без изменения текущего WIP-фокуса.
 
@@ -45,7 +47,7 @@
 ## Now (WIP <= 3)
 
 * [ ] `G2 strict nightly monitoring` (primary, only active track): ежедневно проверять latest summaries (`readiness/governance/progress/transition/cadence`) и reason-codes после включения постоянного `fail_nightly` gate.
-* [ ] `G2 remediation loop`: при nightly fail брать workflow-published `runs/nightly-gateway-sla-remediation/remediation_summary.json` как source-of-truth и разворачивать `candidate_items` в 3-5 `G2`-only пункта в `TODO/session`; ручной запуск helper — fallback path.
+* [ ] `G2 remediation loop`: при nightly fail брать workflow-published `runs/nightly-gateway-sla-remediation/remediation_summary.json` как source-of-truth, использовать тот же snapshot в Streamlit `Latest Metrics` и разворачивать `candidate_items` в 3-5 `G2`-only пункта в `TODO/session`; ручной запуск helper — fallback path.
 * [ ] `G2 telemetry integrity`: подтверждать `status=ok`, `invalid_or_mismatched_count==0`, корректный UTC guardrail (`no double-count/day`) и сохранение dual-write/anti-double-count инвариантов.
 
 ## Next
@@ -65,6 +67,7 @@
 * [x] `G2 Conservative Gate`: зафиксирован Phase 0 baseline (`pytest=383`, `remaining_for_window=12`, `remaining_for_streak=3`, `allow_switch=false`) и execution policy `G2-only until go/no-go` в `TODO/RUNBOOK/DECISIONS/SESSION`.
 * [x] `G2.4 remediation snapshot`: добавлен read-only helper `check_gateway_sla_fail_nightly_remediation.py` с контрактом `gateway_sla_fail_nightly_remediation_v1`, candidate backlog buckets и pytest-покрытием для green/hold/invalid/manual-guardrail сценариев.
 * [x] `G2.5 nightly remediation integration`: remediation snapshot подключен в `.github/workflows/gateway-sla-readiness-nightly.yml` как `report_only` diagnostic layer с summary/artifact wiring и `always()`-публикацией G2 diagnostics при red nightly.
+* [x] `G2.post2 Streamlit remediation visibility`: в `Latest Metrics` добавлен published remediation snapshot (`runs/nightly-gateway-sla-remediation/remediation_summary.json`) с candidate backlog table и tolerant optional-source smoke semantics.
 * [x] `Docs sync`: добавлены session snapshots `docs/SESSION_2026-03-08.md` и `docs/SESSION_2026-03-12.md`; `README.md`, `MANIFEST.md`, `TODO.md` выровнены по текущему G2 snapshot.
 * [x] M8.post: во вкладке `Latest Metrics` добавлен historical view с filters (`source/status/limit`) по timestamp run snapshots из `runs/ci-smoke-*` (без внешней БД).
 * [x] M8.post: в Streamlit `Safe Actions` добавлен traceable audit trail (`Last safe action`, `Recent safe actions`, JSONL лог `runs/.../ui-safe-actions/safe_actions_audit.jsonl`).

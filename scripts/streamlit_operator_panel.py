@@ -109,6 +109,11 @@ FAIL_NIGHTLY_PROGRESS_SOURCE_SPECS: dict[str, dict[str, tuple[str, ...] | str]] 
     },
 }
 
+FAIL_NIGHTLY_REMEDIATION_SOURCE_SPEC: dict[str, tuple[str, ...] | str] = {
+    "path_parts": ("nightly-gateway-sla-remediation", "remediation_summary.json"),
+    "schema_version": "gateway_sla_fail_nightly_remediation_v1",
+}
+
 
 def safe_actions_audit_log_path(runs_dir: Path) -> Path:
     return Path(runs_dir) / "ui-safe-actions" / "safe_actions_audit.jsonl"
@@ -285,6 +290,11 @@ def canonical_fail_nightly_progress_sources(runs_dir: Path) -> dict[str, Path]:
         source: base.joinpath(*tuple(spec["path_parts"]))
         for source, spec in FAIL_NIGHTLY_PROGRESS_SOURCE_SPECS.items()
     }
+
+
+def canonical_fail_nightly_remediation_source(runs_dir: Path) -> Path:
+    base = Path(runs_dir)
+    return base.joinpath(*tuple(FAIL_NIGHTLY_REMEDIATION_SOURCE_SPEC["path_parts"]))
 
 
 def canonical_history_roots(runs_dir: Path) -> dict[str, Path]:
@@ -550,6 +560,22 @@ def load_fail_nightly_progress_snapshot(
     return snapshot, warnings
 
 
+def load_fail_nightly_remediation_snapshot(
+    runs_dir: Path,
+) -> tuple[dict[str, Any] | None, list[str]]:
+    path = canonical_fail_nightly_remediation_source(runs_dir)
+    payload, load_error = _load_optional_contract_payload(
+        "remediation",
+        path,
+        expected_schema_version=str(FAIL_NIGHTLY_REMEDIATION_SOURCE_SPEC["schema_version"]),
+    )
+    if payload is None:
+        if load_error is not None and load_error.startswith("missing file:"):
+            return None, []
+        return None, [] if load_error is None else [load_error]
+    return payload, []
+
+
 def fetch_gateway_health(gateway_url: str, timeout_sec: float) -> tuple[dict[str, Any] | None, str | None]:
     url = gateway_url.rstrip("/") + "/healthz"
     req = request.Request(url=url, method="GET")
@@ -769,6 +795,71 @@ def _render_latest_metrics_tab(runs_dir: Path, sources: dict[str, Path]) -> None
         st.dataframe([progress_row], use_container_width=True)
         st.caption("Progress source paths")
         st.json(progress_snapshot.get("source_paths"))
+
+    st.subheader("Gateway fail_nightly remediation")
+    remediation_snapshot, remediation_warnings = load_fail_nightly_remediation_snapshot(runs_dir)
+    if remediation_warnings:
+        sample = "\n".join(f"- {item}" for item in remediation_warnings[:5])
+        suffix = "" if len(remediation_warnings) <= 5 else "\n- ..."
+        st.warning(
+            "Some fail_nightly remediation artifacts were skipped due to parse/contract issues "
+            f"({len(remediation_warnings)}):\n{sample}{suffix}"
+        )
+    if remediation_snapshot is None:
+        st.info("not available yet")
+    else:
+        observed = remediation_snapshot.get("observed")
+        observed = observed if isinstance(observed, dict) else {}
+        candidate_items = remediation_snapshot.get("candidate_items")
+        candidate_items = candidate_items if isinstance(candidate_items, list) else []
+        candidate_ids = [
+            str(item.get("id"))
+            for item in candidate_items
+            if isinstance(item, dict) and str(item.get("id", "")).strip()
+        ]
+        remediation_row = {
+            "status": remediation_snapshot.get("status"),
+            "policy": remediation_snapshot.get("policy"),
+            "readiness_status": observed.get("readiness_status"),
+            "governance_decision_status": observed.get("governance_decision_status"),
+            "progress_decision_status": observed.get("progress_decision_status"),
+            "transition_allow_switch": observed.get("transition_allow_switch"),
+            "remaining_for_window": observed.get("remaining_for_window"),
+            "remaining_for_streak": observed.get("remaining_for_streak"),
+            "attention_state": observed.get("attention_state"),
+            "candidate_item_count": len(candidate_items),
+            "candidate_item_ids": ", ".join(candidate_ids),
+            "reason_codes": ", ".join(_normalize_reason_codes(remediation_snapshot.get("reason_codes"))),
+        }
+        st.dataframe([remediation_row], use_container_width=True)
+        if candidate_items:
+            candidate_rows = []
+            for item in candidate_items:
+                if not isinstance(item, dict):
+                    continue
+                candidate_rows.append(
+                    {
+                        "id": item.get("id"),
+                        "priority": item.get("priority"),
+                        "summary": item.get("summary"),
+                        "source_refs": ", ".join(_normalize_reason_codes(item.get("source_refs"))),
+                    }
+                )
+            if candidate_rows:
+                st.caption("Remediation candidate backlog")
+                st.dataframe(candidate_rows, use_container_width=True)
+        else:
+            st.caption("Remediation backlog not required.")
+        st.caption("Remediation artifact")
+        st.json(
+            {
+                "checked_at_utc": remediation_snapshot.get("checked_at_utc"),
+                "summary_json": _coalesce(
+                    _nested_get(remediation_snapshot, "paths", "summary_json"),
+                    str(canonical_fail_nightly_remediation_source(runs_dir)),
+                ),
+            }
+        )
 
     st.subheader("Historical snapshots")
     history_roots = canonical_history_roots(runs_dir)

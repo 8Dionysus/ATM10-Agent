@@ -1075,6 +1075,47 @@ Tolerant rendering policy:
 * если optional source битый/contract-mismatch, панель показывает warning и продолжает работу;
 * optional progress sources не входят в strict `missing_sources` smoke-policy.
 
+## G2.post2: Streamlit fail_nightly remediation visibility (published snapshot)
+
+Во вкладке `Latest Metrics` добавлен отдельный блок `Gateway fail_nightly remediation`, который
+читает только workflow-published remediation snapshot и показывает operator-facing triage backlog без
+повторной агрегации upstream G2 summaries.
+
+Optional remediation source:
+
+* `runs/nightly-gateway-sla-remediation/remediation_summary.json`
+
+Поддерживаемый контракт:
+
+* `gateway_sla_fail_nightly_remediation_v1`
+
+UI поля remediation-блока:
+
+* `status`
+* `policy`
+* `readiness_status`
+* `governance_decision_status`
+* `progress_decision_status`
+* `transition_allow_switch`
+* `remaining_for_window`
+* `remaining_for_streak`
+* optional `attention_state`
+* `candidate_item_count`
+* `candidate_item_ids`
+* `reason_codes`
+
+UI backlog surface:
+
+* отдельная compact table по `candidate_items`
+* колонки: `id`, `priority`, `summary`, `source_refs`
+* artifact panel показывает `checked_at_utc` и `summary_json`
+
+Tolerant rendering policy:
+
+* если remediation snapshot отсутствует, панель показывает `not available yet`;
+* если remediation snapshot битый/contract-mismatch, панель показывает warning и продолжает работу;
+* remediation source входит в `optional_missing_sources`, но не входит в strict `missing_sources` smoke-policy.
+
 ## M8.post: Streamlit compact mobile layout baseline
 
 В панели закреплен compact mobile layout policy без изменения IA-табов и safe action guardrails.

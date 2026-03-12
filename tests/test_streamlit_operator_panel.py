@@ -64,6 +64,12 @@ def test_canonical_fail_nightly_progress_sources_returns_expected_paths(tmp_path
     assert sources["progress"] == tmp_path / "nightly-gateway-sla-progress" / "progress_summary.json"
 
 
+def test_canonical_fail_nightly_remediation_source_returns_expected_path(tmp_path: Path) -> None:
+    assert panel.canonical_fail_nightly_remediation_source(tmp_path) == (
+        tmp_path / "nightly-gateway-sla-remediation" / "remediation_summary.json"
+    )
+
+
 def test_load_json_object_handles_missing_and_bad_json(tmp_path: Path) -> None:
     payload, error = panel.load_json_object(tmp_path / "missing.json")
     assert payload is None
@@ -418,3 +424,76 @@ def test_load_fail_nightly_progress_snapshot_invalid_optional_json_is_warning(tm
     assert "progress" in snapshot["missing_sources"]
     assert warnings
     assert any("failed to parse JSON" in item for item in warnings)
+
+
+def test_load_fail_nightly_remediation_snapshot_not_available_yet(tmp_path: Path) -> None:
+    snapshot, warnings = panel.load_fail_nightly_remediation_snapshot(tmp_path)
+    assert snapshot is None
+    assert warnings == []
+
+
+def test_load_fail_nightly_remediation_snapshot_happy_path(tmp_path: Path) -> None:
+    summary_path = panel.canonical_fail_nightly_remediation_source(tmp_path)
+    _write_json(
+        summary_path,
+        {
+            "schema_version": "gateway_sla_fail_nightly_remediation_v1",
+            "status": "ok",
+            "checked_at_utc": "2026-03-12T08:00:00+00:00",
+            "policy": "report_only",
+            "observed": {
+                "readiness_status": "not_ready",
+                "governance_decision_status": "hold",
+                "progress_decision_status": "hold",
+                "transition_allow_switch": False,
+                "remaining_for_window": 12,
+                "remaining_for_streak": 3,
+                "attention_state": "ready_for_accounted_run",
+            },
+            "reason_codes": ["insufficient_window", "ready_streak_below_threshold"],
+            "candidate_items": [
+                {
+                    "id": "window_accumulation",
+                    "priority": "medium",
+                    "summary": "Accumulate more accounted runs.",
+                    "source_refs": ["progress", "readiness"],
+                }
+            ],
+            "paths": {"summary_json": str(summary_path)},
+        },
+    )
+
+    snapshot, warnings = panel.load_fail_nightly_remediation_snapshot(tmp_path)
+    assert warnings == []
+    assert snapshot is not None
+    assert snapshot["status"] == "ok"
+    assert snapshot["policy"] == "report_only"
+    assert snapshot["observed"]["remaining_for_window"] == 12
+    assert snapshot["candidate_items"][0]["id"] == "window_accumulation"
+
+
+def test_load_fail_nightly_remediation_snapshot_invalid_json_is_warning(tmp_path: Path) -> None:
+    summary_path = panel.canonical_fail_nightly_remediation_source(tmp_path)
+    summary_path.parent.mkdir(parents=True, exist_ok=True)
+    summary_path.write_text("{bad", encoding="utf-8")
+
+    snapshot, warnings = panel.load_fail_nightly_remediation_snapshot(tmp_path)
+    assert snapshot is None
+    assert warnings
+    assert any("failed to parse JSON" in item for item in warnings)
+
+
+def test_load_fail_nightly_remediation_snapshot_schema_mismatch_is_warning(tmp_path: Path) -> None:
+    summary_path = panel.canonical_fail_nightly_remediation_source(tmp_path)
+    _write_json(
+        summary_path,
+        {
+            "schema_version": "wrong_schema_v1",
+            "status": "ok",
+        },
+    )
+
+    snapshot, warnings = panel.load_fail_nightly_remediation_snapshot(tmp_path)
+    assert snapshot is None
+    assert warnings
+    assert any("schema_version mismatch" in item for item in warnings)
