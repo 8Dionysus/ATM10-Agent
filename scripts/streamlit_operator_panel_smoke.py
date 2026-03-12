@@ -21,6 +21,7 @@ from scripts.streamlit_operator_panel import (
     canonical_fail_nightly_integrity_source,
     canonical_fail_nightly_remediation_source,
     canonical_fail_nightly_progress_sources,
+    canonical_operating_cycle_source,
     canonical_summary_sources,
 )
 from scripts.streamlit_operator_panel import (
@@ -158,6 +159,18 @@ def _build_streamlit_command(
     ]
 
 
+def _streamlit_dependency_error() -> str | None:
+    try:
+        import streamlit  # noqa: F401  # pragma: no cover - validated by smoke behavior
+    except Exception as exc:
+        return (
+            "runtime missing dependency: streamlit is not available in the active interpreter "
+            f"({sys.executable}). Repair with: python -m pip install -r requirements.txt. "
+            f"Original error: {exc}"
+        )
+    return None
+
+
 def run_streamlit_operator_panel_smoke(
     *,
     panel_runs_dir: Path,
@@ -198,49 +211,61 @@ def run_streamlit_operator_panel_smoke(
     startup_ok = False
     startup_error: str | None = None
     process_exit_code: int | None = None
+    dependency_error = _streamlit_dependency_error()
 
-    try:
-        port = _pick_free_port()
-        command = _build_streamlit_command(
-            port=port,
-            panel_runs_dir=panel_runs_dir,
-            gateway_url=gateway_url,
-            gateway_timeout_sec=gateway_timeout_sec,
-        )
-        process, output_lines, reader = _launch_streamlit_process(command)
-        startup_ok, startup_error = _wait_for_startup(
-            process,
-            output_lines,
-            startup_timeout_sec=startup_timeout_sec,
-            port=port,
-        )
-        _terminate_process(process)
-        process_exit_code = process.returncode
-        reader.join(timeout=1.0)
-    except Exception as exc:  # pragma: no cover - defensive path
+    if dependency_error is not None:
+        output_lines = [dependency_error]
         startup_ok = False
-        startup_error = f"smoke execution error: {exc}"
+        startup_error = dependency_error
+    else:
+        try:
+            port = _pick_free_port()
+            command = _build_streamlit_command(
+                port=port,
+                panel_runs_dir=panel_runs_dir,
+                gateway_url=gateway_url,
+                gateway_timeout_sec=gateway_timeout_sec,
+            )
+            process, output_lines, reader = _launch_streamlit_process(command)
+            startup_ok, startup_error = _wait_for_startup(
+                process,
+                output_lines,
+                startup_timeout_sec=startup_timeout_sec,
+                port=port,
+            )
+            _terminate_process(process)
+            process_exit_code = process.returncode
+            reader.join(timeout=1.0)
+        except Exception as exc:  # pragma: no cover - defensive path
+            startup_ok = False
+            startup_error = f"smoke execution error: {exc}"
 
     startup_log_path.parent.mkdir(parents=True, exist_ok=True)
     startup_log_path.write_text("\n".join(output_lines), encoding="utf-8")
 
     tabs_detected = list(TAB_NAMES)
-    required_missing_sources = [
-        str(path)
-        for path in canonical_summary_sources(panel_runs_dir).values()
-        if not path.is_file()
-    ]
-    optional_missing_sources = [
-        str(path)
-        for path in canonical_fail_nightly_progress_sources(panel_runs_dir).values()
-        if not path.is_file()
-    ]
-    remediation_path = canonical_fail_nightly_remediation_source(panel_runs_dir)
-    if not remediation_path.is_file():
-        optional_missing_sources.append(str(remediation_path))
-    integrity_path = canonical_fail_nightly_integrity_source(panel_runs_dir)
-    if not integrity_path.is_file():
-        optional_missing_sources.append(str(integrity_path))
+    required_missing_sources: list[str] = []
+    optional_missing_sources: list[str] = []
+    if dependency_error is None:
+        required_missing_sources = [
+            str(path)
+            for path in canonical_summary_sources(panel_runs_dir).values()
+            if not path.is_file()
+        ]
+        optional_missing_sources = [
+            str(path)
+            for path in canonical_fail_nightly_progress_sources(panel_runs_dir).values()
+            if not path.is_file()
+        ]
+        remediation_path = canonical_fail_nightly_remediation_source(panel_runs_dir)
+        if not remediation_path.is_file():
+            optional_missing_sources.append(str(remediation_path))
+        integrity_path = canonical_fail_nightly_integrity_source(panel_runs_dir)
+        if not integrity_path.is_file():
+            optional_missing_sources.append(str(integrity_path))
+        operating_cycle_path = canonical_operating_cycle_source(panel_runs_dir)
+        if not operating_cycle_path.is_file():
+            optional_missing_sources.append(str(operating_cycle_path))
     # Backward-compatible alias: retains previous semantics for required sources.
     missing_sources = list(required_missing_sources)
     mobile_policy = mobile_layout_policy(breakpoint_px=compact_breakpoint_px)
@@ -296,6 +321,9 @@ def run_streamlit_operator_panel_smoke(
     _write_json(summary_path, summary_payload)
 
     run_payload["status"] = summary_payload["status"]
+    if dependency_error is not None:
+        run_payload["error_code"] = "runtime_missing_dependency"
+        run_payload["error"] = dependency_error
     run_payload["result"] = {
         "startup_ok": startup_ok,
         "missing_sources_count": len(missing_sources),
