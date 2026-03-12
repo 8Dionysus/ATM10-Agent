@@ -52,9 +52,10 @@ python scripts/dependency_audit.py --runs-dir runs --policy report_only --with-s
 - KAG Neo4j nightly guardrail path активен: `build -> sync -> eval(sample+hard) -> guardrail-check -> trend snapshot`.
 - Trend snapshot включает rolling-baseline, severity-policy (`signal_only|fail_nightly`) и calibration-aware thresholds (`latency warn=5.0`, `critical=15.0`).
 - Gateway SLA path расширен trend snapshot слоем: `gateway_sla_summary_v1` history -> `gateway_sla_trend_snapshot_v1`.
-- Gateway strict nightly path активен: nightly workflow публикует `readiness/governance/progress/transition/remediation`, при этом `pytest.yml` остается `signal_only`.
+- Gateway strict nightly path активен: nightly workflow публикует `readiness/governance/progress/transition/remediation/integrity`, при этом `pytest.yml` остается `signal_only`.
 - Remediation snapshot интегрирован в nightly: source-of-truth для triage — `runs/nightly-gateway-sla-remediation/remediation_summary.json`.
-- Streamlit operator panel показывает workflow-published `fail_nightly progress` и `remediation` snapshots во вкладке `Latest Metrics` как human-facing triage surface.
+- Integrity snapshot интегрирован в nightly: machine-readable verdict для telemetry/dual-write/UTC guardrail — `runs/nightly-gateway-sla-integrity/integrity_summary.json`.
+- Streamlit operator panel показывает workflow-published `fail_nightly progress`, `remediation` и `integrity` snapshots во вкладке `Latest Metrics` как human-facing triage surface.
 - Automation safe loop расширен: `intent_type=open_world_map` добавлен и закрыт по checklist `M6.19`.
 
 ## Где смотреть детали
