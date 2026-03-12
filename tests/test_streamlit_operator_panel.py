@@ -70,6 +70,12 @@ def test_canonical_fail_nightly_remediation_source_returns_expected_path(tmp_pat
     )
 
 
+def test_canonical_fail_nightly_integrity_source_returns_expected_path(tmp_path: Path) -> None:
+    assert panel.canonical_fail_nightly_integrity_source(tmp_path) == (
+        tmp_path / "nightly-gateway-sla-integrity" / "integrity_summary.json"
+    )
+
+
 def test_load_json_object_handles_missing_and_bad_json(tmp_path: Path) -> None:
     payload, error = panel.load_json_object(tmp_path / "missing.json")
     assert payload is None
@@ -497,3 +503,59 @@ def test_load_fail_nightly_remediation_snapshot_schema_mismatch_is_warning(tmp_p
     assert snapshot is None
     assert warnings
     assert any("schema_version mismatch" in item for item in warnings)
+
+
+def test_load_fail_nightly_integrity_snapshot_not_available_yet(tmp_path: Path) -> None:
+    snapshot, warnings = panel.load_fail_nightly_integrity_snapshot(tmp_path)
+    assert snapshot is None
+    assert warnings == []
+
+
+def test_load_fail_nightly_integrity_snapshot_happy_path(tmp_path: Path) -> None:
+    summary_path = panel.canonical_fail_nightly_integrity_source(tmp_path)
+    _write_json(
+        summary_path,
+        {
+            "schema_version": "gateway_sla_fail_nightly_integrity_v1",
+            "status": "ok",
+            "checked_at_utc": "2026-03-12T08:10:00+00:00",
+            "observed": {
+                "telemetry_ok": True,
+                "dual_write_ok": True,
+                "anti_double_count_ok": True,
+                "utc_guardrail_status": "ok",
+                "invalid_counts": {
+                    "governance": 0,
+                    "progress_readiness": 0,
+                    "progress_governance": 0,
+                    "transition_aggregated": 0,
+                },
+                "utc_guardrail": {
+                    "attention_state": "ready_for_accounted_run",
+                    "decision_status": "allow_accounted_dispatch",
+                    "accounted_dispatch_allowed": True,
+                    "next_accounted_dispatch_at_utc": None,
+                    "reason_codes": [],
+                },
+            },
+            "decision": {"integrity_status": "clean", "reason_codes": []},
+            "paths": {"summary_json": str(summary_path)},
+        },
+    )
+
+    snapshot, warnings = panel.load_fail_nightly_integrity_snapshot(tmp_path)
+    assert warnings == []
+    assert snapshot is not None
+    assert snapshot["decision"]["integrity_status"] == "clean"
+    assert snapshot["observed"]["telemetry_ok"] is True
+
+
+def test_load_fail_nightly_integrity_snapshot_invalid_json_is_warning(tmp_path: Path) -> None:
+    summary_path = panel.canonical_fail_nightly_integrity_source(tmp_path)
+    summary_path.parent.mkdir(parents=True, exist_ok=True)
+    summary_path.write_text("{bad", encoding="utf-8")
+
+    snapshot, warnings = panel.load_fail_nightly_integrity_snapshot(tmp_path)
+    assert snapshot is None
+    assert warnings
+    assert any("failed to parse JSON" in item for item in warnings)
