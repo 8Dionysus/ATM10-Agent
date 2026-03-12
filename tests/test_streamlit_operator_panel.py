@@ -56,6 +56,13 @@ def test_canonical_summary_sources_returns_expected_paths(tmp_path: Path) -> Non
     )
 
 
+def test_streamlit_operator_panel_uses_stretch_width_not_deprecated_flag() -> None:
+    source_path = panel.REPO_ROOT / "scripts" / "streamlit_operator_panel.py"
+    source_text = source_path.read_text(encoding="utf-8")
+    assert "use_container_width=" not in source_text
+    assert 'width="stretch"' in source_text
+
+
 def test_canonical_fail_nightly_progress_sources_returns_expected_paths(tmp_path: Path) -> None:
     sources = panel.canonical_fail_nightly_progress_sources(tmp_path)
     assert list(sources.keys()) == ["readiness", "governance", "progress"]
@@ -73,6 +80,12 @@ def test_canonical_fail_nightly_remediation_source_returns_expected_path(tmp_pat
 def test_canonical_fail_nightly_integrity_source_returns_expected_path(tmp_path: Path) -> None:
     assert panel.canonical_fail_nightly_integrity_source(tmp_path) == (
         tmp_path / "nightly-gateway-sla-integrity" / "integrity_summary.json"
+    )
+
+
+def test_canonical_operating_cycle_source_returns_expected_path(tmp_path: Path) -> None:
+    assert panel.canonical_operating_cycle_source(tmp_path) == (
+        tmp_path / "nightly-gateway-sla-operating-cycle" / "operating_cycle_summary.json"
     )
 
 
@@ -559,3 +572,101 @@ def test_load_fail_nightly_integrity_snapshot_invalid_json_is_warning(tmp_path: 
     assert snapshot is None
     assert warnings
     assert any("failed to parse JSON" in item for item in warnings)
+
+
+def test_load_operating_cycle_snapshot_not_available_yet(tmp_path: Path) -> None:
+    snapshot, warnings = panel.load_operating_cycle_snapshot(tmp_path)
+    assert snapshot is None
+    assert warnings == []
+
+
+def test_load_operating_cycle_snapshot_happy_path(tmp_path: Path) -> None:
+    summary_path = panel.canonical_operating_cycle_source(tmp_path)
+    _write_json(
+        summary_path,
+        {
+            "schema_version": "gateway_sla_operating_cycle_v1",
+            "status": "ok",
+            "checked_at_utc": "2026-03-12T22:10:02.928361+00:00",
+            "policy": "report_only",
+            "cycle": {
+                "source": "manual",
+                "operating_mode": "reuse_fresh_latest",
+                "used_manual_fallback": False,
+                "manual_execution_mode": "accounted",
+                "manual_decision_status": "allow_accounted_dispatch",
+            },
+            "triage": {
+                "readiness_status": "not_ready",
+                "governance_decision_status": "hold",
+                "progress_decision_status": "hold",
+                "remaining_for_window": 11,
+                "remaining_for_streak": 3,
+                "transition_allow_switch": False,
+                "candidate_item_count": 3,
+                "candidate_item_ids": [
+                    "regression_investigation",
+                    "window_accumulation",
+                    "ready_streak_stabilization",
+                ],
+                "integrity_status": "clean",
+                "attention_state": "ready_for_accounted_run",
+                "earliest_go_candidate_at_utc": "2026-03-22T21:53:16.661488+00:00",
+                "next_accounted_dispatch_at_utc": None,
+                "invalid_counts": {
+                    "governance": 0,
+                    "progress_readiness": 0,
+                    "progress_governance": 0,
+                    "transition_aggregated": 0,
+                },
+            },
+            "interpretation": {
+                "telemetry_repair_required": False,
+                "remediation_backlog_primary": True,
+                "blocked_manual_gate": False,
+                "next_action_hint": "continue_g2_backlog",
+            },
+            "paths": {
+                "summary_json": str(summary_path),
+                "brief_md": str(summary_path.parent / "triage_brief.md"),
+            },
+        },
+    )
+
+    snapshot, warnings = panel.load_operating_cycle_snapshot(tmp_path)
+    assert warnings == []
+    assert snapshot is not None
+    assert snapshot["status"] == "ok"
+    assert snapshot["policy"] == "report_only"
+    assert snapshot["cycle"]["manual_execution_mode"] == "accounted"
+    assert snapshot["triage"]["remaining_for_window"] == 11
+    assert snapshot["interpretation"]["next_action_hint"] == "continue_g2_backlog"
+    assert snapshot["paths"]["summary_json"] == str(summary_path)
+    assert snapshot["paths"]["brief_md"] == str(summary_path.parent / "triage_brief.md")
+
+
+def test_load_operating_cycle_snapshot_invalid_json_is_warning(tmp_path: Path) -> None:
+    summary_path = panel.canonical_operating_cycle_source(tmp_path)
+    summary_path.parent.mkdir(parents=True, exist_ok=True)
+    summary_path.write_text("{bad", encoding="utf-8")
+
+    snapshot, warnings = panel.load_operating_cycle_snapshot(tmp_path)
+    assert snapshot is None
+    assert warnings
+    assert any("failed to parse JSON" in item for item in warnings)
+
+
+def test_load_operating_cycle_snapshot_schema_mismatch_is_warning(tmp_path: Path) -> None:
+    summary_path = panel.canonical_operating_cycle_source(tmp_path)
+    _write_json(
+        summary_path,
+        {
+            "schema_version": "wrong_schema_v1",
+            "status": "ok",
+        },
+    )
+
+    snapshot, warnings = panel.load_operating_cycle_snapshot(tmp_path)
+    assert snapshot is None
+    assert warnings
+    assert any("schema_version mismatch" in item for item in warnings)

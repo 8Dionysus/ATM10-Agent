@@ -138,6 +138,51 @@ def _write_optional_progress_sources(runs_dir: Path) -> None:
     )
 
 
+def _write_operating_cycle_source(runs_dir: Path) -> None:
+    summary_path = panel.canonical_operating_cycle_source(runs_dir)
+    summary_path.parent.mkdir(parents=True, exist_ok=True)
+    summary_path.write_text(
+        json.dumps(
+            {
+                "schema_version": "gateway_sla_operating_cycle_v1",
+                "status": "ok",
+                "checked_at_utc": "2026-03-12T22:10:02.928361+00:00",
+                "policy": "report_only",
+                "cycle": {
+                    "source": "manual",
+                    "operating_mode": "reuse_fresh_latest",
+                    "used_manual_fallback": False,
+                    "manual_execution_mode": "accounted",
+                    "manual_decision_status": "allow_accounted_dispatch",
+                },
+                "triage": {
+                    "readiness_status": "not_ready",
+                    "governance_decision_status": "hold",
+                    "progress_decision_status": "hold",
+                    "remaining_for_window": 11,
+                    "remaining_for_streak": 3,
+                    "transition_allow_switch": False,
+                    "candidate_item_count": 3,
+                    "integrity_status": "clean",
+                    "attention_state": "ready_for_accounted_run",
+                    "earliest_go_candidate_at_utc": "2026-03-22T21:53:16.661488+00:00",
+                    "next_accounted_dispatch_at_utc": None,
+                },
+                "interpretation": {
+                    "telemetry_repair_required": False,
+                    "remediation_backlog_primary": True,
+                    "blocked_manual_gate": False,
+                    "next_action_hint": "continue_g2_backlog",
+                },
+                "paths": {
+                    "summary_json": str(summary_path),
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+
+
 def test_streamlit_operator_panel_smoke_happy_path(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -170,7 +215,8 @@ def test_streamlit_operator_panel_smoke_happy_path(
     assert summary["viewport_baseline"] == {"width": 390, "height": 844, "orientation": "portrait"}
     assert summary["missing_sources"] == []
     assert summary["required_missing_sources"] == []
-    assert len(summary["optional_missing_sources"]) == 5
+    assert len(summary["optional_missing_sources"]) == 6
+    assert str(panel.canonical_operating_cycle_source(panel_runs_dir)) in summary["optional_missing_sources"]
     assert str(panel.canonical_fail_nightly_remediation_source(panel_runs_dir)) in summary["optional_missing_sources"]
     assert str(panel.canonical_fail_nightly_integrity_source(panel_runs_dir)) in summary["optional_missing_sources"]
 
@@ -181,6 +227,7 @@ def test_streamlit_operator_panel_smoke_happy_path_with_optional_sources(
     panel_runs_dir = tmp_path / "panel-runs"
     _write_canonical_sources(panel_runs_dir)
     _write_optional_progress_sources(panel_runs_dir)
+    _write_operating_cycle_source(panel_runs_dir)
 
     fake_process = _FakeProcess()
     monkeypatch.setattr(
@@ -232,6 +279,50 @@ def test_streamlit_operator_panel_smoke_timeout_path(
     assert result["exit_code"] == 2
     assert result["summary_payload"]["status"] == "error"
     assert result["summary_payload"]["startup_ok"] is False
+
+
+def test_streamlit_operator_panel_smoke_missing_streamlit_dependency_is_error(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    panel_runs_dir = tmp_path / "panel-runs"
+    _write_canonical_sources(panel_runs_dir)
+
+    monkeypatch.setattr(
+        smoke,
+        "_streamlit_dependency_error",
+        lambda: (
+            "runtime missing dependency: streamlit is not available in the active interpreter "
+            "(python.exe). Repair with: python -m pip install -r requirements.txt."
+        ),
+    )
+
+    def _unexpected_launch(_command: list[str]):
+        raise AssertionError("_launch_streamlit_process must not be called when streamlit is missing")
+
+    monkeypatch.setattr(smoke, "_launch_streamlit_process", _unexpected_launch)
+
+    result = smoke.run_streamlit_operator_panel_smoke(
+        panel_runs_dir=panel_runs_dir,
+        runs_dir=tmp_path / "smoke-runs",
+        summary_json=tmp_path / "smoke-runs" / "summary.json",
+        now=datetime(2026, 2, 27, 22, 0, 45, tzinfo=timezone.utc),
+    )
+    assert result["ok"] is False
+    assert result["exit_code"] == 2
+    summary = result["summary_payload"]
+    assert summary["status"] == "error"
+    assert summary["startup_ok"] is False
+    assert summary["required_missing_sources"] == []
+    assert summary["optional_missing_sources"] == []
+    assert summary["errors"]
+
+    run_payload = result["run_payload"]
+    assert run_payload["error_code"] == "runtime_missing_dependency"
+    assert "Repair with: python -m pip install -r requirements.txt." in str(run_payload["error"])
+
+    startup_log = Path(summary["paths"]["startup_log"]).read_text(encoding="utf-8")
+    assert "runtime missing dependency" in startup_log
+    assert "requirements.txt" in startup_log
 
 
 def test_streamlit_operator_panel_smoke_early_crash_path(

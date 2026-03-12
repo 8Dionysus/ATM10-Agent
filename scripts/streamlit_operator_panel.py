@@ -119,6 +119,11 @@ FAIL_NIGHTLY_INTEGRITY_SOURCE_SPEC: dict[str, tuple[str, ...] | str] = {
     "schema_version": "gateway_sla_fail_nightly_integrity_v1",
 }
 
+OPERATING_CYCLE_SOURCE_SPEC: dict[str, tuple[str, ...] | str] = {
+    "path_parts": ("nightly-gateway-sla-operating-cycle", "operating_cycle_summary.json"),
+    "schema_version": "gateway_sla_operating_cycle_v1",
+}
+
 
 def safe_actions_audit_log_path(runs_dir: Path) -> Path:
     return Path(runs_dir) / "ui-safe-actions" / "safe_actions_audit.jsonl"
@@ -305,6 +310,11 @@ def canonical_fail_nightly_remediation_source(runs_dir: Path) -> Path:
 def canonical_fail_nightly_integrity_source(runs_dir: Path) -> Path:
     base = Path(runs_dir)
     return base.joinpath(*tuple(FAIL_NIGHTLY_INTEGRITY_SOURCE_SPEC["path_parts"]))
+
+
+def canonical_operating_cycle_source(runs_dir: Path) -> Path:
+    base = Path(runs_dir)
+    return base.joinpath(*tuple(OPERATING_CYCLE_SOURCE_SPEC["path_parts"]))
 
 
 def canonical_history_roots(runs_dir: Path) -> dict[str, Path]:
@@ -602,6 +612,46 @@ def load_fail_nightly_integrity_snapshot(
     return payload, []
 
 
+def load_operating_cycle_snapshot(
+    runs_dir: Path,
+) -> tuple[dict[str, Any] | None, list[str]]:
+    path = canonical_operating_cycle_source(runs_dir)
+    payload, load_error = _load_optional_contract_payload(
+        "operating_cycle",
+        path,
+        expected_schema_version=str(OPERATING_CYCLE_SOURCE_SPEC["schema_version"]),
+    )
+    if payload is None:
+        if load_error is not None and load_error.startswith("missing file:"):
+            return None, []
+        return None, [] if load_error is None else [load_error]
+
+    cycle = payload.get("cycle")
+    cycle = cycle if isinstance(cycle, dict) else {}
+    triage = payload.get("triage")
+    triage = triage if isinstance(triage, dict) else {}
+    interpretation = payload.get("interpretation")
+    interpretation = interpretation if isinstance(interpretation, dict) else {}
+    paths_payload = payload.get("paths")
+    paths_payload = paths_payload if isinstance(paths_payload, dict) else {}
+
+    snapshot = {
+        "schema_version": str(payload.get("schema_version")),
+        "status": payload.get("status"),
+        "checked_at_utc": payload.get("checked_at_utc"),
+        "policy": payload.get("policy"),
+        "cycle": cycle,
+        "triage": triage,
+        "interpretation": interpretation,
+        "paths": {
+            "summary_json": _coalesce(paths_payload.get("summary_json"), str(path)),
+            "brief_md": paths_payload.get("brief_md"),
+        },
+        "source_path": str(path),
+    }
+    return snapshot, []
+
+
 def fetch_gateway_health(gateway_url: str, timeout_sec: float) -> tuple[dict[str, Any] | None, str | None]:
     url = gateway_url.rstrip("/") + "/healthz"
     req = request.Request(url=url, method="GET")
@@ -775,7 +825,7 @@ def _render_stack_health_tab(gateway_url: str, gateway_timeout_sec: float) -> No
 
 def _render_run_explorer_tab(sources: dict[str, Path]) -> None:
     rows = build_run_explorer_rows(sources)
-    st.dataframe(rows, use_container_width=True)
+    st.dataframe(rows, width="stretch")
     st.subheader("Artifact paths")
     for row in rows:
         st.code(
@@ -793,7 +843,69 @@ def _render_run_explorer_tab(sources: dict[str, Path]) -> None:
 def _render_latest_metrics_tab(runs_dir: Path, sources: dict[str, Path]) -> None:
     rows = build_metrics_rows(sources)
     st.subheader("Latest summary matrix")
-    st.dataframe(rows, use_container_width=True)
+    st.dataframe(rows, width="stretch")
+
+    st.subheader("G2 operating cycle")
+    operating_cycle_snapshot, operating_cycle_warnings = load_operating_cycle_snapshot(runs_dir)
+    if operating_cycle_warnings:
+        sample = "\n".join(f"- {item}" for item in operating_cycle_warnings[:5])
+        suffix = "" if len(operating_cycle_warnings) <= 5 else "\n- ..."
+        st.warning(
+            "Some G2 operating cycle artifacts were skipped due to parse/contract issues "
+            f"({len(operating_cycle_warnings)}):\n{sample}{suffix}"
+        )
+    if operating_cycle_snapshot is None:
+        st.info("not available yet")
+    else:
+        cycle = operating_cycle_snapshot.get("cycle")
+        cycle = cycle if isinstance(cycle, dict) else {}
+        triage = operating_cycle_snapshot.get("triage")
+        triage = triage if isinstance(triage, dict) else {}
+        interpretation = operating_cycle_snapshot.get("interpretation")
+        interpretation = interpretation if isinstance(interpretation, dict) else {}
+        operating_cycle_row = {
+            "status": operating_cycle_snapshot.get("status"),
+            "cycle_source": cycle.get("source"),
+            "operating_mode": cycle.get("operating_mode"),
+            "used_manual_fallback": cycle.get("used_manual_fallback"),
+            "manual_execution_mode": cycle.get("manual_execution_mode"),
+            "manual_decision_status": cycle.get("manual_decision_status"),
+            "readiness_status": triage.get("readiness_status"),
+            "governance_decision_status": triage.get("governance_decision_status"),
+            "progress_decision_status": triage.get("progress_decision_status"),
+            "remaining_for_window": triage.get("remaining_for_window"),
+            "remaining_for_streak": triage.get("remaining_for_streak"),
+            "transition_allow_switch": triage.get("transition_allow_switch"),
+            "candidate_item_count": triage.get("candidate_item_count"),
+            "integrity_status": triage.get("integrity_status"),
+            "attention_state": triage.get("attention_state"),
+            "earliest_go_candidate_at_utc": triage.get("earliest_go_candidate_at_utc"),
+            "next_accounted_dispatch_at_utc": triage.get("next_accounted_dispatch_at_utc"),
+            "next_action_hint": interpretation.get("next_action_hint"),
+        }
+        st.dataframe([operating_cycle_row], width="stretch")
+        candidate_item_ids = _normalize_reason_codes(triage.get("candidate_item_ids"))
+        if candidate_item_ids:
+            st.caption("Operating cycle candidate backlog")
+            st.dataframe(
+                [{"candidate_item_ids": ", ".join(candidate_item_ids)}],
+                width="stretch",
+            )
+        invalid_counts = triage.get("invalid_counts")
+        invalid_counts = invalid_counts if isinstance(invalid_counts, dict) else {}
+        if invalid_counts:
+            st.caption("Operating cycle invalid counts")
+            st.json(invalid_counts)
+        operating_cycle_paths = operating_cycle_snapshot.get("paths")
+        operating_cycle_paths = operating_cycle_paths if isinstance(operating_cycle_paths, dict) else {}
+        st.caption("Operating cycle artifacts")
+        st.json(
+            {
+                "checked_at_utc": operating_cycle_snapshot.get("checked_at_utc"),
+                "summary_json": operating_cycle_paths.get("summary_json"),
+                "brief_md": _coalesce(operating_cycle_paths.get("brief_md"), "not available yet"),
+            }
+        )
 
     st.subheader("Gateway fail_nightly progress")
     progress_snapshot, progress_warnings = load_fail_nightly_progress_snapshot(runs_dir)
@@ -818,7 +930,7 @@ def _render_latest_metrics_tab(runs_dir: Path, sources: dict[str, Path]) -> None
             "available_sources": ", ".join(progress_snapshot.get("available_sources") or []),
             "missing_sources": ", ".join(progress_snapshot.get("missing_sources") or []),
         }
-        st.dataframe([progress_row], use_container_width=True)
+        st.dataframe([progress_row], width="stretch")
         st.caption("Progress source paths")
         st.json(progress_snapshot.get("source_paths"))
 
@@ -857,7 +969,7 @@ def _render_latest_metrics_tab(runs_dir: Path, sources: dict[str, Path]) -> None
             "candidate_item_ids": ", ".join(candidate_ids),
             "reason_codes": ", ".join(_normalize_reason_codes(remediation_snapshot.get("reason_codes"))),
         }
-        st.dataframe([remediation_row], use_container_width=True)
+        st.dataframe([remediation_row], width="stretch")
         if candidate_items:
             candidate_rows = []
             for item in candidate_items:
@@ -873,7 +985,7 @@ def _render_latest_metrics_tab(runs_dir: Path, sources: dict[str, Path]) -> None
                 )
             if candidate_rows:
                 st.caption("Remediation candidate backlog")
-                st.dataframe(candidate_rows, use_container_width=True)
+                st.dataframe(candidate_rows, width="stretch")
         else:
             st.caption("Remediation backlog not required.")
         st.caption("Remediation artifact")
@@ -920,7 +1032,7 @@ def _render_latest_metrics_tab(runs_dir: Path, sources: dict[str, Path]) -> None
             "transition_aggregated_invalid": invalid_counts.get("transition_aggregated"),
             "reason_codes": ", ".join(_normalize_reason_codes(decision.get("reason_codes"))),
         }
-        st.dataframe([integrity_row], use_container_width=True)
+        st.dataframe([integrity_row], width="stretch")
         st.caption("Integrity UTC guardrail")
         st.json(utc_guardrail)
         st.caption("Integrity artifact")
@@ -974,7 +1086,7 @@ def _render_latest_metrics_tab(runs_dir: Path, sources: dict[str, Path]) -> None
     if not history_rows:
         st.info("not available yet")
         return
-    st.dataframe(history_rows, use_container_width=True)
+    st.dataframe(history_rows, width="stretch")
 
 
 def _render_safe_actions_tab(runs_dir: Path) -> None:
@@ -1016,7 +1128,7 @@ def _render_safe_actions_tab(runs_dir: Path) -> None:
     if not audit_rows:
         st.info("not available yet")
     else:
-        st.dataframe(audit_rows, use_container_width=True)
+        st.dataframe(audit_rows, width="stretch")
 
 
 def render_panel(args: argparse.Namespace) -> None:
