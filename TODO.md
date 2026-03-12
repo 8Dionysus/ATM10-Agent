@@ -24,18 +24,22 @@
 * Active ASR path: `whisper_genai`; `qwen_asr` — archived/recoverable opt-in.
 * KAG Neo4j path валидирован (`build -> sync -> query -> eval`, hard-cases uplift + latency tuning).
 * `G2` nightly strict path активен:
-  * `.github/workflows/gateway-sla-readiness-nightly.yml` публикует `readiness/governance/progress/transition/remediation`;
+  * `.github/workflows/gateway-sla-readiness-nightly.yml` публикует `readiness/governance/progress/transition/remediation/integrity`;
   * `pytest.yml` остается в `signal_only` (`nightly_only` enforcement surface).
-* Streamlit `Latest Metrics` показывает published `fail_nightly progress` и `remediation` snapshots как operator-facing triage surface без изменения nightly policy.
+* Streamlit `Latest Metrics` показывает published `fail_nightly progress`, `remediation` и `integrity` snapshots как operator-facing triage surface без изменения nightly policy.
 * Latest local `G2` remediation snapshot:
   * `readiness_status=not_ready`, `governance.decision_status=hold`;
   * `progress.remaining_for_window=12`, `progress.remaining_for_streak=3`;
   * `candidate_items=3` (`regression_investigation`, `window_accumulation`, `ready_streak_stabilization`).
+* Latest local `G2` integrity snapshot:
+  * `integrity_status=clean`
+  * `telemetry_ok=true`, `dual_write_ok=true`, `anti_double_count_ok=true`, `utc_guardrail_status=ok`
 
 ## Session Focus (2026-03-12)
 
 * Вести `G2` как monitoring/remediation трек после switch, используя workflow-published `remediation_summary.json` как primary triage source.
 * Держать Streamlit `Latest Metrics` синхронизированным с workflow-published remediation snapshot как human-facing read-model для nightly triage.
+* Использовать `runs/nightly-gateway-sla-integrity/integrity_summary.json` как machine-readable daily verdict для telemetry/UTC guardrail checks.
 * Держать fallback-режим через local manual cycle (`manual_nightly -> cycle_summary -> cadence_brief`) для пропущенных nightly runs.
 * Держать human-facing docs синхронизированными с `docs/SESSION_2026-03-12.md` без изменения текущего WIP-фокуса.
 
@@ -48,7 +52,7 @@
 
 * [ ] `G2 strict nightly monitoring` (primary, only active track): ежедневно проверять latest summaries (`readiness/governance/progress/transition/cadence`) и reason-codes после включения постоянного `fail_nightly` gate.
 * [ ] `G2 remediation loop`: при nightly fail брать workflow-published `runs/nightly-gateway-sla-remediation/remediation_summary.json` как source-of-truth, использовать тот же snapshot в Streamlit `Latest Metrics` и разворачивать `candidate_items` в 3-5 `G2`-only пункта в `TODO/session`; ручной запуск helper — fallback path.
-* [ ] `G2 telemetry integrity`: подтверждать `status=ok`, `invalid_or_mismatched_count==0`, корректный UTC guardrail (`no double-count/day`) и сохранение dual-write/anti-double-count инвариантов.
+* [ ] `G2 telemetry integrity`: подтверждать `integrity_summary.json -> decision.integrity_status=clean` и reason-codes/warnings при любых отклонениях (`invalid_or_mismatched_count`, UTC guardrail, dual-write, anti-double-count).
 
 ## Next
 
@@ -68,6 +72,7 @@
 * [x] `G2.4 remediation snapshot`: добавлен read-only helper `check_gateway_sla_fail_nightly_remediation.py` с контрактом `gateway_sla_fail_nightly_remediation_v1`, candidate backlog buckets и pytest-покрытием для green/hold/invalid/manual-guardrail сценариев.
 * [x] `G2.5 nightly remediation integration`: remediation snapshot подключен в `.github/workflows/gateway-sla-readiness-nightly.yml` как `report_only` diagnostic layer с summary/artifact wiring и `always()`-публикацией G2 diagnostics при red nightly.
 * [x] `G2.post2 Streamlit remediation visibility`: в `Latest Metrics` добавлен published remediation snapshot (`runs/nightly-gateway-sla-remediation/remediation_summary.json`) с candidate backlog table и tolerant optional-source smoke semantics.
+* [x] `G2.post3 integrity snapshot`: добавлен read-only helper `check_gateway_sla_fail_nightly_integrity.py`, nightly summary/artifact wiring `runs/nightly-gateway-sla-integrity`, и Streamlit `Latest Metrics` block для telemetry/dual-write/UTC guardrail verdict.
 * [x] `Docs sync`: добавлены session snapshots `docs/SESSION_2026-03-08.md` и `docs/SESSION_2026-03-12.md`; `README.md`, `MANIFEST.md`, `TODO.md` выровнены по текущему G2 snapshot.
 * [x] M8.post: во вкладке `Latest Metrics` добавлен historical view с filters (`source/status/limit`) по timestamp run snapshots из `runs/ci-smoke-*` (без внешней БД).
 * [x] M8.post: в Streamlit `Safe Actions` добавлен traceable audit trail (`Last safe action`, `Recent safe actions`, JSONL лог `runs/.../ui-safe-actions/safe_actions_audit.jsonl`).

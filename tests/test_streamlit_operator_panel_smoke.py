@@ -103,6 +103,39 @@ def _write_optional_progress_sources(runs_dir: Path) -> None:
         ),
         encoding="utf-8",
     )
+    integrity_path = panel.canonical_fail_nightly_integrity_source(runs_dir)
+    integrity_path.parent.mkdir(parents=True, exist_ok=True)
+    integrity_path.write_text(
+        json.dumps(
+            {
+                "schema_version": "gateway_sla_fail_nightly_integrity_v1",
+                "status": "ok",
+                "checked_at_utc": "2026-03-12T08:10:00+00:00",
+                "observed": {
+                    "telemetry_ok": True,
+                    "dual_write_ok": True,
+                    "anti_double_count_ok": True,
+                    "utc_guardrail_status": "ok",
+                    "invalid_counts": {
+                        "governance": 0,
+                        "progress_readiness": 0,
+                        "progress_governance": 0,
+                        "transition_aggregated": 0,
+                    },
+                    "utc_guardrail": {
+                        "attention_state": "ready_for_accounted_run",
+                        "decision_status": "allow_accounted_dispatch",
+                        "accounted_dispatch_allowed": True,
+                        "next_accounted_dispatch_at_utc": None,
+                        "reason_codes": [],
+                    },
+                },
+                "decision": {"integrity_status": "clean", "reason_codes": []},
+                "paths": {"summary_json": str(integrity_path)},
+            }
+        ),
+        encoding="utf-8",
+    )
 
 
 def test_streamlit_operator_panel_smoke_happy_path(
@@ -137,8 +170,9 @@ def test_streamlit_operator_panel_smoke_happy_path(
     assert summary["viewport_baseline"] == {"width": 390, "height": 844, "orientation": "portrait"}
     assert summary["missing_sources"] == []
     assert summary["required_missing_sources"] == []
-    assert len(summary["optional_missing_sources"]) == 4
+    assert len(summary["optional_missing_sources"]) == 5
     assert str(panel.canonical_fail_nightly_remediation_source(panel_runs_dir)) in summary["optional_missing_sources"]
+    assert str(panel.canonical_fail_nightly_integrity_source(panel_runs_dir)) in summary["optional_missing_sources"]
 
 
 def test_streamlit_operator_panel_smoke_happy_path_with_optional_sources(

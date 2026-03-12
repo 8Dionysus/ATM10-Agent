@@ -114,6 +114,11 @@ FAIL_NIGHTLY_REMEDIATION_SOURCE_SPEC: dict[str, tuple[str, ...] | str] = {
     "schema_version": "gateway_sla_fail_nightly_remediation_v1",
 }
 
+FAIL_NIGHTLY_INTEGRITY_SOURCE_SPEC: dict[str, tuple[str, ...] | str] = {
+    "path_parts": ("nightly-gateway-sla-integrity", "integrity_summary.json"),
+    "schema_version": "gateway_sla_fail_nightly_integrity_v1",
+}
+
 
 def safe_actions_audit_log_path(runs_dir: Path) -> Path:
     return Path(runs_dir) / "ui-safe-actions" / "safe_actions_audit.jsonl"
@@ -295,6 +300,11 @@ def canonical_fail_nightly_progress_sources(runs_dir: Path) -> dict[str, Path]:
 def canonical_fail_nightly_remediation_source(runs_dir: Path) -> Path:
     base = Path(runs_dir)
     return base.joinpath(*tuple(FAIL_NIGHTLY_REMEDIATION_SOURCE_SPEC["path_parts"]))
+
+
+def canonical_fail_nightly_integrity_source(runs_dir: Path) -> Path:
+    base = Path(runs_dir)
+    return base.joinpath(*tuple(FAIL_NIGHTLY_INTEGRITY_SOURCE_SPEC["path_parts"]))
 
 
 def canonical_history_roots(runs_dir: Path) -> dict[str, Path]:
@@ -568,6 +578,22 @@ def load_fail_nightly_remediation_snapshot(
         "remediation",
         path,
         expected_schema_version=str(FAIL_NIGHTLY_REMEDIATION_SOURCE_SPEC["schema_version"]),
+    )
+    if payload is None:
+        if load_error is not None and load_error.startswith("missing file:"):
+            return None, []
+        return None, [] if load_error is None else [load_error]
+    return payload, []
+
+
+def load_fail_nightly_integrity_snapshot(
+    runs_dir: Path,
+) -> tuple[dict[str, Any] | None, list[str]]:
+    path = canonical_fail_nightly_integrity_source(runs_dir)
+    payload, load_error = _load_optional_contract_payload(
+        "integrity",
+        path,
+        expected_schema_version=str(FAIL_NIGHTLY_INTEGRITY_SOURCE_SPEC["schema_version"]),
     )
     if payload is None:
         if load_error is not None and load_error.startswith("missing file:"):
@@ -857,6 +883,53 @@ def _render_latest_metrics_tab(runs_dir: Path, sources: dict[str, Path]) -> None
                 "summary_json": _coalesce(
                     _nested_get(remediation_snapshot, "paths", "summary_json"),
                     str(canonical_fail_nightly_remediation_source(runs_dir)),
+                ),
+            }
+        )
+
+    st.subheader("Gateway fail_nightly integrity")
+    integrity_snapshot, integrity_warnings = load_fail_nightly_integrity_snapshot(runs_dir)
+    if integrity_warnings:
+        sample = "\n".join(f"- {item}" for item in integrity_warnings[:5])
+        suffix = "" if len(integrity_warnings) <= 5 else "\n- ..."
+        st.warning(
+            "Some fail_nightly integrity artifacts were skipped due to parse/contract issues "
+            f"({len(integrity_warnings)}):\n{sample}{suffix}"
+        )
+    if integrity_snapshot is None:
+        st.info("not available yet")
+    else:
+        observed = integrity_snapshot.get("observed")
+        observed = observed if isinstance(observed, dict) else {}
+        decision = integrity_snapshot.get("decision")
+        decision = decision if isinstance(decision, dict) else {}
+        invalid_counts = observed.get("invalid_counts")
+        invalid_counts = invalid_counts if isinstance(invalid_counts, dict) else {}
+        utc_guardrail = observed.get("utc_guardrail")
+        utc_guardrail = utc_guardrail if isinstance(utc_guardrail, dict) else {}
+        integrity_row = {
+            "status": integrity_snapshot.get("status"),
+            "integrity_status": decision.get("integrity_status"),
+            "telemetry_ok": observed.get("telemetry_ok"),
+            "dual_write_ok": observed.get("dual_write_ok"),
+            "anti_double_count_ok": observed.get("anti_double_count_ok"),
+            "utc_guardrail_status": observed.get("utc_guardrail_status"),
+            "governance_invalid": invalid_counts.get("governance"),
+            "progress_readiness_invalid": invalid_counts.get("progress_readiness"),
+            "progress_governance_invalid": invalid_counts.get("progress_governance"),
+            "transition_aggregated_invalid": invalid_counts.get("transition_aggregated"),
+            "reason_codes": ", ".join(_normalize_reason_codes(decision.get("reason_codes"))),
+        }
+        st.dataframe([integrity_row], use_container_width=True)
+        st.caption("Integrity UTC guardrail")
+        st.json(utc_guardrail)
+        st.caption("Integrity artifact")
+        st.json(
+            {
+                "checked_at_utc": integrity_snapshot.get("checked_at_utc"),
+                "summary_json": _coalesce(
+                    _nested_get(integrity_snapshot, "paths", "summary_json"),
+                    str(canonical_fail_nightly_integrity_source(runs_dir)),
                 ),
             }
         )

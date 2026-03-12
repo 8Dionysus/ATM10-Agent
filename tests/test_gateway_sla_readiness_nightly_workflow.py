@@ -21,18 +21,25 @@ def test_gateway_sla_readiness_nightly_contains_transition_wiring() -> None:
     assert "check_gateway_sla_fail_nightly_progress.py" in text
     assert "check_gateway_sla_fail_nightly_transition.py" in text
     assert "check_gateway_sla_fail_nightly_remediation.py" in text
+    assert "check_gateway_sla_fail_nightly_integrity.py" in text
     assert "Summary - Gateway SLA fail_nightly progress" in text
     assert "Summary - Gateway SLA fail_nightly transition" in text
     assert "Summary - Gateway SLA fail_nightly remediation" in text
+    assert "Summary - Gateway SLA fail_nightly integrity" in text
     assert "runs/nightly-gateway-sla-progress/progress_summary.json" in text
     assert "runs/nightly-gateway-sla-transition/transition_summary.json" in text
     assert "runs/nightly-gateway-sla-remediation/remediation_summary.json" in text
+    assert "runs/nightly-gateway-sla-integrity/integrity_summary.json" in text
     assert "--critical-policy fail_nightly" in text
     assert "Resolve - Gateway SLA transition gate" not in text
 
     remediation_block = _extract_step_block(
         text,
         "Remediation - Gateway SLA fail_nightly snapshot (report_only)",
+    )
+    integrity_block = _extract_step_block(
+        text,
+        "Integrity - Gateway SLA fail_nightly invariants (report_only)",
     )
     strict_gate_block = _extract_step_block(
         text,
@@ -43,9 +50,12 @@ def test_gateway_sla_readiness_nightly_contains_transition_wiring() -> None:
     progress_summary_block = _extract_step_block(text, "Summary - Gateway SLA fail_nightly progress")
     transition_summary_block = _extract_step_block(text, "Summary - Gateway SLA fail_nightly transition")
     remediation_summary_block = _extract_step_block(text, "Summary - Gateway SLA fail_nightly remediation")
+    integrity_summary_block = _extract_step_block(text, "Summary - Gateway SLA fail_nightly integrity")
 
     assert "if: always()" in remediation_block
     assert "--policy report_only" in remediation_block
+    assert "if: always()" in integrity_block
+    assert "--policy report_only" in integrity_block
     assert "if:" not in strict_gate_block
     for block in (
         readiness_summary_block,
@@ -53,6 +63,7 @@ def test_gateway_sla_readiness_nightly_contains_transition_wiring() -> None:
         progress_summary_block,
         transition_summary_block,
         remediation_summary_block,
+        integrity_summary_block,
     ):
         assert "if: always()" in block
 
@@ -65,3 +76,4 @@ def test_gateway_sla_readiness_nightly_contains_transition_wiring() -> None:
         assert "runs/nightly-gateway-sla-progress" in block
         assert "runs/nightly-gateway-sla-transition" in block
         assert "runs/nightly-gateway-sla-remediation" in block
+        assert "runs/nightly-gateway-sla-integrity" in block
