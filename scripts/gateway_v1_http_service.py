@@ -239,6 +239,7 @@ def create_app(
     runs_dir: Path,
     policy: GatewayHTTPPolicy | None = None,
     service_token: str | None = None,
+    expose_openapi: bool = False,
 ) -> Any:
     effective_policy = policy or GatewayHTTPPolicy()
     _validate_policy(effective_policy)
@@ -268,7 +269,14 @@ def create_app(
             if executor is not None:
                 executor.shutdown(wait=False, cancel_futures=True)
 
-    app = FastAPI(title="ATM10 Gateway v1 HTTP", version="0.1.0", lifespan=_lifespan)
+    app = FastAPI(
+        title="ATM10 Gateway v1 HTTP",
+        version="0.1.0",
+        lifespan=_lifespan,
+        docs_url="/docs" if expose_openapi else None,
+        openapi_url="/openapi.json" if expose_openapi else None,
+        redoc_url=None,
+    )
 
     @app.get("/healthz")
     def _healthz(request: FastAPIRequest) -> Any:
@@ -287,6 +295,7 @@ def create_app(
             "service": "gateway_v1_http_service",
             "runs_dir": str(runs_dir),
             "auth_enabled": bool(effective_service_token),
+            "api_docs_exposed": bool(expose_openapi),
             "policy": asdict(effective_policy),
         }
 
@@ -501,6 +510,11 @@ def parse_args() -> argparse.Namespace:
             "When set (or via ATM10_SERVICE_TOKEN), require header X-ATM10-Token."
         ),
     )
+    parser.add_argument(
+        "--expose-openapi",
+        action="store_true",
+        help="Expose /docs and /openapi.json for local debugging (default: disabled).",
+    )
     return parser.parse_args()
 
 
@@ -518,7 +532,12 @@ def main() -> int:
         artifact_retention_days=args.artifact_retention_days,
         enable_error_redaction=args.enable_error_redaction,
     )
-    app = create_app(runs_dir=args.runs_dir, policy=policy, service_token=args.service_token)
+    app = create_app(
+        runs_dir=args.runs_dir,
+        policy=policy,
+        service_token=args.service_token,
+        expose_openapi=args.expose_openapi,
+    )
     try:
         import uvicorn
     except Exception as exc:  # pragma: no cover - dependency presence

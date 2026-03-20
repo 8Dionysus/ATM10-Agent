@@ -492,6 +492,7 @@ def create_app(
     http_policy: TTSHTTPPolicy | None = None,
     run_dir: Path | None = None,
     service_token: str | None = None,
+    expose_openapi: bool = False,
 ) -> Any:
     effective_http_policy = http_policy or TTSHTTPPolicy()
     _validate_http_policy(effective_http_policy)
@@ -514,7 +515,14 @@ def create_app(
         finally:
             service.stop()
 
-    app = FastAPI(title="ATM10 TTS Runtime", version="0.1.0", lifespan=_lifespan)
+    app = FastAPI(
+        title="ATM10 TTS Runtime",
+        version="0.1.0",
+        lifespan=_lifespan,
+        docs_url="/docs" if expose_openapi else None,
+        openapi_url="/openapi.json" if expose_openapi else None,
+        redoc_url=None,
+    )
 
     @app.get("/health")
     async def _health(http_request: FastAPIRequest) -> Any:
@@ -526,6 +534,7 @@ def create_app(
         return {
             "timestamp_utc": _utc_now(),
             "auth_enabled": bool(effective_service_token),
+            "api_docs_exposed": bool(expose_openapi),
             "policy": asdict(effective_http_policy),
             **service.health(),
         }
@@ -734,6 +743,11 @@ def parse_args() -> argparse.Namespace:
             "When set (or via ATM10_SERVICE_TOKEN), require header X-ATM10-Token."
         ),
     )
+    parser.add_argument(
+        "--expose-openapi",
+        action="store_true",
+        help="Expose /docs and /openapi.json for local debugging (default: disabled).",
+    )
     parser.add_argument("--no-prewarm", action="store_true", help="Disable prewarm on startup.")
     return parser.parse_args()
 
@@ -769,6 +783,7 @@ def main() -> int:
             "host": args.host,
             "port": args.port,
             "base_url": f"http://{args.host}:{args.port}",
+            "api_docs_exposed": args.expose_openapi,
             "http_policy": asdict(http_policy),
             "auth": {
                 "enabled": bool(service_token),
@@ -788,6 +803,7 @@ def main() -> int:
         http_policy=http_policy,
         run_dir=run_dir,
         service_token=service_token,
+        expose_openapi=args.expose_openapi,
     )
     try:
         uvicorn.run(app, host=args.host, port=args.port, log_level="info")
