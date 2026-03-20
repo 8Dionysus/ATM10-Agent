@@ -1,13 +1,13 @@
 # MANIFEST.md
 
-Current as of: 2026-03-13
+Current as of: 2026-03-20
 
 ## Snapshot
 
 - Project: `atm10-agent`
 - Target platform: Windows 11 + PowerShell 7
 - Target Python: 3.11+ (validated on 3.12.10)
-- Current test status: `python -m pytest` green (current snapshot: CI + `docs/SESSION_2026-03-13.md`).
+- Current test status: `python -m pytest` green (see CI and `docs/DECISIONS.md` for corroborating policy/change history).
 
 ## Active capabilities
 
@@ -34,13 +34,18 @@ Current as of: 2026-03-13
 
 ## Canonical docs
 
-- Execution plan: `TODO.md`
-- Goals/milestones: `PLANS.md`
+- Current public status: `MANIFEST.md`
+- Public roadmap: `ROADMAP.md`
 - Runnable commands: `docs/RUNBOOK.md`
-- Architecture decisions: `docs/DECISIONS.md`
-- Session history: `docs/SESSION_2026-03-13.md`
+- Architecture decisions/policy: `docs/DECISIONS.md`
 - Doc roles/policy: `docs/SOURCE_OF_TRUTH.md`
 - Archived tracks: `docs/ARCHIVED_TRACKS.md`
+
+## Public docs boundary
+
+- Local maintainer working docs are ignored and intentionally not part of the public repo surface.
+- Future internal-only notes, session chronology, and PR/release scratch docs belong under ignored `docs/internal/**`.
+- Local session notes/templates and PR coordination docs are ignored and do not ship in the public repo tree.
 
 ## Data/commit policy (short)
 

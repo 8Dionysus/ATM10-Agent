@@ -10,22 +10,34 @@ This file defines the roles of the project's documents to remove duplication and
   * Does not store long lists of run IDs or historical metrics.
 
 * `MANIFEST.md`
-  * Short machine/human repository snapshot (current date, capabilities, links).
-  * No detailed chronology; details live in `docs/SESSION_*.md`.
+  * Short public repository snapshot (current date, capabilities, links).
+  * This is the primary public current-state document.
 
-* `TODO.md`
-  * Step-by-step execution plan.
-  * Format: `Now`, `Next`, `Blocked`, `Done this week`.
-  * Constraint: WIP limit = 3.
+* `ROADMAP.md`
+  * Public direction, milestones, horizons, and high-level risks.
+  * This is the public replacement for the old tracked `PLANS.md` role.
 
-* `PLANS.md`
-  * Goals, milestones, DoD, constraints, and risks.
-  * No long chronology of run artifacts.
+* `TODO.md` (local-only, ignored)
+  * Maintainer execution scratchpad.
+  * Format can stay `Now`, `Next`, `Blocked`, `Done this week`.
+  * Not part of the public repository contract.
 
-* `docs/SESSION_YYYY-MM-DD.md`
-  * Detailed chronology of changes, runs, metrics, and artifacts.
-  * This is the place for the "long history".
-  * Weekly summary uses template `docs/SESSION_WEEKLY_TEMPLATE.md`.
+* `PLANS.md` (local-only, ignored)
+  * Maintainer planning/decomposition notes behind the public roadmap.
+  * Not part of the public repository contract.
+
+* `docs/SESSION_YYYY-MM-DD.md` (local-only, ignored)
+  * Maintainer session chronology and handoff notes.
+  * Existing local copies may remain for continuity, but they are not part of the public repository contract.
+  * New internal chronology should prefer `docs/internal/**`.
+
+* `docs/SESSION_WEEKLY_TEMPLATE.md` (local-only, ignored)
+  * Template for local weekly/session notes.
+
+* `docs/internal/**`
+  * Internal-only detailed chronology, PR/release scratch docs, and ad-hoc operational tails.
+  * Ignored by git for the public repository.
+  * Future session chronology belongs here by default.
 
 * `docs/DECISIONS.md`
   * Architecture decisions and policy changes.
@@ -44,24 +56,28 @@ This file defines the roles of the project's documents to remove duplication and
 
 ## Precedence
 
-* In case of conflict, priority always belongs to repo-local docs:
-  * `TODO.md`
+* For the public repo surface, priority belongs to:
+  * `MANIFEST.md`
+  * `ROADMAP.md`
   * `docs/DECISIONS.md`
   * `docs/RUNBOOK.md`
-  * `docs/SESSION_*.md`
 * `docs/ECOSYSTEM_CONTEXT.md` is used only as a reference/context layer.
+* Local-only `TODO.md` / `PLANS.md` may guide maintainer workflow, but they do not replace public source-of-truth docs.
+* Local-only session docs, templates, and PR/release scratch docs do not define the public repo surface.
 
 ## Update Rules
 
 * If behavior/architecture changed -> update `docs/DECISIONS.md`.
 * If commands/setup changed -> update `docs/RUNBOOK.md`.
-* If there is an important run/result -> add it to `docs/SESSION_*.md`.
-* Update active steps only in `TODO.md`.
-* Update goals/DoD only in `PLANS.md`.
+* If there is an important public status/result -> update `MANIFEST.md` and, if policy/direction changed, `ROADMAP.md` and/or `docs/DECISIONS.md`.
+* If there is local execution planning -> update local `TODO.md` / `PLANS.md`.
+* If there is detailed internal chronology or PR/release scratch material -> use ignored local-only surfaces (`docs/internal/**` by default; existing local `docs/SESSION_*.md` copies are allowed for continuity).
+* Keep `README.md` pointed only at public canonical docs.
 
 ## What Not To Store Everywhere
 
 * Do not duplicate counters like `N passed` across all files at once.
   Preferred truth:
-  * Truth for current state is CI + the latest `docs/SESSION_*.md`.
+  * Truth for current public state is CI + `MANIFEST.md` + `docs/DECISIONS.md`.
+  * Detailed internal chronology belongs only in local ignored docs.
 * Do not keep long run ID lists in `TODO.md`.

@@ -111,6 +111,7 @@ python -m pytest
 * Normalized docs: `data/ftbquests_norm/` (JSONL)
 * Runtime artifacts: `runs/<timestamp>/`
 * Temporary files: `runs/<timestamp>/tmp/`
+* Local maintainer planning/docs scratch area: `TODO.md`, `PLANS.md`, `docs/internal/**`, local `docs/SESSION_*.md`, and local PR/release coordination docs (ignored in the public repo)
 
 ---
 
@@ -160,7 +161,7 @@ DoD:
 * No "magic" global path constants; use env vars / config / discovery.
 * Logs: `logging` module (`print` is acceptable in demos/smoke).
 * Data structures: JSON serializable (for run artifacts and trace).
-* LF/CRLF warnings on Windows are expected; fix policy through `.gitattributes` and/or git config, and reflect the decision in `TODO.md`/`docs/DECISIONS.md`.
+* LF/CRLF warnings on Windows are expected; fix policy through `.gitattributes` and/or git config, and reflect the decision in public docs (`ROADMAP.md`/`docs/DECISIONS.md`) and in local `TODO.md` when relevant.
 
 ---
 
