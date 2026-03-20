@@ -250,4 +250,8 @@
 ## 2026-03-20
 
 * `docs/ECOSYSTEM_CONTEXT.md` was locked as a context-only reference: the file is needed for high-level compatibility with the AoA/ToS ecosystem, but it is not treated as a governing doc for local development.
-* In case of conflict, priority remains with repo-local source-of-truth documents (`TODO.md`, `docs/DECISIONS.md`, `docs/RUNBOOK.md`, `docs/SESSION_*.md`); ecosystem context influences architectural direction only, not local operating rules.
+* In case of conflict, priority remains with public repo source-of-truth documents (`MANIFEST.md`, `ROADMAP.md`, `docs/DECISIONS.md`, `docs/RUNBOOK.md`); ecosystem context influences architectural direction only, not local operating rules.
+* For public-repo prep, internal chronology, session templates, PR body/comment drafts, and release coordination notes were moved out of the public tree into ignored local-only surfaces (`docs/internal/**` by default, with existing local `docs/SESSION_*.md` allowed for continuity).
+* Public current-state entrypoints were narrowed to stable tracked docs (`MANIFEST.md`, `ROADMAP.md`, `docs/DECISIONS.md`, `docs/RUNBOOK.md`, `docs/SOURCE_OF_TRUTH.md`); session docs and PR-coordination docs no longer belong to the public repo surface.
+* Public repo surface is now split from maintainer-local workflow docs: `ROADMAP.md` is the public planning document, while `TODO.md` and `PLANS.md` are local-only ignored files and do not belong to the public contract.
+* Public entrypoints should link to `MANIFEST.md`, `ROADMAP.md`, `docs/RUNBOOK.md`, `docs/DECISIONS.md`, and `docs/SOURCE_OF_TRUTH.md`; `TODO.md` and `PLANS.md` remain valid for local execution only.

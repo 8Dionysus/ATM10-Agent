@@ -4,11 +4,10 @@ Local game companion for ATM10 (Windows 11 + PowerShell 7): perception (screen/H
 
 ## Quick links (canonical documents)
 
-- `TODO.md` — execution plan (`Now/Next/Blocked/Done`).
-- `PLANS.md` — goals, milestones, DoD, risks.
+- `MANIFEST.md` — current public repository snapshot.
+- `ROADMAP.md` — public direction, milestones, and roadmap horizons.
 - `docs/RUNBOOK.md` — runnable commands and operational profiles.
 - `docs/DECISIONS.md` — architecture decisions.
-- `docs/SESSION_2026-03-13.md` — current session snapshot.
 - `docs/SOURCE_OF_TRUTH.md` — document roles.
 
 ## Quickstart (Phase A smoke)
@@ -47,7 +46,7 @@ python scripts/dependency_audit.py --runs-dir runs --policy report_only --with-s
 
 ## Current status (as of 2026-03-13)
 
-- `python -m pytest` green (see CI and `docs/SESSION_2026-03-13.md` for the current snapshot).
+- `python -m pytest` green (see CI, `MANIFEST.md`, and `docs/DECISIONS.md` for the current public snapshot and policy history).
 - Active ASR path: `whisper_genai`; `qwen_asr` is archived/recoverable opt-in.
 - KAG Neo4j nightly guardrail path is active: `build -> sync -> eval(sample+hard) -> guardrail-check -> trend snapshot`.
 - Trend snapshot includes rolling-baseline, severity-policy (`signal_only|fail_nightly`) and calibration-aware thresholds (`latency warn=5.0`, `critical=15.0`).
@@ -63,9 +62,11 @@ python scripts/dependency_audit.py --runs-dir runs --policy report_only --with-s
 
 ## Where to look for details
 
-- Detailed runs/results and chronology: `docs/SESSION_*.md`.
+- Current public execution state: `MANIFEST.md` + `docs/DECISIONS.md`.
+- Public roadmap and milestones: `ROADMAP.md`.
 - Full runnable command set: `docs/RUNBOOK.md`.
 - Archived/recoverable tracks: `docs/ARCHIVED_TRACKS.md`.
+- Internal chronology, session notes, and PR/release scratch docs are local-only and belong under ignored surfaces (`docs/internal/**` by default).
 
 ## License
 

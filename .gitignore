@@ -1,6 +1,17 @@
 models/
 data/
 runs/
+# Local maintainer planning docs are intentionally not public.
+/TODO.md
+/PLANS.md
+# Future internal-only docs for the public repo live here.
+docs/internal/
+# Local-only session history and weekly template.
+docs/SESSION_*.md
+docs/SESSION_WEEKLY_TEMPLATE.md
+# Local-only PR coordination docs.
+docs/RELEASE_WAVE6_PR_BODY.md
+docs/RELEASE_WAVE6_PR_COMMENT.md
 .codex/logs/
 .codex/.codex/logs/
 __pycache__/
