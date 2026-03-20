@@ -8,10 +8,10 @@ cd D:\atm10-agent
 python scripts/discover_instance.py
 ```
 
-Ожидаемый результат:
+Expected result:
 
-* Создается `runs/<timestamp>/instance_paths.json`.
-* В консоль печатается summary по найденным путям и marker-папкам.
+* `runs/<timestamp>/instance_paths.json` is created.
+* A summary of the found paths and marker folders is printed to the console.
 
 ## Tests
 
@@ -71,34 +71,34 @@ python scripts/gateway_sla_trend_snapshot.py --sla-runs-dir runs/ci-smoke-gatewa
 python scripts/streamlit_operator_panel_smoke.py --panel-runs-dir runs --runs-dir runs/ci-smoke-streamlit --summary-json runs/ci-smoke-streamlit/streamlit_smoke_summary.json --gateway-url http://127.0.0.1:8770 --startup-timeout-sec 45 --viewport-width 390 --viewport-height 844 --compact-breakpoint-px 768
 ```
 
-Ожидаемый результат:
+Expected result:
 
-* Для core smoke шагов создаются machine-readable summaries:
+* Machine-readable summaries are created for core smoke steps:
   * `runs/ci-smoke-phase-a/smoke_summary.json`
   * `runs/ci-smoke-retrieve/smoke_summary.json`
   * `runs/ci-smoke-eval/smoke_summary.json`
-* Для automation smoke шагов создаются contract summaries:
+* For automation smoke steps, contract summaries are created:
   * `runs/ci-smoke-automation-dry-run/contract_summary.json`
   * `runs/ci-smoke-automation-chain/contract_summary.json`
   * `runs/ci-smoke-automation-chain-inventory/contract_summary.json`
   * `runs/ci-smoke-automation-chain-open-world-map/contract_summary.json`
-* Для gateway smoke шагов создаются machine-readable summaries:
+* Machine-readable summaries are created for gateway smoke steps:
   * `runs/ci-smoke-gateway-core/gateway_smoke_summary.json`
   * `runs/ci-smoke-gateway-automation/gateway_smoke_summary.json`
-* Для gateway HTTP smoke шагов создаются machine-readable summaries:
+* For gateway HTTP smoke steps, machine-readable summaries are created:
   * `runs/ci-smoke-gateway-http-core/gateway_http_smoke_summary.json`
   * `runs/ci-smoke-gateway-http-automation/gateway_http_smoke_summary.json`
-* Для gateway SLA check создается machine-readable summary:
+* For gateway SLA check, a machine-readable summary is created:
   * `runs/ci-smoke-gateway-sla/gateway_sla_summary.json`
-* Для gateway SLA trend snapshot создаются machine-readable artifacts:
+* Machine-readable artifacts are created for gateway SLA trend snapshot:
   * `runs/ci-smoke-gateway-sla-trend/<timestamp>-gateway-sla-trend/gateway_sla_trend_snapshot.json`
   * `runs/ci-smoke-gateway-sla-trend/<timestamp>-gateway-sla-trend/summary.md`
-* Для streamlit smoke создается machine-readable summary:
+* For streamlit smoke, a machine-readable summary is created:
   * `runs/ci-smoke-streamlit/streamlit_smoke_summary.json`
 
 ## M7.0: Gateway v1 local contract runner
 
-Локальный gateway path фиксирует request/response contract без HTTP-транспорта и без новых dependencies.
+The local gateway path fixes the request/response contract without HTTP transport and without new dependencies.
 
 ### Single request (CLI)
 
@@ -108,7 +108,7 @@ cd D:\atm10-agent
 python scripts/gateway_v1_local.py --request-json "C:\path\to\gateway_request.json" --runs-dir runs\gateway-local
 ```
 
-Пример `gateway_request.json`:
+Example `gateway_request.json`:
 
 ```json
 {
@@ -124,17 +124,17 @@ python scripts/gateway_v1_local.py --request-json "C:\path\to\gateway_request.js
 }
 ```
 
-Ожидаемый результат:
+Expected result:
 
-* Создается `runs/<timestamp>-gateway-v1/`.
-* Внутри есть `request.json`, `run.json`, `response.json`, `child_runs/`.
-* `request.json` сохраняется в redacted-виде (без plaintext секретов).
-* В `run.json` публикуется `request_redaction` (`applied`, `fields_redacted`, checklist version).
+* `runs/<timestamp>-gateway-v1/` is created.
+* Inside there are `request.json`, `run.json`, `response.json`, `child_runs/`.
+* `request.json` is saved in redacted form (without plaintext secrets).
+* `request_redaction` (`applied`, `fields_redacted`, checklist version) is published in `run.json`.
 * `response.json.schema_version = gateway_response_v1`.
-* Для `retrieval_query` + `reranker=qwen3` `payload.reranker_model` ограничен allowlist:
+* For `retrieval_query` + `reranker=qwen3` `payload.reranker_model` is limited by allowlist:
   * `Qwen/Qwen3-Reranker-0.6B`
   * `OpenVINO/Qwen3-Reranker-0.6B-fp16-ov`
-  * override только через `ATM10_ALLOW_UNTRUSTED_RERANKER_MODEL=true` (trusted-only).
+  * override only via `ATM10_ALLOW_UNTRUSTED_RERANKER_MODEL=true` (trusted-only).
 
 ### Gateway smoke scenarios
 
@@ -145,15 +145,15 @@ python scripts/gateway_v1_smoke.py --scenario core --runs-dir runs\ci-smoke-gate
 python scripts/gateway_v1_smoke.py --scenario automation --runs-dir runs\ci-smoke-gateway-automation --summary-json runs\ci-smoke-gateway-automation\gateway_smoke_summary.json
 ```
 
-Ожидаемый результат:
+Expected result:
 
-* `core` сценарий проверяет `health`, `retrieval_query`, `kag_query` (`backend=file`).
-* `automation` сценарий проверяет `automation_dry_run` через fixture.
-* В каждом `--summary-json` фиксируется `status=ok|error`; любой `error` возвращает non-zero exit code.
+* The `core` script checks `health`, `retrieval_query`, `kag_query` (`backend=file`).
+* The `automation` script checks `automation_dry_run` through fixture.
+* In each `--summary-json`, a `status=ok|error` is fixed; any `error` returns a non-zero exit code.
 
 ## M7.1/M7.2: Gateway v1 HTTP transport + hardening
 
-HTTP слой использует тот же dispatcher `run_gateway_request`, поэтому body-контракт совпадает с CLI gateway.
+The HTTP layer uses the same dispatcher `run_gateway_request`, so the body contract is the same as the CLI gateway.
 
 ### Service start (FastAPI)
 
@@ -163,16 +163,16 @@ cd D:\atm10-agent
 python scripts/gateway_v1_http_service.py --host 127.0.0.1 --port 8770 --runs-dir runs\gateway-http
 ```
 
-Запуск с override policy (пример):
+Running with override policy (example):
 
 ```powershell
 python scripts/gateway_v1_http_service.py --host 127.0.0.1 --port 8770 --runs-dir runs\gateway-http --max-request-bytes 262144 --max-json-depth 8 --max-string-length 8192 --max-array-items 256 --max-object-keys 256 --operation-timeout-sec 15.0 --error-log-max-bytes 1048576 --error-log-max-files 5 --artifact-retention-days 14 --enable-error-redaction true
 ```
 
-Опциональный auth-token hardening:
+Optional auth-token hardening:
 
 ```powershell
-# Token может быть передан флагом или через env ATM10_SERVICE_TOKEN
+# Token can be passed by flag or through env ATM10_SERVICE_TOKEN
 python scripts/gateway_v1_http_service.py --host 127.0.0.1 --port 8770 --runs-dir runs\gateway-http --service-token "change-me"
 ```
 
@@ -189,7 +189,7 @@ Hardening defaults (`Balanced`):
 * `artifact_retention_days = 14`
 * `enable_error_redaction = true`
 
-Проверка transport health:
+Transport health check:
 
 ```powershell
 python -c "import requests; print(requests.get('http://127.0.0.1:8770/healthz', timeout=10).json())"
@@ -212,14 +212,14 @@ HTTP status mapping:
 
 Sanitize policy:
 
-* Клиент получает только sanitized envelope (без traceback/внутренних деталей).
-* При включенном `service-token` все HTTP endpoints требуют `X-ATM10-Token`.
-* Перед записью error JSONL применяется redaction checklist `gateway_error_redaction_v1` (key-based + text pattern masking).
-* Error лог ротируется по лимитам (`gateway_http_errors.jsonl`, `gateway_http_errors.1.jsonl`, ...).
-* На startup выполняется retention cleanup:
+* The client receives only a sanitized envelope (without traceback/internal details).
+* When `service-token` is enabled, all HTTP endpoints require `X-ATM10-Token`.
+* Redaction checklist `gateway_error_redaction_v1` (key-based + text pattern masking) is applied before the error JSONL entry.
+* The Error log is rotated according to limits (`gateway_http_errors.jsonl`, `gateway_http_errors.1.jsonl`, ...).
+* At startup, a retention cleanup is performed:
   * `gateway_http_errors*.jsonl`
-  * директории `runs/.../*-gateway-v1*` старше retention window.
-* В каждой JSONL записи добавляются machine-readable metadata:
+  * directories `runs/.../*-gateway-v1*` are older than retention window.
+* Machine-readable metadata is added to each JSONL entry:
   * `redaction.checklist_version|applied|fields_redacted`
   * `retention_policy.artifact_retention_days|error_log_max_bytes|error_log_max_files`.
 
@@ -232,15 +232,15 @@ python scripts/gateway_v1_http_smoke.py --scenario core --runs-dir runs\ci-smoke
 python scripts/gateway_v1_http_smoke.py --scenario automation --runs-dir runs\ci-smoke-gateway-http-automation --summary-json runs\ci-smoke-gateway-http-automation\gateway_http_smoke_summary.json
 ```
 
-Ожидаемый результат:
+Expected result:
 
-* В `core` проходят операции `health`, `retrieval_query`, `kag_query(file)`.
-* В `automation` проходит `automation_dry_run`.
-* Любой error в gateway body/HTTP статусе делает smoke `status=error` и non-zero exit code.
+* `core` contains operations `health`, `retrieval_query`, `kag_query(file)`.
+* `automation_dry_run` passes through `automation`.
+* Any error in the gateway body/HTTP status causes smoke `status=error` and non-zero exit code.
 
 ## M7.post: Gateway SLA/Observability baseline
 
-На шаге `M7.post` SLA и observability строятся поверх HTTP smoke summary без изменения
+At step `M7.post`, SLA and observability are built on top of the HTTP smoke summary without modification
 `gateway_request_v1/gateway_response_v1`.
 
 ### SLA checker
@@ -254,7 +254,7 @@ python scripts/check_gateway_sla.py --http-summary-json runs\ci-smoke-gateway-ht
 SLA summary contract (`gateway_sla_summary_v1`):
 
 * `schema_version = gateway_sla_summary_v1`
-* `status = ok|error` (`error` только для execution/contract ошибок checker)
+* `status = ok|error` (`error` only for execution/contract checker errors)
 * `sla_status = pass|breach`
 * `profile = conservative|moderate|aggressive`
 * `policy = signal_only|fail_on_breach`
@@ -284,21 +284,21 @@ Default conservative thresholds:
 
 Exit policy:
 
-* `signal_only`: `0` даже при `sla_status=breach`.
-* `fail_on_breach`: `2` при `sla_status=breach`.
-* Любая execution/contract ошибка checker: `2`.
+* `signal_only`: `0` even with `sla_status=breach`.
+* `fail_on_breach`: `2` with `sla_status=breach`.
+* Any execution/contract error checker: `2`.
 
 History mode (`--runs-dir`):
 
-* При передаче `--runs-dir` checker создает `runs/<timestamp>-gateway-sla-check/`.
-* В run-директории пишутся:
+* When `--runs-dir` is passed, checker creates `runs/<timestamp>-gateway-sla-check/`.
+* In the run directory it is written:
   * `run.json`
-  * `gateway_sla_summary.json` (history copy для trend scanner).
-* Основной `--summary-json` продолжает работать как latest summary path для CI.
+  * `gateway_sla_summary.json` (history copy for trend scanner).
+* The main `--summary-json` continues to work as the latest summary path for CI.
 
 ## M7.post: Gateway SLA trend snapshot (rolling baseline + breach drift)
 
-Trend layer рассчитывается поверх history из `gateway_sla_summary_v1` без изменения базового SLA контракта.
+The trend layer is calculated on top of history from `gateway_sla_summary_v1` without changing the base SLA of the contract.
 
 ```powershell
 cd D:\atm10-agent
@@ -330,13 +330,13 @@ Trend snapshot contract (`gateway_sla_trend_snapshot_v1`):
 
 Exit policy:
 
-* `signal_only`: `0` при валидном snapshot, даже при регрессиях.
-* `fail_nightly`: `2`, если обнаружена `critical` severity.
+* `signal_only`: `0` with a valid snapshot, even with regressions.
+* `fail_nightly`: `2` if `critical` severity is detected.
 
 ## G2: Gateway SLA fail_nightly readiness (staged report)
 
-Readiness слой оценивает готовность перехода trend policy с `signal_only` на `fail_nightly`
-без включения hard-gate в этой итерации.
+The readiness layer evaluates the readiness of the trend policy transition from `signal_only` to `fail_nightly`
+without enabling hard-gate in this iteration.
 
 ```powershell
 cd D:\atm10-agent
@@ -371,41 +371,41 @@ Readiness summary contract (`gateway_sla_fail_nightly_readiness_v1`):
 
 Readiness rules (conservative bar):
 
-* Используются валидные trend snapshots (`gateway_sla_trend_snapshot_v1`, `status=ok`).
-* Берутся последние `N=14` валидных snapshots после `history_limit=30`.
-* Переход считается `ready`, только если одновременно:
+* Valid trend snapshots (`gateway_sla_trend_snapshot_v1`, `status=ok`) are used.
+* The last `N=14` valid snapshots after `history_limit=30` are taken.
+* A transition is considered `ready` only if simultaneously:
   * `window_observed >= 14`
   * `critical_count == 0`
   * `warn_ratio <= 0.20`
   * `insufficient_history_count == 0`
   * `invalid_or_error_count == 0`
-* Snapshot severity считается как max:
+* Snapshot severity is calculated as max:
   * `rolling_baseline.regression_flags.max_regression_severity`
   * `breach_drift.breach_rate_severity`
 
 Exit policy:
 
-* `report_only`: `0` при `status=ok` даже если `readiness_status=not_ready`; `2` только на execution/contract error.
-* `fail_if_not_ready`: `2` при `status=error` или `readiness_status=not_ready`.
+* `report_only`: `0` with `status=ok` even if `readiness_status=not_ready`; `2` only for execution/contract error.
+* `fail_if_not_ready`: `2` with `status=error` or `readiness_status=not_ready`.
 
 Nightly workflow:
 
 * `.github/workflows/gateway-sla-readiness-nightly.yml`
-* История SLA/trend/readiness/governance/progress сохраняется между nightly запусками через cache:
+* The SLA/trend/readiness/governance/progress history is saved between nightly runs via cache:
   * `runs/nightly-gateway-sla-history`
   * `runs/nightly-gateway-sla-trend-history`
   * `runs/nightly-gateway-sla-readiness`
   * `runs/nightly-gateway-sla-governance`
   * `runs/nightly-gateway-sla-progress`
-* Nightly публикует:
+* Nightly publishes:
   * `runs/nightly-gateway-sla-readiness/readiness_summary.json`
   * summary section `Gateway SLA Fail-Nightly Readiness`
   * artifacts `runs/nightly-gateway-*`.
 
 ## G2.1: Gateway SLA fail_nightly governance (go/no-go)
 
-Governance слой формализует решение `go|hold` для переключения trend policy на `fail_nightly`
-после накопления nightly readiness history.
+The Governance layer formalizes the `go|hold` solution for switching trend policy to `fail_nightly`
+after accumulating nightly readiness history.
 
 ```powershell
 cd D:\atm10-agent
@@ -445,38 +445,38 @@ Go/hold rules:
 * Source-of-truth:
   * latest alias: `runs/nightly-gateway-sla-readiness/readiness_summary.json`
   * history rows: `runs/nightly-gateway-sla-readiness/<timestamp>-gateway-sla-fail-readiness/readiness_summary.json`
-  * при наличии history rows top-level latest alias исключается из history scan (чтобы не было double-count);
-    если history rows еще нет, используется legacy fallback по top-level latest alias.
-* Для valid row требуется:
+  * if history rows are present, top-level latest alias is excluded from history scan (so that there is no double-count);
+    if there are no history rows yet, legacy fallback is used using top-level latest alias.
+* Valid row requires:
   * `status=ok`
   * `readiness_status in {ready, not_ready}`
   * criteria match:
     * `readiness_window == 14`
     * `required_baseline_count == 5`
     * `max_warn_ratio == 0.20` (float epsilon check)
-* После `history_limit=60` берется хвост истории.
-* `decision_status=go` только если:
+* After `history_limit=60` the tail of the story is taken.
+* `decision_status=go` only if:
   * latest readiness = `ready`
   * latest ready streak `>= 3`
   * `invalid_or_mismatched_count == 0`
-* Иначе `decision_status=hold`.
+* Otherwise `decision_status=hold`.
 
 Exit policy:
 
-* `report_only`: `0` при `status=ok` независимо от `go|hold`; `2` только на execution/contract error.
-* `fail_if_not_go`: `2` при `decision_status=hold` или `status=error`.
+* `report_only`: `0` with `status=ok` regardless of `go|hold`; `2` only for execution/contract error.
+* `fail_if_not_go`: `2` with `decision_status=hold` or `status=error`.
 
 Nightly governance integration:
 
-* `.github/workflows/gateway-sla-readiness-nightly.yml` добавляет:
+* `.github/workflows/gateway-sla-readiness-nightly.yml` adds:
   * governance step (report_only),
   * summary section `Gateway SLA Fail-Nightly Governance`,
   * artifacts `runs/nightly-gateway-sla-governance`.
 
 ## G2.2: Gateway SLA fail_nightly progress summary (nightly decision tracking)
 
-Progress слой агрегирует readiness+governance историю и показывает, сколько еще
-nightly сигналов нужно до потенциального `go` решения.
+Progress layer aggregates readiness+governance history and shows how much more
+nightly signals are needed before a potential `go` solution.
 
 ```powershell
 cd D:\atm10-agent
@@ -523,38 +523,38 @@ Progress summary contract (`gateway_sla_fail_nightly_progress_v1`):
 
 Progress rules:
 
-* Source-of-truth: валидные readiness/governance summaries:
+* Source-of-truth: valid readiness/governance summaries:
   * latest aliases:
     * `runs/nightly-gateway-sla-readiness/readiness_summary.json`
     * `runs/nightly-gateway-sla-governance/governance_summary.json`
   * history rows:
     * `runs/nightly-gateway-sla-readiness/<timestamp>-gateway-sla-fail-readiness/readiness_summary.json`
     * `runs/nightly-gateway-sla-governance/<timestamp>-gateway-sla-governance/governance_summary.json`
-  * при наличии history rows top-level latest aliases исключаются из history scan; при legacy layout
-    (history rows еще нет) используется fallback на top-level latest aliases.
-* Для valid rows обязательно criteria match с ожидаемым baseline
+  * if history rows are present, top-level latest aliases are excluded from history scan; with legacy layout
+    (history rows do not exist yet) fallback is used on top-level latest aliases.
+* For valid rows, criteria must match with the expected baseline
   (`window=14`, `required_baseline_count=5`, `max_warn_ratio=0.20`, `required_ready_streak=3`).
-* `decision_status=go` только если latest governance = `go`
-  и `invalid_or_mismatched_count(governance)=0`.
-* `remaining_for_window` и `remaining_for_streak` считаются по latest readiness/history
-  и используются как операционный индикатор прогресса.
+* `decision_status=go` only if latest governance = `go`
+  and `invalid_or_mismatched_count(governance)=0`.
+* `remaining_for_window` and `remaining_for_streak` are considered according to latest readiness/history
+  and are used as an operational indicator of progress.
 
 Exit policy:
 
-* `report_only`: `0` при `status=ok` независимо от `go|hold`; `2` только на execution/contract error.
-* `fail_if_not_go`: `2` при `decision_status=hold` или `status=error`.
+* `report_only`: `0` with `status=ok` regardless of `go|hold`; `2` only for execution/contract error.
+* `fail_if_not_go`: `2` with `decision_status=hold` or `status=error`.
 
 Nightly progress integration:
 
-* `.github/workflows/gateway-sla-readiness-nightly.yml` добавляет:
+* `.github/workflows/gateway-sla-readiness-nightly.yml` adds:
   * progress step (report_only),
   * summary section `Gateway SLA Fail-Nightly Progress`,
   * artifacts `runs/nightly-gateway-sla-progress`.
 
-## G2.manual: UTC preflight перед manual `workflow_dispatch`
+## G2.manual: UTC preflight before manual `workflow_dispatch`
 
-Helper проверяет calendar-day guardrail до ручного запуска nightly workflow.
-Важно: скрипт не запускает dispatch, только выдает decision summary.
+Helper checks the calendar-day guardrail before manually starting the nightly workflow.
+Important: the script does not run dispatch, it only issues a decision summary.
 
 ```powershell
 cd D:\atm10-agent
@@ -588,15 +588,15 @@ Preflight summary contract (`gateway_sla_manual_preflight_v1`):
 
 Decision interpretation:
 
-* `accounted_dispatch_allowed=true` -> можно выполнять следующий учитываемый dispatch в текущие UTC-сутки.
+* `accounted_dispatch_allowed=true` -> you can execute the next dispatch that is taken into account on the current UTC day.
 * `accounted_dispatch_allowed=false` + `reason_codes=["utc_day_quota_exhausted"]` ->
-  новый учитываемый run блокируется до `next_accounted_dispatch_at_utc`.
-* `policy=fail_if_blocked` возвращает `exit_code=2`, когда guardrail блокирует запуск.
+  the new run taken into account is blocked until `next_accounted_dispatch_at_utc`.
+* `policy=fail_if_blocked` returns `exit_code=2` when guardrail blocks startup.
 
 ## G2.manual: unified manual-cycle summary (`preflight + readiness/governance/progress/transition`)
 
-Helper агрегирует preflight и текущие nightly summaries в единый machine-readable snapshot для operator-loop.
-Скрипт side-effect free: dispatch не запускается.
+Helper aggregates preflight and current nightly summaries into a single machine-readable snapshot for operator-loop.
+The side-effect free: dispatch script does not run.
 
 ```powershell
 cd D:\atm10-agent
@@ -612,7 +612,7 @@ Unified summary contract (`gateway_sla_manual_cycle_summary_v1`):
 * `policy = report_only|fail_if_blocked`
 * `sources`:
   * `preflight|readiness|governance|progress|transition`
-  * для каждого source: `path`, `status` (`present|missing|invalid`), schema/status metadata
+  * for each source: `path`, `status` (`present|missing|invalid`), schema/status metadata
   * `preflight` — required source; `readiness/governance/progress/transition` — optional sources
 * `observed`:
   * `preflight.workflow_runs_observed|today_dispatch_count|latest_dispatch_run`
@@ -620,7 +620,7 @@ Unified summary contract (`gateway_sla_manual_cycle_summary_v1`):
   * `governance_decision_status`
   * `progress.remaining_for_window|remaining_for_streak|decision_status`
   * `transition.allow_switch|reason_codes|decision_status`
-* `decision` (из preflight):
+* `decision` (from preflight):
   * `accounted_dispatch_allowed`
   * `decision_status`
   * `next_accounted_dispatch_at_utc`
@@ -632,19 +632,19 @@ Unified summary contract (`gateway_sla_manual_cycle_summary_v1`):
 
 Exit policy:
 
-* `report_only`: `0`, если preflight валиден (даже при block decision); `2` только при `status=error`.
-* `fail_if_blocked`: `2`, если `accounted_dispatch_allowed=false` или `status=error`.
+* `report_only`: `0`, if preflight is valid (even with block decision); `2` only with `status=error`.
+* `fail_if_blocked`: `2` if `accounted_dispatch_allowed=false` or `status=error`.
 
 Decision interpretation:
 
-* `decision.accounted_dispatch_allowed=true` -> можно выполнять следующий учитываемый dispatch.
-* `decision.accounted_dispatch_allowed=false` -> dispatch блокирован до `decision.next_accounted_dispatch_at_utc`.
-* Optional source missing/invalid не ломает summary, но отражается в `sources.*.status` и `warnings`.
+* `decision.accounted_dispatch_allowed=true` -> the following dispatch can be executed.
+* `decision.accounted_dispatch_allowed=false` -> dispatch is blocked until `decision.next_accounted_dispatch_at_utc`.
+* Optional source missing/invalid does not break the summary, but is reflected in `sources.*.status` and `warnings`.
 
 ## G2.manual: local manual nightly runner (solo+AI, no workflow_dispatch)
 
-Wrapper запускает локальный nightly-chain как единый manual entrypoint с UTC guardrail
-(`max 1 accounted run/day`) и recovery-mode без progression credit.
+Wrapper runs local nightly-chain as a single manual entrypoint with UTC guardrail
+(`max 1 accounted run/day`) and recovery-mode without progression credit.
 
 ```powershell
 cd D:\atm10-agent
@@ -665,7 +665,7 @@ Runner summary contract (`gateway_sla_manual_nightly_runner_v1`):
   * `max_runs_per_utc_day`
 * `steps[]`:
   * `id`, `status`, `exit_code`, `started_at_utc`, `finished_at_utc`, `paths`, `error`
-* `decision` (из local preflight `gateway_sla_manual_preflight_v1`):
+* `decision` (from local preflight `gateway_sla_manual_preflight_v1`):
   * `accounted_dispatch_allowed`
   * `recovery_rerun_allowed`
   * `decision_status` (`allow_accounted_dispatch|allow_recovery_rerun|block_accounted_dispatch|error`)
@@ -679,21 +679,21 @@ Runner summary contract (`gateway_sla_manual_nightly_runner_v1`):
 Execution behavior:
 
 * `accounted`: full chain (`gateway_http_core -> sla_signal -> trend_signal -> readiness -> governance -> progress -> transition`).
-* `recovery`: только `transition` + `manual_cycle_summary` (без progression credit).
-* `blocked`: chain шаги не выполняются, но всегда обновляется `manual_cycle_summary` с local preflight.
-* `fail-fast`: при `status=error` любого шага wrapper останавливает chain и возвращает `exit_code=2`.
+* `recovery`: only `transition` + `manual_cycle_summary` (without progression credit).
+* `blocked`: chain steps are not executed, but `manual_cycle_summary` is always updated with local preflight.
+* `fail-fast`: at `status=error` of any step, the wrapper stops the chain and returns `exit_code=2`.
 
 Guardrail source-of-truth:
 
-* Учитываемые runs считаются по history `runs/nightly-gateway-sla-manual-runner/*/run.json`
-  только с `result.progression_credit=true`.
-* Recovery допускается только если `readiness/governance/progress` summaries валидны (`status=ok`),
-  а `transition_summary.json` отсутствует или невалиден.
+* Counted runs are counted according to history `runs/nightly-gateway-sla-manual-runner/*/run.json`
+  only with `result.progression_credit=true`.
+* Recovery is allowed only if `readiness/governance/progress` summaries are valid (`status=ok`),
+  and `transition_summary.json` is missing or invalid.
 
 ## G2.manual: local cadence brief (daily operator status/ETA)
 
-Read-only helper строит единый daily brief для локального solo+AI цикла:
-можно ли делать следующий учитываемый запуск сейчас, какой attention-state, и минимальный ETA до go-candidate.
+Read-only helper builds a single daily brief for a local solo+AI cycle:
+Is it possible to do the next considered launch now, what is the attention-state, and the minimum ETA before go-candidate.
 
 ```powershell
 cd D:\atm10-agent
@@ -737,20 +737,20 @@ Cadence brief contract (`gateway_sla_manual_cadence_brief_v1`):
 
 Exit policy:
 
-* `report_only`: `0` при `status=ok`; `2` только при `status=error`.
-* `fail_if_attention_required`: `2` при `attention_state in {source_repair_required, wait_for_utc_reset, run_recovery_only, unknown}` или `status=error`.
+* `report_only`: `0` at `status=ok`; `2` only with `status=error`.
+* `fail_if_attention_required`: `2` with `attention_state in {source_repair_required, wait_for_utc_reset, run_recovery_only, unknown}` or `status=error`.
 
 Operator interpretation:
 
-* `attention_state=ready_for_accounted_run` -> можно запускать следующий учитываемый cycle.
-* `attention_state=wait_for_utc_reset` -> ждать `forecast.next_accounted_dispatch_at_utc`.
-* `attention_state=run_recovery_only` -> допускается только recovery-path без progression credit.
-* `attention_state=source_repair_required` -> сначала восстановить required summaries (`manual_cycle`, `progress`).
+* `attention_state=ready_for_accounted_run` -> you can run the next cycle taken into account.
+* `attention_state=wait_for_utc_reset` -> wait for `forecast.next_accounted_dispatch_at_utc`.
+* `attention_state=run_recovery_only` -> only recovery-path without progression credit is allowed.
+* `attention_state=source_repair_required` -> first restore required summaries (`manual_cycle`, `progress`).
 
 ## G2.3: Gateway SLA fail_nightly transition telemetry + strict nightly gate
 
-Transition checker сохраняет формальный decision telemetry для readiness/governance/progress,
-а nightly strict gate исполняется стабильно (`fail_nightly`) без изменения PR/CI `signal_only` policy.
+Transition checker preserves formal decision telemetry for readiness/governance/progress,
+and nightly strict gate is executed stably (`fail_nightly`) without changing the PR/CI `signal_only` policy.
 
 ```powershell
 cd D:\atm10-agent
@@ -760,41 +760,41 @@ python scripts/check_gateway_sla_fail_nightly_transition.py --readiness-runs-dir
 
 Nightly transition integration:
 
-* `.github/workflows/gateway-sla-readiness-nightly.yml` добавляет:
+* `.github/workflows/gateway-sla-readiness-nightly.yml` adds:
   * step `Transition - Gateway SLA fail_nightly switch gate (report_only)`,
-  * stable strict step `gateway_sla_trend_snapshot --critical-policy fail_nightly` на каждом nightly run,
+  * stable strict step `gateway_sla_trend_snapshot --critical-policy fail_nightly` on every nightly run,
   * summary section `Gateway SLA Fail-Nightly Transition`,
   * cache/artifact path `runs/nightly-gateway-sla-transition`.
 
 Recovery rule (calendar-day guardrail compatible):
 
-* Если в успешном UTC-run отсутствует `runs/nightly-gateway-sla-transition/transition_summary.json`,
-  разрешен один recovery rerun в те же UTC-сутки для восстановления chain.
-* Recovery rerun не считается отдельным progression-днем для switch evidence.
+* If the successful UTC-run is missing `runs/nightly-gateway-sla-transition/transition_summary.json`,
+  One recovery rerun is allowed on the same UTC day to restore the chain.
+* Recovery rerun is not considered a separate progression day for switch evidence.
 
 History consistency hotfix (`2026-03-03`):
 
-* Каждый checker (`readiness/governance/progress/transition`) пишет dual outputs за запуск:
-  * latest alias в `runs/nightly-gateway-sla-*/<summary>.json`;
-  * history copy в `run_dir/<summary>.json`.
-* Progress/transition collectors считают `valid_count` по history rows, не включая top-level latest alias
-  при наличии history copies.
-* Backfill для старых запусков не делается: валидное accumulation окно для `valid_count` считается
-  с первого nightly run после merge hotfix.
+* Each checker (`readiness/governance/progress/transition`) writes dual outputs per launch:
+  * latest alias in `runs/nightly-gateway-sla-*/<summary>.json`;
+  * history copy to `run_dir/<summary>.json`.
+* Progress/transition collectors count `valid_count` using history rows, not including top-level latest alias
+  if history copies are available.
+* Backfill is not done for old runs: a valid accumulation window for `valid_count` is considered
+  from the first nightly run after merge hotfix.
 
 ## G2 Stable Strict Nightly (active policy)
 
-Operational цель: держать nightly strict enforcement (`critical_policy=fail_nightly`) как
-стабильный operating mode без изменения runtime API, используя `readiness/governance/progress/transition`
-как telemetry/remediation слой.
+Operational goal: keep nightly strict enforcement (`critical_policy=fail_nightly`) as
+stable operating mode without changing runtime API, using `readiness/governance/progress/transition`
+like telemetry/remediation layer.
 
 Update (`2026-03-03`, manual switch override):
 
-* Nightly strict gate включен стабильно: `gateway_sla_trend_snapshot --critical-policy fail_nightly`
-  выполняется на каждом nightly run.
-* `readiness/governance/progress/transition` остаются decision telemetry слоем (reason-codes/remaining gap),
-  а не runtime gate condition.
-* `pytest.yml` остается `signal_only` (`nightly_only` strict enforcement surface).
+* Nightly strict gate is enabled stably: `gateway_sla_trend_snapshot --critical-policy fail_nightly`
+  executed on every nightly run.
+* `readiness/governance/progress/transition` remain decision telemetry layer (reason-codes/remaining gap),
+  not runtime gate condition.
+* `pytest.yml` remains `signal_only` (`nightly_only` strict enforcement surface).
 
 Historical baseline (locked on `2026-03-03` before stable strict switch):
 
@@ -807,16 +807,16 @@ Historical baseline (locked on `2026-03-03` before stable strict switch):
 
 Historical note:
 
-* Этот baseline относится к conservative gate-фазе и сохраняется только для traceability.
-* После manual switch override nightly strict gate больше не зависит от `transition.allow_switch`.
+* This baseline belongs to the conservative gate phase and is saved only for traceability.
+* After manual switch, override nightly strict gate no longer depends on `transition.allow_switch`.
 
 ### Daily loop (primary = nightly, fallback = manual)
 
 Primary mode:
 
-* использовать `.github/workflows/gateway-sla-readiness-nightly.yml` (cron `35 3 * * *`).
+* use `.github/workflows/gateway-sla-readiness-nightly.yml` (cron `35 3 * * *`).
 
-Fallback mode (если nightly run пропущен/недоступен):
+Fallback mode (if nightly run is skipped/unavailable):
 
 ```powershell
 cd D:\atm10-agent
@@ -872,14 +872,14 @@ Operating cycle contract (`gateway_sla_operating_cycle_v1`):
 
 Behavior:
 
-* Если required latest summaries свежие за текущие UTC-сутки, helper переиспользует existing latest aliases и не запускает новый `manual_nightly`.
-* Если свежий latest snapshot совпадает по времени с local manual cluster, helper помечает `cycle.source=manual` и сохраняет `operating_mode=reuse_fresh_latest`.
-* Если required sources missing/stale/invalid, helper запускает fallback в фиксированном порядке:
+* If the required latest summaries are fresh for the current UTC day, helper reuses the existing latest aliases and does not run a new `manual_nightly`.
+* If the latest latest snapshot coincides in time with the local manual cluster, helper marks `cycle.source=manual` and saves `operating_mode=reuse_fresh_latest`.
+* If required sources missing/stale/invalid, helper runs fallback in a fixed order:
   * `run_gateway_sla_manual_nightly.py`
   * `check_gateway_sla_manual_cadence_brief.py`
   * `check_gateway_sla_fail_nightly_remediation.py`
   * `check_gateway_sla_fail_nightly_integrity.py`
-* Порядок fallback фиксирован: `cadence` должен быть обновлен до `remediation/integrity`, чтобы optional source `manual_cadence` был консистентен в том же цикле.
+* The fallback order is fixed: `cadence` must be updated to `remediation/integrity` in order for the optional source `manual_cadence` to be consistent in the same loop.
 
 Daily acceptance checks:
 
@@ -892,25 +892,25 @@ Daily acceptance checks:
   * `runs/nightly-gateway-sla-integrity/integrity_summary.json`
   * `runs/nightly-gateway-sla-manual-cadence/cadence_brief.json`
 * `invalid_or_mismatched_count == 0` (governance/progress/transition).
-* `integrity_status=clean` или, как минимум, отсутствие `required_sources_unhealthy`/`dual_write_invariant_broken`/`anti_double_count_invariant_broken`.
-* `remaining_for_window` убывает по accounted run.
-* `next_accounted_dispatch_at_utc` не нарушает guardrail `1 accounted run / UTC day`.
+* `integrity_status=clean` or, at a minimum, the absence of `required_sources_unhealthy`/`dual_write_invariant_broken`/`anti_double_count_invariant_broken`.
+* `remaining_for_window` decreases by accounted run.
+* `next_accounted_dispatch_at_utc` does not violate the guardrail of `1 accounted run / UTC day`.
 
 ### Post-switch monitoring
 
-* В nightly-loop обязательны:
+* In nightly-loop the following are required:
   * strict trend gate (`fail_nightly`);
   * decision telemetry summaries (`readiness/governance/progress/transition`);
   * remediation snapshot (`runs/nightly-gateway-sla-remediation/remediation_summary.json`).
   * integrity snapshot (`runs/nightly-gateway-sla-integrity/integrity_summary.json`).
-* При nightly fail source-of-truth для triage — workflow-published `remediation_summary.json`; `candidate_items` разворачиваются в 3-5 `G2`-only пункта в session/TODO docs.
-* `transition.allow_switch` и related reason-codes используются только для diagnostics/traceability
-  и не блокируют запуск strict nightly.
+* If nightly fail source-of-truth for triage - workflow-published `remediation_summary.json`; `candidate_items` is expanded into 3-5 `G2`-only paragraphs in the session/TODO docs.
+* `transition.allow_switch` and related reason-codes are used only for diagnostics/traceability
+  and do not block the launch of strict nightly.
 
 ## G2.4: Gateway SLA fail_nightly remediation snapshot
 
-Read-only helper собирает latest G2 summaries в единый remediation snapshot и machine-readable backlog-кандидаты
-без пересчета history и без изменения runtime/API/UI surface.
+Read-only helper collects the latest G2 summaries into a single remediation snapshot and machine-readable backlog candidates
+without recalculating history and without changing runtime/API/UI surface.
 
 ```powershell
 cd D:\atm10-agent
@@ -937,12 +937,12 @@ Remediation contract (`gateway_sla_fail_nightly_remediation_v1`):
   * `remaining_for_streak`
   * optional `attention_state`
 * `reason_codes`:
-  * deduplicated union из latest `recommendation.reason_codes` и `manual_cadence.decision.reason_codes`
+  * deduplicated union of latest `recommendation.reason_codes` and `manual_cadence.decision.reason_codes`
 * `candidate_items`:
-  * детерминированный список backlog candidates
-  * поля элемента: `id`, `priority`, `summary`, `source_refs`
+  * deterministic list of backlog candidates
+  * element fields: `id`, `priority`, `summary`, `source_refs`
   * buckets: `telemetry_integrity`, `regression_investigation`, `window_accumulation`, `ready_streak_stabilization`, `manual_guardrail`
-  * максимум `5` items на snapshot
+  * maximum `5` items per snapshot
 * `warnings`
 * `error`
 * `exit_code`
@@ -956,26 +956,26 @@ Artifacts:
 
 Nightly integration:
 
-* `.github/workflows/gateway-sla-readiness-nightly.yml` запускает remediation helper в режиме `report_only`.
-* Workflow публикует summary section `Gateway SLA Fail-Nightly Remediation`.
-* Cache/artifact wiring сохраняет `runs/nightly-gateway-sla-remediation` вместе с остальными G2 nightly paths.
-* G2 summary sections используют `always()` semantics, чтобы diagnostics не терялись при red nightly после strict `fail_nightly`.
+* `.github/workflows/gateway-sla-readiness-nightly.yml` runs remediation helper in `report_only` mode.
+* Workflow publishes summary section `Gateway SLA Fail-Nightly Remediation`.
+* Cache/artifact wiring saves `runs/nightly-gateway-sla-remediation` along with the rest of the G2 nightly paths.
+* G2 summary sections use `always()` semantics so that diagnostics are not lost in red nightly after strict `fail_nightly`.
 
 Exit policy:
 
-* `report_only`: `0`, если remediation snapshot собран успешно; `2` только при `status=error`.
-* `fail_if_remediation_required`: `2`, если broken required sources или `candidate_items` непустой; также `2` при `status=error`.
+* `report_only`: `0`, if the remediation snapshot was collected successfully; `2` only with `status=error`.
+* `fail_if_remediation_required`: `2` if broken required sources or `candidate_items` is non-empty; also `2` with `status=error`.
 
 Operator usage:
 
-* Для nightly triage использовать workflow-published `runs/nightly-gateway-sla-remediation/remediation_summary.json` как canonical draft backlog.
-* Прямой локальный запуск helper остается fallback path для ручной перепроверки или пропущенного nightly run.
-* Если snapshot green (`candidate_items=[]`), дополнительных remediation пунктов не требуется.
-* Если snapshot не green, разворачивать `candidate_items` в 3-5 `G2`-only пункта с ссылкой на соответствующие source artifacts.
+* For nightly triage, use workflow-published `runs/nightly-gateway-sla-remediation/remediation_summary.json` as canonical draft backlog.
+* Direct local launch of helper remains the fallback path for manual rechecking or skipped nightly run.
+* If snapshot is green (`candidate_items=[]`), no additional remediation items are required.
+* If the snapshot is not green, expand `candidate_items` to 3-5 `G2`-only points with a link to the corresponding source artifacts.
 
 ## G2.post3: Gateway SLA fail_nightly integrity snapshot
 
-Integrity helper агрегирует latest nightly summaries и проверяет operator-facing invariants без добавления нового hard fail surface.
+Integrity helper aggregates latest nightly summaries and checks operator-facing invariants without adding a new hard fail surface.
 
 ```powershell
 cd D:\atm10-agent
@@ -992,7 +992,7 @@ Integrity contract (`gateway_sla_fail_nightly_integrity_v1`):
   * `readiness|governance|progress|transition|remediation|manual_cadence`
   * status per source: `present|missing|invalid`
   * required sources: `readiness`, `governance`, `progress`, `transition`, `remediation`
-  * `manual_cadence` остается optional source для UTC guardrail validation
+  * `manual_cadence` remains optional source for UTC guardrail validation
 * `observed`:
   * `telemetry_ok`
   * `dual_write_ok`
@@ -1030,8 +1030,8 @@ Checked invariants:
   * `history_summary_json` differs from top-level latest alias
   * history copy remains the canonical nested summary for collectors
 * UTC guardrail:
-  * если `manual_cadence` доступен, helper проверяет согласованность `attention_state`, `decision.accounted_dispatch_allowed`, `decision.next_accounted_dispatch_at_utc` и `decision.reason_codes`
-  * если `manual_cadence` отсутствует, выставляется `utc_guardrail_status=not_available` и warning без fail
+  * if `manual_cadence` is available, helper checks the consistency of `attention_state`, `decision.accounted_dispatch_allowed`, `decision.next_accounted_dispatch_at_utc` and `decision.reason_codes`
+  * if `manual_cadence` is missing, `utc_guardrail_status=not_available` is set and warning without fail
 
 Artifacts:
 
@@ -1041,38 +1041,38 @@ Artifacts:
 
 Nightly integration:
 
-* `.github/workflows/gateway-sla-readiness-nightly.yml` запускает integrity helper в режиме `report_only`
-* workflow публикует summary section `Gateway SLA Fail-Nightly Integrity`
-* cache/artifact wiring сохраняет `runs/nightly-gateway-sla-integrity` вместе с остальными G2 nightly paths
+* `.github/workflows/gateway-sla-readiness-nightly.yml` runs integrity helper in `report_only` mode
+* workflow publishes summary section `Gateway SLA Fail-Nightly Integrity`
+* cache/artifact wiring saves `runs/nightly-gateway-sla-integrity` along with the rest of the G2 nightly paths
 
 Exit policy:
 
-* `report_only`: `0`, если integrity snapshot собран успешно; `2` только при `status=error`
+* `report_only`: `0`, if the integrity snapshot was collected successfully; `2` only with `status=error`
 
 Operator usage:
 
-* Использовать integrity snapshot как быстрый machine-readable verdict для `G2 telemetry integrity` daily check.
-* `integrity_status=attention` сам по себе не добавляет новый hard gate, но должен попадать в nightly/manual triage.
-* При наличии `dual_write` или `anti_double_count` reason-codes сначала чинить telemetry/artifact path, потом трактовать remediation backlog.
+* Use integrity snapshot as a quick machine-readable verdict for `G2 telemetry integrity` daily check.
+* `integrity_status=attention` itself does not add a new hard gate, but should fall into the nightly/manual triage.
+* If there are `dual_write` or `anti_double_count` reason-codes, first repair the telemetry/artifact path, then interpret the remediation backlog.
 
 ## M8.0: Streamlit IA spec (decision-complete, no implementation)
 
-На шаге `M8.0` фиксируем IA-спецификацию без добавления Streamlit runtime-кода.
+At step `M8.0` we fix the IA specification without adding Streamlit runtime code.
 
 Source of truth:
 
 * `docs/STREAMLIT_IA_V0.md`
 
-Ожидаемый результат:
+Expected result:
 
-* В документе зафиксированы 4 зоны UI (`Stack Health`, `Run Explorer`, `Latest Metrics`, `Safe Actions`).
-* Зафиксированы canonical data sources (CI smoke summaries) и field mapping.
-* Зафиксированы safe action guardrails и handoff-контракт для `M8.1`.
-* Док защищен regression-тестом `tests/test_streamlit_ia_doc.py`.
+* The document contains 4 UI zones (`Stack Health`, `Run Explorer`, `Latest Metrics`, `Safe Actions`).
+* Canonical data sources (CI smoke summaries) and field mapping are fixed.
+* Safe action guardrails and handoff contract for `M8.1` have been fixed.
+* The dock is protected by the `tests/test_streamlit_ia_doc.py` regression test.
 
 ## M8.1: Streamlit operator panel v0 + no-crash smoke
 
-Запуск панели:
+Launching the panel:
 
 ```powershell
 cd D:\atm10-agent
@@ -1080,7 +1080,7 @@ cd D:\atm10-agent
 python -m streamlit run scripts/streamlit_operator_panel.py -- --runs-dir runs --gateway-url http://127.0.0.1:8770
 ```
 
-Запуск smoke-gate:
+Launching smoke-gate:
 
 ```powershell
 cd D:\atm10-agent
@@ -1090,18 +1090,18 @@ python scripts/streamlit_operator_panel_smoke.py --panel-runs-dir runs --runs-di
 
 Dependency preflight:
 
-* `scripts/streamlit_operator_panel_smoke.py` сначала проверяет import availability `streamlit` в активном interpreter.
-* Если dependency отсутствует, smoke не запускает subprocess и сразу пишет обычный `streamlit_smoke_summary_v1` с:
+* `scripts/streamlit_operator_panel_smoke.py` first checks the import availability of `streamlit` in the active interpreter.
+* If the dependency is missing, smoke does not launch subprocess and immediately writes the usual `streamlit_smoke_summary_v1` with:
   * `status=error`
   * `startup_ok=false`
   * `exit_code=2`
   * `required_missing_sources=[]`
   * `optional_missing_sources=[]`
-* `streamlit_startup.log` в этом случае содержит repair hint:
+* `streamlit_startup.log` in this case contains a repair hint:
   * `python -m pip install -r requirements.txt`
-* `run.json` получает `error_code=runtime_missing_dependency`.
+* `run.json` receives `error_code=runtime_missing_dependency`.
 
-Ожидаемый result contract (`streamlit_smoke_summary_v1`):
+Expected result contract (`streamlit_smoke_summary_v1`):
 
 * `schema_version = streamlit_smoke_summary_v1`
 * `status = ok|error`
@@ -1119,14 +1119,14 @@ Dependency preflight:
 
 Exit policy:
 
-* `0` только если `status=ok`.
-* `2` для любого `status=error`.
-* `status=error` только если нарушены strict условия:
+* `0` only if `status=ok`.
+* `2` for any `status=error`.
+* `status=error` only if strict conditions are violated:
   * startup fail,
   * mobile layout contract fail,
-  * отсутствуют `required_missing_sources`.
-* `optional_missing_sources` не переводят smoke в `error`; используются как observability signal.
-* В optional surface входят operator-facing G2 summaries (`progress`, `remediation`, `integrity`, `operating_cycle`), если они еще не опубликованы в выбранном `runs_dir`.
+  * missing `required_missing_sources`.
+* `optional_missing_sources` do not translate smoke to `error`; used as observability signal.
+* The optional surface includes operator-facing G2 summaries (`progress`, `remediation`, `integrity`, `operating_cycle`), if they are not already published in the selected `runs_dir`.
 
 Manual operator-check:
 
@@ -1139,14 +1139,14 @@ python -m streamlit run scripts/streamlit_operator_panel.py -- --runs-dir runs -
 
 Operator procedure:
 
-* success criterion: в терминале появляется Streamlit banner `You can now view your Streamlit app in your browser.` и строка `Local URL: ...`
-* если на first-run появляется onboarding prompt `Email:`, отправить пустую строку и продолжить до banner
-* после фиксации banner остановить процесс через `Ctrl+C`
-* сохранить terminal output в `runs/ci-smoke-streamlit/<timestamp>-manual-operator-check.log`
+* success criterion: Streamlit banner `You can now view your Streamlit app in your browser.` and line `Local URL: ...` appear in the terminal
+* if the onboarding prompt `Email:` appears at first-run, send an empty line and continue to banner
+* after fixing the banner, stop the process via `Ctrl+C`
+* save terminal output to `runs/ci-smoke-streamlit/<timestamp>-manual-operator-check.log`
 
 ## M8.post: Streamlit Safe Actions audit trail
 
-`Safe Actions` в панели ведет append-only audit log с traceable результатами запусков.
+`Safe Actions` keeps an append-only audit log in the panel with traceable launch results.
 
 Audit artifact path:
 
@@ -1166,14 +1166,14 @@ Audit entry contract (JSON object per line):
 
 UI behavior:
 
-* В `Safe Actions` после выполнения команды показывается блок `Last safe action`.
-* Ниже показывается таблица `Recent safe actions` (default: последние 10 записей, newest-first).
-* Если лог отсутствует, UI показывает `not available yet` и не падает.
-* При битой JSONL строке UI не падает: показывается error-row `invalid audit entry`.
+* In `Safe Actions`, after the command is executed, the `Last safe action` block is shown.
+* Below is the table `Recent safe actions` (default: last 10 records, newest-first).
+* If the log is missing, the UI shows `not available yet` and does not crash.
+* If the JSONL line is broken, the UI does not crash: error-row `invalid audit entry` is displayed.
 
 ## M8.post: Streamlit Latest Metrics history filters
 
-Во вкладке `Latest Metrics` добавлен historical view без внешней БД: история строится из уже существующих timestamp run-директорий в canonical smoke roots.
+In the `Latest Metrics` tab, a historical view without an external database has been added: the history is built from existing timestamp run directories in canonical smoke roots.
 
 History sources:
 
@@ -1187,7 +1187,7 @@ History sources:
 
 History controls:
 
-* `History sources` (multiselect, default = все canonical sources)
+* `History sources` (multiselect, default = all canonical sources)
 * `History statuses` (multiselect, default = `ok,error`)
 * `History limit per source` (default = `10`)
 
@@ -1198,7 +1198,7 @@ Historical row fields (`metrics_history_row_v1`, in-memory UI contract):
 * `status`
 * `run_dir`
 * `run_json`
-* `summary_json` (если доступен)
+* `summary_json` (if available)
 * `request_count`
 * `failed_requests_count`
 * `results_count`
@@ -1208,14 +1208,14 @@ Historical row fields (`metrics_history_row_v1`, in-memory UI contract):
 
 Resilience/performance policy:
 
-* scan cap: максимум `200` candidate run-директорий на source перед применением limit.
-* некорректные run-директории пропускаются; UI показывает warning и продолжает работу.
-* при отсутствии history строк показывается `not available yet`.
+* scan cap: maximum `200` candidate run-directories on source before applying limit.
+* incorrect run directories are skipped; The UI shows a warning and continues working.
+* if there are no history lines, `not available yet` is shown.
 
 ## G2.post: Streamlit fail_nightly progress visibility (optional sources)
 
-Во вкладке `Latest Metrics` добавлен отдельный блок `Gateway fail_nightly progress`, который
-агрегирует nightly decision-path артефакты и показывает операционный прогресс до `go|hold`.
+In the `Latest Metrics` tab, a separate block `Gateway fail_nightly progress` has been added, which
+aggregates nightly decision-path artifacts and shows operational progress up to `go|hold`.
 
 Optional progress sources:
 
@@ -1223,13 +1223,13 @@ Optional progress sources:
 * `runs/nightly-gateway-sla-governance/governance_summary.json`
 * `runs/nightly-gateway-sla-progress/progress_summary.json`
 
-Поддерживаемые контракты:
+Supported contracts:
 
 * `gateway_sla_fail_nightly_readiness_v1`
 * `gateway_sla_fail_nightly_governance_v1`
 * `gateway_sla_fail_nightly_progress_v1`
 
-UI поля progress-блока:
+Progress block field UI:
 
 * `readiness_status`
 * `latest_ready_streak`
@@ -1241,25 +1241,25 @@ UI поля progress-блока:
 
 Tolerant rendering policy:
 
-* если optional sources отсутствуют, панель показывает `not available yet`;
-* если optional source битый/contract-mismatch, панель показывает warning и продолжает работу;
-* optional progress sources не входят в strict `missing_sources` smoke-policy.
+* if optional sources are missing, the panel shows `not available yet`;
+* if the optional source is broken/contract-mismatch, the panel shows a warning and continues working;
+* optional progress sources are not included in strict `missing_sources` smoke-policy.
 
 ## G2.post2: Streamlit fail_nightly remediation visibility (published snapshot)
 
-Во вкладке `Latest Metrics` добавлен отдельный блок `Gateway fail_nightly remediation`, который
-читает только workflow-published remediation snapshot и показывает operator-facing triage backlog без
-повторной агрегации upstream G2 summaries.
+In the `Latest Metrics` tab, a separate block `Gateway fail_nightly remediation` has been added, which
+reads only workflow-published remediation snapshot and shows operator-facing triage backlog without
+re-aggregation of upstream G2 summaries.
 
 Optional remediation source:
 
 * `runs/nightly-gateway-sla-remediation/remediation_summary.json`
 
-Поддерживаемый контракт:
+Supported Contract:
 
 * `gateway_sla_fail_nightly_remediation_v1`
 
-UI поля remediation-блока:
+UI of the remediation block field:
 
 * `status`
 * `policy`
@@ -1276,30 +1276,30 @@ UI поля remediation-блока:
 
 UI backlog surface:
 
-* отдельная compact table по `candidate_items`
-* колонки: `id`, `priority`, `summary`, `source_refs`
-* artifact panel показывает `checked_at_utc` и `summary_json`
+* separate compact table according to `candidate_items`
+* speakers: `id`, `priority`, `summary`, `source_refs`
+* artifact panel showing `checked_at_utc` and `summary_json`
 
 Tolerant rendering policy:
 
-* если remediation snapshot отсутствует, панель показывает `not available yet`;
-* если remediation snapshot битый/contract-mismatch, панель показывает warning и продолжает работу;
-* remediation source входит в `optional_missing_sources`, но не входит в strict `missing_sources` smoke-policy.
+* if remediation snapshot is missing, the panel shows `not available yet`;
+* if the remediation snapshot is broken/contract-mismatch, the panel shows a warning and continues working;
+* remediation source is included in `optional_missing_sources`, but is not included in strict `missing_sources` smoke-policy.
 
 ## G2.post3: Streamlit fail_nightly integrity visibility
 
-Во вкладке `Latest Metrics` добавлен блок `Gateway fail_nightly integrity`, который показывает сводный verdict
-по telemetry, dual-write/anti-double-count и UTC guardrail invariants.
+In the `Latest Metrics` tab, the `Gateway fail_nightly integrity` block has been added, which shows the summary verdict
+by telemetry, dual-write/anti-double-count and UTC guardrail invariants.
 
 Optional integrity source:
 
 * `runs/nightly-gateway-sla-integrity/integrity_summary.json`
 
-Поддерживаемый контракт:
+Supported Contract:
 
 * `gateway_sla_fail_nightly_integrity_v1`
 
-UI поля integrity-блока:
+UI field of the integrity block:
 
 * `status`
 * `integrity_status`
@@ -1315,29 +1315,29 @@ UI поля integrity-блока:
 
 Artifact panels:
 
-* отдельный JSON panel по `utc_guardrail`
-* compact artifact panel с `checked_at_utc` и `summary_json`
+* separate JSON panel by `utc_guardrail`
+* compact artifact panel with `checked_at_utc` and `summary_json`
 
 Tolerant rendering policy:
 
-* если integrity snapshot отсутствует, панель показывает `not available yet`
-* если integrity snapshot битый/contract-mismatch, панель показывает warning и продолжает работу
-* integrity source входит в `optional_missing_sources`, но не входит в strict `missing_sources` smoke-policy
+* if integrity snapshot is missing, the panel shows `not available yet`
+* if the integrity snapshot is broken/contract-mismatch, the panel shows a warning and continues working
+* integrity source is included in `optional_missing_sources`, but is not included in strict `missing_sources` smoke-policy
 
 ## G2.post4: Streamlit operating cycle visibility
 
-Во вкладке `Latest Metrics` добавлен верхний read-only блок `G2 operating cycle`, который
-читает единый operator snapshot из local helper без запуска нового цикла из UI.
+In the `Latest Metrics` tab, the top read-only block `G2 operating cycle` has been added, which
+reads a single operator snapshot from the local helper without starting a new loop from the UI.
 
 Optional operating-cycle source:
 
 * `runs/nightly-gateway-sla-operating-cycle/operating_cycle_summary.json`
 
-Поддерживаемый контракт:
+Supported Contract:
 
 * `gateway_sla_operating_cycle_v1`
 
-UI поля operating-cycle блока:
+UI field of the operating-cycle block:
 
 * `cycle_source`
 * `operating_mode`
@@ -1359,37 +1359,37 @@ UI поля operating-cycle блока:
 
 Artifact panels:
 
-* compact artifact panel с `checked_at_utc`, `summary_json`, `brief_md`
-* отсутствие `brief_md` считается soft-info и не переводит block в warning/error
-* optional JSON panel по `invalid_counts`, если они присутствуют в triage
+* compact artifact panel with `checked_at_utc`, `summary_json`, `brief_md`
+* the absence of `brief_md` is considered soft-info and does not convert block to warning/error
+* optional JSON panel by `invalid_counts`, if they are present in triage
 
 Guardrails:
 
-* блок только читает опубликованный summary и не запускает `scripts/run_gateway_sla_operating_cycle.py`
-* `Safe Actions` остаются smoke-only и не расширяются этим helper
-* operating-cycle source входит в `optional_missing_sources`, но не входит в strict `missing_sources` smoke-policy
+* the block only reads the published summary and does not run `scripts/run_gateway_sla_operating_cycle.py`
+* `Safe Actions` remain smoke-only and are not expanded by this helper
+* operating-cycle source is included in `optional_missing_sources`, but not in strict `missing_sources` smoke-policy
 
 ## M8.post: Streamlit compact mobile layout baseline
 
-В панели закреплен compact mobile layout policy без изменения IA-табов и safe action guardrails.
+The compact mobile layout policy is fixed in the panel without changing IA tabs and safe action guardrails.
 
 Policy defaults:
 
 * `compact_breakpoint_px = 768`
-* baseline viewport для smoke-check: `390x844` (portrait)
-* compact-режим включает:
-  * уменьшенные paddings контейнера
-  * stack header controls в одну колонку
-  * horizontal scroll fallback для dataframes
+* baseline viewport for smoke-check: `390x844` (portrait)
+* compact mode includes:
+  * reduced container paddings
+  * stack header controls in one column
+  * horizontal scroll fallback for dataframes
 
 Regression smoke-check:
 
-* `scripts/streamlit_operator_panel_smoke.py` валидирует mobile policy контракт и baseline viewport.
-* При нарушении mobile baseline (`viewport > breakpoint` или `landscape`) smoke возвращает `status=error`, `exit_code=2`.
+* `scripts/streamlit_operator_panel_smoke.py` validates the mobile policy contract and baseline viewport.
+* If the mobile baseline (`viewport > breakpoint` or `landscape`) is violated, smoke returns `status=error`, `exit_code=2`.
 
 ## Qwen3 stack (OpenVINO-first)
 
-Активный стек:
+Active stack:
 
 * `Qwen3-8B`
 * `Qwen3-VL-4B-Instruct`
@@ -1397,12 +1397,12 @@ Regression smoke-check:
 * `Qwen3-Reranker-0.6B`
 * `Whisper v3 Turbo (OpenVINO GenAI runtime path for ASR)`
 
-Деактивировано:
+Deactivated:
 
-* `Qwen3-TTS-12Hz-0.6B-CustomVoice` (archived; не использовать в production runbook).
+* `Qwen3-TTS-12Hz-0.6B-CustomVoice` (archived; do not use in production runbook).
 * `Qwen3-ASR-0.6B` (archived; reversible via explicit opt-in flags).
 
-Подробная матрица: `docs/QWEN3_MODEL_STACK.md`.
+Detailed matrix: `docs/QWEN3_MODEL_STACK.md`.
 
 ### Qwen3-VL self-conversion (OpenVINO IR)
 
@@ -1434,8 +1434,8 @@ python -m scripts.export_qwen3_custom_openvino --preset qwen3-asr-0.6b
 python -m scripts.export_qwen3_custom_openvino --preset qwen3-asr-0.6b --execute
 ```
 
-Примечание: для `--execute` требуется установленный export toolchain (`transformers`, `optimum`, `optimum-intel`);
-в runtime-only окружении dry-run может вернуть `support_probe.status=import_error`.
+Note: `--execute` requires installed export toolchain (`transformers`, `optimum`, `optimum-intel`);
+in a runtime-only environment, dry-run may return `support_probe.status=import_error`.
 
 ### Voice support probe + matrix
 
@@ -1448,15 +1448,15 @@ python scripts/qwen3_voice_probe_matrix.py
 python scripts/qwen3_voice_probe_matrix.py --execute
 ```
 
-Ожидаемый результат:
+Expected result:
 
-* Создается `runs/<timestamp>-qwen3-voice-probe/`.
-* `qwen3_asr` проверяем только для upstream-monitoring archived path.
+* `runs/<timestamp>-qwen3-voice-probe/` is created.
+* We check `qwen3_asr` only for upstream-monitoring archived path.
 
 ### Isolated upstream experiment
 
-`qwen3-tts` экспериментальное `.venv-exp` окружение удалено из active path.
-Если понадобится повторная проверка upstream, создавай новое изолированное окружение вручную.
+`qwen3-tts` experimental `.venv-exp` environment has been removed from the active path.
+If you need to check the upstream again, create a new isolated environment manually.
 
 ### Qwen3 cache cleanup (disk pressure)
 
@@ -1477,13 +1477,13 @@ python -c "import openvino as ov; core=ov.Core(); print('openvino=', ov.__versio
 python scripts/openvino_diag.py
 ```
 
-Ожидаемый результат:
+Expected result:
 
-* В `runs/<timestamp>-openvino/` создан `openvino_diag_all_devices.json`.
+* `openvino_diag_all_devices.json` was created in `runs/<timestamp>-openvino/`.
 
 ## M3.1: Text core demo (OpenVINO GenAI + Qwen3-8B profile)
 
-Установка runtime deps:
+Runtime deps installation:
 
 ```powershell
 cd D:\atm10-agent
@@ -1492,20 +1492,20 @@ python -m pip install -r requirements.txt
 python -m pip install "openvino-genai>=2025.4.0"
 ```
 
-Запуск demo:
+Run demo:
 
 ```powershell
 python scripts/text_core_openvino_demo.py --model-dir models\qwen3-8b-int4-cw-ov --prompt "Give me a short ATM10 starter plan" --device NPU
 ```
 
-Ожидаемый результат:
+Expected result:
 
-* Создается `runs/<timestamp>-text-core-openvino/`.
-* Внутри есть `run.json` и `response.json`.
+* `runs/<timestamp>-text-core-openvino/` is created.
+* Inside there are `run.json` and `response.json`.
 
 ## M4: HUD OCR baseline (Tesseract CLI)
 
-Примечание: для этого baseline нужен установленный системный `tesseract` в `PATH`.
+Note: This baseline requires system `tesseract` to be installed in `PATH`.
 
 ```powershell
 cd D:\atm10-agent
@@ -1513,14 +1513,14 @@ cd D:\atm10-agent
 python scripts/hud_ocr_baseline.py --image-in "C:\path\to\hud_screenshot.png" --lang eng --psm 6 --oem 1
 ```
 
-Ожидаемый результат:
+Expected result:
 
-* Создается `runs/<timestamp>-hud-ocr/`.
-* Внутри есть `run.json`, `ocr.json`, `ocr.txt`.
+* `runs/<timestamp>-hud-ocr/` is created.
+* Inside there are `run.json`, `ocr.json`, `ocr.txt`.
 
 ## M4: HUD mod-hook baseline
 
-Подготовь payload JSON (пример):
+Prepare payload JSON (example):
 
 ```json
 {
@@ -1533,7 +1533,7 @@ python scripts/hud_ocr_baseline.py --image-in "C:\path\to\hud_screenshot.png" --
 }
 ```
 
-Запуск:
+Launch:
 
 ```powershell
 cd D:\atm10-agent
@@ -1541,14 +1541,14 @@ cd D:\atm10-agent
 python scripts/hud_mod_hook_baseline.py --hook-json "C:\path\to\hud_hook_payload.json"
 ```
 
-Ожидаемый результат:
+Expected result:
 
-* Создается `runs/<timestamp>-hud-hook/`.
-* Внутри есть `run.json`, `hook_raw.json`, `hook_normalized.json`, `hud_text.txt`.
+* `runs/<timestamp>-hud-hook/` is created.
+* Inside there are `run.json`, `hook_raw.json`, `hook_normalized.json`, `hud_text.txt`.
 
 ## M3: Voice runtime demos (active path = Whisper GenAI ASR)
 
-Установка runtime deps (active path):
+Installation of runtime deps (active path):
 
 ```powershell
 cd D:\atm10-agent
@@ -1556,8 +1556,8 @@ cd D:\atm10-agent
 python -m pip install -r requirements.txt
 ```
 
-Примечание: `qwen-tts` и `qwen-asr` выведены из active stack.
-Rollback к archived `qwen-asr` допускается только временно и с explicit opt-in флагами.
+Note: `qwen-tts` and `qwen-asr` are removed from the active stack.
+Rollback to archived `qwen-asr` is only allowed temporarily and with explicit opt-in flags.
 
 ### ASR demo (archived qwen3-asr path)
 
@@ -1569,14 +1569,14 @@ python scripts/asr_demo.py --allow-archived-qwen-asr --audio-in "C:\path\to\samp
 python scripts/asr_demo.py --allow-archived-qwen-asr --record-seconds 5
 ```
 
-Ожидаемый результат:
+Expected result:
 
-* Создается `runs/<timestamp>-asr-demo/`.
-* Внутри есть `run.json` и `transcription.json`.
+* `runs/<timestamp>-asr-demo/` is created.
+* Inside there are `run.json` and `transcription.json`.
 
 ### ASR demo (OpenVINO GenAI + Whisper v3 Turbo, NPU path)
 
-Установка runtime deps:
+Runtime deps installation:
 
 ```powershell
 cd D:\atm10-agent
@@ -1584,13 +1584,13 @@ cd D:\atm10-agent
 python -m pip install "openvino-genai>=2025.4.0"
 ```
 
-Подготовка OpenVINO модели Whisper v3 Turbo:
+Preparing OpenVINO model Whisper v3 Turbo:
 
 ```powershell
 optimum-cli export openvino --model openai/whisper-large-v3-turbo models\whisper-large-v3-turbo-ov
 ```
 
-Запуск demo:
+Run demo:
 
 ```powershell
 # File -> text on NPU
@@ -1600,10 +1600,10 @@ python scripts/asr_demo_whisper_genai.py --model-dir models\whisper-large-v3-tur
 python scripts/asr_demo_whisper_genai.py --model-dir models\whisper-large-v3-turbo-ov --audio-in "C:\path\to\sample.wav" --device NPU --return-timestamps --word-timestamps
 ```
 
-Ожидаемый результат:
+Expected result:
 
-* Создается `runs/<timestamp>-asr-whisper-genai/`.
-* Внутри есть `run.json` и `transcription.json`.
+* `runs/<timestamp>-asr-whisper-genai/` is created.
+* Inside there are `run.json` and `transcription.json`.
 
 ### Long-lived voice runtime service (ASR only)
 
@@ -1628,15 +1628,15 @@ HTTP hardening defaults (voice service):
 * `max_string_length = 8192`
 * `max_array_items = 256`
 * `max_object_keys = 256`
-* optional `service_token` (`--service-token` или `ATM10_SERVICE_TOKEN`) -> require `X-ATM10-Token`
+* optional `service_token` (`--service-token` or `ATM10_SERVICE_TOKEN`) -> require `X-ATM10-Token`
 
 Payload-limit behavior:
 
 * `payload_too_large` -> HTTP `413`
 * `payload_limit_exceeded` -> HTTP `413`
-* обычные валидационные ошибки payload -> HTTP `400`
+* normal validation errors payload -> HTTP `400`
 
-Примечание (security): в HTTP payload для `/tts` и `/tts_stream` поле `out_wav_path` должно быть только именем файла (без absolute path и директорий). Сервис всегда пишет TTS WAV в свой `runs/<timestamp>-voice-service/tts_outputs/`.
+Note (security): in HTTP payload for `/tts` and `/tts_stream`, the `out_wav_path` field should only be the file name (without absolute path and directories). The service always writes TTS WAV to its `runs/<timestamp>-voice-service/tts_outputs/`.
 
 ### Long-lived voice runtime service (Whisper GenAI + NPU ASR)
 
@@ -1657,8 +1657,8 @@ python scripts/voice_runtime_client.py --service-url http://127.0.0.1:8765 healt
 python scripts/voice_runtime_client.py --service-url http://127.0.0.1:8765 asr --audio-in "C:\path\to\sample.wav" --language en
 ```
 
-Примечание: `--asr-warmup-request` делает один ASR inference на старте (по умолчанию на сгенерированном silence WAV, либо через `--asr-warmup-audio`) и снижает cold-start impact в игровом цикле.
-Пока warmup выполняется, `/health` может быть временно недоступен; это нормально для startup-фазы.
+Note: `--asr-warmup-request` makes one ASR inference at the start (by default on the generated silence WAV, or through `--asr-warmup-audio`) and reduces the cold-start impact in the game loop.
+While warmup is running, `/health` may be temporarily unavailable; this is normal for the startup phase.
 
 ### Optional rollback: archived qwen_asr service profile
 
@@ -1690,10 +1690,10 @@ python scripts/benchmark_asr_backends.py `
   --whisper-device NPU
 ```
 
-Ожидаемый результат:
+Expected result:
 
-* Создается `runs/<timestamp>-asr-backend-bench/`.
-* Внутри есть `summary.json`, `summary.md`, `per_sample_results.jsonl`.
+* `runs/<timestamp>-asr-backend-bench/` is created.
+* Inside there are `summary.json`, `summary.md`, `per_sample_results.jsonl`.
 
 ### TTS runtime service (separate process/container)
 
@@ -1704,16 +1704,16 @@ python -m pip install fastapi uvicorn
 python scripts/tts_runtime_service.py --host 127.0.0.1 --port 8780 --runs-dir runs\tts-runtime
 ```
 
-Принятый runtime design:
+Accepted runtime design:
 
 * Router: FastAPI
 * Main engine: XTTS v2
-* Fallback engines: Piper, Silero (для `ru` service voice)
+* Fallback engines: Piper, Silero (for `ru` service voice)
 * Techniques: prewarm, queue, chunking, phrase cache, true streaming for `/tts_stream`
 * HTTP hardening: payload limits (`max_request_bytes/json_depth/string/array/object`) + sanitized internal errors
-* Optional auth hardening: `--service-token` или `ATM10_SERVICE_TOKEN` -> require `X-ATM10-Token`
+* Optional auth hardening: `--service-token` or `ATM10_SERVICE_TOKEN` -> require `X-ATM10-Token`
 
-Минимальная конфигурация adapters (env):
+Minimum configuration of adapters (env):
 
 ```powershell
 # XTTS v2
@@ -1744,24 +1744,24 @@ Security policy for Silero source:
 * Default mode expects local source (`SILERO_REPO_OR_DIR` as local path) and keeps remote hub disabled.
 * Remote hub source requires explicit opt-in (`SILERO_ALLOW_REMOTE_HUB=true`) and pinned revision (`SILERO_REPO_REF` or `owner/repo:ref` in `SILERO_REPO_OR_DIR`).
 
-Пример запроса TTS:
+Example TTS request:
 
 ```powershell
 python scripts/tts_runtime_client.py --service-url http://127.0.0.1:8780 health
 python scripts/tts_runtime_client.py --service-url http://127.0.0.1:8780 tts --text "crafting started" --language en
-python scripts/tts_runtime_client.py --service-url http://127.0.0.1:8780 tts-stream --text "служебное сообщение" --language ru --service-voice
+python scripts/tts_runtime_client.py --service-url http://127.0.0.1:8780 tts-stream --text "service message" --language ru --service-voice
 ```
 
 Streaming behavior:
 
-* `/tts_stream` отдает NDJSON инкрементально (`started -> audio_chunk -> completed`) без полного pre-buffer.
-* `/tts` остается non-streaming и использует прежний request/response контракт.
-* Internal 500 ответы всегда sanitized; подробности пишутся локально в `runs/<timestamp>-tts-service/service_errors.jsonl`.
+* `/tts_stream` sends NDJSON incrementally (`started -> audio_chunk -> completed`) without a full pre-buffer.
+* `/tts` remains non-streaming and uses the same request/response contract.
+* Internal 500 responses are always sanitized; details are written locally in `runs/<timestamp>-tts-service/service_errors.jsonl`.
 
 ### Voice latency benchmark (historical)
 
-Исторические артефакты `Qwen3-TTS` оставлены для reference в `runs/*qwen3-tts*`.
-Для production game-loop этот путь деактивирован.
+Historical artifacts of `Qwen3-TTS` are left for reference in `runs/*qwen3-tts*`.
+For production game-loop this path is deactivated.
 
 ## M1: Phase A smoke
 
@@ -1773,11 +1773,11 @@ python scripts/phase_a_smoke.py
 python scripts/phase_a_smoke.py --vlm-provider openai --strict-vlm
 ```
 
-Ожидаемый результат:
+Expected result:
 
-* Создается `runs/<timestamp>/`.
-* Внутри есть `screenshot.png`, `run.json`, `response.json`.
-* В strict-mode при ошибке VLM `run.json` и `response.json` все равно сохраняются перед non-zero exit.
+* `runs/<timestamp>/` is created.
+* Inside there are `screenshot.png`, `run.json`, `response.json`.
+* In strict-mode, if VLM fails, `run.json` and `response.json` are still saved before non-zero exit.
 
 ## M2: FTB Quests normalization
 
@@ -1787,7 +1787,7 @@ cd D:\atm10-agent
 python scripts/normalize_ftbquests.py
 ```
 
-Опционально:
+Optional:
 
 ```powershell
 python scripts/normalize_ftbquests.py --quests-dir "C:\path\to\config\ftbquests\quests"
@@ -1801,13 +1801,13 @@ cd D:\atm10-agent
 python scripts/retrieve_demo.py --profile baseline --in data/ftbquests_norm --query "steel tools"
 ```
 
-Опционально, OV production profile:
+Optionally, OV production profile:
 
 ```powershell
 python scripts/retrieve_demo.py --profile ov_production --in data/ftbquests_norm --query "steel tools"
 ```
 
-Опционально, ручной override поверх profile:
+Optionally, manual override over profile:
 
 ```powershell
 python scripts/retrieve_demo.py --profile ov_production --in data/ftbquests_norm --query "steel tools" --reranker-device NPU
@@ -1821,7 +1821,7 @@ cd D:\atm10-agent
 python scripts/eval_retrieval.py --profile baseline --docs tests/fixtures/retrieval_docs_sample.jsonl --eval tests/fixtures/retrieval_eval_sample.jsonl --topk 3 --candidate-k 50 --reranker none
 ```
 
-Опционально, OV production profile:
+Optionally, OV production profile:
 
 ```powershell
 python scripts/eval_retrieval.py --profile ov_production --docs tests/fixtures/retrieval_docs_sample.jsonl --eval tests/fixtures/retrieval_eval_sample.jsonl
@@ -1854,10 +1854,10 @@ cd D:\atm10-agent
 python scripts/kag_build_baseline.py --in data/ftbquests_norm/quests.jsonl
 ```
 
-Ожидаемый результат:
+Expected result:
 
-* Создается `runs/<timestamp>-kag-build/`.
-* Внутри есть `run.json` и `kag_graph.json`.
+* `runs/<timestamp>-kag-build/` is created.
+* Inside there are `run.json` and `kag_graph.json`.
 
 ### Query graph
 
@@ -1867,10 +1867,10 @@ cd D:\atm10-agent
 python scripts/kag_query_demo.py --graph runs\YYYYMMDD_HHMMSS-kag-build\kag_graph.json --query "steel tools"
 ```
 
-Ожидаемый результат:
+Expected result:
 
-* Создается `runs/<timestamp>-kag-query/`.
-* Внутри есть `run.json` и `kag_query_results.json`.
+* `runs/<timestamp>-kag-query/` is created.
+* Inside there are `run.json` and `kag_query_results.json`.
 
 ## M5.1: KAG via Neo4j (approved transition)
 
@@ -1896,10 +1896,10 @@ python scripts/kag_sync_neo4j.py `
   --reset-graph
 ```
 
-Ожидаемый результат:
+Expected result:
 
-* Создается `runs/<timestamp>-kag-sync-neo4j/`.
-* Внутри есть `run.json` и `neo4j_sync_summary.json`.
+* `runs/<timestamp>-kag-sync-neo4j/` is created.
+* Inside there are `run.json` and `neo4j_sync_summary.json`.
 
 ### Query KAG directly from Neo4j
 
@@ -1915,10 +1915,10 @@ python scripts/kag_query_neo4j.py `
   --neo4j-user neo4j
 ```
 
-Ожидаемый результат:
+Expected result:
 
-* Создается `runs/<timestamp>-kag-query-neo4j/`.
-* Внутри есть `run.json` и `kag_query_results.json`.
+* `runs/<timestamp>-kag-query-neo4j/` is created.
+* Inside there are `run.json` and `kag_query_results.json`.
 
 ## M5.2: KAG Neo4j benchmark (quality + latency)
 
@@ -1935,21 +1935,21 @@ python scripts/eval_kag_neo4j.py `
   --neo4j-user neo4j
 ```
 
-Ожидаемый результат:
+Expected result:
 
-* Создается `runs/<timestamp>-kag-neo4j-eval/`.
-* Внутри есть `run.json`, `eval_results.json`, `summary.md`.
-* В `eval_results.json` есть:
+* `runs/<timestamp>-kag-neo4j-eval/` is created.
+* Inside there are `run.json`, `eval_results.json`, `summary.md`.
+* `eval_results.json` has:
   * `mean_recall_at_k`
   * `mean_mrr_at_k`
   * `hit_rate_at_k`
   * `latency_mean_ms`, `latency_p95_ms`, `latency_max_ms`
-* `--warmup-runs` делает N полноценных warmup-проходов по eval-набору до измеряемого прогона.
-  Warmup-запросы не входят в per-case latency и итоговые метрики, но фиксируются в `run.json.warmup`.
+* `--warmup-runs` makes N full warmup passes through the eval set before the measured run.
+  Warmup requests are not included in per-case latency and final metrics, but are recorded in `run.json.warmup`.
 
 ### Hard-cases benchmark
 
-Nightly hard profile (recommended): использовать `--warmup-runs 1` как default.
+Nightly hard profile (recommended): use `--warmup-runs 1` as default.
 
 ```powershell
 cd D:\atm10-agent
@@ -1966,18 +1966,18 @@ python scripts/eval_kag_neo4j.py `
 
 ### Canonical guardrail thresholds (sample + hard)
 
-Пороговые профили:
+Threshold profiles:
 
 * `sample`: `recall@k >= 1.0`, `mrr@k >= 0.80`, `hit-rate@k >= 1.0`, `latency_p95_ms <= 120`
 * `hard`: `recall@k >= 1.0`, `mrr@k >= 0.90`, `hit-rate@k >= 1.0`, `latency_p95_ms <= 130`
 
-Проверка sample-run:
+Checking sample-run:
 
 ```powershell
 python scripts/check_kag_neo4j_guardrail.py --profile sample --eval-results-json "runs\YYYYMMDD_HHMMSS-kag-neo4j-eval\eval_results.json"
 ```
 
-Проверка hard-run:
+Hard-run check:
 
 ```powershell
 python scripts/check_kag_neo4j_guardrail.py --profile hard --eval-results-json "runs\YYYYMMDD_HHMMSS-kag-neo4j-eval\eval_results.json"
@@ -1991,11 +1991,11 @@ Nightly workflow file:
 
 Workflow steps:
 
-* `kag_build_baseline` на fixture docs `tests/fixtures/kag_neo4j_docs_sample.jsonl`
-* `kag_sync_neo4j` в локальный Neo4j service
-* `eval_kag_neo4j` для `sample` + `hard` (оба с `--warmup-runs 1`)
-* `check_kag_neo4j_guardrail.py` для `sample` + `hard`
-* `kag_guardrail_trend_snapshot.py` для latest/history trend (`sample` vs `hard`)
+* `kag_build_baseline` on fixture docs `tests/fixtures/kag_neo4j_docs_sample.jsonl`
+* `kag_sync_neo4j` to local Neo4j service
+* `eval_kag_neo4j` for `sample` + `hard` (both with `--warmup-runs 1`)
+* `check_kag_neo4j_guardrail.py` for `sample` + `hard`
+* `kag_guardrail_trend_snapshot.py` for latest/history trend (`sample` vs `hard`)
 * upload run artifacts + step summary (guardrail table + trend snapshot)
 
 Trend snapshot manual run (optional):
@@ -2016,15 +2016,15 @@ Trend snapshot with fail-nightly policy on critical severity (opt-in):
 python scripts/kag_guardrail_trend_snapshot.py --sample-runs-dir runs/nightly-kag-eval-sample --hard-runs-dir runs/nightly-kag-eval-hard --history-limit 10 --baseline-window 5 --critical-policy fail_nightly --runs-dir runs/nightly-kag-trend
 ```
 
-Ожидаемый результат:
+Expected result:
 
-* Создается `runs/<timestamp>-kag-guardrail-trend/`.
-* Внутри есть `run.json`, `trend_snapshot.json`, `summary.md`.
-* В `trend_snapshot.json` есть `rolling_baseline` по `sample`/`hard` (latest vs mean previous N runs).
-* В `rolling_baseline.regression_flags` фиксируются статусы `mrr`/`latency_p95` (`improved|stable|regressed|insufficient_history`) и severity (`none|warn|critical`) с агрегатом `max_regression_severity`.
-* В `trend_snapshot.json.critical_policy` фиксируется принятый policy (`signal_only|fail_nightly`) и `critical_profiles`.
-* Nightly baseline policy: `signal_only` (critical severity сигнализируется в summary/artifacts и не фейлит job).
-* Опциональный `fail_nightly` режим доступен только как explicit opt-in для ужесточения guardrail.
+* `runs/<timestamp>-kag-guardrail-trend/` is created.
+* Inside there are `run.json`, `trend_snapshot.json`, `summary.md`.
+* In `trend_snapshot.json` there is `rolling_baseline` by `sample`/`hard` (latest vs mean previous N runs).
+* `rolling_baseline.regression_flags` records the `mrr`/`latency_p95` (`improved|stable|regressed|insufficient_history`) and severity (`none|warn|critical`) statuses with the `max_regression_severity` aggregate.
+* The accepted policy (`signal_only|fail_nightly`) and `critical_profiles` are recorded in `trend_snapshot.json.critical_policy`.
+* Nightly baseline policy: `signal_only` (critical severity is signaled in summary/artifacts and does not fail jobs).
+* The optional `fail_nightly` mode is only available as an explicit opt-in to tighten the guardrail.
 
 ### Warmup A/B compare (mini benchmark)
 
@@ -2043,15 +2043,15 @@ python scripts/compare_kag_neo4j_warmup.py `
   --neo4j-user neo4j
 ```
 
-Ожидаемый результат:
+Expected result:
 
-* Создается `runs/<timestamp>-kag-neo4j-warmup-compare/`.
-* Внутри есть `run.json`, `summary.json`, `summary.md`.
-* `summary.json.delta.p95_improvement_ms > 0` означает, что candidate профиль быстрее baseline по p95.
+* `runs/<timestamp>-kag-neo4j-warmup-compare/` is created.
+* Inside there are `run.json`, `summary.json`, `summary.md`.
+* `summary.json.delta.p95_improvement_ms > 0` means that the candidate profile is faster than the baseline according to p95.
 
 ## M6: Automation scaffold (dry-run only)
 
-Важно: этот entrypoint не выполняет реальные keyboard/mouse события. Он только валидирует план и пишет dry-run artifacts.
+Important: this entrypoint does not execute real keyboard/mouse events. It only validates the plan and writes dry-run artifacts.
 
 ```powershell
 cd D:\atm10-agent
@@ -2059,7 +2059,7 @@ cd D:\atm10-agent
 python scripts/automation_dry_run.py --plan-json "C:\path\to\automation_plan.json"
 ```
 
-Пример `automation_plan.json`:
+Example `automation_plan.json`:
 
 ```json
 {
@@ -2095,22 +2095,22 @@ Canonical demo scenarios (fixtures):
 * `tests/fixtures/automation_plan_quest_book.json`
 * `tests/fixtures/automation_plan_inventory_check.json`
 
-Пример запуска fixture-сценариев:
+Example of running fixture scripts:
 
 ```powershell
 python scripts/automation_dry_run.py --plan-json "tests/fixtures/automation_plan_quest_book.json"
 python scripts/automation_dry_run.py --plan-json "tests/fixtures/automation_plan_inventory_check.json"
 ```
 
-Ожидаемый результат:
+Expected result:
 
-* Создается `runs/<timestamp>-automation-dry-run/`.
-* Внутри есть `run.json`, `actions_normalized.json`, `execution_plan.json`.
-* `run.json.result.dry_run=true`, никаких системных input events не отправляется.
+* `runs/<timestamp>-automation-dry-run/` is created.
+* Inside there are `run.json`, `actions_normalized.json`, `execution_plan.json`.
+* `run.json.result.dry_run=true`, no system input events are sent.
 
 ## M6.3: Intent -> automation_plan adapter (dry-run only)
 
-Важно: adapter только строит `automation_plan_v1` из intent payload и сохраняет artifacts. Реальных input events нет.
+Important: adapter only builds `automation_plan_v1` from intent payload and saves artifacts. There are no real input events.
 
 ```powershell
 cd D:\atm10-agent
@@ -2118,14 +2118,14 @@ cd D:\atm10-agent
 python scripts/intent_to_automation_plan.py --intent-json "tests/fixtures/intent_open_quest_book.json"
 ```
 
-Ожидаемый результат:
+Expected result:
 
-* Создается `runs/<timestamp>-intent-to-automation-plan/`.
-* Внутри есть `run.json` и `automation_plan.json`.
+* `runs/<timestamp>-intent-to-automation-plan/` is created.
+* Inside there are `run.json` and `automation_plan.json`.
 * `run.json.result.dry_run_only=true`.
-* В `automation_plan.json` есть `planning` metadata (`intent_type`, `intent_schema_version`, `adapter_name`, `adapter_version`; optional `intent_id/trace_id`).
+* `automation_plan.json` has `planning` metadata (`intent_type`, `intent_schema_version`, `adapter_name`, `adapter_version`; optional `intent_id/trace_id`).
 
-Проверка end-to-end через existing dry-run runner:
+End-to-end check via existing dry-run runner:
 
 ```powershell
 python scripts/intent_to_automation_plan.py --intent-json "tests/fixtures/intent_open_quest_book.json" --plan-out "runs\m6_3_intent_plan.json"
@@ -2134,7 +2134,7 @@ python scripts/automation_dry_run.py --plan-json "runs\m6_3_intent_plan.json"
 
 ## M6.4: Unified smoke chain (`intent -> plan -> automation_dry_run`)
 
-Единый smoke entrypoint для dry-run цепочки.
+Single smoke entrypoint for dry-run chain.
 
 ```powershell
 cd D:\atm10-agent
@@ -2144,10 +2144,10 @@ python scripts/automation_intent_chain_smoke.py --intent-json "tests/fixtures/in
 python scripts/automation_intent_chain_smoke.py --intent-json "tests/fixtures/intent_open_world_map.json"
 ```
 
-Ожидаемый результат:
+Expected result:
 
-* Создается `runs/<timestamp>-automation-intent-chain-smoke/`.
-* Внутри есть:
+* `runs/<timestamp>-automation-intent-chain-smoke/` is created.
+* Inside there is:
   * `run.json`
   * `chain_summary.json`
   * `automation_plan.json`
@@ -2179,51 +2179,51 @@ python scripts/check_automation_smoke_contract.py --mode intent_chain --runs-dir
 python scripts/check_automation_smoke_contract.py --mode intent_chain --runs-dir runs/ci-smoke-automation-chain-open-world-map --min-action-count 3 --min-step-count 4 --expected-intent-type open_world_map --require-trace-id --require-intent-id --summary-json runs/ci-smoke-automation-chain-open-world-map/contract_summary.json
 ```
 
-Ожидаемый результат:
+Expected result:
 
-* Оба check-скрипта завершаются с `status=ok`.
-* В `--summary-json` поле `observed` включает optional trace-correlation metadata:
-  * `trace_id`, `intent_id` (если они есть в `planning` action-plan metadata).
-* Для intent-chain canonical fixtures используются `--require-trace-id` и `--require-intent-id`; отсутствие любого из id считается contract violation.
-* В CI step summary (`Automation Smoke Contracts`) эти поля выводятся отдельными колонками `trace_id/intent_id` для быстрого triage.
-* Любое нарушение контракта (missing artifact/метрики ниже порога/несовпадение intent) даёт non-zero exit code.
+* Both check scripts end with `status=ok`.
+* In `--summary-json`, the `observed` field includes optional trace-correlation metadata:
+  * `trace_id`, `intent_id` (if they are in `planning` action-plan metadata).
+* For intent-chain canonical fixtures, `--require-trace-id` and `--require-intent-id` are used; the absence of any of the id is considered a contract violation.
+* In CI step summary (`Automation Smoke Contracts`), these fields are displayed in separate columns `trace_id/intent_id` for quick triage.
+* Any violation of the contract (missing artifact/metrics below the threshold/intent mismatch) gives a non-zero exit code.
 
 ## M6.19: New intent template rollout policy (CI)
 
-Policy checklist для каждого нового `intent_type`:
+Policy checklist for each new `intent_type`:
 
-1. Добавить canonical fixture:
+1. Add canonical fixture:
    * `tests/fixtures/intent_<new_intent_type>.json`
-   * fixture должен включать `intent_id` и `trace_id`.
-2. Добавить smoke run step:
+   * fixture must include `intent_id` and `trace_id`.
+2. Add smoke run step:
    * `python scripts/automation_intent_chain_smoke.py --intent-json tests/fixtures/intent_<new_intent_type>.json --runs-dir runs/ci-smoke-automation-chain-<new_intent_type>`
-3. Добавить contract-check step:
+3. Add contract-check step:
    * `python scripts/check_automation_smoke_contract.py --mode intent_chain --runs-dir runs/ci-smoke-automation-chain-<new_intent_type> --min-action-count 3 --min-step-count 4 --expected-intent-type <new_intent_type> --require-trace-id --require-intent-id --summary-json runs/ci-smoke-automation-chain-<new_intent_type>/contract_summary.json`
-4. Добавить summary/artifact wiring:
-   * новая строка в `Automation Smoke Contracts` summary table;
-   * новый `contract_summary.json` в upload artifact path.
-5. Добавить regression test:
-   * минимум 1 pytest на e2e dry-run chain для нового fixture.
+4. Add summary/artifact wiring:
+   * new line in `Automation Smoke Contracts` summary table;
+   * new `contract_summary.json` in upload artifact path.
+5. Add regression test:
+   * at least 1 pytest on e2e dry-run chain for a new fixture.
 
 ## M6.8: Troubleshooting automation smoke contract failures (CI)
 
-Быстрый чек-лист при падении `check_automation_smoke_contract`:
+Quick checklist when `check_automation_smoke_contract` crashes:
 
-1. Проверить summary artifacts:
+1. Check summary artifacts:
    * `runs/ci-smoke-automation-dry-run/contract_summary.json`
    * `runs/ci-smoke-automation-chain/contract_summary.json`
-2. Проверить поле `violations` и `error` в summary JSON:
-   * `error != null` обычно указывает на missing artifact path.
-   * `violations` содержит конкретный контракт, который не выполнен.
-3. Сверить минимальные пороги в workflow:
+2. Check field `violations` and `error` in summary JSON:
+   * `error != null` usually points to a missing artifact path.
+   * `violations` contains a specific contract that has failed.
+3. Check minimum thresholds in workflow:
    * `min_action_count=3`, `min_step_count=4`
-   * для chain дополнительно `expected_intent_type` для соответствующего fixture (`open_quest_book`, `check_inventory_tool`, `open_world_map`)
-4. Перезапустить локально те же команды CI:
+   * for chain additionally `expected_intent_type` for the corresponding fixture (`open_quest_book`, `check_inventory_tool`, `open_world_map`)
+4. Rerun locally the same CI commands:
    * `automation_dry_run` + `check_automation_smoke_contract --mode dry_run`
    * `automation_intent_chain_smoke` + `check_automation_smoke_contract --mode intent_chain`
-5. Если проблема в артефактах:
-   * убедиться, что smoke script завершился `status=ok` в `run.json`
-   * проверить, что пути в `--runs-dir` совпадают между smoke step и check step
-6. Если проблема в `intent_type`:
-   * проверить fixture (`tests/fixtures/intent_open_quest_book.json`, `tests/fixtures/intent_check_inventory_tool.json`, `tests/fixtures/intent_open_world_map.json`)
-   * проверить `automation_plan.json.context.intent_type` в chain run artifacts
+5. If the problem is in artifacts:
+   * make sure the smoke script has completed `status=ok` to `run.json`
+   * check that the paths in `--runs-dir` match between smoke step and check step
+6. If the problem is `intent_type`:
+   * check fixture (`tests/fixtures/intent_open_quest_book.json`, `tests/fixtures/intent_check_inventory_tool.json`, `tests/fixtures/intent_open_world_map.json`)
+   * check `automation_plan.json.context.intent_type` in chain run artifacts
