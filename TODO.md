@@ -66,6 +66,8 @@
 
 ## Next
 
+* [ ] Filesystem housekeeping outside current interface: удалить orphan directory `D:/atm10-agent-hotfix-g23` как обычную папку (Git уже не считает ее worktree; current blocker был только policy на destructive delete из этой среды).
+* [ ] Optional recovery follow-up for `release/wave6-security-hardening`: опираться на `runs/20260312_232852-release-wave6-recovery-triage/`, начинать только с новой ветки от `master`; первый кандидат — `codex/release-wave6-ops-contracts`, не использовать саму release-ветку как base.
 * [ ] После стабилизации strict nightly вернуться к `G3 follow-up` (next intent template): при добавлении следующего нового `intent_type` применить checklist `M6.19` (fixture + smoke + strict contract-check + summary/artifacts + e2e test).
 * [ ] После стабилизации strict nightly вернуться к `G5 follow-up`: расширять machine-readable summaries для новых smoke entrypoints по умолчанию.
 
@@ -77,6 +79,8 @@
 
 ## Done This Week
 
+* [x] Git/GitHub tail cleanup: закрыт stale PR `#5`, удалены stale `sync/docs` и hotfix branch-heads, open PR backlog очищен до нуля; `release/wave6-security-hardening` сохранен как quarantined reference.
+* [x] `release/wave6` selective recovery triage: добавлен quarantine verdict в PR `#3` и собраны runtime artifacts `runs/20260312_232852-release-wave6-recovery-triage/` с breakdown `recover_now|recover_later|drop`.
 * [x] `G2 daily triage loop`: refreshed stale local `readiness/governance/progress/transition` через local manual fallback cycle (`execution_mode=accounted`), regenerated remediation/integrity/cadence snapshots и synced docs к `docs/SESSION_2026-03-13.md`.
 * [x] `G2 single-cycle helper`: добавлен `scripts/run_gateway_sla_operating_cycle.py` + tests/runbook wiring; live pass переиспользовал fresh manual-backed latest snapshot без нового accounted run.
 * [x] `G2.post4 Streamlit operating cycle visibility`: в `Latest Metrics` добавлен read-only block для `runs/nightly-gateway-sla-operating-cycle/operating_cycle_summary.json`; smoke contract расширен новым optional source без изменения smoke-only `Safe Actions`.

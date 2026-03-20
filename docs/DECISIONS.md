@@ -248,3 +248,8 @@
 * Для локального `G2` operator-loop добавлен preferred single-cycle entrypoint `scripts/run_gateway_sla_operating_cycle.py` с контрактом `gateway_sla_operating_cycle_v1`: helper переиспользует fresh same-UTC latest summaries и уходит в fixed-order manual fallback только если required sources missing, stale или invalid.
 * Во Streamlit `Latest Metrics` `operating_cycle_summary.json` трактуется как primary read-only triage snapshot для `G2`; supporting `progress/remediation/integrity` блоки сохраняются ниже, а `Safe Actions` сознательно остаются smoke-only и не запускают `scripts/run_gateway_sla_operating_cycle.py`.
 * `scripts/streamlit_operator_panel_smoke.py` получает ранний dependency preflight для `streamlit`: missing dependency классифицируется как `runtime_missing_dependency` до subprocess launch, пишет repair hint в `streamlit_startup.log` и возвращает обычный `streamlit_smoke_summary_v1` с `status=error`, `startup_ok=false`, `exit_code=2`.
+
+## 2026-03-20
+
+* `docs/ECOSYSTEM_CONTEXT.md` зафиксирован как context-only reference: файл нужен для high-level совместимости с AoA/ToS ecosystem, но не считается governing doc для локальной разработки.
+* При конфликте приоритет остается у repo-local source-of-truth документов (`TODO.md`, `docs/DECISIONS.md`, `docs/RUNBOOK.md`, `docs/SESSION_*.md`); ecosystem context влияет только на архитектурное направление, а не на локальные operating rules.

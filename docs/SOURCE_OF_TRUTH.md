@@ -37,6 +37,20 @@
 * `docs/ARCHIVED_TRACKS.md`
   * Archived/recoverable направления и условия re-open.
 
+* `docs/ECOSYSTEM_CONTEXT.md`
+  * Context-only reference про место репозитория в более широком AoA/ToS ecosystem.
+  * Используется для high-level compatibility direction.
+  * Не заменяет и не переопределяет локальные repo rules, execution-plan или operating policy.
+
+## Precedence
+
+* При конфликте приоритет всегда у repo-local docs:
+  * `TODO.md`
+  * `docs/DECISIONS.md`
+  * `docs/RUNBOOK.md`
+  * `docs/SESSION_*.md`
+* `docs/ECOSYSTEM_CONTEXT.md` используется только как reference/context layer.
+
 ## Update Rules
 
 * Изменили поведение/архитектуру -> обнови `docs/DECISIONS.md`.
