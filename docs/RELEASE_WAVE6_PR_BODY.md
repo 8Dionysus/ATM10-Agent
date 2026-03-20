@@ -2,8 +2,8 @@
 
 ## Context
 
-Wave 6 собирает уже реализованный security hardening в release-ready пакет без новых продуктовых фич.
-Контекст и evidence берутся из канонических источников:
+Wave 6 packages already implemented security hardening into a release-ready bundle without new product features.
+Context and evidence come from canonical sources:
 
 - `docs/RELEASE_WAVE6.md`
 - `docs/RUNBOOK.md`
@@ -13,13 +13,13 @@ Wave 6 собирает уже реализованный security hardening в 
 
 ## Scope
 
-Что входит в PR:
+What is included in the PR:
 
-- только изменения security hardening baseline и release handoff;
-- без новых API-фич и без breaking changes публичного `gateway_response_v1`;
-- staged rollout и monitoring на 7 дней.
+- only security hardening baseline changes and release handoff;
+- no new API features and no breaking changes to public `gateway_response_v1`;
+- staged rollout and 7-day monitoring.
 
-Коммиты в PR:
+Commits in the PR:
 
 - `88328f4` gateway redaction + reranker allowlist
 - `afa2d83` optional token auth (gateway/voice)
@@ -48,15 +48,15 @@ Reviewer guide:
 ## Public Contract Changes
 
 1. Gateway artifacts:
-   `request.json` now redacted-by-default; `run.json` includes `request_redaction` (`applied`, `fields_redacted`, `checklist_version`).
+   `request.json` is now redacted by default; `run.json` includes `request_redaction` (`applied`, `fields_redacted`, `checklist_version`).
 2. Gateway request policy:
-   for `retrieval_query` + `reranker=qwen3`, `payload.reranker_model` is allowlisted; invalid model returns `invalid_request` (HTTP 400 on gateway HTTP path); override only via `ATM10_ALLOW_UNTRUSTED_RERANKER_MODEL=true`.
+   for `retrieval_query` + `reranker=qwen3`, `payload.reranker_model` is allowlisted; invalid model returns `invalid_request` (HTTP 400 on the gateway HTTP path); override only via `ATM10_ALLOW_UNTRUSTED_RERANKER_MODEL=true`.
 3. Optional HTTP auth:
-   gateway/voice/tts support `--service-token` and `ATM10_SERVICE_TOKEN`; when token is configured, `X-ATM10-Token` is mandatory; gateway unauthorized path returns `error_code=unauthorized` and HTTP 401.
+   gateway/voice/tts support `--service-token` and `ATM10_SERVICE_TOKEN`; when a token is configured, `X-ATM10-Token` is mandatory; gateway unauthorized path returns `error_code=unauthorized` and HTTP 401.
 4. TTS HTTP hardening:
    payload limits are enforced (`max_request_bytes`, `max_json_depth`, `max_string_length`, `max_array_items`, `max_object_keys`); internal `500` is sanitized; details go to redacted local `service_errors.jsonl`.
 5. CI/security governance:
-   critical actions pinned to SHA; nightly `security-gate` uses `dependency_audit --policy fail_on_critical`; `fail_on_critical` fails when `security_scan status != ok|skipped`.
+   critical actions are pinned to SHA; nightly `security-gate` uses `dependency_audit --policy fail_on_critical`; `fail_on_critical` fails when `security_scan status != ok|skipped`.
 
 ## Verification Evidence
 
@@ -88,7 +88,7 @@ Operational smoke:
 
 Stage A (merge, auth disabled by default):
 
-- merge PR with no token env set;
+- merge the PR with no token env set;
 - confirm backward compatibility of existing clients/automation.
 
 Stage B (staging):

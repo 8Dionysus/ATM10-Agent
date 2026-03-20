@@ -1,34 +1,33 @@
 # SESSION_WEEKLY_TEMPLATE
 
-Шаблон weekly review для `docs/SESSION_*.md` (1 экран).
+Weekly review template for `docs/SESSION_*.md` (one screen).
 
 ## Week
 
-* Период: `YYYY-MM-DD -> YYYY-MM-DD`
-* Фокус недели: `<1-2 ключевых цели>`
+* Period: `YYYY-MM-DD -> YYYY-MM-DD`
+* Weekly focus: `<1-2 key goals>`
 
-## Что улучшили
+## What improved
 
-* `<изменение 1: что внедрили + эффект>`
-* `<изменение 2: что внедрили + эффект>`
-* `<изменение 3: что внедрили + эффект>`
+* `<change 1: what was introduced + effect>`
+* `<change 2: what was introduced + effect>`
+* `<change 3: what was introduced + effect>`
 
-## Что блокирует
+## What blocks progress
 
-* `<блокер 1>` -> `owner:` `<имя/роль>` -> `next action:` `<конкретный шаг>`
-* `<блокер 2>` -> `owner:` `<имя/роль>` -> `next action:` `<конкретный шаг>`
+* `<blocker 1>` -> `owner:` `<name/role>` -> `next action:` `<specific step>`
+* `<blocker 2>` -> `owner:` `<name/role>` -> `next action:` `<specific step>`
 
-## Что дальше
+## What comes next
 
 * `Now`:
-  * `<задача 1>`
-  * `<задача 2>`
+  * `<task 1>`
+  * `<task 2>`
 * `Next`:
-  * `<задача 3>`
-  * `<задача 4>`
+  * `<task 3>`
+  * `<task 4>`
 
 ## Validation snapshot
 
 * `python -m pytest` -> `<N passed>`
-* CI/nightly summary: `<ok|issues + ссылка на run/artifact>`
-
+* CI/nightly summary: `<ok|issues + link to run/artifact>`

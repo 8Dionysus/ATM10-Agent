@@ -1,12 +1,12 @@
 ## Release Handoff (Wave 6 Security Baseline)
 
-### Что merged в этом PR
+### What was merged in this PR
 
-- Security hardening baseline без новых продуктовых фич.
-- Backward compatibility сохранена по умолчанию (auth opt-in).
-- Контракт `gateway_response_v1` не менялся.
+- Security hardening baseline without new product features.
+- Backward compatibility preserved by default (auth opt-in).
+- Contract `gateway_response_v1` unchanged.
 
-Коммиты:
+Commits:
 
 - `88328f4` gateway redaction + reranker allowlist
 - `afa2d83` optional token auth (gateway/voice)
@@ -14,26 +14,26 @@
 - `3f1c1bc` action SHA pinning + security-nightly
 - `4e6e58f` tests/docs/release sync
 
-### Контрактные изменения (для операторов и клиентов)
+### Contract changes (for operators and clients)
 
 1. Gateway artifacts:
-   `request.json` redacted-by-default; в `run.json` есть `request_redaction`.
+   `request.json` is redacted by default; `run.json` includes `request_redaction`.
 2. Gateway request policy:
-   для `retrieval_query` + `reranker=qwen3` модель ограничена allowlist;
+   for `retrieval_query` + `reranker=qwen3`, the model is constrained by an allowlist;
    invalid model -> `invalid_request` (HTTP 400).
-3. Optional auth для gateway/voice/tts:
-   при заданном `ATM10_SERVICE_TOKEN` обязателен заголовок `X-ATM10-Token`, иначе `401`.
+3. Optional auth for gateway/voice/tts:
+   when `ATM10_SERVICE_TOKEN` is set, header `X-ATM10-Token` is required, otherwise `401`.
 4. TTS hardening:
-   payload limits + sanitized internal `500`; детали только в redacted `service_errors.jsonl`.
+   payload limits + sanitized internal `500`; details only in redacted `service_errors.jsonl`.
 5. CI governance:
-   critical actions pinned to SHA; nightly security gate включен.
+   critical actions pinned to SHA; nightly security gate enabled.
 
 ### Verification evidence
 
 - `python -m pytest` -> `324 passed`
 - gateway HTTP smoke core -> `status=ok`
 - gateway SLA signal-only -> `status=ok`, `sla_status=pass`
-- streamlit operator panel smoke -> `status=ok`
+- Streamlit operator panel smoke -> `status=ok`
 
 Canonical artifacts:
 
@@ -45,43 +45,42 @@ Canonical artifacts:
 
 Stage A (merge, default open mode):
 
-- не задавать `ATM10_SERVICE_TOKEN`;
-- подтвердить обратную совместимость существующих клиентов/автоматизации.
+- do not set `ATM10_SERVICE_TOKEN`;
+- confirm backward compatibility for existing clients/automation.
 
 Stage B (staging token-on):
 
-- задать `ATM10_SERVICE_TOKEN` в staging;
-- проверить gateway/voice/tts:
-  - без токена -> `401`,
-  - с токеном -> успешный ответ;
-- прогнать health/smoke с `X-ATM10-Token`.
+- set `ATM10_SERVICE_TOKEN` in staging;
+- verify gateway/voice/tts:
+  - without token -> `401`,
+  - with token -> successful response;
+- run health/smoke with `X-ATM10-Token`.
 
 Stage C (production token-on):
 
-- включить token policy в production where applicable;
-- мониторить динамику `401` и стабильность smoke/SLA.
+- enable token policy in production where applicable;
+- monitor `401` dynamics and smoke/SLA stability.
 
 ### Monitoring (7 days)
 
-Ежедневно проверить:
+Check daily:
 
 - `security-nightly`
 - `gateway-sla-readiness-nightly`
 - `kag-neo4j-guardrail-nightly`
-- integrity артефактов redaction:
-  - `run.json.request_redaction` у gateway runs,
+- artifact redaction integrity:
+  - `run.json.request_redaction` in gateway runs,
   - redacted `service_errors.jsonl`,
-  - отсутствие plaintext секретов.
+  - no plaintext secrets.
 
 Escalation:
 
-- любой plaintext secret в артефактах;
-- неожиданный рост `401 unauthorized` после Stage B/C;
-- fail в nightly security gate.
+- any plaintext secret in artifacts;
+- unexpected growth of `401 unauthorized` after Stage B/C;
+- failure in the nightly security gate.
 
-### Rollback (быстрый путь)
+### Rollback (fast path)
 
-- снять `ATM10_SERVICE_TOKEN` в целевом runtime;
-- перезапустить сервисы;
-- сервисы вернутся в backward-compatible open mode без отката кода.
-
+- unset `ATM10_SERVICE_TOKEN` in the target runtime;
+- restart services;
+- services return to backward-compatible open mode without code rollback.

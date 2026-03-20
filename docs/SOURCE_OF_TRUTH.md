@@ -1,67 +1,67 @@
 # SOURCE_OF_TRUTH.md — atm10-agent
 
-Этот файл фиксирует роли документов проекта, чтобы убрать дубли и разнобой.
+This file defines the roles of the project's documents to remove duplication and drift.
 
 ## Canonical Roles
 
 * `README.md`
-  * Короткий human-facing entrypoint.
-  * Только high-level статус + ссылки на каноничные документы.
-  * Не хранит длинные списки run IDs и исторические метрики.
+  * Short human-facing entrypoint.
+  * High-level status + links to canonical documents only.
+  * Does not store long lists of run IDs or historical metrics.
 
 * `MANIFEST.md`
-  * Короткий machine/human snapshot репозитория (актуальная дата, capabilities, ссылки).
-  * Без детальной хронологии; детали держим в `docs/SESSION_*.md`.
+  * Short machine/human repository snapshot (current date, capabilities, links).
+  * No detailed chronology; details live in `docs/SESSION_*.md`.
 
 * `TODO.md`
-  * Пошаговый execution-план.
-  * Формат: `Now`, `Next`, `Blocked`, `Done this week`.
-  * Ограничение: WIP limit = 3.
+  * Step-by-step execution plan.
+  * Format: `Now`, `Next`, `Blocked`, `Done this week`.
+  * Constraint: WIP limit = 3.
 
 * `PLANS.md`
-  * Цели, milestones, DoD, ограничения и риски.
-  * Без длинной хронологии run artifacts.
+  * Goals, milestones, DoD, constraints, and risks.
+  * No long chronology of run artifacts.
 
 * `docs/SESSION_YYYY-MM-DD.md`
-  * Подробная хронология изменений, запусков, метрик и артефактов.
-  * Это место для «длинной истории».
-  * Weekly выжимка — по шаблону `docs/SESSION_WEEKLY_TEMPLATE.md`.
+  * Detailed chronology of changes, runs, metrics, and artifacts.
+  * This is the place for the "long history".
+  * Weekly summary uses template `docs/SESSION_WEEKLY_TEMPLATE.md`.
 
 * `docs/DECISIONS.md`
-  * Архитектурные решения и policy-изменения.
-  * Формат: 1–3 bullets на значимое решение.
+  * Architecture decisions and policy changes.
+  * Format: 1-3 bullets per meaningful decision.
 
 * `docs/RUNBOOK.md`
-  * Runnable команды, операционные профили, quickstart для запуска.
+  * Runnable commands, operational profiles, quickstart for launches.
 
 * `docs/ARCHIVED_TRACKS.md`
-  * Archived/recoverable направления и условия re-open.
+  * Archived/recoverable directions and re-open criteria.
 
 * `docs/ECOSYSTEM_CONTEXT.md`
-  * Context-only reference про место репозитория в более широком AoA/ToS ecosystem.
-  * Используется для high-level compatibility direction.
-  * Не заменяет и не переопределяет локальные repo rules, execution-plan или operating policy.
+  * Context-only reference about the repository's place in the broader AoA/ToS ecosystem.
+  * Used for high-level compatibility direction.
+  * Does not replace or override local repo rules, the execution plan, or operating policy.
 
 ## Precedence
 
-* При конфликте приоритет всегда у repo-local docs:
+* In case of conflict, priority always belongs to repo-local docs:
   * `TODO.md`
   * `docs/DECISIONS.md`
   * `docs/RUNBOOK.md`
   * `docs/SESSION_*.md`
-* `docs/ECOSYSTEM_CONTEXT.md` используется только как reference/context layer.
+* `docs/ECOSYSTEM_CONTEXT.md` is used only as a reference/context layer.
 
 ## Update Rules
 
-* Изменили поведение/архитектуру -> обнови `docs/DECISIONS.md`.
-* Изменили команды/setup -> обнови `docs/RUNBOOK.md`.
-* Есть важный run/result -> добавь в `docs/SESSION_*.md`.
-* Активные шаги обновляй только в `TODO.md`.
-* Цели/DoD обновляй только в `PLANS.md`.
+* If behavior/architecture changed -> update `docs/DECISIONS.md`.
+* If commands/setup changed -> update `docs/RUNBOOK.md`.
+* If there is an important run/result -> add it to `docs/SESSION_*.md`.
+* Update active steps only in `TODO.md`.
+* Update goals/DoD only in `PLANS.md`.
 
 ## What Not To Store Everywhere
 
-* Счетчики вида `N passed` не дублировать во всех файлах одновременно.
-  Предпочтение:
-  * Истина для текущего состояния — CI + последний `docs/SESSION_*.md`.
-* Длинные списки run IDs не держать в `TODO.md`.
+* Do not duplicate counters like `N passed` across all files at once.
+  Preferred truth:
+  * Truth for current state is CI + the latest `docs/SESSION_*.md`.
+* Do not keep long run ID lists in `TODO.md`.
