@@ -1,24 +1,24 @@
 # AGENTS.md — rules of engagement (Codex / coding agents)
 
-Этот файл — **single source of truth** для coding agents (включая Codex): как работать в репозитории, какие команды запускать, какие **boundaries** соблюдать, и что считается **Definition of Done (DoD)**.
+This file is the **single source of truth** for coding agents (including Codex): how to work in the repository, which commands to run, which **boundaries** to respect, and what counts as **Definition of Done (DoD)**.
 
-Принцип: **small, reviewable diffs**. Минимум магии, максимум **reproducibility**.
+Principle: **small, reviewable diffs**. Minimum magic, maximum **reproducibility**.
 
 ---
 
 ## TL;DR
 
-1. Делай изменения маленькими (ориентир: <= ~200 LOC diff, если возможно).
-2. Перед правками: короткий **plan** + список файлов, которые тронешь.
-3. После правок: запусти **tests** или добавь хотя бы 1 **smoke test**.
-4. Любые изменения dependencies / tooling — **Ask first**.
-5. Любые важные архитектурные решения — фиксируй в `docs/DECISIONS.md`.
+1. Make small changes (target: <= ~200 LOC diff when possible).
+2. Before editing: provide a short **plan** + the list of files you will touch.
+3. After editing: run **tests** or add at least 1 **smoke test**.
+4. Any dependency / tooling changes: **Ask first**.
+5. Any important architecture decision: record it in `docs/DECISIONS.md`.
 
 ---
 
 ## Repo commands (PowerShell 7)
 
-Рекомендуется открывать PowerShell в корне репо. Пример пути: `D:\atm10-agent`.
+It is recommended to open PowerShell in the repo root. Example path: `D:\atm10-agent`.
 
 ### Activate venv
 
@@ -48,25 +48,25 @@ python -m pytest
 
 ---
 
-## Working style (как делать изменения)
+## Working style (how to make changes)
 
-### Before coding (обязательно)
+### Before coding (required)
 
-* Переформулируй задачу в 3–7 bullets как **executable plan**.
-* Скажи, какие файлы планируешь изменить/создать.
-* Отдельно перечисли риски (Windows paths, permissions, зависимости).
+* Restate the task in 3-7 bullets as an **executable plan**.
+* Say which files you plan to modify/create.
+* List risks separately (Windows paths, permissions, dependencies).
 
 ### While coding
 
-* Используй `pathlib` вместо ручных путей.
-* Предпочитай lightweight deps.
-* Логи и artifacts — в `runs/<timestamp>/`.
+* Use `pathlib` instead of manual paths.
+* Prefer lightweight dependencies.
+* Logs and artifacts go to `runs/<timestamp>/`.
 
-### After coding (обязательно)
+### After coding (required)
 
-* Запусти `python -m pytest`.
-* Если тестов нет — добавь минимум 1 test, который проверяет ключевой результат (artifact file/folder, успешный exit code, базовая нормализация).
-* Если изменились команды или setup — обнови `docs/RUNBOOK.md`.
+* Run `python -m pytest`.
+* If there are no tests, add at least 1 test that validates the key result (artifact file/folder, successful exit code, baseline normalization).
+* If commands or setup changed, update `docs/RUNBOOK.md`.
 
 ---
 
@@ -74,23 +74,23 @@ python -m pytest
 
 ### Always
 
-* Всегда сохраняй **artifacts** (screenshots/logs/traces) в `runs/<timestamp>/`.
-* Всегда делай изменения так, чтобы они были runnable на Windows 11 + PowerShell 7.
-* Всегда добавляй/обновляй tests, если меняешь поведение.
+* Always save **artifacts** (screenshots/logs/traces) to `runs/<timestamp>/`.
+* Always make changes runnable on Windows 11 + PowerShell 7.
+* Always add/update tests when behavior changes.
 
-### Ask first (нужен явный запрос/подтверждение)
+### Ask first (requires explicit request/confirmation)
 
-* Менять `requirements.txt` (кроме минимального добавления pytest/необходимого для текущей задачи).
-* Добавлять новые heavy dependencies или фреймворки “про запас”.
-* Добавлять новые сервисы (например, Neo4j) или менять инфраструктуру (Docker compose, ports и т.п.).
-* Делать любые действия, которые меняют состояние игры (automation: keyboard/mouse), beyond safe локальных smoke-проверок.
-* Скачивать большие модели/датасеты или добавлять файлы > 10 MB в репозиторий.
+* Change `requirements.txt` (except minimal additions like pytest or something strictly necessary for the current task).
+* Add new heavy dependencies or "just in case" frameworks.
+* Add new services (for example, Neo4j) or change infrastructure (Docker compose, ports, etc.).
+* Perform any actions that change game state (automation: keyboard/mouse) beyond safe local smoke checks.
+* Download large models/datasets or add files > 10 MB to the repository.
 
 ### Never
 
-* Никогда не коммить: `models/`, большие дампы данных, `runs/`, секреты (API keys), токены, приватные логи.
-* Никогда не отключай tests или не “обходи” их.
-* Никогда не запускай destructive commands (rm -r, форматирование, изменение системных настроек).
+* Never commit: `models/`, large data dumps, `runs/`, secrets (API keys), tokens, private logs.
+* Never disable tests or "work around" them.
+* Never run destructive commands (rm -r, formatting disks, changing system settings).
 
 ---
 
@@ -99,11 +99,11 @@ python -m pytest
 ### Do not commit
 
 * `models/**`
-* `data/**` (дампы/вики/квесты — обсуждается отдельно)
+* `data/**` (dumps/wiki/quests — discussed separately)
 * `runs/**`
 * `.codex/**/logs/**`
-* Любые бинарники и большие артефакты
-* Любые секреты/токены
+* Any binaries and large artifacts
+* Any secrets/tokens
 
 ### Preferred locations
 
@@ -114,68 +114,66 @@ python -m pytest
 
 ---
 
-## Definition of Done (DoD) по фазам
+## Definition of Done (DoD) by phase
 
 ### Phase A — Vision loop (screenshot → VLM stub → output)
 
-Goal: оживить dev loop без зависания на моделях.
+Goal: bring the dev loop to life without getting blocked on models.
 
 DoD:
 
-* `scripts/phase_a_smoke.py` существует и запускается.
-* Скрипт:
-
-  * создаёт `runs/<timestamp>/`
-  * сохраняет screenshot как PNG
-  * пишет `run.json` (metadata: timestamp, mode, paths)
-  * вызывает VLM через interface (пока stub) и пишет `response.json`
-* Есть минимум 1 pytest, который проверяет, что `runs/<timestamp>/` и `run.json` создаются.
-* `python -m pytest` проходит.
+* `scripts/phase_a_smoke.py` exists and runs.
+* The script:
+  * creates `runs/<timestamp>/`
+  * saves screenshot as PNG
+  * writes `run.json` (metadata: timestamp, mode, paths)
+  * calls VLM through the interface (stub for now) and writes `response.json`
+* There is at least 1 pytest that checks `runs/<timestamp>/` and `run.json` are created.
+* `python -m pytest` passes.
 
 ### Phase B — Memory (RAG)
 
-Goal: retrieval-backed ответы по локальным источникам.
+Goal: retrieval-backed answers over local sources.
 
 DoD:
 
-* Есть ingest script (например, `scripts/ingest_qdrant.py`) с runnable CLI.
-* Нормализация данных в JSONL (например, квесты/гайды).
-* Поиск возвращает top-k chunks + citations (id/source/path).
-* Tests: минимум 1 test на нормализацию (fixture) и 1 test на retrieval (можно in-memory stub).
+* There is an ingest script (for example `scripts/ingest_qdrant.py`) with a runnable CLI.
+* Data is normalized to JSONL (for example quests/guides).
+* Search returns top-k chunks + citations (id/source/path).
+* Tests: at least 1 normalization test (fixture) and 1 retrieval test (an in-memory stub is fine).
 
 ### Phase C — Voice (ASR/TTS)
 
-Goal: voice in/out как опция, не блокирующая core.
+Goal: voice input/output as an option that does not block the core.
 
 DoD:
 
-* Есть отдельные entrypoints (`scripts/asr_demo.py`, `scripts/tts_demo.py`).
-* Отказоустойчивость: если нет audio device — graceful error.
-* Tests: минимум 1 test на “import + CLI help + no crash”.
+* There are separate entrypoints (`scripts/asr_demo.py`, `scripts/tts_demo.py`).
+* Fault tolerance: if there is no audio device, return a graceful error.
+* Tests: at least 1 test for “import + CLI help + no crash”.
 
 ---
 
 ## Coding conventions
 
 * Python >= 3.11 target (tested on 3.12.10).
-* Никаких “магических” глобальных констант путей; всё через env vars / config / discovery.
-* Логи: `logging` module (print допустим в demos/smoke).
-* Структуры данных: JSON serializable (для run artifacts и trace).
-* LF/CRLF warnings на Windows ожидаемы; фиксируй политику через `.gitattributes` и/или git config, решение отражай в `TODO.md`/`docs/DECISIONS.md`.
+* No "magic" global path constants; use env vars / config / discovery.
+* Logs: `logging` module (`print` is acceptable in demos/smoke).
+* Data structures: JSON serializable (for run artifacts and trace).
+* LF/CRLF warnings on Windows are expected; fix policy through `.gitattributes` and/or git config, and reflect the decision in `TODO.md`/`docs/DECISIONS.md`.
 
 ---
 
 ## Commit policy (git hygiene)
 
-* Коммиты маленькие и понятные: `phase-a: add smoke runner`, `rag: add ingest stub`.
-* Если решение архитектурное — 1–3 bullets в `docs/DECISIONS.md`.
+* Commits should be small and clear: `phase-a: add smoke runner`, `rag: add ingest stub`.
+* If a decision is architectural, add 1-3 bullets to `docs/DECISIONS.md`.
 
 ---
 
 ## If the conversation gets long
 
-* Сжимай контекст через `/compact`, но сохраняй:
-
-  * текущую фазу (A/B/C),
-  * активные файлы/команды,
-  * DoD и boundaries.
+* Compress context via `/compact`, but preserve:
+  * current phase (A/B/C),
+  * active files/commands,
+  * DoD and boundaries.

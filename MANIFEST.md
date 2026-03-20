@@ -1,13 +1,13 @@
 # MANIFEST.md
 
-Актуально на: 2026-03-13
+Current as of: 2026-03-13
 
 ## Snapshot
 
-- Проект: `atm10-agent`
+- Project: `atm10-agent`
 - Target platform: Windows 11 + PowerShell 7
-- Target Python: 3.11+ (проверено на 3.12.10)
-- Текущий status tests: `python -m pytest` green (актуальный snapshot: CI + `docs/SESSION_2026-03-13.md`).
+- Target Python: 3.11+ (validated on 3.12.10)
+- Current test status: `python -m pytest` green (current snapshot: CI + `docs/SESSION_2026-03-13.md`).
 
 ## Active capabilities
 
@@ -17,7 +17,7 @@
 - KAG nightly guardrail: `.github/workflows/kag-neo4j-guardrail-nightly.yml`.
 - Trend snapshot: `scripts/kag_guardrail_trend_snapshot.py` (rolling-baseline + severity flags + `critical_policy`).
 - Automation: dry-run stack (`automation_dry_run`, `intent_to_automation_plan`, `automation_intent_chain_smoke`, `check_automation_smoke_contract`).
-- Automation intents: canonical templates включают `open_quest_book`, `check_inventory_tool`, `open_world_map`.
+- Automation intents: canonical templates include `open_quest_book`, `check_inventory_tool`, `open_world_map`.
 - CI core smoke summaries: `scripts/collect_smoke_run_summary.py` (`phase_a_smoke|retrieve_demo|eval_retrieval` -> `smoke_summary.json`).
 - Gateway SLA trend: `scripts/gateway_sla_trend_snapshot.py` (`gateway_sla_summary_v1` history -> `gateway_sla_trend_snapshot_v1`).
 - Gateway fail_nightly readiness: `scripts/check_gateway_sla_fail_nightly_readiness.py` (`gateway_sla_fail_nightly_readiness_v1`).
@@ -27,8 +27,8 @@
 - Gateway fail_nightly integrity: `scripts/check_gateway_sla_fail_nightly_integrity.py` (`gateway_sla_fail_nightly_integrity_v1`).
 - Gateway manual fallback loop: `scripts/run_gateway_sla_manual_nightly.py` + `scripts/check_gateway_sla_manual_cycle_summary.py` + `scripts/check_gateway_sla_manual_cadence_brief.py`.
 - Gateway single-cycle operator helper: `scripts/run_gateway_sla_operating_cycle.py` (`gateway_sla_operating_cycle_v1`, reuse-fresh-latest or manual-fallback).
-- Gateway SLA readiness nightly: `.github/workflows/gateway-sla-readiness-nightly.yml` с `readiness/governance/progress/transition/remediation/integrity` summary/artifact wiring.
-- Streamlit operator panel: `scripts/streamlit_operator_panel.py` + `scripts/streamlit_operator_panel_smoke.py`, включая `Latest Metrics` visibility для `G2 operating cycle` snapshot и supporting `fail_nightly progress/remediation/integrity` surfaces.
+- Gateway SLA readiness nightly: `.github/workflows/gateway-sla-readiness-nightly.yml` with `readiness/governance/progress/transition/remediation/integrity` summary/artifact wiring.
+- Streamlit operator panel: `scripts/streamlit_operator_panel.py` + `scripts/streamlit_operator_panel_smoke.py`, including `Latest Metrics` visibility for the `G2 operating cycle` snapshot and supporting `fail_nightly progress/remediation/integrity` surfaces.
 - Dependency profiles: `requirements-voice.txt`, `requirements-llm.txt`, `requirements-export.txt`, `requirements-audit.txt`.
 - Dependency audit: `scripts/dependency_audit.py` + report-only CI step (`runs/ci-dependency-audit`, artifact `dependency-audit-report`).
 

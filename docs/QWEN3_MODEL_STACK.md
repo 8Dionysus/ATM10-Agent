@@ -1,6 +1,6 @@
 # QWEN3 Model Stack (OpenVINO-first)
 
-Актуально на: 2026-02-22 (updated)
+Current as of: 2026-02-22 (updated)
 
 ## Active target stack
 
@@ -13,12 +13,12 @@ Rule: no substitution to `Qwen2.5*`.
 
 ## Deactivated components
 
-* `Qwen3-TTS-12Hz-0.6B-CustomVoice` + `Qwen3-TTS-Tokenizer-12Hz` removed from active stack on 2026-02-20.
-* Причина: не проходит production SLA по latency и остается заблокированным для NPU compile-path в текущем OpenVINO pipeline.
-* Все TTS-эксперименты оставлены только как архив артефактов (`runs/*qwen3-tts*`), без operational rollout.
-* `Qwen3-ASR-0.6B` переведен в archived/recoverable status на 2026-02-22.
-* Причина: подтвержденный `blocked_upstream` в `transformers/optimum` export flow (`qwen3_asr`), активный ASR path переведен на Whisper GenAI.
-* Восстановление возможно без переписывания кода: используются explicit opt-in флаги в runtime scripts.
+* `Qwen3-TTS-12Hz-0.6B-CustomVoice` + `Qwen3-TTS-Tokenizer-12Hz` were removed from the active stack on 2026-02-20.
+* Reason: they do not meet production latency SLA and remain blocked for the NPU compile path in the current OpenVINO pipeline.
+* All TTS experiments are kept only as an artifact archive (`runs/*qwen3-tts*`), with no operational rollout.
+* `Qwen3-ASR-0.6B` was moved to archived/recoverable status on 2026-02-22.
+* Reason: confirmed `blocked_upstream` in the `transformers/optimum` export flow (`qwen3_asr`); the active ASR path was switched to Whisper GenAI.
+* Restoration is possible without rewriting code: runtime scripts use explicit opt-in flags.
 
 ## Local hardware profile (this repo host)
 
@@ -81,15 +81,15 @@ python scripts/export_qwen3_custom_openvino.py --preset qwen3-asr-0.6b --execute
 
 ## Archived Qwen3-TTS notes (history only)
 
-* `qwen3-tts` custom/export/INT8/INT4 runs kept for reference.
+* `qwen3-tts` custom/export/INT8/INT4 runs are kept for reference.
 * Historical artifacts:
   * `runs/20260220_214546-qwen3-tts-ov-helper-smoke/`
   * `runs/20260220_221511-qwen3-tts-ov-speed-bench-int8-cpu/`
   * `runs/20260220_222426-qwen3-tts-ov-speed-bench-int4-cpu/`
   * `runs/20260220_222650-qwen3-tts-npu-compile-diag-int4/`
-* Эти path'ы не считаются active roadmap и не используются в production planning.
+* These paths are not considered part of the active roadmap and are not used in production planning.
 
 ## Runtime policy
 
-* Default runtime for active Qwen3 stack in this project: OpenVINO (`CPU|GPU|NPU`).
-* OpenAI-compatible adapter stays in repo as gateway layer; it does not replace Qwen3 as core stack.
+* Default runtime for the active Qwen3 stack in this project: OpenVINO (`CPU|GPU|NPU`).
+* The OpenAI-compatible adapter remains in the repo as a gateway layer; it does not replace Qwen3 as the core stack.

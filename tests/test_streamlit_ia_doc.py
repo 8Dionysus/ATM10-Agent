@@ -23,7 +23,7 @@ def test_streamlit_ia_doc_has_required_sections() -> None:
         "## Goals / Non-goals",
         "## Personas & primary tasks",
         "## IA map",
-        "## Screen specs (4 зоны)",
+        "## Screen specs (4 zones)",
         "## Data contracts & field mapping",
         "## Error/empty/loading states",
         "## Operator flows (happy + failure)",

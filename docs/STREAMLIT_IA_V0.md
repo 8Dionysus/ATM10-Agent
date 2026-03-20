@@ -1,33 +1,33 @@
 # STREAMLIT_IA_V0
 
-Decision-complete IA-спецификация для `M8.0` (без реализации Streamlit-кода в этой итерации).
+Decision-complete IA specification for `M8.0` (without implementing Streamlit code in this iteration).
 
 ## Goals / Non-goals
 
 Goals:
 
-* Зафиксировать структуру Streamlit operator panel v0 как single source для `M8.1`.
-* Определить обязательные зоны UI: `Stack Health`, `Run Explorer`, `Latest Metrics`, `Safe Actions`.
-* Зафиксировать data contracts, field mapping, artifact links и operator flows.
-* Снять продуктовые и архитектурные двусмысленности для implementer.
+* Lock the structure of Streamlit operator panel v0 as the single source for `M8.1`.
+* Define required UI zones: `Stack Health`, `Run Explorer`, `Latest Metrics`, `Safe Actions`.
+* Lock data contracts, field mapping, artifact links, and operator flows.
+* Remove product and architecture ambiguity for the implementer.
 
 Non-goals:
 
-* Не пишем `scripts/streamlit_operator_panel.py`.
-* Не добавляем `streamlit` в `requirements.txt`.
-* Не меняем `gateway_request_v1` / `gateway_response_v1`.
-* Не добавляем CI smoke для Streamlit (это `M8.1`).
+* Do not write `scripts/streamlit_operator_panel.py`.
+* Do not add `streamlit` to `requirements.txt`.
+* Do not change `gateway_request_v1` / `gateway_response_v1`.
+* Do not add CI smoke for Streamlit (that belongs to `M8.1`).
 
 ## Personas & primary tasks
 
-1. Operator (ежедневный runtime-контроль):
-* Проверить, что gateway transport доступен и smoke summaries в норме.
-* Быстро открыть артефакты последнего запуска при деградации.
-* Запустить safe smoke-trigger и получить traceable path на результат.
+1. Operator (daily runtime control):
+* Check that gateway transport is available and smoke summaries are healthy.
+* Quickly open the latest run artifacts when degradation happens.
+* Trigger a safe smoke action and get a traceable result path.
 
-2. Engineer (диагностика regressions):
-* Сопоставить `status/error_code/request_count/failed_requests_count` между smoke контуром и gateway health.
-* Перейти из UI в конкретный `run.json/response.json` для root-cause.
+2. Engineer (regression diagnostics):
+* Compare `status/error_code/request_count/failed_requests_count` between the smoke loop and gateway health.
+* Jump from the UI to a specific `run.json/response.json` for root cause analysis.
 
 ## IA map
 
@@ -49,7 +49,7 @@ Future entrypoint (`M8.1`):
 
 * `python -m streamlit run scripts/streamlit_operator_panel.py -- --runs-dir runs --gateway-url http://127.0.0.1:8770`
 
-## Screen specs (4 зоны)
+## Screen specs (4 zones)
 
 ### Stack Health
 
@@ -57,11 +57,11 @@ Required widgets:
 
 * Service status card (`gateway transport`)
 * HTTP endpoint card (`GET /healthz`)
-* Quick diagnostics table по gateway policy snapshot
+* Quick diagnostics table for the gateway policy snapshot
 
 Inputs:
 
-* `GET /healthz` from gateway URL
+* `GET /healthz` from the gateway URL
 
 Displayed fields:
 
@@ -78,12 +78,12 @@ Displayed fields:
 
 Artifact link rules:
 
-* Для health transport-check ссылки на artifact не требуются.
-* При ошибке запроса показывается troubleshooting hint на `docs/RUNBOOK.md`.
+* No artifact links are required for the health transport check.
+* If the request fails, show a troubleshooting hint for `docs/RUNBOOK.md`.
 
 Refresh policy:
 
-* Только manual (`Refresh` button), без background polling.
+* Manual only (`Refresh` button), no background polling.
 
 ### Run Explorer
 
@@ -97,7 +97,7 @@ Required widgets:
 Inputs:
 
 * Filesystem under `runs/...`
-* `run.json` и summary JSON соответствующего сценария
+* `run.json` and the relevant summary JSON for the selected scenario
 
 Displayed fields:
 
@@ -106,27 +106,27 @@ Displayed fields:
 * `paths.summary_json`
 * `status`
 * `request_count`
-* `failed_requests_count` (если доступно)
+* `failed_requests_count` (if available)
 * Per-request rows (`operation`, `status`, `error_code`, `http_status`, `expected_http_status`, `run_json`)
 
 Artifact link rules:
 
-* Link строится только из реального существующего пути.
-* Если файла нет, показывается `missing`.
-* Путь выводится как абсолютный/resolve-only label (без попытки auto-open внешними toolchain).
+* Build links only from real existing paths.
+* If a file is missing, show `missing`.
+* Display the path as an absolute/resolve-only label (do not attempt to auto-open through external toolchains).
 
 Refresh policy:
 
-* Только manual (`Refresh` button).
+* Manual only (`Refresh` button).
 
 ### Latest Metrics
 
 Required widgets:
 
-* Summary matrix table по canonical smoke sources
+* Summary matrix table for canonical smoke sources
 * Status badge per source (`ok|error|missing`)
-* Compact trend snapshot (latest only, без historical charts в v0)
-* Optional `G2 operating cycle` snapshot как primary operator-facing triage summary
+* Compact trend snapshot (latest only, no historical charts in v0)
+* Optional `G2 operating cycle` snapshot as the primary operator-facing triage summary
 
 Inputs (canonical sources):
 
@@ -154,12 +154,12 @@ Displayed fields:
 
 Artifact link rules:
 
-* Для каждой строки должен быть link на исходный summary JSON.
-* Для `G2 operating cycle` summary JSON обязателен; `triage_brief.md` optional и при отсутствии не переводит UI в error.
+* Every row must include a link to the source summary JSON.
+* For `G2 operating cycle`, the summary JSON is required; `triage_brief.md` is optional and its absence must not make the UI error.
 
 Refresh policy:
 
-* Только manual (`Refresh` button).
+* Manual only (`Refresh` button).
 
 ### Safe Actions
 
@@ -179,7 +179,7 @@ Inputs:
 * Local script entrypoints:
   * `scripts/gateway_v1_http_smoke.py`
   * `scripts/gateway_v1_smoke.py`
-* `scripts/run_gateway_sla_operating_cycle.py` не входит в `Safe Actions` v0; он читается только как summary source в `Latest Metrics`
+* `scripts/run_gateway_sla_operating_cycle.py` is not part of `Safe Actions` in v0; it is read only as a summary source in `Latest Metrics`.
 
 Displayed fields:
 
@@ -190,21 +190,21 @@ Displayed fields:
 
 Artifact link rules:
 
-* Каждый action обязан возвращать ссылку на summary JSON.
-* Если summary отсутствует, action считается failed даже при `exit_code=0`.
+* Every action must return a link to a summary JSON.
+* If the summary is missing, the action counts as failed even when `exit_code=0`.
 
 Refresh policy:
 
-* После action UI не auto-refresh; оператор нажимает `Refresh`.
+* No auto-refresh after the action; the operator presses `Refresh`.
 
 ## Data contracts & field mapping
 
-Summary contract mapping (минимальный обязательный набор):
+Summary contract mapping (minimum required set):
 
 1. `smoke_summary.json` (`phase_a_smoke|retrieve_demo|eval_retrieval`):
 * `status`
 * `observed.mode`
-* `observed.*` metrics по mode
+* `observed.*` metrics by mode
 
 2. `gateway_smoke_summary.json`:
 * `status`
@@ -234,68 +234,68 @@ Summary contract mapping (минимальный обязательный наб
 ## Error/empty/loading states
 
 1. Loading:
-* Пока идет чтение файлов/health-request, показывается `loading` indicator.
+* While reading files/health requests, show a `loading` indicator.
 
 2. Empty:
-* Если summary файл отсутствует, статус источника `missing`.
-* UI не падает; вместо данных показывается `not available yet`.
+* If a summary file is missing, the source status is `missing`.
+* The UI must not crash; show `not available yet` instead of data.
 
 3. Error:
-* Parse error JSON -> status `error`, текст `invalid summary format`.
-* HTTP error/timeout на `GET /healthz` -> status `error`, показать `gateway unavailable`.
-* Для `Safe Actions` ошибкой считается любое из:
+* JSON parse error -> status `error`, text `invalid summary format`.
+* HTTP error/timeout on `GET /healthz` -> status `error`, show `gateway unavailable`.
+* For `Safe Actions`, any of the following is an error:
   * non-zero exit code
   * summary `status=error`
-  * отсутствие summary file
+  * missing summary file
 
 ## Operator flows (happy + failure)
 
 Flow A (happy): daily check
 
-1. Operator открывает panel.
-2. Нажимает `Refresh`.
-3. В `Stack Health` видит `status=ok`.
-4. В `Latest Metrics` видит `ok` по gateway/core sources и, если доступен, свежий `G2 operating cycle` snapshot.
-5. При необходимости открывает `Run Explorer` и переходит по link в `run.json`.
+1. Operator opens the panel.
+2. Presses `Refresh`.
+3. Sees `status=ok` in `Stack Health`.
+4. Sees `ok` for gateway/core sources in `Latest Metrics` and, if available, a fresh `G2 operating cycle` snapshot.
+5. If needed, opens `Run Explorer` and follows the link to `run.json`.
 
 Flow B (failure): gateway HTTP regression
 
-1. В `Latest Metrics` источник `gateway-http-core` показывает `error`.
-2. Operator идет в `Run Explorer`, открывает `gateway_http_smoke_summary.json`.
-3. Смотрит `failed_requests_count` и request rows.
-4. Переходит по `run_json` в проблемный run.
-5. Проверяет `Stack Health` для `GET /healthz` и policy snapshot.
+1. In `Latest Metrics`, source `gateway-http-core` shows `error`.
+2. Operator opens `Run Explorer` and inspects `gateway_http_smoke_summary.json`.
+3. Checks `failed_requests_count` and request rows.
+4. Follows `run_json` into the problematic run.
+5. Checks `Stack Health` for `GET /healthz` and the policy snapshot.
 
 Flow C (safe action rerun)
 
-1. В `Safe Actions` выбирает `Gateway HTTP smoke core`.
-2. Нажимает `Execute safe action`.
-3. Получает `exit_code/status/summary_json`.
-4. Нажимает `Refresh` и проверяет обновленный статус в `Latest Metrics`.
+1. In `Safe Actions`, choose `Gateway HTTP smoke core`.
+2. Press `Execute safe action`.
+3. Get `exit_code/status/summary_json`.
+4. Press `Refresh` and verify updated status in `Latest Metrics`.
 
 ## Safe actions guardrails
 
-* Разрешены только safe smoke-trigger commands.
-* `G2 operating cycle` не добавляется в action selector, пока surface остается smoke-only.
-* Запрещены любые real keyboard/mouse/game-state mutation действия.
-* Любой action должен быть traceable через artifacts в `runs/...`.
-* UI не должен скрывать команду запуска; operator должен видеть exact command string.
-* При любой неопределенности действие трактуется как `deny by default`.
+* Only safe smoke-trigger commands are allowed.
+* `G2 operating cycle` is not added to the action selector while the surface remains smoke-only.
+* Any real keyboard/mouse/game-state mutation action is forbidden.
+* Every action must be traceable through artifacts in `runs/...`.
+* The UI must not hide the launch command; the operator must see the exact command string.
+* Any ambiguity is treated as `deny by default`.
 
 ## M8.1 handoff checklist
 
-Implementation contract для `scripts/streamlit_operator_panel.py`:
+Implementation contract for `scripts/streamlit_operator_panel.py`:
 
-* Поддержка CLI args:
+* Support CLI args:
   * `--runs-dir` (default `runs`)
   * `--gateway-url` (default `http://127.0.0.1:8770`)
-* Обязательные UI зоны: `Stack Health`, `Run Explorer`, `Latest Metrics`, `Safe Actions`.
-* Загрузка данных только из canonical sources, перечисленных в этом документе.
-* Manual refresh по кнопке как default policy.
+* Required UI zones: `Stack Health`, `Run Explorer`, `Latest Metrics`, `Safe Actions`.
+* Load data only from the canonical sources listed in this document.
+* Manual refresh by button as the default policy.
 
 No-crash startup criterion (`M8.1`):
 
-* Команда старта UI должна завершать bootstrap без exception в headless smoke окружении.
+* The UI startup command must complete bootstrap without exception in a headless smoke environment.
 
 Machine-readable summary contract (`M8.1` target):
 
