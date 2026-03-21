@@ -539,3 +539,27 @@ def test_tts_service_sanitizes_internal_error_and_logs_locally(tmp_path: Path) -
     assert log_payload["error_code"] == "internal_error"
     assert "SUPER_SECRET" not in json.dumps(log_payload)
     assert log_payload["redaction"]["applied"] is True
+
+
+def test_tts_runtime_service_bind_policy_requires_token_for_non_loopback() -> None:
+    assert tts_runtime_service._validate_bind_security(
+        host="127.0.0.1",
+        service_token=None,
+        allow_insecure_no_token=False,
+    ) is None
+    assert tts_runtime_service._validate_bind_security(
+        host="0.0.0.0",
+        service_token="test-token",
+        allow_insecure_no_token=False,
+    ) == "test-token"
+    assert tts_runtime_service._validate_bind_security(
+        host="0.0.0.0",
+        service_token=None,
+        allow_insecure_no_token=True,
+    ) is None
+    with pytest.raises(ValueError, match="allow-insecure-no-token"):
+        tts_runtime_service._validate_bind_security(
+            host="0.0.0.0",
+            service_token=None,
+            allow_insecure_no_token=False,
+        )

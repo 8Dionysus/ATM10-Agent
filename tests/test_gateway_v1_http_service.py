@@ -501,3 +501,27 @@ def test_gateway_v1_http_service_cli_help_exits_zero(monkeypatch: pytest.MonkeyP
     with pytest.raises(SystemExit) as exc:
         gateway_http.parse_args()
     assert exc.value.code == 0
+
+
+def test_gateway_v1_http_service_bind_policy_requires_token_for_non_loopback() -> None:
+    assert gateway_http._validate_bind_security(
+        host="127.0.0.1",
+        service_token=None,
+        allow_insecure_no_token=False,
+    ) is None
+    assert gateway_http._validate_bind_security(
+        host="0.0.0.0",
+        service_token="test-token",
+        allow_insecure_no_token=False,
+    ) == "test-token"
+    assert gateway_http._validate_bind_security(
+        host="0.0.0.0",
+        service_token=None,
+        allow_insecure_no_token=True,
+    ) is None
+    with pytest.raises(ValueError, match="allow-insecure-no-token"):
+        gateway_http._validate_bind_security(
+            host="0.0.0.0",
+            service_token=None,
+            allow_insecure_no_token=False,
+        )

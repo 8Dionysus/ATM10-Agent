@@ -69,6 +69,10 @@ def test_preflight_allows_accounted_dispatch_when_no_today_runs(tmp_path: Path) 
     assert summary["observed"]["today_dispatch_count"] == 0
     assert summary["decision"]["reason_codes"] == []
     assert summary["decision"]["next_accounted_dispatch_at_utc"] is None
+    assert summary["inputs"]["token_source"] == "env"
+    assert "token_env" not in summary["inputs"]
+    assert result["run_payload"]["params"]["token_source"] == "env"
+    assert "token_env" not in result["run_payload"]["params"]
     assert "branch=master" in capture["url"]
     assert "event=workflow_dispatch" in capture["url"]
 
@@ -175,6 +179,9 @@ def test_preflight_returns_error_when_token_is_missing(tmp_path: Path) -> None:
     assert result["exit_code"] == 2
     assert summary["status"] == "error"
     assert "missing GitHub token" in str(summary["error"])
+    assert "GITHUB_TOKEN" not in str(summary["error"])
+    assert summary["inputs"]["token_source"] == "env"
+    assert "token_env" not in summary["inputs"]
 
 
 def test_preflight_cli_help_exits_zero(monkeypatch: pytest.MonkeyPatch) -> None:

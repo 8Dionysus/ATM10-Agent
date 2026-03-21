@@ -153,7 +153,7 @@ def run_gateway_sla_manual_preflight(
             "event": event,
             "max_runs_per_utc_day": max_runs_per_utc_day,
             "per_page": per_page,
-            "token_env": token_env,
+            "token_source": "env",
             "policy": policy,
         },
         "paths": {
@@ -169,7 +169,7 @@ def run_gateway_sla_manual_preflight(
     try:
         token = str(env.get(token_env, "")).strip()
         if not token:
-            raise ValueError(f"missing GitHub token in environment variable: {token_env}")
+            raise ValueError("missing GitHub token in configured environment variable")
 
         headers = _build_headers(token=token)
         url = _build_workflow_runs_url(
@@ -246,7 +246,7 @@ def run_gateway_sla_manual_preflight(
                 "event": event,
                 "max_runs_per_utc_day": max_runs_per_utc_day,
                 "per_page": per_page,
-                "token_env": token_env,
+                "token_source": "env",
             },
             "observed": {
                 "workflow_runs_observed": len(normalized_runs),
@@ -301,7 +301,7 @@ def run_gateway_sla_manual_preflight(
                 "event": event,
                 "max_runs_per_utc_day": max_runs_per_utc_day,
                 "per_page": per_page,
-                "token_env": token_env,
+                "token_source": "env",
             },
             "observed": {
                 "workflow_runs_observed": 0,

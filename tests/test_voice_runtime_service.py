@@ -734,7 +734,30 @@ def test_internal_error_response_omits_traceback_and_logs_locally(tmp_path: Path
     log_payload = json.loads(log_path.read_text(encoding="utf-8").strip())
     assert log_payload["endpoint"] == "/tts"
     assert log_payload["error_code"] == "internal_error"
+    assert log_payload["error"] == "internal service error"
+    assert log_payload["traceback"] == "[REDACTED]"
+    assert log_payload["redaction"]["applied"] is True
+    assert "boom" not in json.dumps(log_payload)
+
+
+def test_internal_error_response_allows_unsafe_details_with_opt_in(tmp_path: Path) -> None:
+    try:
+        raise RuntimeError("boom")
+    except RuntimeError as exc:
+        voice_runtime_service._internal_error_response(
+            run_dir=tmp_path,
+            endpoint="/tts",
+            exc=exc,
+            stream_event=False,
+            unsafe_error_details=True,
+        )
+
+    log_path = tmp_path / "service_errors.jsonl"
+    log_payload = json.loads(log_path.read_text(encoding="utf-8").strip())
+    assert log_payload["endpoint"] == "/tts"
+    assert log_payload["error"] == "boom"
     assert "RuntimeError: boom" in log_payload["traceback"]
+    assert log_payload["redaction"]["applied"] is False
 
 
 def test_voice_runtime_service_cli_help_exits_zero(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -798,3 +821,57 @@ def test_run_voice_runtime_service_allows_archived_qwen_backend_with_opt_in(
     run_payload = json.loads((result["run_dir"] / "run.json").read_text(encoding="utf-8"))
     assert run_payload["models"]["asr_backend"] == "qwen_asr"
     assert run_payload["models"]["asr_backend_archived"] is True
+
+
+def test_run_voice_runtime_service_rejects_non_loopback_without_token(tmp_path: Path) -> None:
+    with pytest.raises(ValueError, match="allow-insecure-no-token"):
+        voice_runtime_service.run_voice_runtime_service(
+            host="0.0.0.0",
+            port=8765,
+            runs_dir=tmp_path / "runs",
+            asr_model_id="asr-model",
+            tts_model_id="tts-model",
+            device_map="auto",
+            dtype="auto",
+            asr_max_new_tokens=128,
+            preload_asr=False,
+            preload_tts=False,
+            now=datetime(2026, 2, 22, 17, 2, 0, tzinfo=timezone.utc),
+        )
+
+
+def test_run_voice_runtime_service_allows_non_loopback_with_explicit_insecure_opt_in(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    class _FakeServer:
+        def __init__(self, bind: tuple[str, int], handler: type[object]) -> None:
+            self.bind = bind
+            self.handler = handler
+
+        def serve_forever(self) -> None:
+            return
+
+        def server_close(self) -> None:
+            return
+
+    monkeypatch.setattr(voice_runtime_service, "ThreadingHTTPServer", _FakeServer)
+
+    result = voice_runtime_service.run_voice_runtime_service(
+        host="0.0.0.0",
+        port=8765,
+        runs_dir=tmp_path / "runs",
+        asr_model_id="asr-model",
+        tts_model_id="tts-model",
+        device_map="auto",
+        dtype="auto",
+        asr_max_new_tokens=128,
+        preload_asr=False,
+        preload_tts=False,
+        allow_insecure_no_token=True,
+        now=datetime(2026, 2, 22, 17, 3, 0, tzinfo=timezone.utc),
+    )
+
+    run_payload = json.loads((result["run_dir"] / "run.json").read_text(encoding="utf-8"))
+    assert result["ok"] is True
+    assert run_payload["service"]["host"] == "0.0.0.0"
+    assert run_payload["service"]["auth"]["enabled"] is False

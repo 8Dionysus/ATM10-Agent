@@ -5,6 +5,9 @@ on:
     - cron: "45 2 * * *"
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 jobs:
   dependency_security_audit:
     runs-on: windows-latest
@@ -32,4 +35,9 @@ jobs:
         uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f
         with:
           name: security-nightly-report
-          path: runs/nightly-security-audit
+          path: |
+            runs/nightly-security-audit/**/run.json
+            runs/nightly-security-audit/**/dependency_inventory.json
+            runs/nightly-security-audit/**/dependency_findings.json
+            runs/nightly-security-audit/**/security_audit.json
+            runs/nightly-security-audit/**/summary.md

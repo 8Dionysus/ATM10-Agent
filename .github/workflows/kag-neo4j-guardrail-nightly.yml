@@ -5,6 +5,9 @@ on:
     - cron: "20 3 * * *"
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 jobs:
   kag_guardrail:
     runs-on: ubuntu-latest
@@ -159,56 +162,19 @@ jobs:
           import json
           import os
           snapshot = json.loads(open(os.environ["TREND_SNAPSHOT_JSON"], encoding="utf-8").read())
-          sample = snapshot["profiles"]["sample"]["latest"]
-          hard = snapshot["profiles"]["hard"]["latest"]
           sample_roll = snapshot["profiles"]["sample"]["rolling_baseline"]
           hard_roll = snapshot["profiles"]["hard"]["rolling_baseline"]
           critical_policy = snapshot.get("critical_policy") or {}
-          delta = snapshot["comparison"]["latest_hard_minus_sample"]
-          sample_flags = sample_roll.get("regression_flags") or {}
-          hard_flags = hard_roll.get("regression_flags") or {}
-          from scripts.build_runbook_link import build_runbook_url
-
-          runbook_url = build_runbook_url(anchor="m68-troubleshooting-automation-smoke-contract-failures-ci")
-
-          def fmt(value, decimals):
-              if value is None:
-                  return "n/a"
-              return f"{float(value):.{decimals}f}"
-
-          sample_delta = sample_roll.get("delta_latest_minus_baseline") or {}
-          hard_delta = hard_roll.get("delta_latest_minus_baseline") or {}
           lines = [
               "",
               "## KAG Guardrail Trend Snapshot",
               "",
-              f"- `sample_latest_run`: {sample['run_name']}",
-              f"- `hard_latest_run`: {hard['run_name']}",
-              f"- `delta_mrr (hard-sample)`: {float(delta['delta_mrr']):.4f}",
-              f"- `delta_latency_p95_ms (hard-sample)`: {float(delta['delta_latency_p95_ms']):.2f}",
-              f"- `sample_baseline_count`: {sample_roll['count']}",
-              f"- `sample_delta_mrr (latest-baseline)`: {fmt(sample_delta.get('delta_mean_mrr_at_k'), 4)}",
-              f"- `sample_mrr_status`: {sample_flags.get('mrr_status', 'n/a')}",
-              f"- `sample_latency_p95_status`: {sample_flags.get('latency_p95_status', 'n/a')}",
-              f"- `sample_mrr_severity`: {sample_flags.get('mrr_regression_severity', 'n/a')}",
-              f"- `sample_latency_p95_severity`: {sample_flags.get('latency_p95_regression_severity', 'n/a')}",
-              f"- `sample_max_regression_severity`: {sample_flags.get('max_regression_severity', 'n/a')}",
-              f"- `sample_has_any_regression`: {sample_flags.get('has_any_regression', 'n/a')}",
-              f"- `hard_baseline_count`: {hard_roll['count']}",
-              f"- `hard_delta_mrr (latest-baseline)`: {fmt(hard_delta.get('delta_mean_mrr_at_k'), 4)}",
-              f"- `hard_mrr_status`: {hard_flags.get('mrr_status', 'n/a')}",
-              f"- `hard_latency_p95_status`: {hard_flags.get('latency_p95_status', 'n/a')}",
-              f"- `hard_mrr_severity`: {hard_flags.get('mrr_regression_severity', 'n/a')}",
-              f"- `hard_latency_p95_severity`: {hard_flags.get('latency_p95_regression_severity', 'n/a')}",
-              f"- `hard_max_regression_severity`: {hard_flags.get('max_regression_severity', 'n/a')}",
-              f"- `hard_has_any_regression`: {hard_flags.get('has_any_regression', 'n/a')}",
-              f"- `critical_policy_mode`: {critical_policy.get('mode', 'n/a')}",
-              f"- `critical_policy_has_critical_regression`: {critical_policy.get('has_critical_regression', 'n/a')}",
-              f"- `critical_policy_should_fail_nightly`: {critical_policy.get('should_fail_nightly', 'n/a')}",
-              f"- `trend_summary_md`: {os.environ['TREND_SUMMARY_MD']}",
+              "| sample_baseline_count | hard_baseline_count | critical_policy_mode |",
+              "|---:|---:|---|",
+              f"| {sample_roll['count']} | {hard_roll['count']} | {critical_policy.get('mode', 'n/a')} |",
               "",
-              "### Quick Links",
-              f"- Troubleshooting: [RUNBOOK M6.8]({runbook_url})",
+              f"- `critical_policy_mode`: {critical_policy.get('mode', 'n/a')}",
+              "- `trend_artifacts`: trend_snapshot.json, summary.md",
           ]
           with open(os.environ["GITHUB_STEP_SUMMARY"], "a", encoding="utf-8") as handle:
               handle.write("\\n".join(lines) + "\\n")
@@ -219,8 +185,12 @@ jobs:
         with:
           name: kag-neo4j-guardrail-nightly-runs
           path: |
-            runs/nightly-kag-build
-            runs/nightly-kag-sync
-            runs/nightly-kag-eval-sample
-            runs/nightly-kag-eval-hard
-            runs/nightly-kag-trend
+            runs/nightly-kag-eval-sample/**/run.json
+            runs/nightly-kag-eval-sample/**/eval_results.json
+            runs/nightly-kag-eval-sample/**/summary.md
+            runs/nightly-kag-eval-hard/**/run.json
+            runs/nightly-kag-eval-hard/**/eval_results.json
+            runs/nightly-kag-eval-hard/**/summary.md
+            runs/nightly-kag-trend/**/run.json
+            runs/nightly-kag-trend/**/trend_snapshot.json
+            runs/nightly-kag-trend/**/summary.md

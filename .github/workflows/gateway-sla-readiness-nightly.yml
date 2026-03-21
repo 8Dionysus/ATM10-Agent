@@ -5,6 +5,9 @@ on:
     - cron: "35 3 * * *"
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 jobs:
   gateway_sla_readiness:
     runs-on: windows-latest
@@ -89,9 +92,9 @@ jobs:
             $lines = @(
               "## Gateway SLA Fail-Nightly Readiness",
               "",
-              "| status | readiness_status | window_observed | critical_count | warn_count | warn_ratio | invalid_or_error_count | target_policy |",
-              "|---|---|---:|---:|---:|---:|---:|---|",
-              "| missing | - | - | - | - | - | - | - |",
+              "| status | readiness_status | window_observed | critical_count | warn_count | warn_ratio |",
+              "|---|---|---:|---:|---:|---:|",
+              "| missing | - | - | - | - | - |",
               "",
               "- `readiness_summary_json`: $path (missing)"
             )
@@ -99,17 +102,15 @@ jobs:
             $readiness = Get-Content $path | ConvertFrom-Json
             $window = $readiness.window_summary
             $criteria = $readiness.criteria
-            $reasonCodes = if ($null -eq $readiness.recommendation.reason_codes) { "-" } else { ($readiness.recommendation.reason_codes -join ", ") }
             $lines = @(
               "## Gateway SLA Fail-Nightly Readiness",
               "",
-              "| status | readiness_status | window_observed | critical_count | warn_count | warn_ratio | invalid_or_error_count | target_policy |",
-              "|---|---|---:|---:|---:|---:|---:|---|",
-              "| $($readiness.status) | $($readiness.readiness_status) | $($criteria.window_observed) | $($window.critical_count) | $($window.warn_count) | $($window.warn_ratio) | $($window.invalid_or_error_count) | $($readiness.recommendation.target_critical_policy) |",
+              "| status | readiness_status | window_observed | critical_count | warn_count | warn_ratio |",
+              "|---|---|---:|---:|---:|---:|",
+              "| $($readiness.status) | $($readiness.readiness_status) | $($criteria.window_observed) | $($window.critical_count) | $($window.warn_count) | $($window.warn_ratio) |",
               "",
               "- `required_baseline_count`: $($criteria.required_baseline_count)",
               "- `max_warn_ratio`: $($criteria.max_warn_ratio)",
-              "- `reason_codes`: $reasonCodes",
               "- `readiness_summary_json`: $path"
             )
           }
@@ -124,9 +125,9 @@ jobs:
             $lines = @(
               "## Gateway SLA Fail-Nightly Governance",
               "",
-              "| status | decision_status | latest_ready_streak | required_ready_streak | invalid_or_mismatched_count | target_policy |",
-              "|---|---|---:|---:|---:|---|",
-              "| missing | - | - | - | - | - |",
+              "| status | decision_status | latest_ready_streak | required_ready_streak |",
+              "|---|---|---:|---:|",
+              "| missing | - | - | - |",
               "",
               "- `governance_summary_json`: $path (missing)"
             )
@@ -134,16 +135,13 @@ jobs:
             $governance = Get-Content $path | ConvertFrom-Json
             $criteria = $governance.criteria
             $observed = $governance.observed
-            $reasonCodes = if ($null -eq $governance.recommendation.reason_codes) { "-" } else { ($governance.recommendation.reason_codes -join ", ") }
             $lines = @(
               "## Gateway SLA Fail-Nightly Governance",
               "",
-              "| status | decision_status | latest_ready_streak | required_ready_streak | invalid_or_mismatched_count | target_policy |",
-              "|---|---|---:|---:|---:|---|",
-              "| $($governance.status) | $($governance.decision_status) | $($observed.latest_ready_streak) | $($criteria.required_ready_streak) | $($observed.invalid_or_mismatched_count) | $($governance.recommendation.target_critical_policy) |",
+              "| status | decision_status | latest_ready_streak | required_ready_streak |",
+              "|---|---|---:|---:|",
+              "| $($governance.status) | $($governance.decision_status) | $($observed.latest_ready_streak) | $($criteria.required_ready_streak) |",
               "",
-              "- `switch_surface`: $($governance.recommendation.switch_surface)",
-              "- `reason_codes`: $reasonCodes",
               "- `governance_summary_json`: $path"
             )
           }
@@ -158,25 +156,22 @@ jobs:
             $lines = @(
               "## Gateway SLA Fail-Nightly Progress",
               "",
-              "| status | decision_status | readiness_valid_count | remaining_for_window | remaining_for_streak | governance_valid_count | latest_governance_status | target_policy |",
-              "|---|---|---:|---:|---:|---:|---|---|",
-              "| missing | - | - | - | - | - | - | - |",
+              "| status | decision_status | remaining_for_window | remaining_for_streak |",
+              "|---|---|---:|---:|",
+              "| missing | - | - | - |",
               "",
               "- `progress_summary_json`: $path (missing)"
             )
           } else {
             $progress = Get-Content $path | ConvertFrom-Json
             $ready = $progress.observed.readiness
-            $governance = $progress.observed.governance
-            $reasonCodes = if ($null -eq $progress.recommendation.reason_codes) { "-" } else { ($progress.recommendation.reason_codes -join ", ") }
             $lines = @(
               "## Gateway SLA Fail-Nightly Progress",
               "",
-              "| status | decision_status | readiness_valid_count | remaining_for_window | remaining_for_streak | governance_valid_count | latest_governance_status | target_policy |",
-              "|---|---|---:|---:|---:|---:|---|---|",
-              "| $($progress.status) | $($progress.decision_status) | $($ready.valid_count) | $($ready.remaining_for_window) | $($ready.remaining_for_streak) | $($governance.valid_count) | $($governance.latest_decision_status) | $($progress.recommendation.target_critical_policy) |",
+              "| status | decision_status | remaining_for_window | remaining_for_streak |",
+              "|---|---|---:|---:|",
+              "| $($progress.status) | $($progress.decision_status) | $($ready.remaining_for_window) | $($ready.remaining_for_streak) |",
               "",
-              "- `reason_codes`: $reasonCodes",
               "- `progress_summary_json`: $path"
             )
           }
@@ -191,29 +186,22 @@ jobs:
             $lines = @(
               "## Gateway SLA Fail-Nightly Transition",
               "",
-              "| status | decision_status | allow_switch | readiness_valid_count | latest_ready_streak | invalid_or_mismatched_count | target_policy |",
-              "|---|---|---|---:|---:|---:|---|",
-              "| missing | - | - | - | - | - | - |",
+              "| status | decision_status | strict_gate_policy | summary_json |",
+              "|---|---|---|---|",
+              "| missing | - | fail_nightly | $path (missing) |",
               "",
-              "- `strict_gate_executed`: true",
-              "- `strict_gate_policy`: fail_nightly",
-              "- `transition_summary_json`: $path (missing)"
+              "- `strict_gate_executed`: true"
             )
           } else {
             $transition = Get-Content $path | ConvertFrom-Json
-            $observed = $transition.observed
-            $reasonCodes = if ($null -eq $transition.recommendation.reason_codes) { "-" } else { ($transition.recommendation.reason_codes -join ", ") }
             $lines = @(
               "## Gateway SLA Fail-Nightly Transition",
               "",
-              "| status | decision_status | allow_switch | readiness_valid_count | latest_ready_streak | invalid_or_mismatched_count | target_policy |",
-              "|---|---|---|---:|---:|---:|---|",
-              "| $($transition.status) | $($transition.decision_status) | $($transition.allow_switch) | $($observed.readiness.valid_count) | $($observed.aggregated.latest_ready_streak) | $($observed.aggregated.invalid_or_mismatched_count) | $($transition.recommendation.target_critical_policy) |",
+              "| status | decision_status | strict_gate_policy | summary_json |",
+              "|---|---|---|---|",
+              "| $($transition.status) | $($transition.decision_status) | fail_nightly | $path |",
               "",
-              "- `reason_codes`: $reasonCodes",
-              "- `strict_gate_executed`: true",
-              "- `strict_gate_policy`: fail_nightly",
-              "- `transition_summary_json`: $path"
+              "- `strict_gate_executed`: true"
             )
           }
           $lines -join "`n" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
@@ -227,28 +215,26 @@ jobs:
             $lines = @(
               "## Gateway SLA Fail-Nightly Remediation",
               "",
-              "| status | candidate_item_count | candidate_item_ids | reason_codes | summary_json |",
-              "|---|---:|---|---|---|",
-              "| missing | 0 | - | - | $path (missing) |",
+              "| status | candidate_item_count | summary_json |",
+              "|---|---:|---|",
+              "| missing | 0 | $path (missing) |",
               "",
               "- remediation backlog not available because the summary artifact is missing"
             )
           } else {
             $remediation = Get-Content $path | ConvertFrom-Json
             $candidateItems = @($remediation.candidate_items)
-            $candidateIds = if ($candidateItems.Count -eq 0) { "-" } else { (($candidateItems | ForEach-Object { $_.id }) -join ", ") }
-            $reasonCodes = if ($null -eq $remediation.reason_codes) { "-" } else { ($remediation.reason_codes -join ", ") }
             $backlogNote = if ($candidateItems.Count -eq 0) {
               "- remediation backlog is not required for this nightly snapshot"
             } else {
-              "- canonical draft backlog buckets: $candidateIds"
+              "- remediation backlog details are available in the uploaded artifact bundle"
             }
             $lines = @(
               "## Gateway SLA Fail-Nightly Remediation",
               "",
-              "| status | candidate_item_count | candidate_item_ids | reason_codes | summary_json |",
-              "|---|---:|---|---|---|",
-              "| $($remediation.status) | $($candidateItems.Count) | $candidateIds | $reasonCodes | $path |",
+              "| status | candidate_item_count | summary_json |",
+              "|---|---:|---|",
+              "| $($remediation.status) | $($candidateItems.Count) | $path |",
               "",
               $backlogNote
             )
@@ -264,25 +250,19 @@ jobs:
             $lines = @(
               "## Gateway SLA Fail-Nightly Integrity",
               "",
-              "| status | integrity_status | telemetry_ok | dual_write_ok | anti_double_count_ok | utc_guardrail_status | summary_json |",
-              "|---|---|---|---|---|---|---|",
-              "| missing | - | - | - | - | - | $path (missing) |",
-              "",
-              "- `reason_codes`: -"
+              "| status | integrity_status | summary_json |",
+              "|---|---|---|",
+              "| missing | - | $path (missing) |"
             )
           } else {
             $integrity = Get-Content $path | ConvertFrom-Json
-            $observed = $integrity.observed
             $decision = $integrity.decision
-            $reasonCodes = if ($null -eq $decision.reason_codes) { "-" } else { ($decision.reason_codes -join ", ") }
             $lines = @(
               "## Gateway SLA Fail-Nightly Integrity",
               "",
-              "| status | integrity_status | telemetry_ok | dual_write_ok | anti_double_count_ok | utc_guardrail_status | summary_json |",
-              "|---|---|---|---|---|---|---|",
-              "| $($integrity.status) | $($decision.integrity_status) | $($observed.telemetry_ok) | $($observed.dual_write_ok) | $($observed.anti_double_count_ok) | $($observed.utc_guardrail_status) | $path |",
-              "",
-              "- `reason_codes`: $reasonCodes"
+              "| status | integrity_status | summary_json |",
+              "|---|---|---|",
+              "| $($integrity.status) | $($decision.integrity_status) | $path |"
             )
           }
           $lines -join "`n" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
@@ -308,12 +288,20 @@ jobs:
         with:
           name: gateway-sla-readiness-nightly-runs
           path: |
-            runs/nightly-gateway-http-core
-            runs/nightly-gateway-sla-history
-            runs/nightly-gateway-sla-trend-history
-            runs/nightly-gateway-sla-readiness
-            runs/nightly-gateway-sla-governance
-            runs/nightly-gateway-sla-progress
-            runs/nightly-gateway-sla-transition
-            runs/nightly-gateway-sla-remediation
-            runs/nightly-gateway-sla-integrity
+            runs/nightly-gateway-http-core/gateway_http_smoke_summary.json
+            runs/nightly-gateway-sla-history/gateway_sla_summary.json
+            runs/nightly-gateway-sla-history/**/gateway_sla_summary.json
+            runs/nightly-gateway-sla-trend-history/**/gateway_sla_trend_snapshot.json
+            runs/nightly-gateway-sla-trend-history/**/summary.md
+            runs/nightly-gateway-sla-readiness/readiness_summary.json
+            runs/nightly-gateway-sla-readiness/**/readiness_summary.json
+            runs/nightly-gateway-sla-governance/governance_summary.json
+            runs/nightly-gateway-sla-governance/**/governance_summary.json
+            runs/nightly-gateway-sla-progress/progress_summary.json
+            runs/nightly-gateway-sla-progress/**/progress_summary.json
+            runs/nightly-gateway-sla-transition/transition_summary.json
+            runs/nightly-gateway-sla-transition/**/transition_summary.json
+            runs/nightly-gateway-sla-remediation/remediation_summary.json
+            runs/nightly-gateway-sla-remediation/**/remediation_summary.json
+            runs/nightly-gateway-sla-integrity/integrity_summary.json
+            runs/nightly-gateway-sla-integrity/**/integrity_summary.json
