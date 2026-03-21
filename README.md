@@ -7,7 +7,6 @@ Local game companion for ATM10 (Windows 11 + PowerShell 7): perception (screen/H
 - `MANIFEST.md` — current public repository snapshot.
 - `ROADMAP.md` — public direction, milestones, and roadmap horizons.
 - `docs/RUNBOOK.md` — runnable commands and operational profiles.
-- `docs/DECISIONS.md` — architecture decisions.
 - `docs/SOURCE_OF_TRUTH.md` — document roles.
 
 ## Quickstart (Phase A smoke)
@@ -44,9 +43,9 @@ pip install -r requirements-audit.txt
 python scripts/dependency_audit.py --runs-dir runs --policy report_only --with-security-scan true
 ```
 
-## Current status (as of 2026-03-13)
+## Current status (as of 2026-03-20)
 
-- `python -m pytest` green (see CI, `MANIFEST.md`, and `docs/DECISIONS.md` for the current public snapshot and policy history).
+- `python -m pytest` green (see CI and `MANIFEST.md` for the current public snapshot).
 - Active ASR path: `whisper_genai`; `qwen_asr` is archived/recoverable opt-in.
 - KAG Neo4j nightly guardrail path is active: `build -> sync -> eval(sample+hard) -> guardrail-check -> trend snapshot`.
 - Trend snapshot includes rolling-baseline, severity-policy (`signal_only|fail_nightly`) and calibration-aware thresholds (`latency warn=5.0`, `critical=15.0`).
@@ -54,7 +53,6 @@ python scripts/dependency_audit.py --runs-dir runs --policy report_only --with-s
 - Gateway strict nightly path is active: the nightly workflow publishes `readiness/governance/progress/transition/remediation/integrity`, while `pytest.yml` stays `signal_only`.
 - Remediation snapshot is integrated into nightly as a workflow-published machine-readable triage artifact.
 - Integrity snapshot is integrated into nightly as a workflow-published machine-readable telemetry/dual-write/UTC-guardrail verdict.
-- Local fallback `G2` triage loop refreshed stale summaries on `2026-03-12T21:53:16Z`: `manual_nightly=accounted`, `remaining_for_window=11`, `remaining_for_streak=3`, `integrity_status=clean`.
 - There is now a single local operator-pass helper: `scripts/run_gateway_sla_operating_cycle.py`. It reuses fresh same-UTC latest summaries and does not spend a new accounted run if the snapshot is already current.
 - Streamlit operator panel shows the `G2 operating cycle` snapshot as the primary triage surface in `Latest Metrics`, while `fail_nightly progress/remediation/integrity` remain supporting drilldown views.
 - `Safe Actions` in Streamlit remain smoke-only and do not run the `G2 operating cycle` helper.
@@ -62,10 +60,11 @@ python scripts/dependency_audit.py --runs-dir runs --policy report_only --with-s
 
 ## Where to look for details
 
-- Current public execution state: `MANIFEST.md` + `docs/DECISIONS.md`.
+- Current public execution state: `MANIFEST.md`.
 - Public roadmap and milestones: `ROADMAP.md`.
 - Full runnable command set: `docs/RUNBOOK.md`.
 - Archived/recoverable tracks: `docs/ARCHIVED_TRACKS.md`.
+- Public doc roles and boundary policy: `docs/SOURCE_OF_TRUTH.md`.
 - Internal chronology, session notes, and PR/release scratch docs are local-only and belong under ignored surfaces (`docs/internal/**` by default).
 
 ## License

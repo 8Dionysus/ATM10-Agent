@@ -82,11 +82,7 @@ python scripts/export_qwen3_custom_openvino.py --preset qwen3-asr-0.6b --execute
 ## Archived Qwen3-TTS notes (history only)
 
 * `qwen3-tts` custom/export/INT8/INT4 runs are kept for reference.
-* Historical artifacts:
-  * `runs/20260220_214546-qwen3-tts-ov-helper-smoke/`
-  * `runs/20260220_221511-qwen3-tts-ov-speed-bench-int8-cpu/`
-  * `runs/20260220_222426-qwen3-tts-ov-speed-bench-int4-cpu/`
-  * `runs/20260220_222650-qwen3-tts-npu-compile-diag-int4/`
+* Historical artifacts remain local-only and are not part of the public repository surface.
 * These paths are not considered part of the active roadmap and are not used in production planning.
 
 ## Runtime policy

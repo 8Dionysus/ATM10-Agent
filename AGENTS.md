@@ -12,7 +12,7 @@ Principle: **small, reviewable diffs**. Minimum magic, maximum **reproducibility
 2. Before editing: provide a short **plan** + the list of files you will touch.
 3. After editing: run **tests** or add at least 1 **smoke test**.
 4. Any dependency / tooling changes: **Ask first**.
-5. Any important architecture decision: record it in `docs/DECISIONS.md`.
+5. Any important architecture decision: record it in local `docs/DECISIONS.md`.
 
 ---
 
@@ -161,14 +161,14 @@ DoD:
 * No "magic" global path constants; use env vars / config / discovery.
 * Logs: `logging` module (`print` is acceptable in demos/smoke).
 * Data structures: JSON serializable (for run artifacts and trace).
-* LF/CRLF warnings on Windows are expected; fix policy through `.gitattributes` and/or git config, and reflect the decision in public docs (`ROADMAP.md`/`docs/DECISIONS.md`) and in local `TODO.md` when relevant.
+* LF/CRLF warnings on Windows are expected; fix policy through `.gitattributes` and/or git config, and reflect the decision in public docs (`ROADMAP.md`/`docs/SOURCE_OF_TRUTH.md`/`docs/RUNBOOK.md`) and in local `TODO.md` when relevant.
 
 ---
 
 ## Commit policy (git hygiene)
 
 * Commits should be small and clear: `phase-a: add smoke runner`, `rag: add ingest stub`.
-* If a decision is architectural, add 1-3 bullets to `docs/DECISIONS.md`.
+* If a decision is architectural, add 1-3 bullets to local `docs/DECISIONS.md`.
 
 ---
 

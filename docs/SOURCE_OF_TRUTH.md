@@ -26,6 +26,11 @@ This file defines the roles of the project's documents to remove duplication and
   * Maintainer planning/decomposition notes behind the public roadmap.
   * Not part of the public repository contract.
 
+* `docs/DECISIONS.md` (local-only, ignored)
+  * Maintainer architecture/policy decision ledger.
+  * Public-facing outcomes should be reflected in `MANIFEST.md`, `ROADMAP.md`, `docs/RUNBOOK.md`, and/or this file as needed.
+  * Not part of the public repository contract.
+
 * `docs/SESSION_YYYY-MM-DD.md` (local-only, ignored)
   * Maintainer session chronology and handoff notes.
   * Existing local copies may remain for continuity, but they are not part of the public repository contract.
@@ -38,10 +43,6 @@ This file defines the roles of the project's documents to remove duplication and
   * Internal-only detailed chronology, PR/release scratch docs, and ad-hoc operational tails.
   * Ignored by git for the public repository.
   * Future session chronology belongs here by default.
-
-* `docs/DECISIONS.md`
-  * Architecture decisions and policy changes.
-  * Format: 1-3 bullets per meaningful decision.
 
 * `docs/RUNBOOK.md`
   * Runnable commands, operational profiles, quickstart for launches.
@@ -59,17 +60,17 @@ This file defines the roles of the project's documents to remove duplication and
 * For the public repo surface, priority belongs to:
   * `MANIFEST.md`
   * `ROADMAP.md`
-  * `docs/DECISIONS.md`
   * `docs/RUNBOOK.md`
+  * `docs/SOURCE_OF_TRUTH.md`
 * `docs/ECOSYSTEM_CONTEXT.md` is used only as a reference/context layer.
-* Local-only `TODO.md` / `PLANS.md` may guide maintainer workflow, but they do not replace public source-of-truth docs.
+* Local-only `TODO.md` / `PLANS.md` / `docs/DECISIONS.md` may guide maintainer workflow, but they do not replace public source-of-truth docs.
 * Local-only session docs, templates, and PR/release scratch docs do not define the public repo surface.
 
 ## Update Rules
 
-* If behavior/architecture changed -> update `docs/DECISIONS.md`.
+* If behavior/architecture changed -> update local `docs/DECISIONS.md` and any impacted public docs.
 * If commands/setup changed -> update `docs/RUNBOOK.md`.
-* If there is an important public status/result -> update `MANIFEST.md` and, if policy/direction changed, `ROADMAP.md` and/or `docs/DECISIONS.md`.
+* If there is an important public status/result -> update `MANIFEST.md` and, if policy/direction changed, `ROADMAP.md`, `docs/RUNBOOK.md`, and/or `docs/SOURCE_OF_TRUTH.md`.
 * If there is local execution planning -> update local `TODO.md` / `PLANS.md`.
 * If there is detailed internal chronology or PR/release scratch material -> use ignored local-only surfaces (`docs/internal/**` by default; existing local `docs/SESSION_*.md` copies are allowed for continuity).
 * Keep `README.md` pointed only at public canonical docs.
@@ -78,6 +79,6 @@ This file defines the roles of the project's documents to remove duplication and
 
 * Do not duplicate counters like `N passed` across all files at once.
   Preferred truth:
-  * Truth for current public state is CI + `MANIFEST.md` + `docs/DECISIONS.md`.
+  * Truth for current public state is CI + `MANIFEST.md` + `ROADMAP.md` + `docs/RUNBOOK.md` / `docs/SOURCE_OF_TRUTH.md` where relevant.
   * Detailed internal chronology belongs only in local ignored docs.
 * Do not keep long run ID lists in `TODO.md`.
