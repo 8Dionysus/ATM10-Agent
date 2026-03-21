@@ -119,4 +119,4 @@ python scripts/dependency_audit.py --runs-dir runs --policy report_only --with-s
 
 ## License
 
-Pending final selection. Add a detectable `LICENSE` file before broader reuse or outside contributions.
+Released under the [MIT License](LICENSE).
