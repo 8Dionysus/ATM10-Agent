@@ -17,7 +17,7 @@ Current as of: 2026-03-20
 - KAG nightly guardrail: `.github/workflows/kag-neo4j-guardrail-nightly.yml`.
 - Trend snapshot: `scripts/kag_guardrail_trend_snapshot.py` (rolling-baseline + severity flags + `critical_policy`).
 - Automation: dry-run stack (`automation_dry_run`, `intent_to_automation_plan`, `automation_intent_chain_smoke`, `check_automation_smoke_contract`).
-- Automation intents: canonical templates include `open_quest_book`, `check_inventory_tool`, `open_world_map`.
+- Automation intents: canonical templates include `open_quest_book`, `check_inventory_tool`, `open_world_map`; the public intent -> plan -> dry-run chain has rollout records for all three under `M6.19`.
 - CI core smoke summaries: `scripts/collect_smoke_run_summary.py` (`phase_a_smoke|retrieve_demo|eval_retrieval` -> `smoke_summary.json`).
 - Gateway SLA trend: `scripts/gateway_sla_trend_snapshot.py` (`gateway_sla_summary_v1` history -> `gateway_sla_trend_snapshot_v1`).
 - Gateway fail_nightly readiness: `scripts/check_gateway_sla_fail_nightly_readiness.py` (`gateway_sla_fail_nightly_readiness_v1`).

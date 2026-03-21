@@ -71,3 +71,19 @@ def test_public_entry_and_release_docs_avoid_concrete_local_runs_evidence() -> N
                 f"concrete local runs evidence leaked into public entry/reference doc {path}: "
                 f"{pattern.pattern}"
             )
+
+
+def test_public_automation_rollout_records_are_documented() -> None:
+    readme_text = Path("README.md").read_text(encoding="utf-8")
+    roadmap_text = Path("ROADMAP.md").read_text(encoding="utf-8")
+    manifest_text = Path("MANIFEST.md").read_text(encoding="utf-8")
+    runbook_text = Path("docs/RUNBOOK.md").read_text(encoding="utf-8")
+
+    for text in (readme_text, roadmap_text, manifest_text, runbook_text):
+        assert "M6.19" in text
+        assert "open_quest_book" in text
+        assert "check_inventory_tool" in text
+        assert "open_world_map" in text
+
+    assert "## M6.19 rollout records" in runbook_text
+    assert "public intent -> plan -> dry-run chain" in runbook_text
