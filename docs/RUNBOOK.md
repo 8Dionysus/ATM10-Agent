@@ -2218,7 +2218,7 @@ Expected result:
 * In `--summary-json`, the `observed` field includes optional trace-correlation metadata:
   * `trace_id`, `intent_id` (if they are in `planning` action-plan metadata).
 * For intent-chain canonical fixtures, `--require-trace-id` and `--require-intent-id` are used; the absence of any of the id is considered a contract violation.
-* In CI step summary (`Automation Smoke Contracts`), these fields are displayed in separate columns `trace_id/intent_id` for quick triage.
+* In CI, these ids stay in the machine-readable contract summaries; the public `Automation Smoke Contracts` step summary remains coarse and does not display `trace_id/intent_id`.
 * Any violation of the contract (missing artifact/metrics below the threshold/intent mismatch) gives a non-zero exit code.
 
 ## M6.19: New intent template rollout policy (CI)
@@ -2260,4 +2260,3 @@ Quick checklist when `check_automation_smoke_contract` crashes:
 6. If the problem is `intent_type`:
    * check fixture (`tests/fixtures/intent_open_quest_book.json`, `tests/fixtures/intent_check_inventory_tool.json`, `tests/fixtures/intent_open_world_map.json`)
    * check `automation_plan.json.context.intent_type` in chain run artifacts
-

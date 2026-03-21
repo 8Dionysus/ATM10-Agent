@@ -11,10 +11,7 @@ Reason:
 * On the target `transformers/optimum` stack, the `qwen3_asr` model is not recognized in the export flow.
 * Latest confirmed status: `blocked_upstream`.
 
-Reference artifacts:
-
-* `runs/20260222_142450-qwen3-voice-probe/`
-* `runs/20260222_142518-qwen3-custom-export/`
+Reference artifacts are local-only historical runs from the original validation pass and are not part of the public repository surface.
 
 Current policy:
 

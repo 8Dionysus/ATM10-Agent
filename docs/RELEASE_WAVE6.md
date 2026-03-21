@@ -9,7 +9,6 @@ Canonical companion docs:
 
 - `MANIFEST.md`
 - `ROADMAP.md`
-- `docs/DECISIONS.md`
 - `docs/RUNBOOK.md`
 - `docs/SOURCE_OF_TRUTH.md`
 
@@ -117,6 +116,6 @@ Operationally, this means Stage C can be paused or partially rolled back without
 
 ## Related Policies
 
-- `docs/DECISIONS.md` records the hardening-policy decisions and public-doc boundary.
 - `docs/RUNBOOK.md` contains runnable local commands, with public-safe placeholders for paths and tokens.
 - `MANIFEST.md` and `ROADMAP.md` remain the public current-state and direction surfaces.
+- `docs/SOURCE_OF_TRUTH.md` defines the public-doc boundary and the split between public and local-only docs.

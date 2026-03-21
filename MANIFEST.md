@@ -7,7 +7,7 @@ Current as of: 2026-03-20
 - Project: `atm10-agent`
 - Target platform: Windows 11 + PowerShell 7
 - Target Python: 3.11+ (validated on 3.12.10)
-- Current test status: `python -m pytest` green (see CI and `docs/DECISIONS.md` for corroborating policy/change history).
+- Current test status: `python -m pytest` green (see CI and this manifest for the current public snapshot).
 
 ## Active capabilities
 
@@ -37,7 +37,6 @@ Current as of: 2026-03-20
 - Current public status: `MANIFEST.md`
 - Public roadmap: `ROADMAP.md`
 - Runnable commands: `docs/RUNBOOK.md`
-- Architecture decisions/policy: `docs/DECISIONS.md`
 - Doc roles/policy: `docs/SOURCE_OF_TRUTH.md`
 - Archived tracks: `docs/ARCHIVED_TRACKS.md`
 

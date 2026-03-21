@@ -4,6 +4,7 @@ runs/
 # Local maintainer planning docs are intentionally not public.
 /TODO.md
 /PLANS.md
+docs/DECISIONS.md
 # Future internal-only docs for the public repo live here.
 docs/internal/
 # Local-only session history and weekly template.
@@ -21,3 +22,4 @@ __pycache__/
 .pytest_cache/
 pytest-tmp/
 temp/
+.playwright-cli/
