@@ -22,6 +22,12 @@ from scripts.gateway_artifact_policy import (
     redact_error_entry,
     rotate_jsonl,
 )
+from scripts.operator_product_safe_actions import build_safe_actions_overview
+from scripts.operator_product_snapshot import (
+    build_operator_history_payload,
+    build_operator_product_snapshot,
+    build_operator_runs_payload,
+)
 from scripts.gateway_v1_local import run_gateway_request
 
 RESPONSE_SCHEMA_VERSION = "gateway_response_v1"
@@ -195,6 +201,24 @@ def _build_response(
     }
 
 
+def _build_health_payload(
+    *,
+    runs_dir: Path,
+    policy: GatewayHTTPPolicy,
+    service_token: str | None,
+    expose_openapi: bool,
+) -> dict[str, Any]:
+    return {
+        "timestamp_utc": _utc_now(),
+        "status": "ok",
+        "service": "gateway_v1_http_service",
+        "runs_dir": str(runs_dir),
+        "auth_enabled": bool(service_token),
+        "api_docs_exposed": bool(expose_openapi),
+        "policy": asdict(policy),
+    }
+
+
 def _raise_payload_limit_if_needed(value: Any, *, policy: GatewayHTTPPolicy, depth: int = 1) -> None:
     if depth > policy.max_json_depth:
         raise ValueError(
@@ -265,12 +289,22 @@ def _build_request_context(payload: Mapping[str, Any] | None) -> dict[str, Any]:
     return context
 
 
+def _parse_csv_values(raw_value: str | None) -> list[str] | None:
+    if raw_value is None:
+        return None
+    values = [item.strip() for item in str(raw_value).split(",") if item.strip()]
+    return values or None
+
+
 def create_app(
     *,
     runs_dir: Path,
     policy: GatewayHTTPPolicy | None = None,
     service_token: str | None = None,
     expose_openapi: bool = False,
+    voice_service_url: str | None = None,
+    tts_service_url: str | None = None,
+    operator_health_timeout_sec: float = 1.5,
 ) -> Any:
     effective_policy = policy or GatewayHTTPPolicy()
     _validate_policy(effective_policy)
@@ -320,15 +354,216 @@ def create_app(
                 result=None,
             )
             return JSONResponse(status_code=map_gateway_http_status(response), content=response)
-        return {
-            "timestamp_utc": _utc_now(),
-            "status": "ok",
-            "service": "gateway_v1_http_service",
-            "runs_dir": str(runs_dir),
-            "auth_enabled": bool(effective_service_token),
-            "api_docs_exposed": bool(expose_openapi),
-            "policy": asdict(effective_policy),
+        return _build_health_payload(
+            runs_dir=runs_dir,
+            policy=effective_policy,
+            service_token=effective_service_token,
+            expose_openapi=expose_openapi,
+        )
+
+    @app.get("/v1/operator/snapshot")
+    def _operator_snapshot(request: FastAPIRequest) -> Any:
+        if not _is_authorized(request.headers, service_token=effective_service_token):
+            return JSONResponse(
+                status_code=401,
+                content={
+                    "schema_version": "gateway_operator_status_v1",
+                    "status": "error",
+                    "error_code": "unauthorized",
+                    "error": "unauthorized",
+                },
+            )
+        gateway_health = _build_health_payload(
+            runs_dir=runs_dir,
+            policy=effective_policy,
+            service_token=effective_service_token,
+            expose_openapi=expose_openapi,
+        )
+        return build_operator_product_snapshot(
+            runs_dir=runs_dir,
+            gateway_health=gateway_health,
+            voice_service_url=voice_service_url,
+            tts_service_url=tts_service_url,
+            health_timeout_sec=operator_health_timeout_sec,
+            service_token=effective_service_token,
+        )
+
+    @app.get("/v1/operator/runs")
+    def _operator_runs(request: FastAPIRequest, limit: int = 20) -> Any:
+        if not _is_authorized(request.headers, service_token=effective_service_token):
+            return JSONResponse(
+                status_code=401,
+                content={
+                    "schema_version": "gateway_operator_runs_v1",
+                    "status": "error",
+                    "error_code": "unauthorized",
+                    "error": "unauthorized",
+                },
+            )
+        return build_operator_runs_payload(runs_dir=runs_dir, limit=limit)
+
+    @app.get("/v1/operator/history")
+    def _operator_history(
+        request: FastAPIRequest,
+        source: str | None = None,
+        status: str | None = None,
+        limit_per_source: int = 10,
+    ) -> Any:
+        if not _is_authorized(request.headers, service_token=effective_service_token):
+            return JSONResponse(
+                status_code=401,
+                content={
+                    "schema_version": "gateway_operator_history_v1",
+                    "status": "error",
+                    "error_code": "unauthorized",
+                    "error": "unauthorized",
+                },
+            )
+        return build_operator_history_payload(
+            runs_dir=runs_dir,
+            selected_sources=_parse_csv_values(source),
+            selected_statuses=_parse_csv_values(status),
+            limit_per_source=limit_per_source,
+        )
+
+    @app.get("/v1/operator/safe-actions")
+    def _operator_safe_actions(request: FastAPIRequest, history_limit: int = 10) -> Any:
+        if not _is_authorized(request.headers, service_token=effective_service_token):
+            return JSONResponse(
+                status_code=401,
+                content={
+                    "schema_version": "gateway_operator_safe_actions_v1",
+                    "status": "error",
+                    "error_code": "unauthorized",
+                    "error": "unauthorized",
+                },
+            )
+        return build_safe_actions_overview(runs_dir=runs_dir, history_limit=history_limit)
+
+    @app.post("/v1/operator/safe-actions/run")
+    async def _operator_safe_action_run(request: FastAPIRequest) -> Any:
+        if not _is_authorized(request.headers, service_token=effective_service_token):
+            return JSONResponse(
+                status_code=401,
+                content={
+                    "schema_version": "gateway_operator_safe_action_run_v1",
+                    "status": "error",
+                    "error_code": "unauthorized",
+                    "error": "unauthorized",
+                },
+            )
+        request_payload: dict[str, Any] = {}
+        raw_body = b""
+        try:
+            content_length_raw = request.headers.get("content-length")
+            content_length = int(content_length_raw) if content_length_raw is not None else None
+            if content_length is not None and content_length < 0:
+                raise ValueError("invalid_request: content-length must be >= 0")
+        except ValueError:
+            return JSONResponse(
+                status_code=400,
+                content={
+                    "schema_version": "gateway_operator_safe_action_run_v1",
+                    "status": "error",
+                    "error_code": "invalid_request",
+                    "error": "invalid_request: malformed Content-Length header",
+                },
+            )
+
+        raw_body = await request.body()
+        try:
+            body_payload = _parse_request_json_bytes(
+                body_bytes=raw_body,
+                content_length=content_length,
+                policy=effective_policy,
+            )
+        except RuntimeError:
+            return JSONResponse(
+                status_code=413,
+                content={
+                    "schema_version": "gateway_operator_safe_action_run_v1",
+                    "status": "error",
+                    "error_code": "payload_too_large",
+                    "error": "payload too large",
+                },
+            )
+        except ValueError as exc:
+            error_message = str(exc)
+            error_code = "payload_limit_exceeded" if "payload_limit_exceeded" in error_message else "invalid_request"
+            status_code = 413 if error_code == "payload_limit_exceeded" else 400
+            return JSONResponse(
+                status_code=status_code,
+                content={
+                    "schema_version": "gateway_operator_safe_action_run_v1",
+                    "status": "error",
+                    "error_code": error_code,
+                    "error": error_message,
+                },
+            )
+
+        request_payload = {
+            "schema_version": "gateway_request_v1",
+            "operation": "safe_action_smoke",
+            "payload": body_payload,
         }
+        try:
+            executor = getattr(app.state, "gateway_request_executor", None)
+            if executor is None:
+                raise RuntimeError("gateway_request_executor is not initialized.")
+            future = executor.submit(
+                run_gateway_request,
+                request_payload=request_payload,
+                runs_dir=runs_dir,
+            )
+            try:
+                gateway_result = future.result(timeout=effective_policy.operation_timeout_sec)
+            except FutureTimeoutError:
+                future.cancel()
+                return JSONResponse(
+                    status_code=504,
+                    content={
+                        "schema_version": "gateway_operator_safe_action_run_v1",
+                        "status": "error",
+                        "error_code": "operation_timeout",
+                        "error": "gateway operation timed out",
+                    },
+                )
+            response_payload = gateway_result["response_payload"]
+            status_code = 200 if response_payload["status"] == "ok" else map_gateway_http_status(response_payload)
+            return JSONResponse(status_code=status_code, content=response_payload["result"] if response_payload["status"] == "ok" else {
+                "schema_version": "gateway_operator_safe_action_run_v1",
+                "status": "error",
+                "error_code": response_payload.get("error_code"),
+                "error": response_payload.get("error"),
+                "action_key": body_payload.get("action_key"),
+            })
+        except Exception as exc:  # pragma: no cover - defensive path
+            try:
+                _append_gateway_error_entry(
+                    runs_dir=runs_dir,
+                    policy=effective_policy,
+                    payload={
+                        "timestamp_utc": _utc_now(),
+                        "path": "/v1/operator/safe-actions/run",
+                        "error_code": "internal_error_sanitized",
+                        "error": str(exc),
+                        "operation": "safe_action_smoke",
+                        "request_body_bytes": len(raw_body),
+                        "request_context": _build_request_context(request_payload),
+                        "traceback": traceback.format_exc(),
+                    },
+                )
+            except Exception:
+                pass
+            return JSONResponse(
+                status_code=500,
+                content={
+                    "schema_version": "gateway_operator_safe_action_run_v1",
+                    "status": "error",
+                    "error_code": "internal_error_sanitized",
+                    "error": "internal service error",
+                },
+            )
 
     @app.post("/v1/gateway")
     async def _gateway(request: FastAPIRequest) -> Any:
@@ -554,6 +789,24 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Expose /docs and /openapi.json for local debugging (default: disabled).",
     )
+    parser.add_argument(
+        "--voice-service-url",
+        type=str,
+        default=None,
+        help="Optional base URL for voice_runtime_service health probes in the operator snapshot.",
+    )
+    parser.add_argument(
+        "--tts-service-url",
+        type=str,
+        default=None,
+        help="Optional base URL for tts_runtime_service health probes in the operator snapshot.",
+    )
+    parser.add_argument(
+        "--operator-health-timeout-sec",
+        type=float,
+        default=1.5,
+        help="Timeout in seconds for optional downstream health probes in /v1/operator/snapshot.",
+    )
     return parser.parse_args()
 
 
@@ -584,6 +837,9 @@ def main() -> int:
         policy=policy,
         service_token=service_token,
         expose_openapi=args.expose_openapi,
+        voice_service_url=args.voice_service_url,
+        tts_service_url=args.tts_service_url,
+        operator_health_timeout_sec=args.operator_health_timeout_sec,
     )
     try:
         import uvicorn

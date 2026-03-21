@@ -60,6 +60,141 @@ def test_gateway_v1_http_service_healthz_ok(tmp_path: Path) -> None:
     }
 
 
+def test_gateway_v1_http_service_operator_snapshot_returns_gateway_centered_payload(tmp_path: Path) -> None:
+    app = gateway_http.create_app(runs_dir=tmp_path / "runs")
+    with TestClient(app) as client:
+        response = client.get("/v1/operator/snapshot")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["schema_version"] == "gateway_operator_status_v1"
+    assert payload["status"] == "ok"
+    assert payload["gateway"]["service"] == "gateway_v1_http_service"
+    assert payload["stack_services"]["gateway_v1_http_service"]["status"] == "ok"
+    assert payload["stack_services"]["voice_runtime_service"]["status"] == "not_configured"
+    assert payload["stack_services"]["tts_runtime_service"]["status"] == "not_configured"
+    assert isinstance(payload["latest_metrics"]["summary_matrix"], list)
+
+
+def test_gateway_v1_http_service_operator_snapshot_passes_optional_service_urls(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    captured: dict[str, object] = {}
+
+    def _fake_build_operator_product_snapshot(**kwargs):
+        captured.update(kwargs)
+        return {
+            "schema_version": "gateway_operator_status_v1",
+            "status": "ok",
+            "gateway": kwargs["gateway_health"],
+            "stack_services": {},
+            "latest_metrics": {"summary_matrix": []},
+            "warnings": {"metrics": [], "service_probes": []},
+        }
+
+    monkeypatch.setattr(gateway_http, "build_operator_product_snapshot", _fake_build_operator_product_snapshot)
+    app = gateway_http.create_app(
+        runs_dir=tmp_path / "runs",
+        voice_service_url="http://127.0.0.1:8765",
+        tts_service_url="http://127.0.0.1:8780",
+        operator_health_timeout_sec=9.5,
+    )
+    with TestClient(app) as client:
+        response = client.get("/v1/operator/snapshot")
+
+    assert response.status_code == 200
+    assert captured["voice_service_url"] == "http://127.0.0.1:8765"
+    assert captured["tts_service_url"] == "http://127.0.0.1:8780"
+    assert captured["health_timeout_sec"] == 9.5
+
+
+def test_gateway_v1_http_service_operator_runs_returns_schema(tmp_path: Path) -> None:
+    app = gateway_http.create_app(runs_dir=tmp_path / "runs")
+    with TestClient(app) as client:
+        response = client.get("/v1/operator/runs?limit=5")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["schema_version"] == "gateway_operator_runs_v1"
+    assert payload["status"] == "ok"
+    assert isinstance(payload["rows"], list)
+
+
+def test_gateway_v1_http_service_operator_history_passes_filters(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    captured: dict[str, object] = {}
+
+    def _fake_build_operator_history_payload(**kwargs):
+        captured.update(kwargs)
+        return {
+            "schema_version": "gateway_operator_history_v1",
+            "status": "ok",
+            "rows": [],
+            "warnings": [],
+        }
+
+    monkeypatch.setattr(gateway_http, "build_operator_history_payload", _fake_build_operator_history_payload)
+    app = gateway_http.create_app(runs_dir=tmp_path / "runs")
+    with TestClient(app) as client:
+        response = client.get("/v1/operator/history?source=phase_a,retrieve&status=ok,error&limit_per_source=3")
+
+    assert response.status_code == 200
+    assert captured["selected_sources"] == ["phase_a", "retrieve"]
+    assert captured["selected_statuses"] == ["ok", "error"]
+    assert captured["limit_per_source"] == 3
+
+
+def test_gateway_v1_http_service_safe_actions_overview_returns_schema(tmp_path: Path) -> None:
+    app = gateway_http.create_app(runs_dir=tmp_path / "runs")
+    with TestClient(app) as client:
+        response = client.get("/v1/operator/safe-actions")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["schema_version"] == "gateway_operator_safe_actions_v1"
+    assert payload["status"] == "ok"
+    assert isinstance(payload["catalog"], list)
+
+
+def test_gateway_v1_http_service_safe_action_run_happy_path(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def _fake_run_gateway_request(*, request_payload, runs_dir):
+        assert request_payload["operation"] == "safe_action_smoke"
+        assert request_payload["payload"]["action_key"] == "gateway_local_core"
+        return {
+            "response_payload": {
+                "schema_version": "gateway_response_v1",
+                "operation": "safe_action_smoke",
+                "status": "ok",
+                "error_code": None,
+                "error": None,
+                "result": {
+                    "schema_version": "gateway_operator_safe_action_run_v1",
+                    "action_key": "gateway_local_core",
+                    "status": "ok",
+                    "smoke_only": True,
+                },
+                "artifacts": {"run_dir": "", "run_json": "", "child_runs": {}},
+            }
+        }
+
+    monkeypatch.setattr(gateway_http, "run_gateway_request", _fake_run_gateway_request)
+    app = gateway_http.create_app(runs_dir=tmp_path / "runs")
+    with TestClient(app) as client:
+        response = client.post(
+            "/v1/operator/safe-actions/run",
+            json={"action_key": "gateway_local_core", "confirm": True},
+        )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["schema_version"] == "gateway_operator_safe_action_run_v1"
+    assert payload["action_key"] == "gateway_local_core"
+    assert payload["smoke_only"] is True
+
+
 def test_gateway_v1_http_service_openapi_is_disabled_by_default_and_opt_in_enabled(tmp_path: Path) -> None:
     app = gateway_http.create_app(runs_dir=tmp_path / "runs-default")
     with TestClient(app) as client:

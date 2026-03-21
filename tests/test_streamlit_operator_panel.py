@@ -6,6 +6,7 @@ from pathlib import Path
 
 import pytest
 
+import scripts.operator_product_safe_actions as safe_actions
 import scripts.streamlit_operator_panel as panel
 
 
@@ -107,6 +108,166 @@ def test_fetch_gateway_health_failure_returns_error() -> None:
     assert error is not None
 
 
+def test_fetch_gateway_operator_snapshot_failure_returns_error() -> None:
+    payload, error = panel.fetch_gateway_operator_snapshot("http://127.0.0.1:1", timeout_sec=0.1)
+    assert payload is None
+    assert error is not None
+
+
+def test_fetch_gateway_operator_snapshot_success(monkeypatch: pytest.MonkeyPatch) -> None:
+    class _FakeResponse:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def read(self) -> bytes:
+            return json.dumps(
+                {
+                    "schema_version": "gateway_operator_status_v1",
+                    "status": "ok",
+                    "gateway": {"status": "ok"},
+                    "stack_services": {},
+                    "latest_metrics": {"summary_matrix": []},
+                    "warnings": {"metrics": [], "service_probes": []},
+                }
+            ).encode("utf-8")
+
+    monkeypatch.setattr(panel.request, "urlopen", lambda req, timeout: _FakeResponse())
+    payload, error = panel.fetch_gateway_operator_snapshot("http://127.0.0.1:8770", timeout_sec=0.1)
+    assert error is None
+    assert payload is not None
+    assert payload["schema_version"] == "gateway_operator_status_v1"
+
+
+def test_fetch_gateway_operator_snapshot_rejects_schema_mismatch(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class _FakeResponse:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def read(self) -> bytes:
+            return json.dumps({"schema_version": "wrong", "status": "ok"}).encode("utf-8")
+
+    monkeypatch.setattr(panel.request, "urlopen", lambda req, timeout: _FakeResponse())
+    payload, error = panel.fetch_gateway_operator_snapshot("http://127.0.0.1:8770", timeout_sec=0.1)
+    assert payload is None
+    assert error is not None
+
+
+def test_fetch_gateway_operator_runs_success(monkeypatch: pytest.MonkeyPatch) -> None:
+    class _FakeResponse:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def read(self) -> bytes:
+            return json.dumps(
+                {
+                    "schema_version": "gateway_operator_runs_v1",
+                    "status": "ok",
+                    "rows": [{"source": "phase_a", "status": "ok"}],
+                }
+            ).encode("utf-8")
+
+    monkeypatch.setattr(panel.request, "urlopen", lambda req, timeout: _FakeResponse())
+    payload, error = panel.fetch_gateway_operator_runs("http://127.0.0.1:8770", timeout_sec=0.1)
+    assert error is None
+    assert payload is not None
+    assert payload["schema_version"] == "gateway_operator_runs_v1"
+
+
+def test_fetch_gateway_operator_history_success(monkeypatch: pytest.MonkeyPatch) -> None:
+    class _FakeResponse:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def read(self) -> bytes:
+            return json.dumps(
+                {
+                    "schema_version": "gateway_operator_history_v1",
+                    "status": "ok",
+                    "rows": [],
+                    "warnings": [],
+                }
+            ).encode("utf-8")
+
+    monkeypatch.setattr(panel.request, "urlopen", lambda req, timeout: _FakeResponse())
+    payload, error = panel.fetch_gateway_operator_history(
+        "http://127.0.0.1:8770",
+        timeout_sec=0.1,
+        selected_sources=["phase_a"],
+        selected_statuses=["ok"],
+        limit_per_source=3,
+    )
+    assert error is None
+    assert payload is not None
+    assert payload["schema_version"] == "gateway_operator_history_v1"
+
+
+def test_fetch_gateway_safe_actions_success(monkeypatch: pytest.MonkeyPatch) -> None:
+    class _FakeResponse:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def read(self) -> bytes:
+            return json.dumps(
+                {
+                    "schema_version": "gateway_operator_safe_actions_v1",
+                    "status": "ok",
+                    "catalog": [],
+                    "recent_runs": [],
+                }
+            ).encode("utf-8")
+
+    monkeypatch.setattr(panel.request, "urlopen", lambda req, timeout: _FakeResponse())
+    payload, error = panel.fetch_gateway_safe_actions("http://127.0.0.1:8770", timeout_sec=0.1)
+    assert error is None
+    assert payload is not None
+    assert payload["schema_version"] == "gateway_operator_safe_actions_v1"
+
+
+def test_run_gateway_safe_action_surfaces_http_error(monkeypatch: pytest.MonkeyPatch) -> None:
+    class _HttpError(panel.url_error.HTTPError):
+        def __init__(self):
+            super().__init__(
+                url="http://127.0.0.1:8770/v1/operator/safe-actions/run",
+                code=400,
+                msg="Bad Request",
+                hdrs=None,
+                fp=None,
+            )
+
+        def read(self) -> bytes:
+            return json.dumps({"error": "payload.confirm must be true"}).encode("utf-8")
+
+    def _boom(req, timeout):
+        raise _HttpError()
+
+    monkeypatch.setattr(panel.request, "urlopen", _boom)
+    payload, error = panel.run_gateway_safe_action(
+        "http://127.0.0.1:8770",
+        timeout_sec=0.1,
+        action_key="gateway_local_core",
+        confirm=True,
+    )
+    assert payload is None
+    assert "payload.confirm must be true" in str(error)
+
+
 def test_tab_names_exact() -> None:
     assert panel.TAB_NAMES == (
         "Stack Health",
@@ -153,12 +314,18 @@ def test_run_safe_action_fails_when_summary_missing(
     def _fake_run(*args, **kwargs):
         return completed
 
-    monkeypatch.setattr(panel.subprocess, "run", _fake_run)
+    monkeypatch.setattr(safe_actions.subprocess, "run", _fake_run)
     result = panel.run_safe_action("gateway_local_core", tmp_path)
     assert result["ok"] is False
     assert result["status"] == "error"
     assert result["error"] is not None
     assert isinstance(result["timestamp_utc"], str)
+
+
+def test_safe_actions_tab_source_uses_gateway_and_not_local_subprocess() -> None:
+    source_text = panel.REPO_ROOT.joinpath("scripts", "streamlit_operator_panel.py").read_text(encoding="utf-8")
+    assert "run_gateway_safe_action(" in source_text
+    assert "Safe Actions require a reachable gateway operator API." in source_text
 
 
 def test_safe_actions_audit_append_and_load_newest_first(tmp_path: Path) -> None:
