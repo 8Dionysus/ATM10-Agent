@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import base64
 import io
+import ipaddress
 import json
 import os
 import subprocess
@@ -103,6 +104,36 @@ def _resolve_service_token(cli_value: str | None) -> str | None:
         return stripped or None
     env_value = os.getenv(_SERVICE_TOKEN_ENV, "").strip()
     return env_value or None
+
+
+def _is_loopback_host(host: str) -> bool:
+    normalized = str(host).strip()
+    if not normalized:
+        return False
+    if normalized.lower() == "localhost":
+        return True
+    if normalized.startswith("[") and normalized.endswith("]"):
+        normalized = normalized[1:-1]
+    try:
+        return ipaddress.ip_address(normalized).is_loopback
+    except ValueError:
+        return False
+
+
+def _validate_bind_security(
+    *,
+    host: str,
+    service_token: str | None,
+    allow_insecure_no_token: bool,
+) -> str | None:
+    effective_service_token = _resolve_service_token(service_token)
+    if effective_service_token is not None or allow_insecure_no_token or _is_loopback_host(host):
+        return effective_service_token
+    raise ValueError(
+        "Refusing to start tts_runtime_service on a non-loopback host without a service token. "
+        "Set --service-token / ATM10_SERVICE_TOKEN or pass --allow-insecure-no-token to opt into "
+        "the insecure bind explicitly."
+    )
 
 
 def _is_authorized(request_headers: Mapping[str, Any], *, service_token: str | None) -> bool:
@@ -744,6 +775,14 @@ def parse_args() -> argparse.Namespace:
         ),
     )
     parser.add_argument(
+        "--allow-insecure-no-token",
+        action="store_true",
+        help=(
+            "Allow binding to a non-loopback host without a service token. "
+            "Intended only for explicit local-network testing."
+        ),
+    )
+    parser.add_argument(
         "--expose-openapi",
         action="store_true",
         help="Expose /docs and /openapi.json for local debugging (default: disabled).",
@@ -771,10 +810,17 @@ def main() -> int:
         max_array_items=args.max_array_items,
         max_object_keys=args.max_object_keys,
     )
+    try:
+        service_token = _validate_bind_security(
+            host=args.host,
+            service_token=args.service_token,
+            allow_insecure_no_token=args.allow_insecure_no_token,
+        )
+    except ValueError as exc:
+        raise SystemExit(str(exc)) from exc
     now = datetime.now(timezone.utc)
     run_dir = _create_run_dir(args.runs_dir, now=now)
     run_json_path = run_dir / "run.json"
-    service_token = _resolve_service_token(args.service_token)
     run_payload: dict[str, Any] = {
         "timestamp_utc": now.astimezone(timezone.utc).isoformat(),
         "mode": "tts_runtime_service",

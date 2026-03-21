@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import base64
+import ipaddress
 import json
 import os
 import sys
@@ -33,6 +34,7 @@ from src.agent_core.io_voice import (
     synthesize_ovms_tts_to_wav,
     write_wav_pcm16,
 )
+from scripts.gateway_artifact_policy import redact_error_entry
 
 
 def _create_run_dir(runs_dir: Path, now: datetime) -> Path:
@@ -112,6 +114,36 @@ def _resolve_service_token(cli_value: str | None) -> str | None:
         return stripped or None
     env_value = os.getenv(_SERVICE_TOKEN_ENV, "").strip()
     return env_value or None
+
+
+def _is_loopback_host(host: str) -> bool:
+    normalized = str(host).strip()
+    if not normalized:
+        return False
+    if normalized.lower() == "localhost":
+        return True
+    if normalized.startswith("[") and normalized.endswith("]"):
+        normalized = normalized[1:-1]
+    try:
+        return ipaddress.ip_address(normalized).is_loopback
+    except ValueError:
+        return False
+
+
+def _validate_bind_security(
+    *,
+    host: str,
+    service_token: str | None,
+    allow_insecure_no_token: bool,
+) -> str | None:
+    effective_service_token = _resolve_service_token(service_token)
+    if effective_service_token is not None or allow_insecure_no_token or _is_loopback_host(host):
+        return effective_service_token
+    raise ValueError(
+        "Refusing to start voice_runtime_service on a non-loopback host without a service token. "
+        "Set --service-token / ATM10_SERVICE_TOKEN or pass --allow-insecure-no-token to opt into "
+        "the insecure bind explicitly."
+    )
 
 
 def _raise_payload_limit_if_needed(value: Any, *, policy: VoiceHTTPPolicy, depth: int = 1) -> None:
@@ -572,17 +604,35 @@ def _build_tts_output_path(*, run_dir: Path, out_wav_value: Any) -> Path:
     return out_dir / f"{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S_%f')}.wav"
 
 
-def _internal_error_response(*, run_dir: Path, endpoint: str, exc: Exception, stream_event: bool) -> dict[str, Any]:
-    _append_jsonl(
-        run_dir / "service_errors.jsonl",
-        {
-            "timestamp_utc": _utc_now(),
-            "endpoint": endpoint,
-            "error_code": "internal_error",
-            "error": str(exc),
-            "traceback": traceback.format_exc(),
-        },
-    )
+def _internal_error_response(
+    *,
+    run_dir: Path,
+    endpoint: str,
+    exc: Exception,
+    stream_event: bool,
+    unsafe_error_details: bool = False,
+) -> dict[str, Any]:
+    error_entry = {
+        "timestamp_utc": _utc_now(),
+        "endpoint": endpoint,
+        "error_code": "internal_error",
+        "error": str(exc),
+        "traceback": traceback.format_exc(),
+    }
+    if unsafe_error_details:
+        error_entry["redaction"] = {
+            "checklist_version": "voice_service_error_artifact_v1",
+            "applied": False,
+            "fields_redacted": [],
+        }
+        error_entry["details_policy"] = "unsafe_opt_in"
+        _append_jsonl(run_dir / "service_errors.jsonl", error_entry)
+    else:
+        redacted_entry = redact_error_entry(error_entry, enable_redaction=True)
+        redacted_entry["error"] = "internal service error"
+        redacted_entry["traceback"] = "[REDACTED]"
+        redacted_entry["details_policy"] = "sanitized_default"
+        _append_jsonl(run_dir / "service_errors.jsonl", redacted_entry)
     if stream_event:
         return {
             "event": "error",
@@ -757,6 +807,7 @@ def _create_handler(
     state: VoiceRuntimeState,
     http_policy: VoiceHTTPPolicy,
     service_token: str | None = None,
+    unsafe_error_details: bool = False,
 ) -> type[BaseHTTPRequestHandler]:
     class VoiceServiceHandler(BaseHTTPRequestHandler):
         server_version = "ATM10VoiceService/1.0"
@@ -839,6 +890,7 @@ def _create_handler(
                     endpoint="/tts_stream",
                     exc=exc,
                     stream_event=headers_started,
+                    unsafe_error_details=unsafe_error_details,
                 )
                 if headers_started:
                     self._write_ndjson_event(internal_payload)
@@ -893,6 +945,7 @@ def _create_handler(
                     endpoint=self.path,
                     exc=exc,
                     stream_event=False,
+                    unsafe_error_details=unsafe_error_details,
                 )
                 self._send_json(500, internal_payload)
 
@@ -924,6 +977,8 @@ def run_voice_runtime_service(
     asr_warmup_language: str | None = None,
     http_policy: VoiceHTTPPolicy | None = None,
     service_token: str | None = None,
+    allow_insecure_no_token: bool = False,
+    unsafe_error_details: bool = False,
     now: datetime | None = None,
 ) -> dict[str, Any]:
     if asr_backend in ARCHIVED_ASR_BACKENDS and not allow_archived_asr_backend:
@@ -935,7 +990,11 @@ def run_voice_runtime_service(
         now = datetime.now(timezone.utc)
     effective_http_policy = http_policy or VoiceHTTPPolicy()
     _validate_http_policy(effective_http_policy)
-    effective_service_token = _resolve_service_token(service_token)
+    effective_service_token = _validate_bind_security(
+        host=host,
+        service_token=service_token,
+        allow_insecure_no_token=allow_insecure_no_token,
+    )
     run_dir = _create_run_dir(runs_dir, now)
     run_json_path = run_dir / "run.json"
     state = VoiceRuntimeState(
@@ -1014,6 +1073,7 @@ def run_voice_runtime_service(
                 "enabled": bool(effective_service_token),
                 "header": _SERVICE_TOKEN_HEADER,
             },
+            "unsafe_error_details": bool(unsafe_error_details),
         },
         "models": {
             "asr_backend": asr_backend,
@@ -1038,7 +1098,12 @@ def run_voice_runtime_service(
     }
     _write_json(run_json_path, run_payload)
 
-    handler = _create_handler(state, effective_http_policy, service_token=effective_service_token)
+    handler = _create_handler(
+        state,
+        effective_http_policy,
+        service_token=effective_service_token,
+        unsafe_error_details=unsafe_error_details,
+    )
     server = ThreadingHTTPServer((host, port), handler)
     try:
         server.serve_forever()
@@ -1097,6 +1162,22 @@ def parse_args() -> argparse.Namespace:
         help=(
             "Optional shared token for HTTP endpoints. "
             "When set (or via ATM10_SERVICE_TOKEN), require header X-ATM10-Token."
+        ),
+    )
+    parser.add_argument(
+        "--allow-insecure-no-token",
+        action="store_true",
+        help=(
+            "Allow binding to a non-loopback host without a service token. "
+            "Intended only for explicit local-network testing."
+        ),
+    )
+    parser.add_argument(
+        "--unsafe-log-internal-errors",
+        action="store_true",
+        help=(
+            "Write raw exception text and traceback to service_errors.jsonl. "
+            "Default behavior stores sanitized error artifacts."
         ),
     )
     parser.add_argument(
@@ -1186,28 +1267,33 @@ def main() -> int:
     if args.asr_backend == "whisper_genai" and asr_model_id == DEFAULT_QWEN3_ASR_MODEL:
         asr_model_id = DEFAULT_WHISPER_GENAI_MODEL_DIR
 
-    result = run_voice_runtime_service(
-        host=args.host,
-        port=args.port,
-        runs_dir=args.runs_dir,
-        asr_model_id=asr_model_id,
-        asr_backend=args.asr_backend,
-        asr_device=args.asr_device,
-        asr_task=args.asr_task,
-        asr_static_language=args.asr_language,
-        allow_archived_asr_backend=args.allow_archived_qwen_asr,
-        asr_warmup_request=args.asr_warmup_request,
-        asr_warmup_audio=args.asr_warmup_audio,
-        asr_warmup_language=args.asr_warmup_language,
-        http_policy=http_policy,
-        tts_model_id=args.tts_model,
-        device_map=args.device_map,
-        dtype=args.dtype,
-        asr_max_new_tokens=args.asr_max_new_tokens,
-        preload_asr=not args.no_preload_asr,
-        preload_tts=not args.no_preload_tts,
-        service_token=args.service_token,
-    )
+    try:
+        result = run_voice_runtime_service(
+            host=args.host,
+            port=args.port,
+            runs_dir=args.runs_dir,
+            asr_model_id=asr_model_id,
+            asr_backend=args.asr_backend,
+            asr_device=args.asr_device,
+            asr_task=args.asr_task,
+            asr_static_language=args.asr_language,
+            allow_archived_asr_backend=args.allow_archived_qwen_asr,
+            asr_warmup_request=args.asr_warmup_request,
+            asr_warmup_audio=args.asr_warmup_audio,
+            asr_warmup_language=args.asr_warmup_language,
+            http_policy=http_policy,
+            tts_model_id=args.tts_model,
+            device_map=args.device_map,
+            dtype=args.dtype,
+            asr_max_new_tokens=args.asr_max_new_tokens,
+            preload_asr=not args.no_preload_asr,
+            preload_tts=not args.no_preload_tts,
+            service_token=args.service_token,
+            allow_insecure_no_token=args.allow_insecure_no_token,
+            unsafe_error_details=args.unsafe_log_internal_errors,
+        )
+    except ValueError as exc:
+        raise SystemExit(str(exc)) from exc
     run_dir = result["run_dir"]
     print(f"[voice_runtime_service] run_dir: {run_dir}")
     print(f"[voice_runtime_service] run_json: {run_dir / 'run.json'}")

@@ -71,9 +71,19 @@ def test_gateway_sla_readiness_nightly_contains_transition_wiring() -> None:
     save_cache_block = _extract_step_block(text, "Save cache - Gateway SLA history")
     upload_artifact_block = _extract_step_block(text, "Upload artifact - Gateway SLA readiness nightly runs")
 
-    for block in (restore_cache_block, save_cache_block, upload_artifact_block):
+    for block in (restore_cache_block, save_cache_block):
         assert "runs/nightly-gateway-sla-governance" in block
         assert "runs/nightly-gateway-sla-progress" in block
         assert "runs/nightly-gateway-sla-transition" in block
         assert "runs/nightly-gateway-sla-remediation" in block
         assert "runs/nightly-gateway-sla-integrity" in block
+
+    assert "gateway_http_smoke_summary.json" in upload_artifact_block
+    assert "gateway_sla_summary.json" in upload_artifact_block
+    assert "gateway_sla_trend_snapshot.json" in upload_artifact_block
+    assert "readiness_summary.json" in upload_artifact_block
+    assert "governance_summary.json" in upload_artifact_block
+    assert "progress_summary.json" in upload_artifact_block
+    assert "transition_summary.json" in upload_artifact_block
+    assert "remediation_summary.json" in upload_artifact_block
+    assert "integrity_summary.json" in upload_artifact_block

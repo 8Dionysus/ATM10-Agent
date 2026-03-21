@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import ipaddress
 import json
 import os
 import sys
@@ -104,6 +105,36 @@ def _resolve_service_token(cli_value: str | None) -> str | None:
         return stripped or None
     env_value = os.getenv(_SERVICE_TOKEN_ENV, "").strip()
     return env_value or None
+
+
+def _is_loopback_host(host: str) -> bool:
+    normalized = str(host).strip()
+    if not normalized:
+        return False
+    if normalized.lower() == "localhost":
+        return True
+    if normalized.startswith("[") and normalized.endswith("]"):
+        normalized = normalized[1:-1]
+    try:
+        return ipaddress.ip_address(normalized).is_loopback
+    except ValueError:
+        return False
+
+
+def _validate_bind_security(
+    *,
+    host: str,
+    service_token: str | None,
+    allow_insecure_no_token: bool,
+) -> str | None:
+    effective_service_token = _resolve_service_token(service_token)
+    if effective_service_token is not None or allow_insecure_no_token or _is_loopback_host(host):
+        return effective_service_token
+    raise ValueError(
+        "Refusing to start gateway_v1_http_service on a non-loopback host without a service token. "
+        "Set --service-token / ATM10_SERVICE_TOKEN or pass --allow-insecure-no-token to opt into "
+        "the insecure bind explicitly."
+    )
 
 
 def _is_authorized(
@@ -511,6 +542,14 @@ def parse_args() -> argparse.Namespace:
         ),
     )
     parser.add_argument(
+        "--allow-insecure-no-token",
+        action="store_true",
+        help=(
+            "Allow binding to a non-loopback host without a service token. "
+            "Intended only for explicit local-network testing."
+        ),
+    )
+    parser.add_argument(
         "--expose-openapi",
         action="store_true",
         help="Expose /docs and /openapi.json for local debugging (default: disabled).",
@@ -520,6 +559,14 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> int:
     args = parse_args()
+    try:
+        service_token = _validate_bind_security(
+            host=args.host,
+            service_token=args.service_token,
+            allow_insecure_no_token=args.allow_insecure_no_token,
+        )
+    except ValueError as exc:
+        raise SystemExit(str(exc)) from exc
     policy = GatewayHTTPPolicy(
         max_request_body_bytes=args.max_request_bytes,
         max_json_depth=args.max_json_depth,
@@ -535,7 +582,7 @@ def main() -> int:
     app = create_app(
         runs_dir=args.runs_dir,
         policy=policy,
-        service_token=args.service_token,
+        service_token=service_token,
         expose_openapi=args.expose_openapi,
     )
     try:

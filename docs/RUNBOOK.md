@@ -1,9 +1,15 @@
 # RUNBOOK
 
+Path placeholders in this document:
+
+* Use `<repo-root>` for your local clone path.
+* Use `<path-to-...>` placeholders for local files on your workstation.
+* Use env vars or local secret managers for tokens/passwords; do not paste reusable literals into commands.
+
 ## M0: Instance discovery
 
 ```powershell
-cd D:\atm10-agent
+cd <repo-root>
 .\.venv\Scripts\Activate.ps1
 python scripts/discover_instance.py
 ```
@@ -103,9 +109,9 @@ The local gateway path fixes the request/response contract without HTTP transpor
 ### Single request (CLI)
 
 ```powershell
-cd D:\atm10-agent
+cd <repo-root>
 .\.venv\Scripts\Activate.ps1
-python scripts/gateway_v1_local.py --request-json "C:\path\to\gateway_request.json" --runs-dir runs\gateway-local
+python scripts/gateway_v1_local.py --request-json "<path-to-gateway-request.json>" --runs-dir runs\gateway-local
 ```
 
 Example `gateway_request.json`:
@@ -139,7 +145,7 @@ Expected result:
 ### Gateway smoke scenarios
 
 ```powershell
-cd D:\atm10-agent
+cd <repo-root>
 .\.venv\Scripts\Activate.ps1
 python scripts/gateway_v1_smoke.py --scenario core --runs-dir runs\ci-smoke-gateway-core --summary-json runs\ci-smoke-gateway-core\gateway_smoke_summary.json
 python scripts/gateway_v1_smoke.py --scenario automation --runs-dir runs\ci-smoke-gateway-automation --summary-json runs\ci-smoke-gateway-automation\gateway_smoke_summary.json
@@ -158,7 +164,7 @@ The HTTP layer uses the same dispatcher `run_gateway_request`, so the body contr
 ### Service start (FastAPI)
 
 ```powershell
-cd D:\atm10-agent
+cd <repo-root>
 .\.venv\Scripts\Activate.ps1
 python scripts/gateway_v1_http_service.py --host 127.0.0.1 --port 8770 --runs-dir runs\gateway-http
 ```
@@ -172,9 +178,16 @@ python scripts/gateway_v1_http_service.py --host 127.0.0.1 --port 8770 --runs-di
 Optional auth-token hardening:
 
 ```powershell
-# Token can be passed by flag or through env ATM10_SERVICE_TOKEN
-python scripts/gateway_v1_http_service.py --host 127.0.0.1 --port 8770 --runs-dir runs\gateway-http --service-token "change-me"
+# Prefer env-driven local auth setup in public examples
+$env:ATM10_SERVICE_TOKEN="<set-local-service-token>"
+python scripts/gateway_v1_http_service.py --host 127.0.0.1 --port 8770 --runs-dir runs\gateway-http
 ```
+
+Non-loopback bind policy:
+
+* Loopback (`127.0.0.1`, `localhost`, `::1`) keeps backward-compatible no-token behavior.
+* Non-loopback bind requires `--service-token` / `ATM10_SERVICE_TOKEN`.
+* Use `--allow-insecure-no-token` only for explicit local-network testing.
 
 Optional local API docs (debug only):
 
@@ -220,6 +233,7 @@ Sanitize policy:
 
 * The client receives only a sanitized envelope (without traceback/internal details).
 * When `service-token` is enabled, all HTTP endpoints require `X-ATM10-Token`.
+* Non-loopback bind without a token is rejected unless `--allow-insecure-no-token` is passed explicitly.
 * `/docs` and `/openapi.json` are disabled by default; use `--expose-openapi` only for local loopback debugging.
 * Redaction checklist `gateway_error_redaction_v1` (key-based + text pattern masking) is applied before the error JSONL entry.
 * The Error log is rotated according to limits (`gateway_http_errors.jsonl`, `gateway_http_errors.1.jsonl`, ...).
@@ -233,7 +247,7 @@ Sanitize policy:
 ### HTTP smoke scenarios
 
 ```powershell
-cd D:\atm10-agent
+cd <repo-root>
 .\.venv\Scripts\Activate.ps1
 python scripts/gateway_v1_http_smoke.py --scenario core --runs-dir runs\ci-smoke-gateway-http-core --summary-json runs\ci-smoke-gateway-http-core\gateway_http_smoke_summary.json
 python scripts/gateway_v1_http_smoke.py --scenario automation --runs-dir runs\ci-smoke-gateway-http-automation --summary-json runs\ci-smoke-gateway-http-automation\gateway_http_smoke_summary.json
@@ -253,7 +267,7 @@ At step `M7.post`, SLA and observability are built on top of the HTTP smoke summ
 ### SLA checker
 
 ```powershell
-cd D:\atm10-agent
+cd <repo-root>
 .\.venv\Scripts\Activate.ps1
 python scripts/check_gateway_sla.py --http-summary-json runs\ci-smoke-gateway-http-core\gateway_http_smoke_summary.json --summary-json runs\ci-smoke-gateway-sla\gateway_sla_summary.json --profile conservative --policy signal_only
 ```
@@ -308,7 +322,7 @@ History mode (`--runs-dir`):
 The trend layer is calculated on top of history from `gateway_sla_summary_v1` without changing the base SLA of the contract.
 
 ```powershell
-cd D:\atm10-agent
+cd <repo-root>
 .\.venv\Scripts\Activate.ps1
 python scripts/gateway_sla_trend_snapshot.py --sla-runs-dir runs\ci-smoke-gateway-sla --history-limit 10 --baseline-window 5 --critical-policy signal_only --runs-dir runs\ci-smoke-gateway-sla-trend
 ```
@@ -346,7 +360,7 @@ The readiness layer evaluates the readiness of the trend policy transition from 
 without enabling hard-gate in this iteration.
 
 ```powershell
-cd D:\atm10-agent
+cd <repo-root>
 .\.venv\Scripts\Activate.ps1
 python scripts/check_gateway_sla_fail_nightly_readiness.py --trend-runs-dir runs\nightly-gateway-sla-trend-history --history-limit 30 --readiness-window 14 --required-baseline-count 5 --max-warn-ratio 0.20 --policy report_only --runs-dir runs\nightly-gateway-sla-readiness --summary-json runs\nightly-gateway-sla-readiness\readiness_summary.json
 ```
@@ -415,7 +429,7 @@ The Governance layer formalizes the `go|hold` solution for switching trend polic
 after accumulating nightly readiness history.
 
 ```powershell
-cd D:\atm10-agent
+cd <repo-root>
 .\.venv\Scripts\Activate.ps1
 python scripts/check_gateway_sla_fail_nightly_governance.py --readiness-runs-dir runs\nightly-gateway-sla-readiness --history-limit 60 --required-ready-streak 3 --expected-readiness-window 14 --expected-required-baseline-count 5 --expected-max-warn-ratio 0.20 --policy report_only --runs-dir runs\nightly-gateway-sla-governance --summary-json runs\nightly-gateway-sla-governance\governance_summary.json
 ```
@@ -486,7 +500,7 @@ Progress layer aggregates readiness+governance history and shows how much more
 nightly signals are needed before a potential `go` solution.
 
 ```powershell
-cd D:\atm10-agent
+cd <repo-root>
 .\.venv\Scripts\Activate.ps1
 python scripts/check_gateway_sla_fail_nightly_progress.py --readiness-runs-dir runs\nightly-gateway-sla-readiness --governance-runs-dir runs\nightly-gateway-sla-governance --readiness-history-limit 60 --governance-history-limit 60 --expected-readiness-window 14 --expected-required-baseline-count 5 --expected-max-warn-ratio 0.20 --required-ready-streak 3 --policy report_only --runs-dir runs\nightly-gateway-sla-progress --summary-json runs\nightly-gateway-sla-progress\progress_summary.json
 ```
@@ -564,7 +578,7 @@ Helper checks the calendar-day guardrail before manually starting the nightly wo
 Important: the script does not run dispatch, it only issues a decision summary.
 
 ```powershell
-cd D:\atm10-agent
+cd <repo-root>
 .\.venv\Scripts\Activate.ps1
 python scripts/check_gateway_sla_manual_preflight.py --repo 8Dionysus/ATM10-Agent --workflow gateway-sla-readiness-nightly.yml --branch master --event workflow_dispatch --max-runs-per-utc-day 1 --token-env GITHUB_TOKEN --policy report_only --runs-dir runs/nightly-gateway-sla-preflight --summary-json runs/nightly-gateway-sla-preflight/preflight_summary.json
 ```
@@ -578,7 +592,7 @@ Preflight summary contract (`gateway_sla_manual_preflight_v1`):
   * `repo`, `workflow`, `branch`, `event`
   * `max_runs_per_utc_day`
   * `per_page`
-  * `token_env`
+  * `token_source = env`
 * `observed`:
   * `workflow_runs_observed`
   * `today_dispatch_count`
@@ -606,7 +620,7 @@ Helper aggregates preflight and current nightly summaries into a single machine-
 The side-effect free: dispatch script does not run.
 
 ```powershell
-cd D:\atm10-agent
+cd <repo-root>
 .\.venv\Scripts\Activate.ps1
 python scripts/check_gateway_sla_manual_cycle_summary.py --runs-dir runs --policy report_only --summary-json runs/nightly-gateway-sla-manual-cycle/manual_cycle_summary.json
 ```
@@ -654,7 +668,7 @@ Wrapper runs local nightly-chain as a single manual entrypoint with UTC guardrai
 (`max 1 accounted run/day`) and recovery-mode without progression credit.
 
 ```powershell
-cd D:\atm10-agent
+cd <repo-root>
 .\.venv\Scripts\Activate.ps1
 python scripts/run_gateway_sla_manual_nightly.py --runs-dir runs --policy report_only --max-runs-per-utc-day 1 --allow-recovery-rerun true --summary-json runs/nightly-gateway-sla-manual-runner/manual_nightly_summary.json --preflight-summary-json runs/nightly-gateway-sla-preflight/local_preflight_summary.json --manual-cycle-summary-json runs/nightly-gateway-sla-manual-cycle/manual_cycle_summary.json
 ```
@@ -703,7 +717,7 @@ Read-only helper builds a single daily brief for a local solo+AI cycle:
 Is it possible to do the next considered launch now, what is the attention-state, and the minimum ETA before go-candidate.
 
 ```powershell
-cd D:\atm10-agent
+cd <repo-root>
 .\.venv\Scripts\Activate.ps1
 python scripts/check_gateway_sla_manual_cadence_brief.py --runs-dir runs --policy report_only --summary-json runs/nightly-gateway-sla-manual-cadence/cadence_brief.json
 ```
@@ -760,7 +774,7 @@ Transition checker preserves formal decision telemetry for readiness/governance/
 and nightly strict gate is executed stably (`fail_nightly`) without changing the PR/CI `signal_only` policy.
 
 ```powershell
-cd D:\atm10-agent
+cd <repo-root>
 .\.venv\Scripts\Activate.ps1
 python scripts/check_gateway_sla_fail_nightly_transition.py --readiness-runs-dir runs/nightly-gateway-sla-readiness --governance-runs-dir runs/nightly-gateway-sla-governance --progress-runs-dir runs/nightly-gateway-sla-progress --readiness-history-limit 60 --governance-history-limit 60 --progress-history-limit 60 --expected-readiness-window 14 --expected-required-baseline-count 5 --expected-max-warn-ratio 0.20 --required-ready-streak 3 --policy report_only --runs-dir runs/nightly-gateway-sla-transition --summary-json runs/nightly-gateway-sla-transition/transition_summary.json
 ```
@@ -826,7 +840,7 @@ Primary mode:
 Fallback mode (if nightly run is skipped/unavailable):
 
 ```powershell
-cd D:\atm10-agent
+cd <repo-root>
 .\.venv\Scripts\Activate.ps1
 python scripts/run_gateway_sla_manual_nightly.py --runs-dir runs --policy report_only --summary-json runs/nightly-gateway-sla-manual-runner/manual_nightly_summary.json
 python scripts/check_gateway_sla_manual_cycle_summary.py --runs-dir runs --policy report_only --summary-json runs/nightly-gateway-sla-manual-cycle/manual_cycle_summary.json
@@ -836,7 +850,7 @@ python scripts/check_gateway_sla_manual_cadence_brief.py --runs-dir runs --polic
 Single-cycle local operator helper:
 
 ```powershell
-cd D:\atm10-agent
+cd <repo-root>
 .\.venv\Scripts\Activate.ps1
 python scripts/run_gateway_sla_operating_cycle.py --runs-dir runs --policy report_only --summary-json runs/nightly-gateway-sla-operating-cycle/operating_cycle_summary.json --brief-md runs/nightly-gateway-sla-operating-cycle/triage_brief.md
 ```
@@ -920,7 +934,7 @@ Read-only helper collects the latest G2 summaries into a single remediation snap
 without recalculating history and without changing runtime/API/UI surface.
 
 ```powershell
-cd D:\atm10-agent
+cd <repo-root>
 .\.venv\Scripts\Activate.ps1
 python scripts/check_gateway_sla_fail_nightly_remediation.py --runs-dir runs --policy report_only --summary-json runs/nightly-gateway-sla-remediation/remediation_summary.json
 ```
@@ -985,7 +999,7 @@ Operator usage:
 Integrity helper aggregates latest nightly summaries and checks operator-facing invariants without adding a new hard fail surface.
 
 ```powershell
-cd D:\atm10-agent
+cd <repo-root>
 .\.venv\Scripts\Activate.ps1
 python scripts/check_gateway_sla_fail_nightly_integrity.py --runs-dir runs --policy report_only --summary-json runs/nightly-gateway-sla-integrity/integrity_summary.json
 ```
@@ -1082,7 +1096,7 @@ Expected result:
 Launching the panel:
 
 ```powershell
-cd D:\atm10-agent
+cd <repo-root>
 .\.venv\Scripts\Activate.ps1
 python -m streamlit run scripts/streamlit_operator_panel.py -- --runs-dir runs --gateway-url http://127.0.0.1:8770
 ```
@@ -1090,7 +1104,7 @@ python -m streamlit run scripts/streamlit_operator_panel.py -- --runs-dir runs -
 Launching smoke-gate:
 
 ```powershell
-cd D:\atm10-agent
+cd <repo-root>
 .\.venv\Scripts\Activate.ps1
 python scripts/streamlit_operator_panel_smoke.py --panel-runs-dir runs --runs-dir runs/ci-smoke-streamlit --summary-json runs/ci-smoke-streamlit/streamlit_smoke_summary.json --gateway-url http://127.0.0.1:8770 --startup-timeout-sec 45 --viewport-width 390 --viewport-height 844 --compact-breakpoint-px 768
 ```
@@ -1138,7 +1152,7 @@ Exit policy:
 Manual operator-check:
 
 ```powershell
-cd D:\atm10-agent
+cd <repo-root>
 .\.venv\Scripts\Activate.ps1
 python -m pip show streamlit
 python -m streamlit run scripts/streamlit_operator_panel.py -- --runs-dir runs --gateway-url http://127.0.0.1:8770
@@ -1477,7 +1491,7 @@ Remove-Item "$env:USERPROFILE\.cache\huggingface" -Recurse -Force
 ## OpenVINO: setup + diagnostics
 
 ```powershell
-cd D:\atm10-agent
+cd <repo-root>
 .\.venv\Scripts\Activate.ps1
 python -m pip install -r requirements.txt
 python -c "import openvino as ov; core=ov.Core(); print('openvino=', ov.__version__); print('devices=', core.available_devices)"
@@ -1493,7 +1507,7 @@ Expected result:
 Runtime deps installation:
 
 ```powershell
-cd D:\atm10-agent
+cd <repo-root>
 .\.venv\Scripts\Activate.ps1
 python -m pip install -r requirements.txt
 python -m pip install "openvino-genai>=2025.4.0"
@@ -1515,9 +1529,9 @@ Expected result:
 Note: This baseline requires system `tesseract` to be installed in `PATH`.
 
 ```powershell
-cd D:\atm10-agent
+cd <repo-root>
 .\.venv\Scripts\Activate.ps1
-python scripts/hud_ocr_baseline.py --image-in "C:\path\to\hud_screenshot.png" --lang eng --psm 6 --oem 1
+python scripts/hud_ocr_baseline.py --image-in "<path-to-hud-screenshot.png>" --lang eng --psm 6 --oem 1
 ```
 
 Expected result:
@@ -1543,9 +1557,9 @@ Prepare payload JSON (example):
 Launch:
 
 ```powershell
-cd D:\atm10-agent
+cd <repo-root>
 .\.venv\Scripts\Activate.ps1
-python scripts/hud_mod_hook_baseline.py --hook-json "C:\path\to\hud_hook_payload.json"
+python scripts/hud_mod_hook_baseline.py --hook-json "<path-to-hud-hook-payload.json>"
 ```
 
 Expected result:
@@ -1558,7 +1572,7 @@ Expected result:
 Installation of runtime deps (active path):
 
 ```powershell
-cd D:\atm10-agent
+cd <repo-root>
 .\.venv\Scripts\Activate.ps1
 python -m pip install -r requirements.txt
 ```
@@ -1570,7 +1584,7 @@ Rollback to archived `qwen-asr` is only allowed temporarily and with explicit op
 
 ```powershell
 # File -> text
-python scripts/asr_demo.py --allow-archived-qwen-asr --audio-in "C:\path\to\sample.wav"
+python scripts/asr_demo.py --allow-archived-qwen-asr --audio-in "<path-to-sample.wav>"
 
 # Microphone -> text (5s)
 python scripts/asr_demo.py --allow-archived-qwen-asr --record-seconds 5
@@ -1586,7 +1600,7 @@ Expected result:
 Runtime deps installation:
 
 ```powershell
-cd D:\atm10-agent
+cd <repo-root>
 .\.venv\Scripts\Activate.ps1
 python -m pip install "openvino-genai>=2025.4.0"
 ```
@@ -1601,10 +1615,10 @@ Run demo:
 
 ```powershell
 # File -> text on NPU
-python scripts/asr_demo_whisper_genai.py --model-dir models\whisper-large-v3-turbo-ov --audio-in "C:\path\to\sample.wav" --device NPU
+python scripts/asr_demo_whisper_genai.py --model-dir models\whisper-large-v3-turbo-ov --audio-in "<path-to-sample.wav>" --device NPU
 
 # Optional timestamps
-python scripts/asr_demo_whisper_genai.py --model-dir models\whisper-large-v3-turbo-ov --audio-in "C:\path\to\sample.wav" --device NPU --return-timestamps --word-timestamps
+python scripts/asr_demo_whisper_genai.py --model-dir models\whisper-large-v3-turbo-ov --audio-in "<path-to-sample.wav>" --device NPU --return-timestamps --word-timestamps
 ```
 
 Expected result:
@@ -1619,13 +1633,14 @@ Expected result:
 python scripts/voice_runtime_service.py --host 127.0.0.1 --port 8765 --asr-model models\whisper-large-v3-turbo-ov
 
 # Optional auth token hardening
-python scripts/voice_runtime_service.py --host 127.0.0.1 --port 8765 --asr-model models\whisper-large-v3-turbo-ov --service-token "change-me"
+$env:ATM10_SERVICE_TOKEN="<set-local-service-token>"
+python scripts/voice_runtime_service.py --host 127.0.0.1 --port 8765 --asr-model models\whisper-large-v3-turbo-ov
 
 # Health
 python scripts/voice_runtime_client.py --service-url http://127.0.0.1:8765 health
 
 # ASR request
-python scripts/voice_runtime_client.py --service-url http://127.0.0.1:8765 asr --audio-in "C:\path\to\sample.wav"
+python scripts/voice_runtime_client.py --service-url http://127.0.0.1:8765 asr --audio-in "<path-to-sample.wav>"
 ```
 
 HTTP hardening defaults (voice service):
@@ -1636,6 +1651,7 @@ HTTP hardening defaults (voice service):
 * `max_array_items = 256`
 * `max_object_keys = 256`
 * optional `service_token` (`--service-token` or `ATM10_SERVICE_TOKEN`) -> require `X-ATM10-Token`
+* non-loopback bind requires `--service-token` / `ATM10_SERVICE_TOKEN` unless `--allow-insecure-no-token` is passed explicitly
 
 Payload-limit behavior:
 
@@ -1644,6 +1660,7 @@ Payload-limit behavior:
 * normal validation errors payload -> HTTP `400`
 
 Note (security): in HTTP payload for `/tts` and `/tts_stream`, the `out_wav_path` field should only be the file name (without absolute path and directories). The service always writes TTS WAV to its `runs/<timestamp>-voice-service/tts_outputs/`.
+Voice service error artifacts are sanitized by default; use `--unsafe-log-internal-errors` only for deliberate local debugging when raw traceback persistence is acceptable.
 
 ### Long-lived voice runtime service (Whisper GenAI + NPU ASR)
 
@@ -1661,7 +1678,7 @@ pwsh -File scripts\start_voice_whisper_npu.ps1 -BindHost 127.0.0.1 -Port 8765 -A
 python scripts/voice_runtime_client.py --service-url http://127.0.0.1:8765 health
 
 # ASR request
-python scripts/voice_runtime_client.py --service-url http://127.0.0.1:8765 asr --audio-in "C:\path\to\sample.wav" --language en
+python scripts/voice_runtime_client.py --service-url http://127.0.0.1:8765 asr --audio-in "<path-to-sample.wav>" --language en
 ```
 
 Note: `--asr-warmup-request` makes one ASR inference at the start (by default on the generated silence WAV, or through `--asr-warmup-audio`) and reduces the cold-start impact in the game loop.
@@ -1705,7 +1722,7 @@ Expected result:
 ### TTS runtime service (separate process/container)
 
 ```powershell
-cd D:\atm10-agent
+cd <repo-root>
 .\.venv\Scripts\Activate.ps1
 python -m pip install fastapi uvicorn
 python scripts/tts_runtime_service.py --host 127.0.0.1 --port 8780 --runs-dir runs\tts-runtime
@@ -1725,6 +1742,7 @@ Accepted runtime design:
 * Techniques: prewarm, queue, chunking, phrase cache, true streaming for `/tts_stream`
 * HTTP hardening: payload limits (`max_request_bytes/json_depth/string/array/object`) + sanitized internal errors
 * Optional auth hardening: `--service-token` or `ATM10_SERVICE_TOKEN` -> require `X-ATM10-Token`
+* Non-loopback bind requires `--service-token` / `ATM10_SERVICE_TOKEN` unless `--allow-insecure-no-token` is passed explicitly
 * `/docs` and `/openapi.json` are disabled by default; use `--expose-openapi` only for local loopback debugging
 
 Minimum configuration of adapters (env):
@@ -1734,11 +1752,11 @@ Minimum configuration of adapters (env):
 $env:XTTS_MODEL_NAME="tts_models/multilingual/multi-dataset/xtts_v2"
 $env:XTTS_USE_GPU="false"
 # optional cloning wav for XTTS
-# $env:XTTS_DEFAULT_SPEAKER_WAV="C:\path\to\speaker.wav"
+# $env:XTTS_DEFAULT_SPEAKER_WAV="<path-to-speaker.wav>"
 
 # Piper fallback
 $env:PIPER_EXECUTABLE="piper"
-$env:PIPER_MODEL_PATH="C:\path\to\piper\en_US-model.onnx"
+$env:PIPER_MODEL_PATH="<path-to-piper-model.onnx>"
 # optional
 # $env:PIPER_SPEAKER="0"
 
@@ -1780,7 +1798,7 @@ For production game-loop this path is deactivated.
 ## M1: Phase A smoke
 
 ```powershell
-cd D:\atm10-agent
+cd <repo-root>
 .\.venv\Scripts\Activate.ps1
 python scripts/phase_a_smoke.py
 # Strict mode (no fallback to stub)
@@ -1796,7 +1814,7 @@ Expected result:
 ## M2: FTB Quests normalization
 
 ```powershell
-cd D:\atm10-agent
+cd <repo-root>
 .\.venv\Scripts\Activate.ps1
 python scripts/normalize_ftbquests.py
 ```
@@ -1804,13 +1822,13 @@ python scripts/normalize_ftbquests.py
 Optional:
 
 ```powershell
-python scripts/normalize_ftbquests.py --quests-dir "C:\path\to\config\ftbquests\quests"
+python scripts/normalize_ftbquests.py --quests-dir "<path-to-ftbquests-quests-dir>"
 ```
 
 ## M2: Retrieval demo (in-memory)
 
 ```powershell
-cd D:\atm10-agent
+cd <repo-root>
 .\.venv\Scripts\Activate.ps1
 python scripts/retrieve_demo.py --profile baseline --in data/ftbquests_norm --query "steel tools"
 ```
@@ -1830,7 +1848,7 @@ python scripts/retrieve_demo.py --profile ov_production --in data/ftbquests_norm
 ## M2: Retrieval eval benchmark
 
 ```powershell
-cd D:\atm10-agent
+cd <repo-root>
 .\.venv\Scripts\Activate.ps1
 python scripts/eval_retrieval.py --profile baseline --docs tests/fixtures/retrieval_docs_sample.jsonl --eval tests/fixtures/retrieval_eval_sample.jsonl --topk 3 --candidate-k 50 --reranker none
 ```
@@ -1845,7 +1863,7 @@ python scripts/eval_retrieval.py --profile ov_production --docs tests/fixtures/r
 
 ```powershell
 docker run --name atm10-qdrant -p 6333:6333 qdrant/qdrant
-cd D:\atm10-agent
+cd <repo-root>
 .\.venv\Scripts\Activate.ps1
 python scripts/ingest_qdrant.py --in data/ftbquests_norm --collection atm10
 ```
@@ -1853,7 +1871,7 @@ python scripts/ingest_qdrant.py --in data/ftbquests_norm --collection atm10
 ## M2: Retrieval demo (qdrant backend)
 
 ```powershell
-cd D:\atm10-agent
+cd <repo-root>
 .\.venv\Scripts\Activate.ps1
 python scripts/retrieve_demo.py --backend qdrant --collection atm10 --query "steel tools" --topk 5
 ```
@@ -1863,7 +1881,7 @@ python scripts/retrieve_demo.py --backend qdrant --collection atm10 --query "ste
 ### Build graph
 
 ```powershell
-cd D:\atm10-agent
+cd <repo-root>
 .\.venv\Scripts\Activate.ps1
 python scripts/kag_build_baseline.py --in data/ftbquests_norm/quests.jsonl
 ```
@@ -1876,7 +1894,7 @@ Expected result:
 ### Query graph
 
 ```powershell
-cd D:\atm10-agent
+cd <repo-root>
 .\.venv\Scripts\Activate.ps1
 python scripts/kag_query_demo.py --graph runs\YYYYMMDD_HHMMSS-kag-build\kag_graph.json --query "steel tools"
 ```
@@ -1900,7 +1918,7 @@ docker run --name atm10-neo4j -p 7474:7474 -p 7687:7687 `
 ### Sync `kag_graph.json` to Neo4j
 
 ```powershell
-cd D:\atm10-agent
+cd <repo-root>
 .\.venv\Scripts\Activate.ps1
 $env:NEO4J_PASSWORD="<set-local-neo4j-password>"
 python scripts/kag_sync_neo4j.py `
@@ -1919,7 +1937,7 @@ Expected result:
 ### Query KAG directly from Neo4j
 
 ```powershell
-cd D:\atm10-agent
+cd <repo-root>
 .\.venv\Scripts\Activate.ps1
 $env:NEO4J_PASSWORD="<set-local-neo4j-password>"
 python scripts/kag_query_neo4j.py `
@@ -1938,7 +1956,7 @@ Expected result:
 ## M5.2: KAG Neo4j benchmark (quality + latency)
 
 ```powershell
-cd D:\atm10-agent
+cd <repo-root>
 .\.venv\Scripts\Activate.ps1
 $env:NEO4J_PASSWORD="<set-local-neo4j-password>"
 python scripts/eval_kag_neo4j.py `
@@ -1967,7 +1985,7 @@ Expected result:
 Nightly hard profile (recommended): use `--warmup-runs 1` as default.
 
 ```powershell
-cd D:\atm10-agent
+cd <repo-root>
 .\.venv\Scripts\Activate.ps1
 $env:NEO4J_PASSWORD="<set-local-neo4j-password>"
 python scripts/eval_kag_neo4j.py `
@@ -2044,7 +2062,7 @@ Expected result:
 ### Warmup A/B compare (mini benchmark)
 
 ```powershell
-cd D:\atm10-agent
+cd <repo-root>
 .\.venv\Scripts\Activate.ps1
 $env:NEO4J_PASSWORD="<set-local-neo4j-password>"
 python scripts/compare_kag_neo4j_warmup.py `
@@ -2069,9 +2087,9 @@ Expected result:
 Important: this entrypoint does not execute real keyboard/mouse events. It only validates the plan and writes dry-run artifacts.
 
 ```powershell
-cd D:\atm10-agent
+cd <repo-root>
 .\.venv\Scripts\Activate.ps1
-python scripts/automation_dry_run.py --plan-json "C:\path\to\automation_plan.json"
+python scripts/automation_dry_run.py --plan-json "<path-to-automation-plan.json>"
 ```
 
 Example `automation_plan.json`:
@@ -2128,7 +2146,7 @@ Expected result:
 Important: adapter only builds `automation_plan_v1` from intent payload and saves artifacts. There are no real input events.
 
 ```powershell
-cd D:\atm10-agent
+cd <repo-root>
 .\.venv\Scripts\Activate.ps1
 python scripts/intent_to_automation_plan.py --intent-json "tests/fixtures/intent_open_quest_book.json"
 ```
@@ -2152,7 +2170,7 @@ python scripts/automation_dry_run.py --plan-json "runs\m6_3_intent_plan.json"
 Single smoke entrypoint for dry-run chain.
 
 ```powershell
-cd D:\atm10-agent
+cd <repo-root>
 .\.venv\Scripts\Activate.ps1
 python scripts/automation_intent_chain_smoke.py --intent-json "tests/fixtures/intent_open_quest_book.json"
 python scripts/automation_intent_chain_smoke.py --intent-json "tests/fixtures/intent_check_inventory_tool.json"
@@ -2242,3 +2260,4 @@ Quick checklist when `check_automation_smoke_contract` crashes:
 6. If the problem is `intent_type`:
    * check fixture (`tests/fixtures/intent_open_quest_book.json`, `tests/fixtures/intent_check_inventory_tool.json`, `tests/fixtures/intent_open_world_map.json`)
    * check `automation_plan.json.context.intent_type` in chain run artifacts
+

@@ -30,7 +30,7 @@ Current as of: 2026-03-20
 - Gateway SLA readiness nightly: `.github/workflows/gateway-sla-readiness-nightly.yml` with `readiness/governance/progress/transition/remediation/integrity` summary/artifact wiring.
 - Streamlit operator panel: `scripts/streamlit_operator_panel.py` + `scripts/streamlit_operator_panel_smoke.py`, including `Latest Metrics` visibility for the `G2 operating cycle` snapshot and supporting `fail_nightly progress/remediation/integrity` surfaces.
 - Dependency profiles: `requirements-voice.txt`, `requirements-llm.txt`, `requirements-export.txt`, `requirements-audit.txt`.
-- Dependency audit: `scripts/dependency_audit.py` + report-only CI step (`runs/ci-dependency-audit`, artifact `dependency-audit-report`).
+- Dependency audit: `scripts/dependency_audit.py` + report-only CI step with uploaded `dependency-audit-report` artifact.
 
 ## Canonical docs
 

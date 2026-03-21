@@ -18,12 +18,12 @@ Principle: **small, reviewable diffs**. Minimum magic, maximum **reproducibility
 
 ## Repo commands (PowerShell 7)
 
-It is recommended to open PowerShell in the repo root. Example path: `D:\atm10-agent`.
+It is recommended to open PowerShell in the repo root. Use your local clone path as `<repo-root>`.
 
 ### Activate venv
 
 ```powershell
-cd D:\atm10-agent
+cd <repo-root>
 .\.venv\Scripts\Activate.ps1
 ```
 

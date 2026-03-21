@@ -13,7 +13,7 @@ Local game companion for ATM10 (Windows 11 + PowerShell 7): perception (screen/H
 ## Quickstart (Phase A smoke)
 
 ```powershell
-cd D:\atm10-agent
+cd <repo-root>
 py -3.12 -m venv .venv
 .\.venv\Scripts\Activate.ps1
 python -m pip install -U pip
@@ -52,8 +52,8 @@ python scripts/dependency_audit.py --runs-dir runs --policy report_only --with-s
 - Trend snapshot includes rolling-baseline, severity-policy (`signal_only|fail_nightly`) and calibration-aware thresholds (`latency warn=5.0`, `critical=15.0`).
 - Gateway SLA path is extended with a trend-snapshot layer: `gateway_sla_summary_v1` history -> `gateway_sla_trend_snapshot_v1`.
 - Gateway strict nightly path is active: the nightly workflow publishes `readiness/governance/progress/transition/remediation/integrity`, while `pytest.yml` stays `signal_only`.
-- Remediation snapshot is integrated into nightly: source-of-truth for triage is `runs/nightly-gateway-sla-remediation/remediation_summary.json`.
-- Integrity snapshot is integrated into nightly: machine-readable verdict for telemetry/dual-write/UTC guardrail is `runs/nightly-gateway-sla-integrity/integrity_summary.json`.
+- Remediation snapshot is integrated into nightly as a workflow-published machine-readable triage artifact.
+- Integrity snapshot is integrated into nightly as a workflow-published machine-readable telemetry/dual-write/UTC-guardrail verdict.
 - Local fallback `G2` triage loop refreshed stale summaries on `2026-03-12T21:53:16Z`: `manual_nightly=accounted`, `remaining_for_window=11`, `remaining_for_streak=3`, `integrity_status=clean`.
 - There is now a single local operator-pass helper: `scripts/run_gateway_sla_operating_cycle.py`. It reuses fresh same-UTC latest summaries and does not spend a new accounted run if the snapshot is already current.
 - Streamlit operator panel shows the `G2 operating cycle` snapshot as the primary triage surface in `Latest Metrics`, while `fail_nightly progress/remediation/integrity` remain supporting drilldown views.
