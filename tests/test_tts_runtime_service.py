@@ -253,6 +253,55 @@ def test_tts_stream_endpoint_uses_iter_synthesize_without_submit() -> None:
     assert events[1]["audio_wav_b64"] == base64.b64encode(b"RIFFfake").decode("ascii")
 
 
+def test_tts_service_openapi_is_disabled_by_default_and_opt_in_enabled() -> None:
+    from fastapi.testclient import TestClient
+
+    class _FakeService:
+        def start(self) -> None:
+            return
+
+        def stop(self) -> None:
+            return
+
+        def prewarm(self) -> dict[str, dict[str, object]]:
+            return {}
+
+        def health(self) -> dict[str, object]:
+            return {
+                "status": "ok",
+                "worker_alive": True,
+                "queue_size": 0,
+                "cache_items": 0,
+                "prewarm": {},
+            }
+
+        def submit(self, _request):
+            raise AssertionError("submit must not be used in openapi exposure test")
+
+    app = tts_runtime_service.create_app(_FakeService(), prewarm=False)
+    with TestClient(app) as client:
+        assert client.get("/docs").status_code == 404
+        assert client.get("/openapi.json").status_code == 404
+        assert client.get("/redoc").status_code == 404
+
+    exposed_app = tts_runtime_service.create_app(
+        _FakeService(),
+        prewarm=False,
+        expose_openapi=True,
+    )
+    with TestClient(exposed_app) as client:
+        docs_response = client.get("/docs")
+        openapi_response = client.get("/openapi.json")
+        health_response = client.get("/health")
+
+    assert docs_response.status_code == 200
+    assert "Swagger UI" in docs_response.text
+    assert openapi_response.status_code == 200
+    assert openapi_response.json()["info"]["title"] == "ATM10 TTS Runtime"
+    assert health_response.status_code == 200
+    assert health_response.json()["api_docs_exposed"] is True
+
+
 def test_tts_endpoint_keeps_non_streaming_submit_path() -> None:
     from fastapi.testclient import TestClient
 

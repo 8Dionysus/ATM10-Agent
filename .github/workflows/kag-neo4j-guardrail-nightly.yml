@@ -8,11 +8,14 @@ on:
 jobs:
   kag_guardrail:
     runs-on: ubuntu-latest
+    env:
+      # Ephemeral local CI credential for the service container; not a deployment secret.
+      NEO4J_PASSWORD: local-ci-only-not-secret
     services:
       neo4j:
         image: neo4j:5
         env:
-          NEO4J_AUTH: neo4j/neo4jpass
+          NEO4J_AUTH: neo4j/${{ env.NEO4J_PASSWORD }}
         ports:
           - 7474:7474
 
@@ -33,7 +36,7 @@ jobs:
       - name: Wait for Neo4j HTTP
         run: |
           for i in {1..40}; do
-            if curl -fsS -u neo4j:neo4jpass http://127.0.0.1:7474 > /dev/null; then
+            if curl -fsS -u "neo4j:${NEO4J_PASSWORD}" http://127.0.0.1:7474 > /dev/null; then
               echo "Neo4j is ready"
               exit 0
             fi
@@ -56,8 +59,6 @@ jobs:
           echo "GRAPH_JSON=$GRAPH_JSON" >> "$GITHUB_ENV"
 
       - name: Sync graph to Neo4j
-        env:
-          NEO4J_PASSWORD: neo4jpass
         run: |
           python scripts/kag_sync_neo4j.py \
             --graph "$GRAPH_JSON" \
@@ -68,8 +69,6 @@ jobs:
             --runs-dir runs/nightly-kag-sync
 
       - name: Eval KAG Neo4j (sample profile)
-        env:
-          NEO4J_PASSWORD: neo4jpass
         run: |
           python scripts/eval_kag_neo4j.py \
             --eval tests/fixtures/kag_neo4j_eval_sample.jsonl \
@@ -81,8 +80,6 @@ jobs:
             --runs-dir runs/nightly-kag-eval-sample
 
       - name: Eval KAG Neo4j (hard profile)
-        env:
-          NEO4J_PASSWORD: neo4jpass
         run: |
           python scripts/eval_kag_neo4j.py \
             --eval tests/fixtures/kag_neo4j_eval_hard.jsonl \

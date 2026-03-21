@@ -176,6 +176,12 @@ Optional auth-token hardening:
 python scripts/gateway_v1_http_service.py --host 127.0.0.1 --port 8770 --runs-dir runs\gateway-http --service-token "change-me"
 ```
 
+Optional local API docs (debug only):
+
+```powershell
+python scripts/gateway_v1_http_service.py --host 127.0.0.1 --port 8770 --runs-dir runs\gateway-http --expose-openapi
+```
+
 Hardening defaults (`Balanced`):
 
 * `max_request_body_bytes = 262144` (256 KB)
@@ -214,6 +220,7 @@ Sanitize policy:
 
 * The client receives only a sanitized envelope (without traceback/internal details).
 * When `service-token` is enabled, all HTTP endpoints require `X-ATM10-Token`.
+* `/docs` and `/openapi.json` are disabled by default; use `--expose-openapi` only for local loopback debugging.
 * Redaction checklist `gateway_error_redaction_v1` (key-based + text pattern masking) is applied before the error JSONL entry.
 * The Error log is rotated according to limits (`gateway_http_errors.jsonl`, `gateway_http_errors.1.jsonl`, ...).
 * At startup, a retention cleanup is performed:
@@ -1704,6 +1711,12 @@ python -m pip install fastapi uvicorn
 python scripts/tts_runtime_service.py --host 127.0.0.1 --port 8780 --runs-dir runs\tts-runtime
 ```
 
+Optional local API docs (debug only):
+
+```powershell
+python scripts/tts_runtime_service.py --host 127.0.0.1 --port 8780 --runs-dir runs\tts-runtime --expose-openapi
+```
+
 Accepted runtime design:
 
 * Router: FastAPI
@@ -1712,6 +1725,7 @@ Accepted runtime design:
 * Techniques: prewarm, queue, chunking, phrase cache, true streaming for `/tts_stream`
 * HTTP hardening: payload limits (`max_request_bytes/json_depth/string/array/object`) + sanitized internal errors
 * Optional auth hardening: `--service-token` or `ATM10_SERVICE_TOKEN` -> require `X-ATM10-Token`
+* `/docs` and `/openapi.json` are disabled by default; use `--expose-openapi` only for local loopback debugging
 
 Minimum configuration of adapters (env):
 
@@ -1877,8 +1891,9 @@ Expected result:
 ### Start Neo4j locally
 
 ```powershell
+$env:NEO4J_PASSWORD="<set-local-neo4j-password>"
 docker run --name atm10-neo4j -p 7474:7474 -p 7687:7687 `
-  -e NEO4J_AUTH=neo4j/neo4jpass `
+  -e "NEO4J_AUTH=neo4j/$($env:NEO4J_PASSWORD)" `
   neo4j:5
 ```
 
@@ -1887,7 +1902,7 @@ docker run --name atm10-neo4j -p 7474:7474 -p 7687:7687 `
 ```powershell
 cd D:\atm10-agent
 .\.venv\Scripts\Activate.ps1
-$env:NEO4J_PASSWORD="neo4jpass"
+$env:NEO4J_PASSWORD="<set-local-neo4j-password>"
 python scripts/kag_sync_neo4j.py `
   --graph runs\YYYYMMDD_HHMMSS-kag-build\kag_graph.json `
   --neo4j-url http://127.0.0.1:7474 `
@@ -1906,7 +1921,7 @@ Expected result:
 ```powershell
 cd D:\atm10-agent
 .\.venv\Scripts\Activate.ps1
-$env:NEO4J_PASSWORD="neo4jpass"
+$env:NEO4J_PASSWORD="<set-local-neo4j-password>"
 python scripts/kag_query_neo4j.py `
   --query "steel tools" `
   --topk 5 `
@@ -1925,7 +1940,7 @@ Expected result:
 ```powershell
 cd D:\atm10-agent
 .\.venv\Scripts\Activate.ps1
-$env:NEO4J_PASSWORD="neo4jpass"
+$env:NEO4J_PASSWORD="<set-local-neo4j-password>"
 python scripts/eval_kag_neo4j.py `
   --eval tests/fixtures/kag_neo4j_eval_sample.jsonl `
   --topk 5 `
@@ -1954,7 +1969,7 @@ Nightly hard profile (recommended): use `--warmup-runs 1` as default.
 ```powershell
 cd D:\atm10-agent
 .\.venv\Scripts\Activate.ps1
-$env:NEO4J_PASSWORD="neo4jpass"
+$env:NEO4J_PASSWORD="<set-local-neo4j-password>"
 python scripts/eval_kag_neo4j.py `
   --eval tests/fixtures/kag_neo4j_eval_hard.jsonl `
   --topk 5 `
@@ -2031,7 +2046,7 @@ Expected result:
 ```powershell
 cd D:\atm10-agent
 .\.venv\Scripts\Activate.ps1
-$env:NEO4J_PASSWORD="neo4jpass"
+$env:NEO4J_PASSWORD="<set-local-neo4j-password>"
 python scripts/compare_kag_neo4j_warmup.py `
   --eval tests/fixtures/kag_neo4j_eval_hard.jsonl `
   --repeats 3 `

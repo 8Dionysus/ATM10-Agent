@@ -60,6 +60,30 @@ def test_gateway_v1_http_service_healthz_ok(tmp_path: Path) -> None:
     }
 
 
+def test_gateway_v1_http_service_openapi_is_disabled_by_default_and_opt_in_enabled(tmp_path: Path) -> None:
+    app = gateway_http.create_app(runs_dir=tmp_path / "runs-default")
+    with TestClient(app) as client:
+        assert client.get("/docs").status_code == 404
+        assert client.get("/openapi.json").status_code == 404
+        assert client.get("/redoc").status_code == 404
+
+    exposed_app = gateway_http.create_app(
+        runs_dir=tmp_path / "runs-openapi",
+        expose_openapi=True,
+    )
+    with TestClient(exposed_app) as client:
+        docs_response = client.get("/docs")
+        openapi_response = client.get("/openapi.json")
+        health_response = client.get("/healthz")
+
+    assert docs_response.status_code == 200
+    assert "Swagger UI" in docs_response.text
+    assert openapi_response.status_code == 200
+    assert openapi_response.json()["info"]["title"] == "ATM10 Gateway v1 HTTP"
+    assert health_response.status_code == 200
+    assert health_response.json()["api_docs_exposed"] is True
+
+
 @pytest.mark.parametrize(
     "request_payload, expected_operation",
     [
