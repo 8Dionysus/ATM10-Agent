@@ -214,6 +214,18 @@ Transport health check:
 python -c "import requests; print(requests.get('http://127.0.0.1:8770/healthz', timeout=10).json())"
 ```
 
+Operator snapshot check:
+
+```powershell
+python -c "import requests; print(requests.get('http://127.0.0.1:8770/v1/operator/snapshot', timeout=10).json()['schema_version'])"
+```
+
+Optional downstream health aggregation for the operator product:
+
+```powershell
+python scripts/gateway_v1_http_service.py --host 127.0.0.1 --port 8770 --runs-dir runs\gateway-http --voice-service-url http://127.0.0.1:8765 --tts-service-url http://127.0.0.1:8780 --operator-health-timeout-sec 3.0
+```
+
 ### Gateway request over HTTP
 
 ```powershell
@@ -258,6 +270,43 @@ Expected result:
 * `core` contains operations `health`, `retrieval_query`, `kag_query(file)`.
 * `automation_dry_run` passes through `automation`.
 * Any error in the gateway body/HTTP status causes smoke `status=error` and non-zero exit code.
+
+## M8.pre: Primary operator product startup profile
+
+Canonical local operator launch path:
+
+```powershell
+cd <repo-root>
+.\.venv\Scripts\Activate.ps1
+python scripts/start_operator_product.py --runs-dir runs
+```
+
+Optional runtime health wiring through the gateway operator snapshot:
+
+```powershell
+python scripts/start_operator_product.py --runs-dir runs --voice-runtime-url http://127.0.0.1:8765 --tts-runtime-url http://127.0.0.1:8780
+```
+
+Optional managed local runtimes (launcher starts `voice_runtime_service` / `tts_runtime_service` itself):
+
+```powershell
+python scripts/start_operator_product.py --runs-dir runs --start-voice-runtime --start-tts-runtime
+```
+
+Expected result:
+
+* A launcher run dir `runs/<timestamp>-start-operator-product/` is created.
+* `run.json` captures the canonical startup profile, effective runtime URLs, and `managed_processes` plan.
+* Gateway is considered ready only after `GET /v1/operator/snapshot` returns `status=ok`.
+* Streamlit is started against that gateway URL as the primary operator cockpit.
+* If managed runtimes are enabled, launcher waits for `GET /health` on those loopback services before starting the gateway.
+* `gateway.log` and `streamlit.log` are written into the launcher run dir.
+* If managed runtimes are enabled, `voice_runtime_service.log` / `tts_runtime_service.log` are also written into the launcher run dir.
+
+Notes:
+
+* This is the primary operator product startup path.
+* Manual per-service commands remain valid for recovery or focused debugging.
 
 ## M7.post: Gateway SLA/Observability baseline
 
@@ -1167,11 +1216,11 @@ Operator procedure:
 
 ## M8.post: Streamlit Safe Actions audit trail
 
-`Safe Actions` keeps an append-only audit log in the panel with traceable launch results.
+`Safe Actions` remains smoke-only, but execution and audit now go through the gateway instead of direct Streamlit subprocess launch.
 
 Audit artifact path:
 
-* `runs/<runs_dir>/ui-safe-actions/safe_actions_audit.jsonl`
+* `<gateway-runs-dir>/ui-safe-actions/safe_actions_audit.jsonl`
 
 Audit entry contract (JSON object per line):
 
@@ -1187,14 +1236,15 @@ Audit entry contract (JSON object per line):
 
 UI behavior:
 
-* In `Safe Actions`, after the command is executed, the `Last safe action` block is shown.
-* Below is the table `Recent safe actions` (default: last 10 records, newest-first).
-* If the log is missing, the UI shows `not available yet` and does not crash.
-* If the JSONL line is broken, the UI does not crash: error-row `invalid audit entry` is displayed.
+* Streamlit loads the catalog and recent audit rows through `GET /v1/operator/safe-actions`.
+* The run action is executed only through `POST /v1/operator/safe-actions/run`.
+* The panel requires explicit confirmation before sending the smoke action request.
+* If the gateway is unavailable, `Safe Actions` is disabled instead of falling back to local subprocess execution.
+* After execution, the panel refreshes the latest gateway-managed audit state and shows `Last safe action` + `Recent safe actions`.
 
 ## M8.post: Streamlit Latest Metrics history filters
 
-In the `Latest Metrics` tab, a historical view without an external database has been added: the history is built from existing timestamp run directories in canonical smoke roots.
+In the `Latest Metrics` tab, the primary historical path is now `GET /v1/operator/history`; local canonical run directories remain a read-only fallback when the gateway history endpoint is unavailable.
 
 History sources:
 

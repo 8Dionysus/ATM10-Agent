@@ -138,6 +138,76 @@ def test_gateway_v1_local_automation_dry_run_ok(tmp_path: Path) -> None:
     assert "automation_dry_run" in response_payload["artifacts"]["child_runs"]
 
 
+def test_gateway_v1_local_safe_action_smoke_ok(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    captured_audit: dict[str, object] = {}
+
+    def _fake_run_safe_action(action_key: str, runs_dir: Path, *, timeout_sec: float = 300.0) -> dict[str, object]:
+        assert action_key == "gateway_local_core"
+        assert timeout_sec == 45.0
+        return {
+            "schema_version": "gateway_operator_safe_action_run_v1",
+            "timestamp_utc": "2026-02-27T10:04:30+00:00",
+            "action_key": action_key,
+            "action_runs_dir": str(runs_dir / "ui-safe-gateway-core"),
+            "summary_json": str(runs_dir / "ui-safe-gateway-core" / "gateway_smoke_summary.json"),
+            "exit_code": 0,
+            "status": "ok",
+            "ok": True,
+            "summary_status": "ok",
+            "error": None,
+        }
+
+    def _fake_append_safe_action_audit(runs_dir: Path, entry: dict[str, object]) -> None:
+        captured_audit["runs_dir"] = str(runs_dir)
+        captured_audit["entry"] = dict(entry)
+
+    monkeypatch.setattr(gateway, "run_safe_action", _fake_run_safe_action)
+    monkeypatch.setattr(gateway, "append_safe_action_audit", _fake_append_safe_action_audit)
+
+    result = gateway.run_gateway_request(
+        request_payload={
+            "schema_version": "gateway_request_v1",
+            "operation": "safe_action_smoke",
+            "payload": {
+                "action_key": "gateway_local_core",
+                "confirm": True,
+                "timeout_sec": 45.0,
+            },
+        },
+        runs_dir=tmp_path / "runs",
+        now=datetime(2026, 2, 27, 10, 4, 30, tzinfo=timezone.utc),
+    )
+
+    response_payload = result["response_payload"]
+    assert result["ok"] is True
+    assert response_payload["status"] == "ok"
+    assert response_payload["result"]["schema_version"] == "gateway_operator_safe_action_run_v1"
+    assert response_payload["result"]["action_key"] == "gateway_local_core"
+    assert response_payload["result"]["smoke_only"] is True
+    assert "safe_action_smoke" in response_payload["artifacts"]["child_runs"]
+    assert captured_audit["runs_dir"] == str(tmp_path / "runs")
+
+
+def test_gateway_v1_local_safe_action_smoke_requires_confirm(tmp_path: Path) -> None:
+    result = gateway.run_gateway_request(
+        request_payload={
+            "schema_version": "gateway_request_v1",
+            "operation": "safe_action_smoke",
+            "payload": {
+                "action_key": "gateway_local_core",
+                "confirm": False,
+            },
+        },
+        runs_dir=tmp_path / "runs",
+        now=datetime(2026, 2, 27, 10, 4, 45, tzinfo=timezone.utc),
+    )
+
+    assert result["ok"] is False
+    assert result["response_payload"]["status"] == "error"
+    assert result["response_payload"]["error_code"] == "invalid_request"
+    assert "payload.confirm must be true" in str(result["response_payload"]["error"])
+
+
 def test_gateway_v1_local_kag_query_missing_query_fails(tmp_path: Path) -> None:
     result = gateway.run_gateway_request(
         request_payload={

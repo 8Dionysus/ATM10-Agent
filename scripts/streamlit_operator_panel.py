@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import subprocess
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -17,6 +16,39 @@ except Exception:  # pragma: no cover
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
+
+from scripts.operator_product_snapshot import (
+    GATEWAY_OPERATOR_HISTORY_SCHEMA,
+    GATEWAY_OPERATOR_STATUS_SCHEMA,
+    GATEWAY_OPERATOR_RUNS_SCHEMA,
+    FAIL_NIGHTLY_INTEGRITY_SOURCE_SPEC,
+    FAIL_NIGHTLY_PROGRESS_SOURCE_SPECS,
+    FAIL_NIGHTLY_REMEDIATION_SOURCE_SPEC,
+    OPERATING_CYCLE_SOURCE_SPEC,
+    build_metrics_history_rows as shared_build_metrics_history_rows,
+    build_metrics_rows as shared_build_metrics_rows,
+    build_run_explorer_rows as shared_build_run_explorer_rows,
+    canonical_fail_nightly_integrity_source as shared_canonical_fail_nightly_integrity_source,
+    canonical_fail_nightly_progress_sources as shared_canonical_fail_nightly_progress_sources,
+    canonical_fail_nightly_remediation_source as shared_canonical_fail_nightly_remediation_source,
+    canonical_history_roots as shared_canonical_history_roots,
+    canonical_operating_cycle_source as shared_canonical_operating_cycle_source,
+    canonical_summary_sources as shared_canonical_summary_sources,
+    load_fail_nightly_integrity_snapshot as shared_load_fail_nightly_integrity_snapshot,
+    load_fail_nightly_progress_snapshot as shared_load_fail_nightly_progress_snapshot,
+    load_fail_nightly_remediation_snapshot as shared_load_fail_nightly_remediation_snapshot,
+    load_json_object as shared_load_json_object,
+    load_operating_cycle_snapshot as shared_load_operating_cycle_snapshot,
+)
+from scripts.operator_product_safe_actions import (
+    GATEWAY_OPERATOR_SAFE_ACTIONS_SCHEMA,
+    GATEWAY_OPERATOR_SAFE_ACTION_RUN_SCHEMA,
+    append_safe_action_audit as shared_append_safe_action_audit,
+    load_safe_action_audit as shared_load_safe_action_audit,
+    resolve_safe_action as shared_resolve_safe_action,
+    run_safe_action as shared_run_safe_action,
+    safe_actions_audit_log_path as shared_safe_actions_audit_log_path,
+)
 
 TAB_NAMES = (
     "Stack Health",
@@ -126,101 +158,15 @@ OPERATING_CYCLE_SOURCE_SPEC: dict[str, tuple[str, ...] | str] = {
 
 
 def safe_actions_audit_log_path(runs_dir: Path) -> Path:
-    return Path(runs_dir) / "ui-safe-actions" / "safe_actions_audit.jsonl"
+    return shared_safe_actions_audit_log_path(runs_dir)
 
 
 def append_safe_action_audit(runs_dir: Path, entry: dict[str, Any]) -> None:
-    path = safe_actions_audit_log_path(runs_dir)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    payload = {
-        "timestamp_utc": entry.get("timestamp_utc") or _utc_now(),
-        "action_key": entry.get("action_key"),
-        "command": entry.get("command"),
-        "exit_code": entry.get("exit_code"),
-        "status": entry.get("status"),
-        "summary_json": entry.get("summary_json"),
-        "summary_status": entry.get("summary_status"),
-        "error": entry.get("error"),
-        "ok": bool(entry.get("ok", False)),
-    }
-    with path.open("a", encoding="utf-8", newline="\n") as handle:
-        handle.write(json.dumps(payload, ensure_ascii=False) + "\n")
+    shared_append_safe_action_audit(runs_dir, entry)
 
 
 def load_safe_action_audit(runs_dir: Path, limit: int = 10) -> list[dict[str, Any]]:
-    path = safe_actions_audit_log_path(runs_dir)
-    if limit <= 0:
-        return []
-    if not path.is_file():
-        return []
-    entries: list[dict[str, Any]] = []
-    try:
-        lines = path.read_text(encoding="utf-8").splitlines()
-    except Exception as exc:
-        return [
-            {
-                "timestamp_utc": _utc_now(),
-                "action_key": "audit_read_error",
-                "command": None,
-                "exit_code": None,
-                "status": "error",
-                "summary_json": str(path),
-                "summary_status": None,
-                "error": f"failed to read audit log: {exc}",
-                "ok": False,
-            }
-        ]
-
-    for line_idx, raw_line in enumerate(lines, start=1):
-        line = raw_line.strip()
-        if not line:
-            continue
-        try:
-            payload = json.loads(line)
-        except Exception:
-            entries.append(
-                {
-                    "timestamp_utc": _utc_now(),
-                    "action_key": "invalid_audit_entry",
-                    "command": None,
-                    "exit_code": None,
-                    "status": "error",
-                    "summary_json": str(path),
-                    "summary_status": None,
-                    "error": f"invalid audit entry at line {line_idx}",
-                    "ok": False,
-                }
-            )
-            continue
-        if not isinstance(payload, dict):
-            entries.append(
-                {
-                    "timestamp_utc": _utc_now(),
-                    "action_key": "invalid_audit_entry",
-                    "command": None,
-                    "exit_code": None,
-                    "status": "error",
-                    "summary_json": str(path),
-                    "summary_status": None,
-                    "error": f"invalid audit entry at line {line_idx}",
-                    "ok": False,
-                }
-            )
-            continue
-        entries.append(
-            {
-                "timestamp_utc": payload.get("timestamp_utc"),
-                "action_key": payload.get("action_key"),
-                "command": payload.get("command"),
-                "exit_code": payload.get("exit_code"),
-                "status": payload.get("status"),
-                "summary_json": payload.get("summary_json"),
-                "summary_status": payload.get("summary_status"),
-                "error": payload.get("error"),
-                "ok": bool(payload.get("ok", False)),
-            }
-        )
-    return list(reversed(entries))[:limit]
+    return shared_load_safe_action_audit(runs_dir, limit=limit)
 
 
 def _utc_now() -> str:
@@ -318,11 +264,7 @@ def canonical_operating_cycle_source(runs_dir: Path) -> Path:
 
 
 def canonical_history_roots(runs_dir: Path) -> dict[str, Path]:
-    base = Path(runs_dir)
-    return {
-        source: base / str(spec["root_subdir"])
-        for source, spec in HISTORY_SOURCE_SPECS.items()
-    }
+    return shared_canonical_history_roots(runs_dir)
 
 
 def _iter_candidate_run_dirs(root: Path) -> list[Path]:
@@ -422,38 +364,13 @@ def build_metrics_history_rows(
     limit_per_source: int = 10,
     max_candidates_per_source: int = 200,
 ) -> tuple[list[dict[str, Any]], list[str]]:
-    roots = canonical_history_roots(runs_dir)
-    source_filter = selected_sources or list(roots.keys())
-    status_filter = {value.strip().lower() for value in (selected_statuses or ["ok", "error"])}
-    per_source_limit = max(int(limit_per_source), 1)
-    candidate_cap = max(int(max_candidates_per_source), 1)
-
-    rows: list[dict[str, Any]] = []
-    warnings: list[str] = []
-    for source in source_filter:
-        root = roots.get(source)
-        if root is None:
-            warnings.append(f"{source}: unknown source")
-            continue
-        candidates = _iter_candidate_run_dirs(root)[:candidate_cap]
-        source_rows: list[dict[str, Any]] = []
-        for run_dir in candidates:
-            row, warning = _parse_history_row(source, run_dir)
-            if warning is not None:
-                warnings.append(warning)
-                continue
-            if row is None:
-                continue
-            row_status = str(row.get("status", "unknown")).strip().lower()
-            if status_filter and row_status not in status_filter:
-                continue
-            source_rows.append(row)
-            if len(source_rows) >= per_source_limit:
-                break
-        rows.extend(source_rows)
-
-    rows.sort(key=lambda item: str(item.get("timestamp_utc") or ""), reverse=True)
-    return rows, warnings
+    return shared_build_metrics_history_rows(
+        runs_dir,
+        selected_sources=selected_sources,
+        selected_statuses=selected_statuses,
+        limit_per_source=limit_per_source,
+        max_candidates_per_source=max_candidates_per_source,
+    )
 
 
 def load_json_object(path: Path) -> tuple[dict[str, Any] | None, str | None]:
@@ -652,6 +569,22 @@ def load_operating_cycle_snapshot(
     return snapshot, []
 
 
+canonical_summary_sources = shared_canonical_summary_sources
+canonical_fail_nightly_progress_sources = shared_canonical_fail_nightly_progress_sources
+canonical_fail_nightly_remediation_source = shared_canonical_fail_nightly_remediation_source
+canonical_fail_nightly_integrity_source = shared_canonical_fail_nightly_integrity_source
+canonical_operating_cycle_source = shared_canonical_operating_cycle_source
+load_json_object = shared_load_json_object
+load_fail_nightly_progress_snapshot = shared_load_fail_nightly_progress_snapshot
+load_fail_nightly_remediation_snapshot = shared_load_fail_nightly_remediation_snapshot
+load_fail_nightly_integrity_snapshot = shared_load_fail_nightly_integrity_snapshot
+load_operating_cycle_snapshot = shared_load_operating_cycle_snapshot
+build_metrics_rows = shared_build_metrics_rows
+build_run_explorer_rows = shared_build_run_explorer_rows
+canonical_history_roots = shared_canonical_history_roots
+build_metrics_history_rows = shared_build_metrics_history_rows
+
+
 def fetch_gateway_health(gateway_url: str, timeout_sec: float) -> tuple[dict[str, Any] | None, str | None]:
     url = gateway_url.rstrip("/") + "/healthz"
     req = request.Request(url=url, method="GET")
@@ -669,121 +602,385 @@ def fetch_gateway_health(gateway_url: str, timeout_sec: float) -> tuple[dict[str
     return payload, None
 
 
-def build_metrics_rows(sources: dict[str, Path]) -> list[dict[str, Any]]:
-    rows: list[dict[str, Any]] = []
-    for source_name, path in sources.items():
-        payload, load_error = load_json_object(path)
-        row: dict[str, Any] = {
-            "source": source_name,
-            "summary_json": str(path),
-            "status": "missing" if payload is None else str(payload.get("status", "unknown")),
-            "details": "-" if load_error is None else load_error,
-            "request_count": None,
-            "failed_requests_count": None,
-            "query_count": None,
-            "mean_mrr_at_k": None,
-            "results_count": None,
+def fetch_gateway_operator_snapshot(
+    gateway_url: str,
+    timeout_sec: float,
+) -> tuple[dict[str, Any] | None, str | None]:
+    url = gateway_url.rstrip("/") + "/v1/operator/snapshot"
+    req = request.Request(url=url, method="GET")
+    try:
+        with request.urlopen(req, timeout=timeout_sec) as response:
+            body = response.read()
+    except Exception as exc:
+        return None, f"gateway operator snapshot request failed: {exc}"
+    try:
+        payload = json.loads(body.decode("utf-8"))
+    except Exception as exc:
+        return None, f"gateway operator snapshot JSON parse failed: {exc}"
+    if not isinstance(payload, dict):
+        return None, "gateway operator snapshot payload must be object"
+    if str(payload.get("schema_version", "")).strip() != GATEWAY_OPERATOR_STATUS_SCHEMA:
+        return None, (
+            "gateway operator snapshot schema mismatch: "
+            f"{payload.get('schema_version')!r} != {GATEWAY_OPERATOR_STATUS_SCHEMA!r}"
+        )
+    return payload, None
+
+
+def fetch_gateway_operator_runs(
+    gateway_url: str,
+    timeout_sec: float,
+    *,
+    limit: int = 20,
+) -> tuple[dict[str, Any] | None, str | None]:
+    url = gateway_url.rstrip("/") + f"/v1/operator/runs?limit={max(int(limit), 1)}"
+    req = request.Request(url=url, method="GET")
+    try:
+        with request.urlopen(req, timeout=timeout_sec) as response:
+            body = response.read()
+    except Exception as exc:
+        return None, f"gateway operator runs request failed: {exc}"
+    try:
+        payload = json.loads(body.decode("utf-8"))
+    except Exception as exc:
+        return None, f"gateway operator runs JSON parse failed: {exc}"
+    if not isinstance(payload, dict):
+        return None, "gateway operator runs payload must be object"
+    if str(payload.get("schema_version", "")).strip() != GATEWAY_OPERATOR_RUNS_SCHEMA:
+        return None, (
+            "gateway operator runs schema mismatch: "
+            f"{payload.get('schema_version')!r} != {GATEWAY_OPERATOR_RUNS_SCHEMA!r}"
+        )
+    return payload, None
+
+
+def fetch_gateway_operator_history(
+    gateway_url: str,
+    timeout_sec: float,
+    *,
+    selected_sources: list[str] | None = None,
+    selected_statuses: list[str] | None = None,
+    limit_per_source: int = 10,
+) -> tuple[dict[str, Any] | None, str | None]:
+    query_parts = [f"limit_per_source={max(int(limit_per_source), 1)}"]
+    if selected_sources:
+        query_parts.append("source=" + ",".join(selected_sources))
+    if selected_statuses:
+        query_parts.append("status=" + ",".join(selected_statuses))
+    url = gateway_url.rstrip("/") + "/v1/operator/history?" + "&".join(query_parts)
+    req = request.Request(url=url, method="GET")
+    try:
+        with request.urlopen(req, timeout=timeout_sec) as response:
+            body = response.read()
+    except Exception as exc:
+        return None, f"gateway operator history request failed: {exc}"
+    try:
+        payload = json.loads(body.decode("utf-8"))
+    except Exception as exc:
+        return None, f"gateway operator history JSON parse failed: {exc}"
+    if not isinstance(payload, dict):
+        return None, "gateway operator history payload must be object"
+    if str(payload.get("schema_version", "")).strip() != GATEWAY_OPERATOR_HISTORY_SCHEMA:
+        return None, (
+            "gateway operator history schema mismatch: "
+            f"{payload.get('schema_version')!r} != {GATEWAY_OPERATOR_HISTORY_SCHEMA!r}"
+        )
+    return payload, None
+
+
+def fetch_gateway_safe_actions(
+    gateway_url: str,
+    timeout_sec: float,
+    *,
+    history_limit: int = 10,
+) -> tuple[dict[str, Any] | None, str | None]:
+    url = gateway_url.rstrip("/") + f"/v1/operator/safe-actions?history_limit={max(int(history_limit), 1)}"
+    req = request.Request(url=url, method="GET")
+    try:
+        with request.urlopen(req, timeout=timeout_sec) as response:
+            body = response.read()
+    except Exception as exc:
+        return None, f"gateway safe actions request failed: {exc}"
+    try:
+        payload = json.loads(body.decode("utf-8"))
+    except Exception as exc:
+        return None, f"gateway safe actions JSON parse failed: {exc}"
+    if not isinstance(payload, dict):
+        return None, "gateway safe actions payload must be object"
+    if str(payload.get("schema_version", "")).strip() != GATEWAY_OPERATOR_SAFE_ACTIONS_SCHEMA:
+        return None, (
+            "gateway safe actions schema mismatch: "
+            f"{payload.get('schema_version')!r} != {GATEWAY_OPERATOR_SAFE_ACTIONS_SCHEMA!r}"
+        )
+    return payload, None
+
+
+def run_gateway_safe_action(
+    gateway_url: str,
+    timeout_sec: float,
+    *,
+    action_key: str,
+    confirm: bool,
+    action_timeout_sec: float = 300.0,
+) -> tuple[dict[str, Any] | None, str | None]:
+    url = gateway_url.rstrip("/") + "/v1/operator/safe-actions/run"
+    body = json.dumps(
+        {
+            "action_key": action_key,
+            "confirm": bool(confirm),
+            "timeout_sec": float(action_timeout_sec),
         }
-        if payload is not None:
-            observed = payload.get("observed")
-            if isinstance(observed, dict):
-                row["results_count"] = observed.get("results_count")
-                row["query_count"] = observed.get("query_count")
-                row["mean_mrr_at_k"] = observed.get("mean_mrr_at_k")
-            row["request_count"] = payload.get("request_count")
-            row["failed_requests_count"] = payload.get("failed_requests_count")
-        rows.append(row)
-    return rows
+    ).encode("utf-8")
+    req = request.Request(
+        url=url,
+        method="POST",
+        data=body,
+        headers={"Content-Type": "application/json"},
+    )
+    try:
+        with request.urlopen(req, timeout=timeout_sec) as response:
+            raw_body = response.read()
+    except url_error.HTTPError as exc:
+        error_body = exc.read().decode("utf-8", errors="replace")
+        try:
+            payload = json.loads(error_body)
+        except Exception:
+            return None, f"gateway safe action request failed: http {exc.code}: {error_body or exc.reason}"
+        if isinstance(payload, dict):
+            return None, str(payload.get("error") or f"http {exc.code}")
+        return None, f"gateway safe action request failed: http {exc.code}"
+    except Exception as exc:
+        return None, f"gateway safe action request failed: {exc}"
+    try:
+        payload = json.loads(raw_body.decode("utf-8"))
+    except Exception as exc:
+        return None, f"gateway safe action JSON parse failed: {exc}"
+    if not isinstance(payload, dict):
+        return None, "gateway safe action payload must be object"
+    if str(payload.get("schema_version", "")).strip() != GATEWAY_OPERATOR_SAFE_ACTION_RUN_SCHEMA:
+        return None, (
+            "gateway safe action schema mismatch: "
+            f"{payload.get('schema_version')!r} != {GATEWAY_OPERATOR_SAFE_ACTION_RUN_SCHEMA!r}"
+        )
+    return payload, None
+
+
+def _render_snapshot_warnings(title: str, warnings: list[str]) -> None:
+    if not warnings:
+        return
+    sample = "\n".join(f"- {item}" for item in warnings[:5])
+    suffix = "" if len(warnings) <= 5 else "\n- ..."
+    st.warning(f"{title} ({len(warnings)}):\n{sample}{suffix}")
+
+
+def _render_operating_cycle_section(snapshot: dict[str, Any] | None, warnings: list[str]) -> None:
+    _render_snapshot_warnings(
+        "Some G2 operating cycle artifacts were skipped due to parse/contract issues",
+        warnings,
+    )
+    if snapshot is None:
+        st.info("not available yet")
+        return
+
+    cycle = snapshot.get("cycle")
+    cycle = cycle if isinstance(cycle, dict) else {}
+    triage = snapshot.get("triage")
+    triage = triage if isinstance(triage, dict) else {}
+    interpretation = snapshot.get("interpretation")
+    interpretation = interpretation if isinstance(interpretation, dict) else {}
+    operating_cycle_row = {
+        "status": snapshot.get("status"),
+        "cycle_source": cycle.get("source"),
+        "operating_mode": cycle.get("operating_mode"),
+        "used_manual_fallback": cycle.get("used_manual_fallback"),
+        "manual_execution_mode": cycle.get("manual_execution_mode"),
+        "manual_decision_status": cycle.get("manual_decision_status"),
+        "readiness_status": triage.get("readiness_status"),
+        "governance_decision_status": triage.get("governance_decision_status"),
+        "progress_decision_status": triage.get("progress_decision_status"),
+        "remaining_for_window": triage.get("remaining_for_window"),
+        "remaining_for_streak": triage.get("remaining_for_streak"),
+        "transition_allow_switch": triage.get("transition_allow_switch"),
+        "candidate_item_count": triage.get("candidate_item_count"),
+        "integrity_status": triage.get("integrity_status"),
+        "attention_state": triage.get("attention_state"),
+        "earliest_go_candidate_at_utc": triage.get("earliest_go_candidate_at_utc"),
+        "next_accounted_dispatch_at_utc": triage.get("next_accounted_dispatch_at_utc"),
+        "next_action_hint": interpretation.get("next_action_hint"),
+    }
+    st.dataframe([operating_cycle_row], width="stretch")
+    candidate_item_ids = _normalize_reason_codes(triage.get("candidate_item_ids"))
+    if candidate_item_ids:
+        st.caption("Operating cycle candidate backlog")
+        st.dataframe(
+            [{"candidate_item_ids": ", ".join(candidate_item_ids)}],
+            width="stretch",
+        )
+    invalid_counts = triage.get("invalid_counts")
+    invalid_counts = invalid_counts if isinstance(invalid_counts, dict) else {}
+    if invalid_counts:
+        st.caption("Operating cycle invalid counts")
+        st.json(invalid_counts)
+    operating_cycle_paths = snapshot.get("paths")
+    operating_cycle_paths = operating_cycle_paths if isinstance(operating_cycle_paths, dict) else {}
+    st.caption("Operating cycle artifacts")
+    st.json(
+        {
+            "checked_at_utc": snapshot.get("checked_at_utc"),
+            "summary_json": operating_cycle_paths.get("summary_json"),
+            "brief_md": _coalesce(operating_cycle_paths.get("brief_md"), "not available yet"),
+        }
+    )
+
+
+def _render_fail_nightly_progress_section(snapshot: dict[str, Any] | None, warnings: list[str]) -> None:
+    _render_snapshot_warnings(
+        "Some fail_nightly progress artifacts were skipped due to parse/contract issues",
+        warnings,
+    )
+    if snapshot is None:
+        st.info("not available yet")
+        return
+
+    progress_row = {
+        "readiness_status": snapshot.get("readiness_status"),
+        "latest_ready_streak": snapshot.get("latest_ready_streak"),
+        "decision_status": snapshot.get("decision_status"),
+        "remaining_for_window": snapshot.get("remaining_for_window"),
+        "remaining_for_streak": snapshot.get("remaining_for_streak"),
+        "target_critical_policy": snapshot.get("target_critical_policy"),
+        "reason_codes": ", ".join(snapshot.get("reason_codes") or []),
+        "available_sources": ", ".join(snapshot.get("available_sources") or []),
+        "missing_sources": ", ".join(snapshot.get("missing_sources") or []),
+    }
+    st.dataframe([progress_row], width="stretch")
+    st.caption("Progress source paths")
+    st.json(snapshot.get("source_paths"))
+
+
+def _render_fail_nightly_remediation_section(snapshot: dict[str, Any] | None, warnings: list[str]) -> None:
+    _render_snapshot_warnings(
+        "Some fail_nightly remediation artifacts were skipped due to parse/contract issues",
+        warnings,
+    )
+    if snapshot is None:
+        st.info("not available yet")
+        return
+
+    observed = snapshot.get("observed")
+    observed = observed if isinstance(observed, dict) else {}
+    candidate_items = snapshot.get("candidate_items")
+    candidate_items = candidate_items if isinstance(candidate_items, list) else []
+    candidate_ids = [
+        str(item.get("id"))
+        for item in candidate_items
+        if isinstance(item, dict) and str(item.get("id", "")).strip()
+    ]
+    remediation_row = {
+        "status": snapshot.get("status"),
+        "policy": snapshot.get("policy"),
+        "readiness_status": observed.get("readiness_status"),
+        "governance_decision_status": observed.get("governance_decision_status"),
+        "progress_decision_status": observed.get("progress_decision_status"),
+        "transition_allow_switch": observed.get("transition_allow_switch"),
+        "remaining_for_window": observed.get("remaining_for_window"),
+        "remaining_for_streak": observed.get("remaining_for_streak"),
+        "attention_state": observed.get("attention_state"),
+        "candidate_item_count": len(candidate_items),
+        "candidate_item_ids": ", ".join(candidate_ids),
+        "reason_codes": ", ".join(_normalize_reason_codes(snapshot.get("reason_codes"))),
+    }
+    st.dataframe([remediation_row], width="stretch")
+    if candidate_items:
+        candidate_rows = []
+        for item in candidate_items:
+            if not isinstance(item, dict):
+                continue
+            candidate_rows.append(
+                {
+                    "id": item.get("id"),
+                    "priority": item.get("priority"),
+                    "summary": item.get("summary"),
+                    "source_refs": ", ".join(_normalize_reason_codes(item.get("source_refs"))),
+                }
+            )
+        if candidate_rows:
+            st.caption("Remediation candidate backlog")
+            st.dataframe(candidate_rows, width="stretch")
+    else:
+        st.caption("Remediation backlog not required.")
+    st.caption("Remediation artifact")
+    st.json(
+        {
+            "checked_at_utc": snapshot.get("checked_at_utc"),
+            "summary_json": _coalesce(
+                _nested_get(snapshot, "paths", "summary_json"),
+                "not available yet",
+            ),
+        }
+    )
+
+
+def _render_fail_nightly_integrity_section(snapshot: dict[str, Any] | None, warnings: list[str]) -> None:
+    _render_snapshot_warnings(
+        "Some fail_nightly integrity artifacts were skipped due to parse/contract issues",
+        warnings,
+    )
+    if snapshot is None:
+        st.info("not available yet")
+        return
+
+    observed = snapshot.get("observed")
+    observed = observed if isinstance(observed, dict) else {}
+    decision = snapshot.get("decision")
+    decision = decision if isinstance(decision, dict) else {}
+    invalid_counts = observed.get("invalid_counts")
+    invalid_counts = invalid_counts if isinstance(invalid_counts, dict) else {}
+    utc_guardrail = observed.get("utc_guardrail")
+    utc_guardrail = utc_guardrail if isinstance(utc_guardrail, dict) else {}
+    integrity_row = {
+        "status": snapshot.get("status"),
+        "integrity_status": decision.get("integrity_status"),
+        "telemetry_ok": observed.get("telemetry_ok"),
+        "dual_write_ok": observed.get("dual_write_ok"),
+        "anti_double_count_ok": observed.get("anti_double_count_ok"),
+        "utc_guardrail_status": observed.get("utc_guardrail_status"),
+        "governance_invalid": invalid_counts.get("governance"),
+        "progress_readiness_invalid": invalid_counts.get("progress_readiness"),
+        "progress_governance_invalid": invalid_counts.get("progress_governance"),
+        "transition_aggregated_invalid": invalid_counts.get("transition_aggregated"),
+        "reason_codes": ", ".join(_normalize_reason_codes(decision.get("reason_codes"))),
+    }
+    st.dataframe([integrity_row], width="stretch")
+    st.caption("Integrity UTC guardrail")
+    st.json(utc_guardrail)
+    st.caption("Integrity artifact")
+    st.json(
+        {
+            "checked_at_utc": snapshot.get("checked_at_utc"),
+            "summary_json": _coalesce(
+                _nested_get(snapshot, "paths", "summary_json"),
+                "not available yet",
+            ),
+        }
+    )
+
+
+def build_metrics_rows(sources: dict[str, Path]) -> list[dict[str, Any]]:
+    return shared_build_metrics_rows(sources)
 
 
 def build_run_explorer_rows(sources: dict[str, Path]) -> list[dict[str, Any]]:
-    rows: list[dict[str, Any]] = []
-    for source_name, path in sources.items():
-        payload, load_error = load_json_object(path)
-        row: dict[str, Any] = {
-            "source": source_name,
-            "summary_json": str(path),
-            "status": "missing" if payload is None else str(payload.get("status", "unknown")),
-            "scenario": None,
-            "run_dir": None,
-            "run_json": None,
-            "request_count": None,
-            "failed_requests_count": None,
-            "error": load_error,
-        }
-        if payload is not None:
-            paths_payload = payload.get("paths")
-            if isinstance(paths_payload, dict):
-                row["run_dir"] = paths_payload.get("run_dir")
-                row["run_json"] = paths_payload.get("run_json")
-            row["scenario"] = payload.get("scenario")
-            row["request_count"] = payload.get("request_count")
-            row["failed_requests_count"] = payload.get("failed_requests_count")
-        rows.append(row)
-    return rows
+    return shared_build_run_explorer_rows(sources)
 
 
 def resolve_safe_action(action_key: str, runs_dir: Path) -> tuple[list[str], Path]:
-    config = SAFE_ACTIONS.get(action_key)
-    if config is None:
-        raise ValueError(f"unsupported safe action: {action_key!r}")
-    action_runs_dir = Path(runs_dir) / config["runs_subdir"]
-    summary_path = action_runs_dir / config["summary_name"]
-    command = [
-        sys.executable,
-        config["script"],
-        "--scenario",
-        config["scenario"],
-        "--runs-dir",
-        str(action_runs_dir),
-        "--summary-json",
-        str(summary_path),
-    ]
+    command, _action_runs_dir, summary_path = shared_resolve_safe_action(action_key, runs_dir)
     return command, summary_path
 
 
 def run_safe_action(action_key: str, runs_dir: Path, *, timeout_sec: float = 300.0) -> dict[str, Any]:
-    command, summary_path = resolve_safe_action(action_key, runs_dir)
-    command_text = " ".join(command)
-    started_at_utc = _utc_now()
-    try:
-        completed = subprocess.run(
-            command,
-            cwd=str(REPO_ROOT),
-            capture_output=True,
-            text=True,
-            timeout=timeout_sec,
-            check=False,
-        )
-    except subprocess.TimeoutExpired as exc:
-        return {
-            "timestamp_utc": started_at_utc,
-            "action_key": action_key,
-            "command": command_text,
-            "exit_code": 2,
-            "status": "error",
-            "ok": False,
-            "summary_json": str(summary_path),
-            "error": f"safe action timeout: {exc}",
-            "stdout": "",
-            "stderr": "",
-        }
-    summary_payload, load_error = load_json_object(summary_path)
-    summary_status = None if summary_payload is None else str(summary_payload.get("status"))
-    ok = completed.returncode == 0 and summary_status == "ok" and load_error is None
-    return {
-        "timestamp_utc": started_at_utc,
-        "action_key": action_key,
-        "command": command_text,
-        "exit_code": int(completed.returncode),
-        "status": "ok" if ok else "error",
-        "ok": ok,
-        "summary_json": str(summary_path),
-        "summary_status": summary_status,
-        "error": load_error,
-        "stdout": completed.stdout,
-        "stderr": completed.stderr,
-    }
+    return shared_run_safe_action(action_key, runs_dir, timeout_sec=timeout_sec)
 
 
 def parse_panel_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -810,12 +1007,57 @@ def parse_panel_args(argv: list[str] | None = None) -> argparse.Namespace:
     return args
 
 
-def _render_stack_health_tab(gateway_url: str, gateway_timeout_sec: float) -> None:
-    health_payload, health_error = fetch_gateway_health(gateway_url, gateway_timeout_sec)
+def _render_stack_health_tab(
+    *,
+    health_payload: dict[str, Any] | None,
+    health_error: str | None,
+    operator_snapshot_payload: dict[str, Any] | None,
+    operator_snapshot_error: str | None,
+) -> None:
     if health_error is not None:
         st.error(health_error)
         return
-    st.success("Gateway transport health loaded.")
+    if health_payload is None:
+        st.error("gateway health payload is not available")
+        return
+
+    if operator_snapshot_payload is not None:
+        st.success("Gateway operator snapshot loaded.")
+        stack_services = operator_snapshot_payload.get("stack_services")
+        stack_services = stack_services if isinstance(stack_services, dict) else {}
+        service_rows: list[dict[str, Any]] = []
+        for service_name, payload in stack_services.items():
+            payload = payload if isinstance(payload, dict) else {}
+            service_health = payload.get("payload")
+            service_health = service_health if isinstance(service_health, dict) else {}
+            service_rows.append(
+                {
+                    "service_name": service_name,
+                    "configured": payload.get("configured"),
+                    "status": payload.get("status"),
+                    "url": payload.get("url"),
+                    "api_docs_exposed": service_health.get("api_docs_exposed"),
+                    "auth_enabled": service_health.get("auth_enabled"),
+                    "error": payload.get("error"),
+                }
+            )
+        if service_rows:
+            st.subheader("Stack services")
+            st.dataframe(service_rows, width="stretch")
+        warning_payload = operator_snapshot_payload.get("warnings")
+        warning_payload = warning_payload if isinstance(warning_payload, dict) else {}
+        _render_snapshot_warnings(
+            "Some downstream service probes returned errors",
+            [str(item) for item in warning_payload.get("service_probes", []) if str(item).strip()],
+        )
+    else:
+        st.success("Gateway transport health loaded.")
+        if operator_snapshot_error is not None:
+            st.info(
+                "Gateway operator snapshot unavailable; using direct gateway health only.\n"
+                f"{operator_snapshot_error}"
+            )
+
     st.json(health_payload)
     policy = health_payload.get("policy") if isinstance(health_payload, dict) else None
     if isinstance(policy, dict):
@@ -823,8 +1065,30 @@ def _render_stack_health_tab(gateway_url: str, gateway_timeout_sec: float) -> No
         st.json(policy)
 
 
-def _render_run_explorer_tab(sources: dict[str, Path]) -> None:
-    rows = build_run_explorer_rows(sources)
+def _render_run_explorer_tab(
+    *,
+    gateway_url: str,
+    gateway_timeout_sec: float,
+    sources: dict[str, Path],
+) -> None:
+    runs_payload, runs_error = fetch_gateway_operator_runs(
+        gateway_url,
+        gateway_timeout_sec,
+        limit=20,
+    )
+    if runs_payload is not None:
+        rows = runs_payload.get("rows")
+        rows = rows if isinstance(rows, list) else []
+        st.caption("Data source: gateway operator runs")
+    else:
+        rows = build_run_explorer_rows(sources)
+        st.caption(
+            "Data source: local contract fallback"
+            if runs_error is not None
+            else "Data source: local contract files"
+        )
+        if runs_error is not None:
+            st.info(f"Gateway operator runs unavailable; using local fallback.\n{runs_error}")
     st.dataframe(rows, width="stretch")
     st.subheader("Artifact paths")
     for row in rows:
@@ -840,211 +1104,80 @@ def _render_run_explorer_tab(sources: dict[str, Path]) -> None:
         )
 
 
-def _render_latest_metrics_tab(runs_dir: Path, sources: dict[str, Path]) -> None:
-    rows = build_metrics_rows(sources)
+def _render_latest_metrics_tab(
+    runs_dir: Path,
+    sources: dict[str, Path],
+    *,
+    gateway_url: str,
+    gateway_timeout_sec: float,
+    operator_snapshot_payload: dict[str, Any] | None,
+    operator_snapshot_error: str | None,
+) -> None:
+    latest_metrics_payload = (
+        operator_snapshot_payload.get("latest_metrics")
+        if isinstance(operator_snapshot_payload, dict)
+        else None
+    )
+    latest_metrics_payload = latest_metrics_payload if isinstance(latest_metrics_payload, dict) else None
+    warning_payload = (
+        operator_snapshot_payload.get("warnings")
+        if isinstance(operator_snapshot_payload, dict)
+        else None
+    )
+    warning_payload = warning_payload if isinstance(warning_payload, dict) else {}
+    if latest_metrics_payload is not None:
+        rows = latest_metrics_payload.get("summary_matrix")
+        rows = rows if isinstance(rows, list) else []
+        st.caption("Data source: gateway operator snapshot")
+    else:
+        rows = build_metrics_rows(sources)
+        st.caption(
+            "Data source: local contract fallback"
+            if operator_snapshot_error is not None
+            else "Data source: local contract files"
+        )
     st.subheader("Latest summary matrix")
     st.dataframe(rows, width="stretch")
 
     st.subheader("G2 operating cycle")
-    operating_cycle_snapshot, operating_cycle_warnings = load_operating_cycle_snapshot(runs_dir)
-    if operating_cycle_warnings:
-        sample = "\n".join(f"- {item}" for item in operating_cycle_warnings[:5])
-        suffix = "" if len(operating_cycle_warnings) <= 5 else "\n- ..."
-        st.warning(
-            "Some G2 operating cycle artifacts were skipped due to parse/contract issues "
-            f"({len(operating_cycle_warnings)}):\n{sample}{suffix}"
-        )
-    if operating_cycle_snapshot is None:
-        st.info("not available yet")
-    else:
-        cycle = operating_cycle_snapshot.get("cycle")
-        cycle = cycle if isinstance(cycle, dict) else {}
-        triage = operating_cycle_snapshot.get("triage")
-        triage = triage if isinstance(triage, dict) else {}
-        interpretation = operating_cycle_snapshot.get("interpretation")
-        interpretation = interpretation if isinstance(interpretation, dict) else {}
-        operating_cycle_row = {
-            "status": operating_cycle_snapshot.get("status"),
-            "cycle_source": cycle.get("source"),
-            "operating_mode": cycle.get("operating_mode"),
-            "used_manual_fallback": cycle.get("used_manual_fallback"),
-            "manual_execution_mode": cycle.get("manual_execution_mode"),
-            "manual_decision_status": cycle.get("manual_decision_status"),
-            "readiness_status": triage.get("readiness_status"),
-            "governance_decision_status": triage.get("governance_decision_status"),
-            "progress_decision_status": triage.get("progress_decision_status"),
-            "remaining_for_window": triage.get("remaining_for_window"),
-            "remaining_for_streak": triage.get("remaining_for_streak"),
-            "transition_allow_switch": triage.get("transition_allow_switch"),
-            "candidate_item_count": triage.get("candidate_item_count"),
-            "integrity_status": triage.get("integrity_status"),
-            "attention_state": triage.get("attention_state"),
-            "earliest_go_candidate_at_utc": triage.get("earliest_go_candidate_at_utc"),
-            "next_accounted_dispatch_at_utc": triage.get("next_accounted_dispatch_at_utc"),
-            "next_action_hint": interpretation.get("next_action_hint"),
-        }
-        st.dataframe([operating_cycle_row], width="stretch")
-        candidate_item_ids = _normalize_reason_codes(triage.get("candidate_item_ids"))
-        if candidate_item_ids:
-            st.caption("Operating cycle candidate backlog")
-            st.dataframe(
-                [{"candidate_item_ids": ", ".join(candidate_item_ids)}],
-                width="stretch",
-            )
-        invalid_counts = triage.get("invalid_counts")
-        invalid_counts = invalid_counts if isinstance(invalid_counts, dict) else {}
-        if invalid_counts:
-            st.caption("Operating cycle invalid counts")
-            st.json(invalid_counts)
-        operating_cycle_paths = operating_cycle_snapshot.get("paths")
-        operating_cycle_paths = operating_cycle_paths if isinstance(operating_cycle_paths, dict) else {}
-        st.caption("Operating cycle artifacts")
-        st.json(
-            {
-                "checked_at_utc": operating_cycle_snapshot.get("checked_at_utc"),
-                "summary_json": operating_cycle_paths.get("summary_json"),
-                "brief_md": _coalesce(operating_cycle_paths.get("brief_md"), "not available yet"),
-            }
-        )
+    operating_cycle_snapshot = (
+        latest_metrics_payload.get("operating_cycle") if latest_metrics_payload is not None else None
+    )
+    operating_cycle_snapshot = operating_cycle_snapshot if isinstance(operating_cycle_snapshot, dict) else None
+    operating_cycle_warnings = [str(item) for item in warning_payload.get("metrics", []) if "operating_cycle" in str(item)]
+    if operating_cycle_snapshot is None and latest_metrics_payload is None:
+        operating_cycle_snapshot, operating_cycle_warnings = load_operating_cycle_snapshot(runs_dir)
+    _render_operating_cycle_section(operating_cycle_snapshot, operating_cycle_warnings)
 
     st.subheader("Gateway fail_nightly progress")
-    progress_snapshot, progress_warnings = load_fail_nightly_progress_snapshot(runs_dir)
-    if progress_warnings:
-        sample = "\n".join(f"- {item}" for item in progress_warnings[:5])
-        suffix = "" if len(progress_warnings) <= 5 else "\n- ..."
-        st.warning(
-            "Some fail_nightly progress artifacts were skipped due to parse/contract issues "
-            f"({len(progress_warnings)}):\n{sample}{suffix}"
-        )
-    if progress_snapshot is None:
-        st.info("not available yet")
-    else:
-        progress_row = {
-            "readiness_status": progress_snapshot.get("readiness_status"),
-            "latest_ready_streak": progress_snapshot.get("latest_ready_streak"),
-            "decision_status": progress_snapshot.get("decision_status"),
-            "remaining_for_window": progress_snapshot.get("remaining_for_window"),
-            "remaining_for_streak": progress_snapshot.get("remaining_for_streak"),
-            "target_critical_policy": progress_snapshot.get("target_critical_policy"),
-            "reason_codes": ", ".join(progress_snapshot.get("reason_codes") or []),
-            "available_sources": ", ".join(progress_snapshot.get("available_sources") or []),
-            "missing_sources": ", ".join(progress_snapshot.get("missing_sources") or []),
-        }
-        st.dataframe([progress_row], width="stretch")
-        st.caption("Progress source paths")
-        st.json(progress_snapshot.get("source_paths"))
+    progress_snapshot = (
+        latest_metrics_payload.get("fail_nightly_progress") if latest_metrics_payload is not None else None
+    )
+    progress_snapshot = progress_snapshot if isinstance(progress_snapshot, dict) else None
+    progress_warnings = [str(item) for item in warning_payload.get("metrics", []) if "progress" in str(item)]
+    if progress_snapshot is None and latest_metrics_payload is None:
+        progress_snapshot, progress_warnings = load_fail_nightly_progress_snapshot(runs_dir)
+    _render_fail_nightly_progress_section(progress_snapshot, progress_warnings)
 
     st.subheader("Gateway fail_nightly remediation")
-    remediation_snapshot, remediation_warnings = load_fail_nightly_remediation_snapshot(runs_dir)
-    if remediation_warnings:
-        sample = "\n".join(f"- {item}" for item in remediation_warnings[:5])
-        suffix = "" if len(remediation_warnings) <= 5 else "\n- ..."
-        st.warning(
-            "Some fail_nightly remediation artifacts were skipped due to parse/contract issues "
-            f"({len(remediation_warnings)}):\n{sample}{suffix}"
-        )
-    if remediation_snapshot is None:
-        st.info("not available yet")
-    else:
-        observed = remediation_snapshot.get("observed")
-        observed = observed if isinstance(observed, dict) else {}
-        candidate_items = remediation_snapshot.get("candidate_items")
-        candidate_items = candidate_items if isinstance(candidate_items, list) else []
-        candidate_ids = [
-            str(item.get("id"))
-            for item in candidate_items
-            if isinstance(item, dict) and str(item.get("id", "")).strip()
-        ]
-        remediation_row = {
-            "status": remediation_snapshot.get("status"),
-            "policy": remediation_snapshot.get("policy"),
-            "readiness_status": observed.get("readiness_status"),
-            "governance_decision_status": observed.get("governance_decision_status"),
-            "progress_decision_status": observed.get("progress_decision_status"),
-            "transition_allow_switch": observed.get("transition_allow_switch"),
-            "remaining_for_window": observed.get("remaining_for_window"),
-            "remaining_for_streak": observed.get("remaining_for_streak"),
-            "attention_state": observed.get("attention_state"),
-            "candidate_item_count": len(candidate_items),
-            "candidate_item_ids": ", ".join(candidate_ids),
-            "reason_codes": ", ".join(_normalize_reason_codes(remediation_snapshot.get("reason_codes"))),
-        }
-        st.dataframe([remediation_row], width="stretch")
-        if candidate_items:
-            candidate_rows = []
-            for item in candidate_items:
-                if not isinstance(item, dict):
-                    continue
-                candidate_rows.append(
-                    {
-                        "id": item.get("id"),
-                        "priority": item.get("priority"),
-                        "summary": item.get("summary"),
-                        "source_refs": ", ".join(_normalize_reason_codes(item.get("source_refs"))),
-                    }
-                )
-            if candidate_rows:
-                st.caption("Remediation candidate backlog")
-                st.dataframe(candidate_rows, width="stretch")
-        else:
-            st.caption("Remediation backlog not required.")
-        st.caption("Remediation artifact")
-        st.json(
-            {
-                "checked_at_utc": remediation_snapshot.get("checked_at_utc"),
-                "summary_json": _coalesce(
-                    _nested_get(remediation_snapshot, "paths", "summary_json"),
-                    str(canonical_fail_nightly_remediation_source(runs_dir)),
-                ),
-            }
-        )
+    remediation_snapshot = (
+        latest_metrics_payload.get("fail_nightly_remediation") if latest_metrics_payload is not None else None
+    )
+    remediation_snapshot = remediation_snapshot if isinstance(remediation_snapshot, dict) else None
+    remediation_warnings = [str(item) for item in warning_payload.get("metrics", []) if "remediation" in str(item)]
+    if remediation_snapshot is None and latest_metrics_payload is None:
+        remediation_snapshot, remediation_warnings = load_fail_nightly_remediation_snapshot(runs_dir)
+    _render_fail_nightly_remediation_section(remediation_snapshot, remediation_warnings)
 
     st.subheader("Gateway fail_nightly integrity")
-    integrity_snapshot, integrity_warnings = load_fail_nightly_integrity_snapshot(runs_dir)
-    if integrity_warnings:
-        sample = "\n".join(f"- {item}" for item in integrity_warnings[:5])
-        suffix = "" if len(integrity_warnings) <= 5 else "\n- ..."
-        st.warning(
-            "Some fail_nightly integrity artifacts were skipped due to parse/contract issues "
-            f"({len(integrity_warnings)}):\n{sample}{suffix}"
-        )
-    if integrity_snapshot is None:
-        st.info("not available yet")
-    else:
-        observed = integrity_snapshot.get("observed")
-        observed = observed if isinstance(observed, dict) else {}
-        decision = integrity_snapshot.get("decision")
-        decision = decision if isinstance(decision, dict) else {}
-        invalid_counts = observed.get("invalid_counts")
-        invalid_counts = invalid_counts if isinstance(invalid_counts, dict) else {}
-        utc_guardrail = observed.get("utc_guardrail")
-        utc_guardrail = utc_guardrail if isinstance(utc_guardrail, dict) else {}
-        integrity_row = {
-            "status": integrity_snapshot.get("status"),
-            "integrity_status": decision.get("integrity_status"),
-            "telemetry_ok": observed.get("telemetry_ok"),
-            "dual_write_ok": observed.get("dual_write_ok"),
-            "anti_double_count_ok": observed.get("anti_double_count_ok"),
-            "utc_guardrail_status": observed.get("utc_guardrail_status"),
-            "governance_invalid": invalid_counts.get("governance"),
-            "progress_readiness_invalid": invalid_counts.get("progress_readiness"),
-            "progress_governance_invalid": invalid_counts.get("progress_governance"),
-            "transition_aggregated_invalid": invalid_counts.get("transition_aggregated"),
-            "reason_codes": ", ".join(_normalize_reason_codes(decision.get("reason_codes"))),
-        }
-        st.dataframe([integrity_row], width="stretch")
-        st.caption("Integrity UTC guardrail")
-        st.json(utc_guardrail)
-        st.caption("Integrity artifact")
-        st.json(
-            {
-                "checked_at_utc": integrity_snapshot.get("checked_at_utc"),
-                "summary_json": _coalesce(
-                    _nested_get(integrity_snapshot, "paths", "summary_json"),
-                    str(canonical_fail_nightly_integrity_source(runs_dir)),
-                ),
-            }
-        )
+    integrity_snapshot = (
+        latest_metrics_payload.get("fail_nightly_integrity") if latest_metrics_payload is not None else None
+    )
+    integrity_snapshot = integrity_snapshot if isinstance(integrity_snapshot, dict) else None
+    integrity_warnings = [str(item) for item in warning_payload.get("metrics", []) if "integrity" in str(item)]
+    if integrity_snapshot is None and latest_metrics_payload is None:
+        integrity_snapshot, integrity_warnings = load_fail_nightly_integrity_snapshot(runs_dir)
+    _render_fail_nightly_integrity_section(integrity_snapshot, integrity_warnings)
 
     st.subheader("Historical snapshots")
     history_roots = canonical_history_roots(runs_dir)
@@ -1069,13 +1202,31 @@ def _render_latest_metrics_tab(runs_dir: Path, sources: dict[str, Path]) -> None
             step=1,
         )
     )
-    history_rows, history_warnings = build_metrics_history_rows(
-        runs_dir,
+    history_rows: list[dict[str, Any]] = []
+    history_warnings: list[str] = []
+    history_payload, history_error = fetch_gateway_operator_history(
+        gateway_url,
+        gateway_timeout_sec,
         selected_sources=selected_sources,
         selected_statuses=selected_statuses,
         limit_per_source=limit_per_source,
-        max_candidates_per_source=200,
     )
+    if history_payload is not None:
+        history_rows = history_payload.get("rows")
+        history_rows = history_rows if isinstance(history_rows, list) else []
+        history_warnings = [str(item) for item in history_payload.get("warnings", []) if str(item).strip()]
+        st.caption("History source: gateway operator history")
+    else:
+        history_rows, history_warnings = build_metrics_history_rows(
+            runs_dir,
+            selected_sources=selected_sources,
+            selected_statuses=selected_statuses,
+            limit_per_source=limit_per_source,
+            max_candidates_per_source=200,
+        )
+        st.caption("History source: local contract fallback")
+        if history_error is not None:
+            st.info(f"Gateway operator history unavailable; using local fallback.\n{history_error}")
     if history_warnings:
         sample = "\n".join(f"- {item}" for item in history_warnings[:5])
         suffix = "" if len(history_warnings) <= 5 else "\n- ..."
@@ -1089,26 +1240,56 @@ def _render_latest_metrics_tab(runs_dir: Path, sources: dict[str, Path]) -> None
     st.dataframe(history_rows, width="stretch")
 
 
-def _render_safe_actions_tab(runs_dir: Path) -> None:
+def _render_safe_actions_tab(*, gateway_url: str, gateway_timeout_sec: float) -> None:
+    safe_actions_payload, safe_actions_error = fetch_gateway_safe_actions(
+        gateway_url,
+        gateway_timeout_sec,
+        history_limit=10,
+    )
+    if safe_actions_payload is None:
+        st.warning(
+            "Safe Actions require a reachable gateway operator API. "
+            f"Gateway is unavailable right now.\n{safe_actions_error}"
+        )
+        return
+
+    catalog = safe_actions_payload.get("catalog")
+    catalog = catalog if isinstance(catalog, list) else []
+    if not catalog:
+        st.info("not available yet")
+        return
+
     action_labels = {
-        "Gateway local smoke core": "gateway_local_core",
-        "Gateway local smoke automation": "gateway_local_automation",
-        "Gateway HTTP smoke core": "gateway_http_core",
-        "Gateway HTTP smoke automation": "gateway_http_automation",
+        str(item.get("label") or item.get("action_key")): str(item.get("action_key"))
+        for item in catalog
+        if isinstance(item, dict) and str(item.get("action_key", "")).strip()
     }
     selected_label = st.selectbox("Safe action", list(action_labels.keys()))
-    action_runs_dir_raw = st.text_input("Action runs_dir", value=str(runs_dir))
-    if st.button("Execute safe action"):
+    confirm = st.checkbox("I understand this stays smoke-only and goes through the gateway.")
+    if st.button("Execute safe action", disabled=not confirm):
         selected_key = action_labels[selected_label]
-        result = run_safe_action(selected_key, Path(action_runs_dir_raw))
-        append_safe_action_audit(Path(action_runs_dir_raw), result)
-        if result["ok"]:
-            st.success("Safe action finished with status=ok.")
+        result, run_error = run_gateway_safe_action(
+            gateway_url,
+            gateway_timeout_sec,
+            action_key=selected_key,
+            confirm=True,
+        )
+        if run_error is not None:
+            st.error(run_error)
         else:
-            st.error("Safe action finished with status=error.")
-        st.json(result)
+            if str(result.get("status")) == "ok":
+                st.success("Safe action finished with status=ok.")
+            else:
+                st.error("Safe action finished with status=error.")
+            st.json(result)
+        safe_actions_payload, _refresh_error = fetch_gateway_safe_actions(
+            gateway_url,
+            gateway_timeout_sec,
+            history_limit=10,
+        )
 
-    audit_rows = load_safe_action_audit(Path(action_runs_dir_raw), limit=10)
+    audit_rows = safe_actions_payload.get("recent_runs") if isinstance(safe_actions_payload, dict) else None
+    audit_rows = audit_rows if isinstance(audit_rows, list) else []
     st.subheader("Last safe action")
     if not audit_rows:
         st.info("not available yet")
@@ -1161,16 +1342,43 @@ def render_panel(args: argparse.Namespace) -> None:
 
     runs_dir = Path(st.session_state["runs_dir"])
     sources = canonical_summary_sources(runs_dir)
+    operator_snapshot_payload, operator_snapshot_error = fetch_gateway_operator_snapshot(
+        gateway_url, args.gateway_timeout_sec
+    )
+    if operator_snapshot_payload is not None and isinstance(operator_snapshot_payload.get("gateway"), dict):
+        health_payload = operator_snapshot_payload.get("gateway")
+        health_error = None
+    else:
+        health_payload, health_error = fetch_gateway_health(gateway_url, args.gateway_timeout_sec)
     tabs = st.tabs(list(TAB_NAMES))
 
     with tabs[0]:
-        _render_stack_health_tab(gateway_url, args.gateway_timeout_sec)
+        _render_stack_health_tab(
+            health_payload=health_payload if isinstance(health_payload, dict) else None,
+            health_error=health_error,
+            operator_snapshot_payload=operator_snapshot_payload,
+            operator_snapshot_error=operator_snapshot_error,
+        )
     with tabs[1]:
-        _render_run_explorer_tab(sources)
+        _render_run_explorer_tab(
+            gateway_url=gateway_url,
+            gateway_timeout_sec=args.gateway_timeout_sec,
+            sources=sources,
+        )
     with tabs[2]:
-        _render_latest_metrics_tab(runs_dir, sources)
+        _render_latest_metrics_tab(
+            runs_dir,
+            sources,
+            gateway_url=gateway_url,
+            gateway_timeout_sec=args.gateway_timeout_sec,
+            operator_snapshot_payload=operator_snapshot_payload,
+            operator_snapshot_error=operator_snapshot_error,
+        )
     with tabs[3]:
-        _render_safe_actions_tab(runs_dir)
+        _render_safe_actions_tab(
+            gateway_url=gateway_url,
+            gateway_timeout_sec=args.gateway_timeout_sec,
+        )
 
 
 def main(argv: list[str] | None = None) -> int:

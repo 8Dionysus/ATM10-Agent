@@ -17,11 +17,12 @@ from scripts.gateway_artifact_policy import REDACTION_CHECKLIST_VERSION, redact_
 from scripts.kag_build_baseline import run_kag_build_baseline
 from scripts.kag_query_demo import run_kag_query_demo
 from scripts.kag_query_neo4j import run_kag_query_neo4j
+from scripts.operator_product_safe_actions import append_safe_action_audit, run_safe_action
 from src.rag.retrieval import load_docs, retrieve_top_k
 
 REQUEST_SCHEMA_VERSION = "gateway_request_v1"
 RESPONSE_SCHEMA_VERSION = "gateway_response_v1"
-SUPPORTED_OPERATIONS = ("health", "retrieval_query", "kag_query", "automation_dry_run")
+SUPPORTED_OPERATIONS = ("health", "retrieval_query", "kag_query", "automation_dry_run", "safe_action_smoke")
 DEFAULT_RERANKER_MODEL = "Qwen/Qwen3-Reranker-0.6B"
 ALLOWED_RERANKER_MODELS = (
     DEFAULT_RERANKER_MODEL,
@@ -388,11 +389,57 @@ def _run_automation_dry_run(
     return result_payload, child_runs
 
 
+def _run_safe_action_smoke(
+    payload: Mapping[str, Any],
+    *,
+    child_runs_dir: Path,
+    audit_runs_dir: Path,
+) -> tuple[dict[str, Any], dict[str, str]]:
+    action_key = str(payload.get("action_key", "")).strip()
+    if not action_key:
+        raise ValueError("payload.action_key must be non-empty string for safe_action_smoke.")
+
+    confirm = payload.get("confirm")
+    if confirm is not True:
+        raise ValueError("payload.confirm must be true for safe_action_smoke.")
+
+    timeout_raw = payload.get("timeout_sec", 300.0)
+    if isinstance(timeout_raw, bool) or not isinstance(timeout_raw, (int, float)):
+        raise ValueError("payload.timeout_sec must be number when provided.")
+    timeout_sec = float(timeout_raw)
+    if timeout_sec <= 0:
+        raise ValueError("payload.timeout_sec must be > 0.")
+
+    action_result = run_safe_action(action_key, child_runs_dir, timeout_sec=timeout_sec)
+    append_safe_action_audit(audit_runs_dir, action_result)
+
+    child_runs = {"safe_action_smoke": str(action_result["action_runs_dir"])}
+    if not action_result["ok"]:
+        raise GatewayOperationError(
+            str(action_result.get("error") or "safe_action_smoke failed"),
+            error_code="operation_failed",
+            child_runs=child_runs,
+        )
+
+    result_payload = {
+        "schema_version": "gateway_operator_safe_action_run_v1",
+        "action_key": action_key,
+        "smoke_only": True,
+        "status": action_result["status"],
+        "summary_status": action_result.get("summary_status"),
+        "exit_code": action_result.get("exit_code"),
+        "action_runs_dir": action_result.get("action_runs_dir"),
+        "summary_json": action_result.get("summary_json"),
+    }
+    return result_payload, child_runs
+
+
 def _dispatch_operation(
     *,
     operation: str,
     payload: Mapping[str, Any],
     child_runs_dir: Path,
+    audit_runs_dir: Path,
     now: datetime,
 ) -> tuple[dict[str, Any], dict[str, str]]:
     if operation == "health":
@@ -403,6 +450,8 @@ def _dispatch_operation(
         return _run_kag_query(payload, child_runs_dir=child_runs_dir, now=now)
     if operation == "automation_dry_run":
         return _run_automation_dry_run(payload, child_runs_dir=child_runs_dir, now=now)
+    if operation == "safe_action_smoke":
+        return _run_safe_action_smoke(payload, child_runs_dir=child_runs_dir, audit_runs_dir=audit_runs_dir)
     raise ValueError(f"Unsupported operation: {operation!r}.")
 
 
@@ -460,6 +509,7 @@ def run_gateway_request(
             operation=operation,
             payload=normalized_request["payload"],
             child_runs_dir=child_runs_dir,
+            audit_runs_dir=runs_dir,
             now=now,
         )
         response_payload: dict[str, Any] = {
