@@ -2288,6 +2288,16 @@ Policy checklist for each new `intent_type`:
 5. Add regression test:
    * at least 1 pytest on e2e dry-run chain for a new fixture.
 
+## M6.19 rollout records
+
+The public intent -> plan -> dry-run chain has now been exercised on three canonical fixtures:
+
+* `open_quest_book`
+* `check_inventory_tool`
+* `open_world_map`
+
+`open_world_map` is the latest added template and the clearest example of the checklist-complete rollout path. Each record uses the same public-safe sequence: canonical fixture -> smoke run -> contract check.
+
 ## M6.8: Troubleshooting automation smoke contract failures (CI)
 
 Quick checklist when `check_automation_smoke_contract` crashes:

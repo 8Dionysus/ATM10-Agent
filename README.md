@@ -56,7 +56,7 @@ python scripts/dependency_audit.py --runs-dir runs --policy report_only --with-s
 - There is now a single local operator-pass helper: `scripts/run_gateway_sla_operating_cycle.py`. It reuses fresh same-UTC latest summaries and does not spend a new accounted run if the snapshot is already current.
 - Streamlit operator panel shows the `G2 operating cycle` snapshot as the primary triage surface in `Latest Metrics`, while `fail_nightly progress/remediation/integrity` remain supporting drilldown views.
 - `Safe Actions` in Streamlit remain smoke-only and do not run the `G2 operating cycle` helper.
-- The automation safe loop has been extended: `intent_type=open_world_map` was added and completed through checklist `M6.19`.
+- The automation safe loop has been exercised across `open_quest_book`, `check_inventory_tool`, and `open_world_map`; `open_world_map` was added and completed through checklist `M6.19`.
 
 ## Where to look for details
 

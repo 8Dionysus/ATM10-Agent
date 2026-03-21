@@ -75,6 +75,7 @@ Definition of Done:
 
 * Every new `intent_type` follows checklist `M6.19`.
 * `automation_plan_v1` remains backward-compatible and test-covered.
+* Public rollout records exist for `open_quest_book`, `check_inventory_tool`, and `open_world_map`, proving the same intent -> plan -> dry-run contract is reusable under `M6.19`.
 
 ### G4 — KAG Quality / Latency Guardrail
 
