@@ -76,6 +76,7 @@ python scripts/gateway_v1_http_smoke.py --scenario hybrid --runs-dir runs/ci-smo
 python scripts/gateway_v1_http_smoke.py --scenario automation --runs-dir runs/ci-smoke-gateway-http-automation --summary-json runs/ci-smoke-gateway-http-automation/gateway_http_smoke_summary.json
 python scripts/check_gateway_sla.py --http-summary-json runs/ci-smoke-gateway-http-core/gateway_http_smoke_summary.json --summary-json runs/ci-smoke-gateway-sla/gateway_sla_summary.json --profile conservative --policy signal_only --runs-dir runs/ci-smoke-gateway-sla
 python scripts/gateway_sla_trend_snapshot.py --sla-runs-dir runs/ci-smoke-gateway-sla --history-limit 10 --baseline-window 5 --critical-policy signal_only --runs-dir runs/ci-smoke-gateway-sla-trend
+python scripts/cross_service_benchmark_suite.py --runs-dir runs/ci-smoke-cross-service-suite --summary-json runs/ci-smoke-cross-service-suite/cross_service_benchmark_suite.json --smoke-stub-voice-asr
 python scripts/streamlit_operator_panel_smoke.py --panel-runs-dir runs --runs-dir runs/ci-smoke-streamlit --summary-json runs/ci-smoke-streamlit/streamlit_smoke_summary.json --gateway-url http://127.0.0.1:8770 --startup-timeout-sec 45 --viewport-width 390 --viewport-height 844 --compact-breakpoint-px 768
 ```
 
@@ -103,6 +104,10 @@ Expected result:
 * Machine-readable artifacts are created for gateway SLA trend snapshot:
   * `runs/ci-smoke-gateway-sla-trend/<timestamp>-gateway-sla-trend/gateway_sla_trend_snapshot.json`
   * `runs/ci-smoke-gateway-sla-trend/<timestamp>-gateway-sla-trend/summary.md`
+* For the cross-service suite, machine-readable benchmark artifacts are created:
+  * `runs/ci-smoke-cross-service-suite/cross_service_benchmark_suite.json`
+  * `runs/ci-smoke-cross-service-suite/<timestamp>-cross-service-suite/summary.md`
+  * `runs/ci-smoke-cross-service-suite/<timestamp>-cross-service-suite/child_runs/<service>/<timestamp>-.../service_sla_summary.json`
 * For streamlit smoke, a machine-readable summary is created:
   * `runs/ci-smoke-streamlit/streamlit_smoke_summary.json`
 
@@ -161,6 +166,23 @@ Expected result:
 * Inside there are `run.json`, `hybrid_query_results.json`, and `kag_graph.json` when the KAG stage completes.
 * `hybrid_query_results.json` contains `planner_mode`, `planner_status`, `degraded`, `retrieval_results`, `kag_results`, `merged_results`, `warnings`, and `paths`.
 * If retrieval succeeds but the KAG stage fails or returns no expansion rows, the run still ends with `status=ok` and `planner_status=retrieval_only_fallback`.
+
+### Cross-service benchmark suite
+
+```powershell
+cd <repo-root>
+.\.venv\Scripts\Activate.ps1
+python scripts/cross_service_benchmark_suite.py --runs-dir runs\cross-service-suite --summary-json runs\cross-service-suite\cross_service_benchmark_suite.json --smoke-stub-voice-asr
+```
+
+Expected result:
+
+* `runs/<timestamp>-cross-service-suite/` is created.
+* Inside there are `run.json`, `cross_service_benchmark_suite.json`, `summary.md`, and `child_runs/`.
+* Child runs execute in canonical order: `voice_asr -> voice_tts -> retrieval -> kag_file`.
+* Each child run writes a normalized `service_sla_summary.json` next to its native artifacts.
+* `cross_service_benchmark_suite.json` contains `schema_version = cross_service_benchmark_suite_v1`, `services`, `summary_matrix`, `degraded_services`, and `paths.child_runs`.
+* `--smoke-stub-voice-asr` keeps the suite reproducible in CI and local smoke paths without a live ASR backend.
 
 ### Gateway smoke scenarios
 
@@ -1799,7 +1821,9 @@ python scripts/benchmark_asr_backends.py `
 Expected result:
 
 * `runs/<timestamp>-asr-backend-bench/` is created.
-* Inside there are `summary.json`, `summary.md`, `per_sample_results.jsonl`.
+* Inside there are `summary.json`, `summary.md`, `per_sample_results.jsonl`, `service_sla_summary.json`.
+* `summary.json` uses `schema_version = asr_backend_benchmark_summary_v1`.
+* `service_sla_summary.json` publishes the normalized `voice_asr` SLA row for the selected `--primary-backend`.
 
 ### TTS runtime service (separate process/container)
 
@@ -1866,6 +1890,20 @@ python scripts/tts_runtime_client.py --service-url http://127.0.0.1:8780 health
 python scripts/tts_runtime_client.py --service-url http://127.0.0.1:8780 tts --text "crafting started" --language en
 python scripts/tts_runtime_client.py --service-url http://127.0.0.1:8780 tts-stream --text "service message" --language ru --service-voice
 ```
+
+### TTS runtime benchmark (in-process baseline)
+
+```powershell
+cd <repo-root>
+.\.venv\Scripts\Activate.ps1
+python scripts/benchmark_tts_runtime.py --manifest tests/fixtures/tts_benchmark_sample.jsonl --runs-dir runs\tts-runtime-bench
+```
+
+Expected result:
+
+* `runs/<timestamp>-tts-runtime-bench/` is created.
+* Inside there are `benchmark_plan.json`, `per_sample_results.jsonl`, `summary.json`, and `service_sla_summary.json`.
+* `service_sla_summary.json` uses `service_sla_summary_v1` and publishes `voice_tts` baseline metrics including `non_empty_audio_rate`, `chunk_count_mean`, and `cache_hit_rate`.
 
 Streaming behavior:
 
@@ -1941,6 +1979,11 @@ Optionally, OV production profile:
 ```powershell
 python scripts/eval_retrieval.py --profile ov_production --docs tests/fixtures/retrieval_docs_sample.jsonl --eval tests/fixtures/retrieval_eval_sample.jsonl
 ```
+
+Expected result:
+
+* `runs/<timestamp>/service_sla_summary.json` is written next to `eval_results.json`.
+* `service_sla_summary.json` uses `service_sla_summary_v1` and normalizes `status`, latency, and quality fields (`mean_recall_at_k`, `mean_mrr_at_k`, `hit_rate_at_k`).
 
 ## M2: Qdrant ingest (optional backend)
 
@@ -2054,14 +2097,30 @@ python scripts/eval_kag_neo4j.py `
 Expected result:
 
 * `runs/<timestamp>-kag-neo4j-eval/` is created.
-* Inside there are `run.json`, `eval_results.json`, `summary.md`.
+* Inside there are `run.json`, `eval_results.json`, `summary.md`, `service_sla_summary.json`.
 * `eval_results.json` has:
   * `mean_recall_at_k`
   * `mean_mrr_at_k`
   * `hit_rate_at_k`
-  * `latency_mean_ms`, `latency_p95_ms`, `latency_max_ms`
+  * `latency_mean_ms`, `latency_p50_ms`, `latency_p95_ms`, `latency_max_ms`
+* `service_sla_summary.json` uses the same normalized `service_sla_summary_v1` contract as the file-backed KAG baseline and cross-service suite.
 * `--warmup-runs` makes N full warmup passes through the eval set before the measured run.
   Warmup requests are not included in per-case latency and final metrics, but are recorded in `run.json.warmup`.
+
+### KAG file eval baseline
+
+```powershell
+cd <repo-root>
+.\.venv\Scripts\Activate.ps1
+python scripts/eval_kag_file.py --docs tests/fixtures/kag_neo4j_docs_sample.jsonl --eval tests/fixtures/kag_neo4j_eval_sample.jsonl --topk 5 --runs-dir runs\kag-file-eval
+```
+
+Expected result:
+
+* `runs/<timestamp>-kag-file-eval/` is created.
+* Inside there are `run.json`, `kag_graph.json`, `eval_results.json`, `summary.md`, and `service_sla_summary.json`.
+* `eval_results.json` uses the same metric shape as `eval_kag_neo4j.py`, but with `backend = file`.
+* `service_sla_summary.json` publishes the normalized `kag_file` row used by the cross-service benchmark suite.
 
 ### Hard-cases benchmark
 

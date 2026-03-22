@@ -66,7 +66,7 @@ MOBILE_LAYOUT_POLICY_SCHEMA = "streamlit_mobile_layout_policy_v1"
 MOBILE_LAYOUT_BREAKPOINT_PX_DEFAULT = 768
 MOBILE_BASELINE_VIEWPORT = {"width": 390, "height": 844}
 
-SAFE_ACTIONS: dict[str, dict[str, str]] = {
+SAFE_ACTIONS: dict[str, dict[str, Any]] = {
     "gateway_local_core": {
         "script": "scripts/gateway_v1_smoke.py",
         "scenario": "core",
@@ -102,6 +102,13 @@ SAFE_ACTIONS: dict[str, dict[str, str]] = {
         "scenario": "automation",
         "runs_subdir": "ui-safe-gateway-http-automation",
         "summary_name": "gateway_http_smoke_summary.json",
+    },
+    "cross_service_suite_smoke": {
+        "script": "scripts/cross_service_benchmark_suite.py",
+        "scenario": "suite",
+        "runs_subdir": "ui-safe-cross-service-suite",
+        "summary_name": "cross_service_benchmark_suite.json",
+        "extra_args": ["--smoke-stub-voice-asr"],
     },
 }
 
@@ -150,6 +157,11 @@ HISTORY_SOURCE_SPECS: dict[str, dict[str, str | None]] = {
         "root_subdir": "ci-smoke-gateway-http-automation",
         "expected_mode": "gateway_v1_http_smoke",
         "expected_scenario": "automation",
+    },
+    "cross_service_suite": {
+        "root_subdir": "ci-smoke-cross-service-suite",
+        "expected_mode": "cross_service_benchmark_suite",
+        "expected_scenario": None,
     },
 }
 
@@ -273,6 +285,9 @@ def canonical_summary_sources(runs_dir: Path) -> dict[str, Path]:
         "gateway_http_automation": base
         / "ci-smoke-gateway-http-automation"
         / "gateway_http_smoke_summary.json",
+        "cross_service_suite": base
+        / "ci-smoke-cross-service-suite"
+        / "cross_service_benchmark_suite.json",
     }
 
 

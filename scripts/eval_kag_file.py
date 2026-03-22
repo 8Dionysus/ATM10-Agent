@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import os
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -13,15 +12,19 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from src.kag import query_kag_neo4j
+from scripts.eval_kag_neo4j import (  # noqa: E402
+    EVAL_RESULTS_SCHEMA_VERSION,
+    _case_metrics,
+    _load_eval_cases,
+    _write_summary_md,
+)
 from src.agent_core.service_sla import build_common_metrics, build_service_sla_summary
-
-
-EVAL_RESULTS_SCHEMA_VERSION = "kag_eval_results_v1"
+from src.kag import build_kag_graph, query_kag_graph
+from src.rag.retrieval import load_docs
 
 
 def _create_run_dir(runs_dir: Path, now: datetime) -> Path:
-    base_name = now.strftime("%Y%m%d_%H%M%S-kag-neo4j-eval")
+    base_name = now.strftime("%Y%m%d_%H%M%S-kag-file-eval")
     run_dir = runs_dir / base_name
     if not run_dir.exists():
         run_dir.mkdir(parents=True, exist_ok=False)
@@ -41,153 +44,21 @@ def _write_json(path: Path, payload: Mapping[str, Any]) -> None:
     path.write_text(json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8")
 
 
-def _write_summary_md(
+def run_eval_kag_file(
     *,
-    path: Path,
-    metrics: Mapping[str, Any],
-    cases: list[Mapping[str, Any]],
-) -> None:
-    def _fmt(value: float) -> str:
-        return f"{value:.4f}"
-
-    lines = [
-        "# KAG Neo4j Eval Summary",
-        "",
-        "## Metrics",
-        "",
-        f"- `query_count`: {metrics['query_count']}",
-        f"- `topk`: {metrics['topk']}",
-        f"- `mean_recall_at_k`: {_fmt(float(metrics['mean_recall_at_k']))}",
-        f"- `mean_mrr_at_k`: {_fmt(float(metrics['mean_mrr_at_k']))}",
-        f"- `hit_rate_at_k`: {_fmt(float(metrics['hit_rate_at_k']))}",
-        f"- `latency_mean_ms`: {_fmt(float(metrics['latency_mean_ms']))}",
-        f"- `latency_p95_ms`: {_fmt(float(metrics['latency_p95_ms']))}",
-        f"- `latency_max_ms`: {_fmt(float(metrics['latency_max_ms']))}",
-        "",
-        "## Per-case",
-        "",
-        "| id | query | first_hit_rank | recall | mrr | latency_ms |",
-        "|---|---|---:|---:|---:|---:|",
-    ]
-    for item in cases:
-        query = str(item["query"]).replace("|", "\\|")
-        case_metrics = item["metrics"]
-        first_hit_rank = case_metrics["first_hit_rank"]
-        if first_hit_rank is None:
-            first_hit = "-"
-        else:
-            first_hit = str(int(first_hit_rank))
-        lines.append(
-            "| "
-            f"{item['id']} | {query} | {first_hit} | "
-            f"{_fmt(float(case_metrics['recall']))} | "
-            f"{_fmt(float(case_metrics['mrr']))} | "
-            f"{_fmt(float(item['latency_ms']))} |"
-        )
-
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
-
-
-def _resolve_password(password: str | None) -> str:
-    if password:
-        return password
-    from_env = os.environ.get("NEO4J_PASSWORD", "").strip()
-    if from_env:
-        return from_env
-    raise ValueError("Neo4j password is required: pass --password or set NEO4J_PASSWORD.")
-
-
-def _load_eval_cases(path: Path) -> list[dict[str, Any]]:
-    if not path.is_file():
-        raise FileNotFoundError(f"Evaluation file not found: {path}")
-
-    cases: list[dict[str, Any]] = []
-    for line_no, raw_line in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):
-        line = raw_line.strip()
-        if not line:
-            continue
-        try:
-            payload = json.loads(line)
-        except json.JSONDecodeError as exc:
-            raise ValueError(f"Invalid JSON at {path}:{line_no}") from exc
-
-        if not isinstance(payload, dict):
-            raise ValueError(f"Expected JSON object at {path}:{line_no}")
-
-        query = str(payload.get("query", "")).strip()
-        raw_relevant = payload.get("relevant_ids")
-        if not query:
-            raise ValueError(f"Missing non-empty 'query' at {path}:{line_no}")
-        if not isinstance(raw_relevant, list) or not raw_relevant:
-            raise ValueError(f"Missing non-empty 'relevant_ids' list at {path}:{line_no}")
-        relevant_ids = [str(value).strip() for value in raw_relevant if str(value).strip()]
-        if not relevant_ids:
-            raise ValueError(f"Empty 'relevant_ids' entries at {path}:{line_no}")
-        case_id = str(payload.get("id") or f"case_{len(cases) + 1:03d}")
-        cases.append({"id": case_id, "query": query, "relevant_ids": relevant_ids})
-
-    if not cases:
-        raise ValueError(f"No eval cases found in: {path}")
-    return cases
-
-
-def _case_metrics(*, relevant_ids: list[str], retrieved_ids: list[str]) -> dict[str, Any]:
-    relevant_set = set(relevant_ids)
-    hits = [doc_id for doc_id in retrieved_ids if doc_id in relevant_set]
-    unique_hits = set(hits)
-    recall = len(unique_hits) / len(relevant_set)
-
-    rr = 0.0
-    first_hit_rank: int | None = None
-    for index, doc_id in enumerate(retrieved_ids, start=1):
-        if doc_id in relevant_set:
-            rr = 1.0 / index
-            first_hit_rank = index
-            break
-
-    return {
-        "recall": recall,
-        "mrr": rr,
-        "first_hit_rank": first_hit_rank,
-        "hits": sorted(unique_hits),
-    }
-
-
-def _percentile(values: list[float], percentile: float) -> float:
-    if not values:
-        return 0.0
-    if percentile <= 0:
-        return min(values)
-    if percentile >= 100:
-        return max(values)
-    sorted_values = sorted(values)
-    rank = (len(sorted_values) - 1) * (percentile / 100.0)
-    low_index = int(rank)
-    high_index = min(low_index + 1, len(sorted_values) - 1)
-    low_value = sorted_values[low_index]
-    high_value = sorted_values[high_index]
-    fraction = rank - low_index
-    return low_value + ((high_value - low_value) * fraction)
-
-
-def run_eval_kag_neo4j(
-    *,
+    docs_path: Path = Path("tests") / "fixtures" / "kag_neo4j_docs_sample.jsonl",
     eval_path: Path = Path("tests") / "fixtures" / "kag_neo4j_eval_sample.jsonl",
     topk: int = 5,
-    neo4j_url: str = "http://127.0.0.1:7474",
-    neo4j_database: str = "neo4j",
-    neo4j_user: str = "neo4j",
-    neo4j_password: str | None = None,
-    timeout_sec: float = 10.0,
-    warmup_runs: int = 0,
+    max_entities_per_doc: int = 128,
     runs_dir: Path = Path("runs"),
     profile: str = "baseline_first",
     policy: str = "signal_only",
     now: datetime | None = None,
 ) -> dict[str, Any]:
-    if warmup_runs < 0:
-        raise ValueError("warmup_runs must be >= 0.")
+    if topk <= 0:
+        raise ValueError("topk must be > 0.")
+    if max_entities_per_doc <= 0:
+        raise ValueError("max_entities_per_doc must be > 0.")
     if policy not in {"signal_only", "fail_on_breach"}:
         raise ValueError("policy must be signal_only or fail_on_breach.")
     if now is None:
@@ -195,28 +66,27 @@ def run_eval_kag_neo4j(
 
     run_dir = _create_run_dir(runs_dir, now=now)
     run_json_path = run_dir / "run.json"
+    graph_json_path = run_dir / "kag_graph.json"
     eval_json_path = run_dir / "eval_results.json"
     summary_md_path = run_dir / "summary.md"
     service_sla_summary_path = run_dir / "service_sla_summary.json"
 
     run_payload: dict[str, Any] = {
         "timestamp_utc": now.astimezone(timezone.utc).isoformat(),
-        "mode": "eval_kag_neo4j",
+        "mode": "eval_kag_file",
         "status": "started",
         "profile": profile,
         "policy": policy,
         "params": {
             "topk": topk,
-            "neo4j_url": neo4j_url,
-            "neo4j_database": neo4j_database,
-            "neo4j_user": neo4j_user,
-            "timeout_sec": timeout_sec,
-            "warmup_runs": warmup_runs,
+            "max_entities_per_doc": max_entities_per_doc,
         },
         "paths": {
+            "docs": str(docs_path),
             "eval_cases": str(eval_path),
             "run_dir": str(run_dir),
             "run_json": str(run_json_path),
+            "graph_json": str(graph_json_path),
             "eval_results_json": str(eval_json_path),
             "summary_md": str(summary_md_path),
             "service_sla_summary_json": str(service_sla_summary_path),
@@ -225,36 +95,19 @@ def run_eval_kag_neo4j(
     _write_json(run_json_path, run_payload)
 
     try:
-        password = _resolve_password(neo4j_password)
+        docs = load_docs(docs_path)
+        graph_payload = build_kag_graph(docs, max_entities_per_doc=max_entities_per_doc)
+        _write_json(graph_json_path, graph_payload)
         cases = _load_eval_cases(eval_path)
-        warmup_calls = 0
-
-        if warmup_runs > 0:
-            for _ in range(warmup_runs):
-                for case in cases:
-                    query_kag_neo4j(
-                        url=neo4j_url,
-                        database=neo4j_database,
-                        user=neo4j_user,
-                        password=password,
-                        query=case["query"],
-                        topk=topk,
-                        timeout_sec=timeout_sec,
-                    )
-                    warmup_calls += 1
 
         per_case: list[dict[str, Any]] = []
         latencies_ms: list[float] = []
         for case in cases:
             started = perf_counter()
-            results = query_kag_neo4j(
-                url=neo4j_url,
-                database=neo4j_database,
-                user=neo4j_user,
-                password=password,
+            results = query_kag_graph(
+                graph_payload,
                 query=case["query"],
                 topk=topk,
-                timeout_sec=timeout_sec,
             )
             latency_ms = (perf_counter() - started) * 1000.0
             latencies_ms.append(latency_ms)
@@ -284,7 +137,7 @@ def run_eval_kag_neo4j(
 
         eval_payload = {
             "schema_version": EVAL_RESULTS_SCHEMA_VERSION,
-            "backend": "neo4j",
+            "backend": "file",
             "profile": profile,
             "policy": policy,
             "metrics": {
@@ -306,10 +159,11 @@ def run_eval_kag_neo4j(
             metrics=eval_payload["metrics"],
             cases=per_case,
         )
+
         service_sla_summary = build_service_sla_summary(
-            service_name="kag_neo4j",
+            service_name="kag_file",
             surface="eval",
-            backend="neo4j",
+            backend="file",
             profile=profile,
             policy=policy,
             status="ok",
@@ -325,17 +179,15 @@ def run_eval_kag_neo4j(
             paths={
                 "run_dir": run_dir,
                 "run_json": run_json_path,
+                "graph_json": graph_json_path,
                 "eval_results_json": eval_json_path,
                 "summary_md": summary_md_path,
                 "service_sla_summary_json": service_sla_summary_path,
             },
         )
         _write_json(service_sla_summary_path, service_sla_summary)
+
         run_payload["status"] = "ok"
-        run_payload["warmup"] = {
-            "requested_runs": warmup_runs,
-            "executed_calls": warmup_calls,
-        }
         run_payload["result"] = eval_payload["metrics"]
         _write_json(run_json_path, run_payload)
         return {
@@ -348,7 +200,7 @@ def run_eval_kag_neo4j(
     except (FileNotFoundError, ValueError, RuntimeError) as exc:
         eval_payload = {
             "schema_version": EVAL_RESULTS_SCHEMA_VERSION,
-            "backend": "neo4j",
+            "backend": "file",
             "profile": profile,
             "policy": policy,
             "error": str(exc),
@@ -357,9 +209,9 @@ def run_eval_kag_neo4j(
         }
         _write_json(eval_json_path, eval_payload)
         service_sla_summary = build_service_sla_summary(
-            service_name="kag_neo4j",
+            service_name="kag_file",
             surface="eval",
-            backend="neo4j",
+            backend="file",
             profile=profile,
             policy=policy,
             status="error",
@@ -371,6 +223,7 @@ def run_eval_kag_neo4j(
             paths={
                 "run_dir": run_dir,
                 "run_json": run_json_path,
+                "graph_json": graph_json_path,
                 "eval_results_json": eval_json_path,
                 "summary_md": summary_md_path,
                 "service_sla_summary_json": service_sla_summary_path,
@@ -390,7 +243,13 @@ def run_eval_kag_neo4j(
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Evaluate KAG Neo4j query quality and latency.")
+    parser = argparse.ArgumentParser(description="Evaluate file-backed KAG query quality and latency.")
+    parser.add_argument(
+        "--docs",
+        type=Path,
+        default=Path("tests") / "fixtures" / "kag_neo4j_docs_sample.jsonl",
+        help="Path to JSONL file or directory with KAG docs.",
+    )
     parser.add_argument(
         "--eval",
         dest="eval_path",
@@ -399,16 +258,11 @@ def parse_args() -> argparse.Namespace:
         help="JSONL file with eval cases: {id?, query, relevant_ids}.",
     )
     parser.add_argument("--topk", type=int, default=5, help="Cutoff k for metrics (default: 5).")
-    parser.add_argument("--neo4j-url", default="http://127.0.0.1:7474", help="Neo4j HTTP base URL.")
-    parser.add_argument("--neo4j-database", default="neo4j", help="Neo4j database name.")
-    parser.add_argument("--neo4j-user", default="neo4j", help="Neo4j username.")
-    parser.add_argument("--password", default=None, help="Neo4j password (or use NEO4J_PASSWORD env var).")
-    parser.add_argument("--timeout-sec", type=float, default=10.0, help="HTTP timeout for Neo4j requests.")
     parser.add_argument(
-        "--warmup-runs",
+        "--max-entities-per-doc",
         type=int,
-        default=0,
-        help="Number of full warmup passes over eval queries before measured run (default: 0).",
+        default=128,
+        help="Max extracted entities per document for graph build (default: 128).",
     )
     parser.add_argument("--runs-dir", type=Path, default=Path("runs"), help="Run artifact base directory.")
     parser.add_argument(
@@ -428,31 +282,28 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> int:
     args = parse_args()
-    result = run_eval_kag_neo4j(
+    result = run_eval_kag_file(
+        docs_path=args.docs,
         eval_path=args.eval_path,
         topk=args.topk,
-        neo4j_url=args.neo4j_url,
-        neo4j_database=args.neo4j_database,
-        neo4j_user=args.neo4j_user,
-        neo4j_password=args.password,
-        timeout_sec=args.timeout_sec,
-        warmup_runs=args.warmup_runs,
+        max_entities_per_doc=args.max_entities_per_doc,
         runs_dir=args.runs_dir,
         profile=args.profile,
         policy=args.policy,
     )
     run_dir = result["run_dir"]
-    print(f"[eval_kag_neo4j] run_dir: {run_dir}")
-    print(f"[eval_kag_neo4j] run_json: {run_dir / 'run.json'}")
-    print(f"[eval_kag_neo4j] eval_results_json: {run_dir / 'eval_results.json'}")
-
+    print(f"[eval_kag_file] run_dir: {run_dir}")
+    print(f"[eval_kag_file] run_json: {run_dir / 'run.json'}")
+    print(f"[eval_kag_file] graph_json: {run_dir / 'kag_graph.json'}")
+    print(f"[eval_kag_file] eval_results_json: {run_dir / 'eval_results.json'}")
+    print(f"[eval_kag_file] service_sla_summary_json: {run_dir / 'service_sla_summary.json'}")
     if not result["ok"]:
-        print(f"[eval_kag_neo4j] error: {result['eval_payload']['error']}")
+        print(f"[eval_kag_file] error: {result['eval_payload']['error']}")
         return 2
 
     metrics = result["eval_payload"]["metrics"]
     print(
-        "[eval_kag_neo4j] "
+        "[eval_kag_file] "
         f"query_count={metrics['query_count']} "
         f"recall_at_k={metrics['mean_recall_at_k']:.4f} "
         f"mrr_at_k={metrics['mean_mrr_at_k']:.4f} "

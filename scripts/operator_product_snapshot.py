@@ -94,6 +94,11 @@ HISTORY_SOURCE_SPECS: dict[str, dict[str, str | None]] = {
         "expected_mode": "gateway_v1_http_smoke",
         "expected_scenario": "automation",
     },
+    "cross_service_suite": {
+        "root_subdir": "ci-smoke-cross-service-suite",
+        "expected_mode": "cross_service_benchmark_suite",
+        "expected_scenario": None,
+    },
 }
 
 
@@ -113,6 +118,7 @@ def canonical_summary_sources(runs_dir: Path) -> dict[str, Path]:
         "gateway_http_core": base / "ci-smoke-gateway-http-core" / "gateway_http_smoke_summary.json",
         "gateway_http_hybrid": base / "ci-smoke-gateway-http-hybrid" / "gateway_http_smoke_summary.json",
         "gateway_http_automation": base / "ci-smoke-gateway-http-automation" / "gateway_http_smoke_summary.json",
+        "cross_service_suite": base / "ci-smoke-cross-service-suite" / "cross_service_benchmark_suite.json",
     }
 
 
@@ -638,6 +644,20 @@ def build_metrics_rows(sources: dict[str, Path]) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
     for source_name, path in sources.items():
         payload, load_error = load_json_object(path)
+        if (
+            payload is not None
+            and str(payload.get("schema_version", "")).strip() == "cross_service_benchmark_suite_v1"
+        ):
+            summary_matrix = payload.get("summary_matrix")
+            summary_matrix = summary_matrix if isinstance(summary_matrix, list) else []
+            if summary_matrix:
+                for item in summary_matrix:
+                    if not isinstance(item, Mapping):
+                        continue
+                    row = dict(item)
+                    row.setdefault("summary_json", str(path))
+                    rows.append(row)
+                continue
         row: dict[str, Any] = {
             "source": source_name,
             "summary_json": str(path),
@@ -665,6 +685,56 @@ def build_run_explorer_rows(sources: dict[str, Path]) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
     for source_name, path in sources.items():
         payload, load_error = load_json_object(path)
+        if (
+            payload is not None
+            and str(payload.get("schema_version", "")).strip() == "cross_service_benchmark_suite_v1"
+        ):
+            paths_payload = payload.get("paths")
+            paths_payload = paths_payload if isinstance(paths_payload, dict) else {}
+            rows.append(
+                {
+                    "source": source_name,
+                    "summary_json": str(path),
+                    "status": str(payload.get("status", "unknown")),
+                    "scenario": "suite",
+                    "run_dir": paths_payload.get("run_dir"),
+                    "run_json": paths_payload.get("run_json"),
+                    "request_count": len(payload.get("services", {}))
+                    if isinstance(payload.get("services"), dict)
+                    else None,
+                    "failed_requests_count": len(payload.get("degraded_services", []))
+                    if isinstance(payload.get("degraded_services"), list)
+                    else None,
+                    "error": load_error,
+                }
+            )
+            child_runs = paths_payload.get("child_runs")
+            child_runs = child_runs if isinstance(child_runs, dict) else {}
+            services = payload.get("services")
+            services = services if isinstance(services, dict) else {}
+            for child_name, child_paths in child_runs.items():
+                if not isinstance(child_paths, Mapping):
+                    continue
+                child_summary = services.get(child_name)
+                child_status = (
+                    str(child_summary.get("status", "unknown"))
+                    if isinstance(child_summary, Mapping)
+                    else "unknown"
+                )
+                rows.append(
+                    {
+                        "source": f"{source_name}:{child_name}",
+                        "summary_json": child_paths.get("summary_json"),
+                        "status": child_status,
+                        "scenario": "suite_child",
+                        "run_dir": child_paths.get("run_dir"),
+                        "run_json": child_paths.get("run_json"),
+                        "request_count": None,
+                        "failed_requests_count": None,
+                        "error": None,
+                    }
+                )
+            continue
         row: dict[str, Any] = {
             "source": source_name,
             "summary_json": str(path),
@@ -779,6 +849,16 @@ def _parse_history_row(source: str, run_dir: Path) -> tuple[dict[str, Any] | Non
             return None, f"{source}: missing metrics object in eval_results.json for {run_dir}"
         row["query_count"] = metrics_payload.get("query_count")
         row["mean_mrr_at_k"] = metrics_payload.get("mean_mrr_at_k")
+        return row, None
+
+    if source == "cross_service_suite":
+        summary_path = Path(str(summary_json)) if isinstance(summary_json, str) else (run_dir / "cross_service_benchmark_suite.json")
+        summary_payload, summary_error = load_json_object(summary_path)
+        if summary_error is not None or summary_payload is None:
+            return None, f"{source}: missing or invalid cross_service_benchmark_suite.json in {run_dir}"
+        row["details"] = str(summary_payload.get("overall_sla_status", "-"))
+        row["request_count"] = len(summary_payload.get("services", {})) if isinstance(summary_payload.get("services"), dict) else None
+        row["failed_requests_count"] = len(summary_payload.get("degraded_services", [])) if isinstance(summary_payload.get("degraded_services"), list) else None
         return row, None
 
     return row, None

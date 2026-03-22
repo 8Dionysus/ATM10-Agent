@@ -12,7 +12,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 GATEWAY_OPERATOR_SAFE_ACTIONS_SCHEMA = "gateway_operator_safe_actions_v1"
 GATEWAY_OPERATOR_SAFE_ACTION_RUN_SCHEMA = "gateway_operator_safe_action_run_v1"
 
-SAFE_ACTIONS: dict[str, dict[str, str]] = {
+SAFE_ACTIONS: dict[str, dict[str, Any]] = {
     "gateway_local_core": {
         "label": "Gateway local smoke core",
         "script": "scripts/gateway_v1_smoke.py",
@@ -55,6 +55,14 @@ SAFE_ACTIONS: dict[str, dict[str, str]] = {
         "runs_subdir": "ui-safe-gateway-http-automation",
         "summary_name": "gateway_http_smoke_summary.json",
     },
+    "cross_service_suite_smoke": {
+        "label": "Cross-service suite smoke",
+        "script": "scripts/cross_service_benchmark_suite.py",
+        "scenario": "suite",
+        "runs_subdir": "ui-safe-cross-service-suite",
+        "summary_name": "cross_service_benchmark_suite.json",
+        "extra_args": ["--smoke-stub-voice-asr"],
+    },
 }
 
 
@@ -67,7 +75,7 @@ def safe_action_catalog() -> list[dict[str, Any]]:
         {
             "action_key": action_key,
             "label": config["label"],
-            "scenario": config["scenario"],
+            "scenario": config.get("scenario"),
             "summary_name": config["summary_name"],
             "smoke_only": True,
         }
@@ -187,13 +195,17 @@ def resolve_safe_action(action_key: str, runs_dir: Path) -> tuple[list[str], Pat
     command = [
         sys.executable,
         config["script"],
-        "--scenario",
-        config["scenario"],
         "--runs-dir",
         str(action_runs_dir),
         "--summary-json",
         str(summary_path),
     ]
+    scenario = config.get("scenario")
+    if isinstance(scenario, str) and scenario.strip() and str(config["script"]).endswith("_smoke.py"):
+        command.extend(["--scenario", scenario])
+    extra_args = config.get("extra_args")
+    if isinstance(extra_args, list):
+        command.extend(str(item) for item in extra_args)
     return command, action_runs_dir, summary_path
 
 

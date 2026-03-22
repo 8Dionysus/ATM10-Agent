@@ -50,6 +50,7 @@ def test_canonical_summary_sources_returns_expected_paths(tmp_path: Path) -> Non
         "gateway_http_core",
         "gateway_http_hybrid",
         "gateway_http_automation",
+        "cross_service_suite",
     ]
     assert sources["phase_a"] == tmp_path / "ci-smoke-phase-a" / "smoke_summary.json"
     assert sources["gateway_hybrid"] == tmp_path / "ci-smoke-gateway-hybrid" / "gateway_smoke_summary.json"
@@ -57,6 +58,11 @@ def test_canonical_summary_sources_returns_expected_paths(tmp_path: Path) -> Non
         tmp_path
         / "ci-smoke-gateway-http-automation"
         / "gateway_http_smoke_summary.json"
+    )
+    assert sources["cross_service_suite"] == (
+        tmp_path
+        / "ci-smoke-cross-service-suite"
+        / "cross_service_benchmark_suite.json"
     )
 
 
@@ -249,6 +255,12 @@ def test_fetch_gateway_safe_actions_success(monkeypatch: pytest.MonkeyPatch) -> 
     assert payload["schema_version"] == "gateway_operator_safe_actions_v1"
 
 
+def test_safe_action_catalog_includes_cross_service_suite_smoke() -> None:
+    catalog = safe_actions.safe_action_catalog()
+    action_keys = {item["action_key"] for item in catalog}
+    assert "cross_service_suite_smoke" in action_keys
+
+
 def test_run_gateway_safe_action_surfaces_http_error(monkeypatch: pytest.MonkeyPatch) -> None:
     class _HttpError(panel.url_error.HTTPError):
         def __init__(self):
@@ -420,6 +432,84 @@ def test_safe_actions_audit_corrupted_line_is_tolerated(tmp_path: Path) -> None:
     assert loaded[1]["action_key"] == "gateway_local_core"
 
 
+def test_build_metrics_rows_expands_cross_service_suite_summary(tmp_path: Path) -> None:
+    summary_path = tmp_path / "ci-smoke-cross-service-suite" / "cross_service_benchmark_suite.json"
+    _write_json(
+        summary_path,
+        {
+            "schema_version": "cross_service_benchmark_suite_v1",
+            "status": "ok",
+            "summary_matrix": [
+                {
+                    "source": "voice_asr",
+                    "backend": "whisper_genai",
+                    "status": "ok",
+                    "sla_status": "pass",
+                    "sample_count": 2,
+                    "latency_p95_ms": 12.5,
+                    "quality_primary_name": "text_similarity_avg",
+                    "quality_primary_value": 1.0,
+                    "summary_json": "runs/voice_asr/service_sla_summary.json",
+                },
+                {
+                    "source": "retrieval",
+                    "backend": "in_memory",
+                    "status": "ok",
+                    "sla_status": "pass",
+                    "sample_count": 3,
+                    "latency_p95_ms": 4.0,
+                    "quality_primary_name": "mean_mrr_at_k",
+                    "quality_primary_value": 1.0,
+                    "summary_json": "runs/retrieval/service_sla_summary.json",
+                },
+            ],
+        },
+    )
+
+    rows = panel.build_metrics_rows({"cross_service_suite": summary_path})
+    assert len(rows) == 2
+    assert rows[0]["source"] == "voice_asr"
+    assert rows[1]["source"] == "retrieval"
+
+
+def test_build_run_explorer_rows_expands_cross_service_suite_children(tmp_path: Path) -> None:
+    summary_path = tmp_path / "ci-smoke-cross-service-suite" / "cross_service_benchmark_suite.json"
+    _write_json(
+        summary_path,
+        {
+            "schema_version": "cross_service_benchmark_suite_v1",
+            "status": "ok",
+            "services": {
+                "voice_asr": {"status": "ok"},
+                "voice_tts": {"status": "error"},
+            },
+            "degraded_services": ["voice_tts"],
+            "paths": {
+                "run_dir": "runs/cross-service",
+                "run_json": "runs/cross-service/run.json",
+                "child_runs": {
+                    "voice_asr": {
+                        "run_dir": "runs/cross-service/voice-asr",
+                        "run_json": "runs/cross-service/voice-asr/run.json",
+                        "summary_json": "runs/cross-service/voice-asr/service_sla_summary.json",
+                    },
+                    "voice_tts": {
+                        "run_dir": "runs/cross-service/voice-tts",
+                        "run_json": "runs/cross-service/voice-tts/run.json",
+                        "summary_json": "runs/cross-service/voice-tts/service_sla_summary.json",
+                    },
+                },
+            },
+        },
+    )
+
+    rows = panel.build_run_explorer_rows({"cross_service_suite": summary_path})
+    assert len(rows) == 3
+    assert rows[0]["source"] == "cross_service_suite"
+    assert rows[1]["source"] == "cross_service_suite:voice_asr"
+    assert rows[2]["source"] == "cross_service_suite:voice_tts"
+
+
 def test_build_metrics_history_rows_collects_valid_rows(tmp_path: Path) -> None:
     roots = panel.canonical_history_roots(tmp_path)
     run_1 = _create_history_run(
@@ -485,6 +575,57 @@ def test_build_metrics_history_rows_supports_hybrid_gateway_sources(tmp_path: Pa
     assert rows[0]["source"] == "gateway_hybrid"
     assert rows[0]["request_count"] == 1
     assert rows[0]["failed_requests_count"] == 0
+
+
+def test_build_metrics_history_rows_supports_cross_service_suite_source(tmp_path: Path) -> None:
+    roots = panel.canonical_history_roots(tmp_path)
+    run_dir = _create_history_run(
+        root=roots["cross_service_suite"],
+        run_name="20260322_190000-cross-service-suite",
+        mode="cross_service_benchmark_suite",
+        timestamp_utc="2026-03-22T19:00:00+00:00",
+    )
+    summary_path = run_dir / "cross_service_benchmark_suite.json"
+    _write_json(
+        run_dir / "run.json",
+        {
+            "mode": "cross_service_benchmark_suite",
+            "status": "ok",
+            "timestamp_utc": "2026-03-22T19:00:00+00:00",
+            "paths": {
+                "run_json": str(run_dir / "run.json"),
+                "summary_json": str(summary_path),
+            },
+        },
+    )
+    _write_json(
+        summary_path,
+        {
+            "schema_version": "cross_service_benchmark_suite_v1",
+            "status": "ok",
+            "overall_sla_status": "breach",
+            "services": {
+                "voice_asr": {},
+                "voice_tts": {},
+                "retrieval": {},
+                "kag_file": {},
+            },
+            "degraded_services": ["voice_tts"],
+        },
+    )
+
+    rows, warnings = panel.build_metrics_history_rows(
+        tmp_path,
+        selected_sources=["cross_service_suite"],
+        selected_statuses=["ok", "error"],
+        limit_per_source=10,
+    )
+    assert warnings == []
+    assert len(rows) == 1
+    assert rows[0]["source"] == "cross_service_suite"
+    assert rows[0]["request_count"] == 4
+    assert rows[0]["failed_requests_count"] == 1
+    assert rows[0]["details"] == "breach"
 
 
 def test_build_metrics_history_rows_applies_source_filter(tmp_path: Path) -> None:
