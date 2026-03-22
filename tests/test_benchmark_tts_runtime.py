@@ -4,6 +4,9 @@ import json
 from datetime import datetime, timezone
 from pathlib import Path
 
+import pytest
+
+import scripts.benchmark_tts_runtime as benchmark_tts_runtime
 from scripts.benchmark_tts_runtime import run_benchmark_tts_runtime
 from src.agent_core.tts_runtime import CallbackTTSEngine, TTSRuntimeService, make_silence_wav_bytes
 
@@ -80,3 +83,26 @@ def test_run_benchmark_tts_runtime_marks_empty_audio_as_error(tmp_path: Path) ->
     assert result["ok"] is True
     assert service_sla_payload["status"] == "error"
     assert "empty_audio_detected" in service_sla_payload["breaches"]
+
+
+def test_build_benchmark_service_honors_cache_items(monkeypatch: pytest.MonkeyPatch) -> None:
+    engine = CallbackTTSEngine(
+        name="fake_tts",
+        synthesize_fn=lambda text, language, speaker: (
+            make_silence_wav_bytes(duration_ms=320, sample_rate=22050),
+            22050,
+        ),
+        prewarm_fn=lambda: None,
+    )
+
+    monkeypatch.setattr(benchmark_tts_runtime, "_build_xtts_engine", lambda: engine)
+    monkeypatch.setattr(benchmark_tts_runtime, "_build_piper_engine", lambda: engine)
+    monkeypatch.setattr(benchmark_tts_runtime, "_build_silero_engine", lambda: engine)
+
+    service = benchmark_tts_runtime._build_benchmark_service(
+        cache_items=7,
+        chunk_chars=180,
+        queue_size=16,
+    )
+
+    assert service.cache._max_items == 7

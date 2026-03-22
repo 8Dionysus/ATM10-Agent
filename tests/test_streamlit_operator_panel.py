@@ -86,6 +86,30 @@ def test_canonical_summary_sources_returns_expected_paths(tmp_path: Path) -> Non
     )
 
 
+def test_sync_runs_dir_state_keeps_operator_runs_dir_aligned() -> None:
+    session_state = {
+        "runs_dir": "D:/runs/old",
+        "operator_runs_dir": "D:/runs/old",
+    }
+
+    panel.sync_runs_dir_state(session_state, "D:/runs/new")
+
+    assert session_state["runs_dir"] == "D:/runs/new"
+    assert session_state["operator_runs_dir"] == "D:/runs/new"
+
+
+def test_sync_runs_dir_state_preserves_explicit_operator_runs_override() -> None:
+    session_state = {
+        "runs_dir": "D:/runs/old",
+        "operator_runs_dir": "D:/operator/explicit",
+    }
+
+    panel.sync_runs_dir_state(session_state, "D:/runs/new")
+
+    assert session_state["runs_dir"] == "D:/runs/new"
+    assert session_state["operator_runs_dir"] == "D:/operator/explicit"
+
+
 def test_streamlit_operator_panel_uses_stretch_width_not_deprecated_flag() -> None:
     source_path = panel.REPO_ROOT / "scripts" / "streamlit_operator_panel.py"
     source_text = source_path.read_text(encoding="utf-8")

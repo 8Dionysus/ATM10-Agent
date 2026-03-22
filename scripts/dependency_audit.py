@@ -371,9 +371,9 @@ def _normalize_pip_audit_vulnerabilities(parsed_payload: Any) -> list[dict[str, 
         return [dict(item) for item in parsed_payload]
 
     if isinstance(parsed_payload, Mapping):
-        dependencies = parsed_payload.get("dependencies", [])
-        if dependencies in (None, ""):
-            return []
+        if "dependencies" not in parsed_payload:
+            raise ValueError("pip-audit object payload must provide a 'dependencies' list.")
+        dependencies = parsed_payload.get("dependencies")
         if not isinstance(dependencies, list):
             raise ValueError("pip-audit object payload must provide 'dependencies' as a list.")
         if not all(isinstance(item, Mapping) for item in dependencies):

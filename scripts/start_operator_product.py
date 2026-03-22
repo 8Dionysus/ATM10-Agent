@@ -334,6 +334,43 @@ def _update_child_process_state(
     }
 
 
+def _reconcile_final_session_state(
+    run_payload: dict[str, Any],
+    process_map: dict[str, subprocess.Popen[str]],
+    *,
+    finished_at_utc: str,
+) -> None:
+    for service_name, process in process_map.items():
+        _update_child_process_state(run_payload, service_name, process)
+
+    session_state = run_payload.get("session_state", {})
+    if not isinstance(session_state, dict):
+        return
+
+    for service_name, entry in session_state.items():
+        if not isinstance(entry, dict):
+            continue
+        current_status = str(entry.get("status", "")).strip()
+        if current_status in {"error", "external", "not_configured"}:
+            continue
+        if entry.get("pid") is None and current_status == "pending":
+            _update_session_entry(
+                run_payload,
+                service_name,
+                status="not_started",
+                finished_at_utc=finished_at_utc,
+                last_event="not_started",
+            )
+            continue
+        _update_session_entry(
+            run_payload,
+            service_name,
+            status="stopped",
+            finished_at_utc=finished_at_utc,
+            last_event="shutdown",
+        )
+
+
 def _mark_probe_result(
     run_payload: dict[str, Any],
     service_name: str,
@@ -870,28 +907,11 @@ def main(argv: list[str] | None = None) -> int:
         for _service_name, process in reversed(managed_processes):
             _terminate_process(process)
         finished_at_utc = _utc_now()
-        for service_name, process in process_map.items():
-            _update_child_process_state(run_payload, service_name, process)
-            entry = run_payload.get("session_state", {}).get(service_name, {})
-            current_status = str(entry.get("status", "")).strip()
-            if current_status == "error":
-                continue
-            if entry.get("pid") is None and current_status == "pending":
-                _update_session_entry(
-                    run_payload,
-                    service_name,
-                    status="not_started",
-                    finished_at_utc=finished_at_utc,
-                    last_event="not_started",
-                )
-                continue
-            _update_session_entry(
-                run_payload,
-                service_name,
-                status="stopped",
-                finished_at_utc=finished_at_utc,
-                last_event="shutdown",
-            )
+        _reconcile_final_session_state(
+            run_payload,
+            process_map,
+            finished_at_utc=finished_at_utc,
+        )
         run_payload["status"] = final_status
         if final_status == "stopped":
             run_payload["stopped_at_utc"] = finished_at_utc

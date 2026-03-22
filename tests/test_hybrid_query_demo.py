@@ -66,6 +66,54 @@ def test_merge_hybrid_results_rrf_dedup_and_kag_only_contribution() -> None:
     assert merged[2]["kag_rank"] == 2
 
 
+def test_merge_hybrid_results_keeps_best_rank_for_duplicate_doc_ids() -> None:
+    merged = merge_hybrid_results(
+        [
+            {
+                "id": "doc:steel_tools",
+                "source": "ftbquests",
+                "title": "Steel Tools",
+                "text": "Craft steel tools.",
+                "score": 5.0,
+                "citation": {"id": "doc:steel_tools", "source": "ftbquests", "path": "docs.jsonl"},
+            },
+            {
+                "id": "doc:steel_tools",
+                "source": "ftbquests",
+                "title": "Steel Tools duplicate",
+                "text": "Craft steel tools again.",
+                "score": 1.0,
+                "citation": {"id": "doc:steel_tools", "source": "ftbquests", "path": "docs-alt.jsonl"},
+            },
+        ],
+        [
+            {
+                "id": "doc:steel_tools",
+                "source": "ftbquests",
+                "title": "Steel Tools graph hit",
+                "score": 3.0,
+                "matched_entities": ["steel"],
+                "citation": {"id": "doc:steel_tools", "source": "ftbquests", "path": "docs.jsonl"},
+            },
+            {
+                "id": "doc:steel_tools",
+                "source": "ftbquests",
+                "title": "Steel Tools graph duplicate",
+                "score": 0.5,
+                "matched_entities": ["tools"],
+                "citation": {"id": "doc:steel_tools", "source": "ftbquests", "path": "docs-alt.jsonl"},
+            },
+        ],
+        topk=5,
+    )
+
+    assert len(merged) == 1
+    assert merged[0]["retrieval_rank"] == 1
+    assert merged[0]["retrieval_score"] == 5.0
+    assert merged[0]["kag_rank"] == 1
+    assert merged[0]["kag_score"] == 3.0
+
+
 def test_execute_hybrid_baseline_query_happy_path() -> None:
     result = execute_hybrid_baseline_query(
         query="steel tools",
