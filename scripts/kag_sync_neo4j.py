@@ -56,6 +56,45 @@ def _load_graph_payload(path: Path) -> dict[str, Any]:
     return payload
 
 
+def _sync_kag_graph_neo4j_compat(
+    graph_payload: dict[str, Any],
+    *,
+    url: str,
+    database: str,
+    user: str,
+    password: str,
+    timeout_sec: float,
+    batch_size: int,
+    reset_graph: bool,
+    dataset_tag: str | None,
+) -> dict[str, Any]:
+    try:
+        return sync_kag_graph_neo4j(
+            graph_payload,
+            url=url,
+            database=database,
+            user=user,
+            password=password,
+            timeout_sec=timeout_sec,
+            batch_size=batch_size,
+            reset_graph=reset_graph,
+            dataset_tag=dataset_tag,
+        )
+    except TypeError as exc:
+        if "dataset_tag" not in str(exc):
+            raise
+        return sync_kag_graph_neo4j(
+            graph_payload,
+            url=url,
+            database=database,
+            user=user,
+            password=password,
+            timeout_sec=timeout_sec,
+            batch_size=batch_size,
+            reset_graph=reset_graph,
+        )
+
+
 def run_kag_sync_neo4j(
     *,
     graph_path: Path,
@@ -63,6 +102,7 @@ def run_kag_sync_neo4j(
     neo4j_database: str,
     neo4j_user: str,
     neo4j_password: str | None,
+    dataset_tag: str | None = None,
     reset_graph: bool = False,
     timeout_sec: float = 30.0,
     batch_size: int = 500,
@@ -85,6 +125,7 @@ def run_kag_sync_neo4j(
             "neo4j_url": neo4j_url,
             "neo4j_database": neo4j_database,
             "neo4j_user": neo4j_user,
+            "dataset_tag": dataset_tag,
             "reset_graph": reset_graph,
             "timeout_sec": timeout_sec,
             "batch_size": batch_size,
@@ -100,7 +141,7 @@ def run_kag_sync_neo4j(
     try:
         password = _resolve_password(neo4j_password)
         graph_payload = _load_graph_payload(graph_path)
-        summary = sync_kag_graph_neo4j(
+        summary = _sync_kag_graph_neo4j_compat(
             graph_payload,
             url=neo4j_url,
             database=neo4j_database,
@@ -109,6 +150,7 @@ def run_kag_sync_neo4j(
             timeout_sec=timeout_sec,
             batch_size=batch_size,
             reset_graph=reset_graph,
+            dataset_tag=dataset_tag,
         )
         _write_json(summary_json_path, summary)
         run_payload["status"] = "ok"
@@ -135,6 +177,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--neo4j-database", default="neo4j", help="Neo4j database name.")
     parser.add_argument("--neo4j-user", default="neo4j", help="Neo4j username.")
     parser.add_argument("--password", default=None, help="Neo4j password (or use NEO4J_PASSWORD env var).")
+    parser.add_argument(
+        "--dataset-tag",
+        default=None,
+        help="Optional dataset tag for isolated fixture syncs and targeted resets.",
+    )
     parser.add_argument("--reset-graph", action="store_true", help="Delete existing Doc/Entity nodes before sync.")
     parser.add_argument("--timeout-sec", type=float, default=30.0, help="HTTP timeout for Neo4j requests.")
     parser.add_argument("--batch-size", type=int, default=500, help="Cypher UNWIND batch size.")
@@ -150,6 +197,7 @@ def main() -> int:
         neo4j_database=args.neo4j_database,
         neo4j_user=args.neo4j_user,
         neo4j_password=args.password,
+        dataset_tag=args.dataset_tag,
         reset_graph=args.reset_graph,
         timeout_sec=args.timeout_sec,
         batch_size=args.batch_size,

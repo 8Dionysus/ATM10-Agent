@@ -147,6 +147,7 @@ Expected result:
 * `request_redaction` (`applied`, `fields_redacted`, checklist version) is published in `run.json`.
 * `response.json.schema_version = gateway_response_v1`.
 * `health.result.supported_operations` includes additive `hybrid_query`.
+* `health.result.supported_profiles` includes `baseline_first` and additive `combo_a`.
 * For `retrieval_query` + `reranker=qwen3` `payload.reranker_model` is limited by allowlist:
   * `Qwen/Qwen3-Reranker-0.6B`
   * `OpenVINO/Qwen3-Reranker-0.6B-fp16-ov`
@@ -167,12 +168,25 @@ Expected result:
 * `hybrid_query_results.json` contains `planner_mode`, `planner_status`, `degraded`, `retrieval_results`, `kag_results`, `merged_results`, `warnings`, and `paths`.
 * If retrieval succeeds but the KAG stage fails or returns no expansion rows, the run still ends with `status=ok` and `planner_status=retrieval_only_fallback`.
 
+Combo A profile example:
+
+```powershell
+cd <repo-root>
+.\.venv\Scripts\Activate.ps1
+$env:NEO4J_PASSWORD="<set-local-neo4j-password>"
+python scripts/hybrid_query_demo.py --profile combo_a --query "steel tools" --topk 5 --candidate-k 10 --reranker none --collection atm10_combo_a_fixture_manual --host 127.0.0.1 --port 6333 --neo4j-url http://127.0.0.1:7474 --neo4j-database neo4j --neo4j-user neo4j --neo4j-dataset-tag atm10_combo_a_fixture_manual --runs-dir runs\hybrid-query-combo-a
+```
+
+For `profile=combo_a`, `docs_path` is optional when `retrieval_backend=qdrant` and `kag_backend=neo4j`.
+
 ### Cross-service benchmark suite
 
 ```powershell
 cd <repo-root>
 .\.venv\Scripts\Activate.ps1
 python scripts/cross_service_benchmark_suite.py --runs-dir runs\cross-service-suite --summary-json runs\cross-service-suite\cross_service_benchmark_suite.json --smoke-stub-voice-asr
+$env:NEO4J_PASSWORD="<set-local-neo4j-password>"
+python scripts/cross_service_benchmark_suite.py --profile combo_a --runs-dir runs\nightly-combo-a-cross-service-suite --summary-json runs\nightly-combo-a-cross-service-suite\cross_service_benchmark_suite.json --voice-service-url http://127.0.0.1:8765 --tts-service-url http://127.0.0.1:8780 --qdrant-url http://127.0.0.1:6333 --neo4j-url http://127.0.0.1:7474 --neo4j-database neo4j --neo4j-user neo4j
 ```
 
 Expected result:
@@ -183,6 +197,7 @@ Expected result:
 * Each child run writes a normalized `service_sla_summary.json` next to its native artifacts.
 * `cross_service_benchmark_suite.json` contains `schema_version = cross_service_benchmark_suite_v1`, `services`, `summary_matrix`, `degraded_services`, and `paths.child_runs`.
 * `--smoke-stub-voice-asr` keeps the suite reproducible in CI and local smoke paths without a live ASR backend.
+* For `profile=combo_a`, the child order becomes `voice_asr -> voice_tts -> retrieval -> kag_neo4j`, retrieval uses `Qdrant`, KAG uses `Neo4j`, and the suite writes `paths.combo_a_seed_run_dir` for the isolated fixture seeding step.
 
 ### Gateway smoke scenarios
 
@@ -192,6 +207,8 @@ cd <repo-root>
 python scripts/gateway_v1_smoke.py --scenario core --runs-dir runs\ci-smoke-gateway-core --summary-json runs\ci-smoke-gateway-core\gateway_smoke_summary.json
 python scripts/gateway_v1_smoke.py --scenario hybrid --runs-dir runs\ci-smoke-gateway-hybrid --summary-json runs\ci-smoke-gateway-hybrid\gateway_smoke_summary.json
 python scripts/gateway_v1_smoke.py --scenario automation --runs-dir runs\ci-smoke-gateway-automation --summary-json runs\ci-smoke-gateway-automation\gateway_smoke_summary.json
+$env:NEO4J_PASSWORD="<set-local-neo4j-password>"
+python scripts/gateway_v1_smoke.py --scenario combo_a --runs-dir runs\ci-smoke-gateway-combo-a --summary-json runs\ci-smoke-gateway-combo-a\gateway_smoke_summary.json --qdrant-url http://127.0.0.1:6333 --neo4j-url http://127.0.0.1:7474 --neo4j-database neo4j --neo4j-user neo4j
 ```
 
 Expected result:
@@ -199,6 +216,7 @@ Expected result:
 * The `core` script checks `health`, `retrieval_query`, `kag_query` (`backend=file`).
 * The `hybrid` script checks additive `hybrid_query` (`retrieval first + file KAG expansion + RRF merge`).
 * The `automation` script checks `automation_dry_run` through fixture.
+* The `combo_a` script seeds isolated fixture data into `Qdrant` + `Neo4j`, then checks `health`, `retrieval_query(qdrant)`, `kag_query(neo4j)`, and `hybrid_query(profile=combo_a)`.
 * In each `--summary-json`, a `status=ok|error` is fixed; any `error` returns a non-zero exit code.
 
 ## M7.1/M7.2: Gateway v1 HTTP transport + hardening
@@ -262,6 +280,7 @@ Expected transport health fields:
 
 * `status = ok`
 * `supported_operations` includes `health`, `retrieval_query`, `kag_query`, `hybrid_query`, `automation_dry_run`, `safe_action_smoke`
+* `supported_profiles` includes `baseline_first`, `combo_a`
 * `policy` reflects the effective HTTP hardening profile
 
 Operator snapshot check:
@@ -273,8 +292,10 @@ python -c "import requests; print(requests.get('http://127.0.0.1:8770/v1/operato
 Optional downstream health aggregation for the operator product:
 
 ```powershell
-python scripts/gateway_v1_http_service.py --host 127.0.0.1 --port 8770 --runs-dir runs\gateway-http --voice-service-url http://127.0.0.1:8765 --tts-service-url http://127.0.0.1:8780 --operator-health-timeout-sec 3.0
+python scripts/gateway_v1_http_service.py --host 127.0.0.1 --port 8770 --runs-dir runs\gateway-http --voice-service-url http://127.0.0.1:8765 --tts-service-url http://127.0.0.1:8780 --qdrant-url http://127.0.0.1:6333 --neo4j-url http://127.0.0.1:7474 --neo4j-database neo4j --neo4j-user neo4j --operator-health-timeout-sec 3.0
 ```
+
+With external services configured, `/v1/operator/snapshot` additively returns `operator_context.profiles.supported_profiles`, `operator_context.profiles.combo_a`, and probe rows for `qdrant` / `neo4j`.
 
 ### Gateway request over HTTP
 
@@ -314,6 +335,8 @@ cd <repo-root>
 python scripts/gateway_v1_http_smoke.py --scenario core --runs-dir runs\ci-smoke-gateway-http-core --summary-json runs\ci-smoke-gateway-http-core\gateway_http_smoke_summary.json
 python scripts/gateway_v1_http_smoke.py --scenario hybrid --runs-dir runs\ci-smoke-gateway-http-hybrid --summary-json runs\ci-smoke-gateway-http-hybrid\gateway_http_smoke_summary.json
 python scripts/gateway_v1_http_smoke.py --scenario automation --runs-dir runs\ci-smoke-gateway-http-automation --summary-json runs\ci-smoke-gateway-http-automation\gateway_http_smoke_summary.json
+$env:NEO4J_PASSWORD="<set-local-neo4j-password>"
+python scripts/gateway_v1_http_smoke.py --scenario combo_a --runs-dir runs\ci-smoke-gateway-http-combo-a --summary-json runs\ci-smoke-gateway-http-combo-a\gateway_http_smoke_summary.json --qdrant-url http://127.0.0.1:6333 --neo4j-url http://127.0.0.1:7474 --neo4j-database neo4j --neo4j-user neo4j
 ```
 
 Expected result:
@@ -321,6 +344,7 @@ Expected result:
 * `core` contains operations `health`, `retrieval_query`, `kag_query(file)`.
 * `hybrid` contains additive `hybrid_query`.
 * `automation_dry_run` passes through `automation`.
+* `combo_a` seeds isolated external fixture data and validates the same additive `combo_a` request set through HTTP transport.
 * Any error in the gateway body/HTTP status causes smoke `status=error` and non-zero exit code.
 
 ## M8.pre: Primary operator product startup profile
@@ -336,7 +360,7 @@ python scripts/start_operator_product.py --runs-dir runs
 Optional runtime health wiring through the gateway operator snapshot:
 
 ```powershell
-python scripts/start_operator_product.py --runs-dir runs --voice-runtime-url http://127.0.0.1:8765 --tts-runtime-url http://127.0.0.1:8780
+python scripts/start_operator_product.py --runs-dir runs --voice-runtime-url http://127.0.0.1:8765 --tts-runtime-url http://127.0.0.1:8780 --qdrant-url http://127.0.0.1:6333 --neo4j-url http://127.0.0.1:7474 --neo4j-database neo4j --neo4j-user neo4j
 ```
 
 Optional managed local runtimes (launcher starts `voice_runtime_service` / `tts_runtime_service` itself):
@@ -349,18 +373,44 @@ Expected result:
 
 * A launcher run dir `runs/<timestamp>-start-operator-product/` is created.
 * `startup_plan.json` stores the resolved canonical startup profile.
-* `run.json` captures the canonical startup profile, effective runtime URLs, `managed_processes`, `session_state`, startup checkpoints, and artifact pointers.
+* `run.json` captures the canonical startup profile, effective runtime URLs, external service URLs, `managed_processes`, `external_services`, `session_state`, startup checkpoints, and artifact pointers.
 * Gateway is considered ready only after `GET /v1/operator/snapshot` returns `status=ok`.
 * Streamlit is started against that gateway URL as the primary operator cockpit.
 * If managed runtimes are enabled, launcher waits for `GET /health` on those loopback services before starting the gateway.
 * `gateway.log` and `streamlit.log` are written into the launcher run dir.
 * If managed runtimes are enabled, `voice_runtime_service.log` / `tts_runtime_service.log` are also written into the launcher run dir.
-* The operator surface can read the latest launcher artifact back through the gateway/panel as startup-session context.
+* The operator surface can read the latest launcher artifact back through the gateway/panel as startup-session context, including additive `combo_a` readiness/probe state for `qdrant` and `neo4j`.
 
 Notes:
 
 * This is the primary operator product startup path.
 * Manual per-service commands remain valid for recovery or focused debugging.
+
+## M8.combo_a: Combo A live profile workflow
+
+Workflow file:
+
+* `.github/workflows/combo-a-profile-smoke.yml`
+
+Purpose:
+
+* keep `baseline_first` as the default PR path
+* run additive `combo_a` parity checks on a separate nightly/manual workflow
+* publish machine-readable combo_a gateway summaries, cross-service suite summary, and operator probe artifacts
+
+Workflow outputs:
+
+* `runs/ci-smoke-gateway-combo-a/gateway_smoke_summary.json`
+* `runs/ci-smoke-gateway-http-combo-a/gateway_http_smoke_summary.json`
+* `runs/nightly-combo-a-cross-service-suite/cross_service_benchmark_suite.json`
+* `runs/nightly-combo-a-cross-service-suite/<timestamp>-cross-service-suite/child_runs/<service>/<timestamp>-.../service_sla_summary.json`
+* `runs/nightly-combo-a-operator-probes/operator_snapshot.json`
+
+Notes:
+
+* `Qdrant` and `Neo4j` are treated as external services; the workflow only probes and seeds isolated fixture namespaces/collections.
+* `voice_runtime_service` and `tts_runtime_service` are started as live loopback services for the suite profile.
+* The workflow is additive and is not part of the default PR gate.
 
 ## M7.post: Gateway SLA/Observability baseline
 

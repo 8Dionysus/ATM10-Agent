@@ -47,21 +47,35 @@ def test_canonical_summary_sources_returns_expected_paths(tmp_path: Path) -> Non
         "gateway_core",
         "gateway_hybrid",
         "gateway_automation",
+        "gateway_combo_a",
         "gateway_http_core",
         "gateway_http_hybrid",
         "gateway_http_automation",
+        "gateway_http_combo_a",
         "cross_service_suite",
+        "cross_service_suite_combo_a",
     ]
     assert sources["phase_a"] == tmp_path / "ci-smoke-phase-a" / "smoke_summary.json"
     assert sources["gateway_hybrid"] == tmp_path / "ci-smoke-gateway-hybrid" / "gateway_smoke_summary.json"
+    assert sources["gateway_combo_a"] == tmp_path / "ci-smoke-gateway-combo-a" / "gateway_smoke_summary.json"
     assert sources["gateway_http_automation"] == (
         tmp_path
         / "ci-smoke-gateway-http-automation"
         / "gateway_http_smoke_summary.json"
     )
+    assert sources["gateway_http_combo_a"] == (
+        tmp_path
+        / "ci-smoke-gateway-http-combo-a"
+        / "gateway_http_smoke_summary.json"
+    )
     assert sources["cross_service_suite"] == (
         tmp_path
         / "ci-smoke-cross-service-suite"
+        / "cross_service_benchmark_suite.json"
+    )
+    assert sources["cross_service_suite_combo_a"] == (
+        tmp_path
+        / "nightly-combo-a-cross-service-suite"
         / "cross_service_benchmark_suite.json"
     )
 
@@ -259,6 +273,9 @@ def test_safe_action_catalog_includes_cross_service_suite_smoke() -> None:
     catalog = safe_actions.safe_action_catalog()
     action_keys = {item["action_key"] for item in catalog}
     assert "cross_service_suite_smoke" in action_keys
+    assert "cross_service_suite_combo_a_smoke" in action_keys
+    assert "gateway_local_combo_a" in action_keys
+    assert "gateway_http_combo_a" in action_keys
 
 
 def test_run_gateway_safe_action_surfaces_http_error(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -337,6 +354,25 @@ def test_resolve_safe_action_supports_hybrid_smokes(tmp_path: Path) -> None:
     assert "scripts/gateway_v1_http_smoke.py" in http_command
     assert "hybrid" in http_command
     assert str(http_summary).endswith("gateway_http_smoke_summary.json")
+
+
+def test_resolve_safe_action_supports_combo_a_smokes(tmp_path: Path) -> None:
+    local_command, local_summary = panel.resolve_safe_action("gateway_local_combo_a", tmp_path)
+    http_command, http_summary = panel.resolve_safe_action("gateway_http_combo_a", tmp_path)
+    suite_command, suite_summary = panel.resolve_safe_action("cross_service_suite_combo_a_smoke", tmp_path)
+
+    assert "scripts/gateway_v1_smoke.py" in local_command
+    assert "combo_a" in local_command
+    assert str(local_summary).endswith("gateway_smoke_summary.json")
+
+    assert "scripts/gateway_v1_http_smoke.py" in http_command
+    assert "combo_a" in http_command
+    assert str(http_summary).endswith("gateway_http_smoke_summary.json")
+
+    assert "scripts/cross_service_benchmark_suite.py" in suite_command
+    assert "--profile" in suite_command
+    assert "combo_a" in suite_command
+    assert str(suite_summary).endswith("cross_service_benchmark_suite.json")
 
 
 def test_run_safe_action_fails_when_summary_missing(

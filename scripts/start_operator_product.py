@@ -11,6 +11,13 @@ from typing import Any
 from urllib import error as url_error
 from urllib import request
 
+from src.agent_core.combo_a_profile import (
+    DEFAULT_COMBO_A_NEO4J_DATABASE,
+    DEFAULT_COMBO_A_NEO4J_URL,
+    DEFAULT_COMBO_A_NEO4J_USER,
+    DEFAULT_COMBO_A_QDRANT_URL,
+)
+
 SCHEMA_VERSION = "operator_product_startup_v1"
 
 
@@ -57,6 +64,22 @@ def build_startup_plan(args: argparse.Namespace) -> dict[str, Any]:
     voice_runtime_url = args.voice_runtime_url
     tts_runtime_url = args.tts_runtime_url
     managed_processes: dict[str, dict[str, Any]] = {}
+    external_services = {
+        "qdrant": {
+            "managed": False,
+            "url": args.qdrant_url,
+            "runs_dir": None,
+            "command": None,
+        },
+        "neo4j": {
+            "managed": False,
+            "url": args.neo4j_url,
+            "runs_dir": None,
+            "command": None,
+            "database": args.neo4j_database,
+            "user": args.neo4j_user,
+        },
+    }
 
     if args.start_voice_runtime:
         voice_runtime_url = f"http://127.0.0.1:{args.voice_runtime_port}"
@@ -126,6 +149,19 @@ def build_startup_plan(args: argparse.Namespace) -> dict[str, Any]:
         gateway_command.extend(["--voice-service-url", voice_runtime_url])
     if tts_runtime_url:
         gateway_command.extend(["--tts-service-url", tts_runtime_url])
+    if args.qdrant_url:
+        gateway_command.extend(["--qdrant-url", args.qdrant_url])
+    if args.neo4j_url:
+        gateway_command.extend(
+            [
+                "--neo4j-url",
+                args.neo4j_url,
+                "--neo4j-database",
+                args.neo4j_database,
+                "--neo4j-user",
+                args.neo4j_user,
+            ]
+        )
 
     streamlit_command = [
         sys.executable,
@@ -159,12 +195,17 @@ def build_startup_plan(args: argparse.Namespace) -> dict[str, Any]:
             "tts_runtime_runs_dir": str(args.tts_runtime_runs_dir),
         },
         "managed_processes": managed_processes,
+        "external_services": external_services,
         "gateway": {
             "url": gateway_url,
             "runs_dir": str(args.gateway_runs_dir),
             "command": gateway_command,
             "voice_runtime_url": voice_runtime_url,
             "tts_runtime_url": tts_runtime_url,
+            "qdrant_url": args.qdrant_url,
+            "neo4j_url": args.neo4j_url,
+            "neo4j_database": args.neo4j_database,
+            "neo4j_user": args.neo4j_user,
         },
         "streamlit": {
             "url": streamlit_url,
@@ -187,6 +228,23 @@ def _build_initial_session_state(plan: dict[str, Any], run_dir: Path) -> dict[st
             "status": "pending" if service_plan.get("managed") else (
                 "external" if service_plan.get("url") else "not_configured"
             ),
+            "pid": None,
+            "last_probe": None,
+            "error": None,
+            "started_at_utc": None,
+            "finished_at_utc": None,
+            "last_event": "plan_resolved",
+        }
+
+    for service_name, service_plan in plan.get("external_services", {}).items():
+        session_state[service_name] = {
+            "service_name": service_name,
+            "managed": False,
+            "configured": bool(service_plan.get("url")),
+            "effective_url": service_plan.get("url"),
+            "runs_dir": service_plan.get("runs_dir"),
+            "log_path": None,
+            "status": "external" if service_plan.get("url") else "not_configured",
             "pid": None,
             "last_probe": None,
             "error": None,
@@ -468,6 +526,30 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="Managed TTS runtime runs directory (default: <runs-dir>/tts-runtime).",
     )
     parser.add_argument(
+        "--qdrant-url",
+        type=str,
+        default=None,
+        help=f"Optional external Qdrant URL to probe and expose (example: {DEFAULT_COMBO_A_QDRANT_URL}).",
+    )
+    parser.add_argument(
+        "--neo4j-url",
+        type=str,
+        default=None,
+        help=f"Optional external Neo4j URL to probe and expose (example: {DEFAULT_COMBO_A_NEO4J_URL}).",
+    )
+    parser.add_argument(
+        "--neo4j-database",
+        type=str,
+        default=DEFAULT_COMBO_A_NEO4J_DATABASE,
+        help="Neo4j database name for external readiness probes.",
+    )
+    parser.add_argument(
+        "--neo4j-user",
+        type=str,
+        default=DEFAULT_COMBO_A_NEO4J_USER,
+        help="Neo4j user for external readiness probes.",
+    )
+    parser.add_argument(
         "--print-plan-json",
         action="store_true",
         help="Print the resolved startup plan as JSON and exit without launching processes.",
@@ -505,9 +587,12 @@ def main(argv: list[str] | None = None) -> int:
             "streamlit": plan["streamlit"]["url"],
             "voice_runtime_service": plan["gateway"].get("voice_runtime_url"),
             "tts_runtime_service": plan["gateway"].get("tts_runtime_url"),
+            "qdrant": plan["gateway"].get("qdrant_url"),
+            "neo4j": plan["gateway"].get("neo4j_url"),
         },
         "artifact_roots": dict(plan.get("artifact_roots") or {}),
         "managed_processes": plan["managed_processes"],
+        "external_services": plan.get("external_services", {}),
         "paths": {
             "run_dir": str(run_dir),
             "run_json": str(run_json_path),
@@ -671,6 +756,25 @@ def main(argv: list[str] | None = None) -> int:
             message="gateway operator snapshot probe succeeded",
             details={"checked_at_utc": operator_snapshot.get("checked_at_utc")},
         )
+        stack_services = operator_snapshot.get("stack_services")
+        stack_services = stack_services if isinstance(stack_services, dict) else {}
+        for service_name in ("qdrant", "neo4j"):
+            stack_payload = stack_services.get(service_name)
+            if not isinstance(stack_payload, dict):
+                continue
+            _update_session_entry(
+                run_payload,
+                service_name,
+                status=str(stack_payload.get("status", "unknown")),
+                last_probe={
+                    "checked_at_utc": operator_snapshot.get("checked_at_utc"),
+                    "status": str(stack_payload.get("status", "unknown")),
+                    "payload": stack_payload.get("payload"),
+                    "error": stack_payload.get("error"),
+                },
+                error=stack_payload.get("error"),
+                last_event="operator_snapshot_probe",
+            )
 
         streamlit_process = _launch_process(plan["streamlit"]["command"], run_dir / "streamlit.log")
         process_map["streamlit"] = streamlit_process

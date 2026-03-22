@@ -48,6 +48,7 @@ def test_gateway_v1_http_service_healthz_ok(tmp_path: Path) -> None:
     assert payload["service"] == "gateway_v1_http_service"
     assert payload["operator_runs_dir"] == str(tmp_path / "runs")
     assert "hybrid_query" in payload["supported_operations"]
+    assert sorted(payload["supported_profiles"]) == sorted(gateway_http.SUPPORTED_PROFILES)
     assert payload["policy"] == {
         "max_request_body_bytes": 10_000,
         "max_json_depth": 4,
@@ -75,6 +76,9 @@ def test_gateway_v1_http_service_operator_snapshot_returns_gateway_centered_payl
     assert payload["stack_services"]["gateway_v1_http_service"]["status"] == "ok"
     assert payload["stack_services"]["voice_runtime_service"]["status"] == "not_configured"
     assert payload["stack_services"]["tts_runtime_service"]["status"] == "not_configured"
+    assert payload["stack_services"]["qdrant"]["status"] == "not_configured"
+    assert payload["stack_services"]["neo4j"]["status"] == "not_configured"
+    assert payload["operator_context"]["profiles"]["supported_profiles"] == list(gateway_http.SUPPORTED_PROFILES)
     assert payload["operator_context"]["artifact_roots"]["operator_runs_dir"] == str(tmp_path / "runs")
     assert isinstance(payload["latest_metrics"]["summary_matrix"], list)
 
@@ -101,6 +105,10 @@ def test_gateway_v1_http_service_operator_snapshot_passes_optional_service_urls(
         operator_runs_dir=tmp_path / "operator-runs",
         voice_service_url="http://127.0.0.1:8765",
         tts_service_url="http://127.0.0.1:8780",
+        qdrant_url="http://127.0.0.1:6333",
+        neo4j_url="http://127.0.0.1:7474",
+        neo4j_database="neo4j",
+        neo4j_user="neo4j",
         operator_health_timeout_sec=9.5,
     )
     with TestClient(app) as client:
@@ -110,6 +118,10 @@ def test_gateway_v1_http_service_operator_snapshot_passes_optional_service_urls(
     assert captured["operator_runs_dir"] == tmp_path / "operator-runs"
     assert captured["voice_service_url"] == "http://127.0.0.1:8765"
     assert captured["tts_service_url"] == "http://127.0.0.1:8780"
+    assert captured["qdrant_url"] == "http://127.0.0.1:6333"
+    assert captured["neo4j_url"] == "http://127.0.0.1:7474"
+    assert captured["neo4j_database"] == "neo4j"
+    assert captured["neo4j_user"] == "neo4j"
     assert captured["health_timeout_sec"] == 9.5
 
 

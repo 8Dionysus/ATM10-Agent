@@ -7,6 +7,14 @@ from typing import Any, Mapping
 from urllib import error as url_error
 from urllib import request
 
+from src.agent_core.combo_a_profile import (
+    COMBO_A_PROFILE,
+    DEFAULT_COMBO_A_NEO4J_DATABASE,
+    DEFAULT_COMBO_A_NEO4J_USER,
+    probe_neo4j_service,
+    probe_qdrant_service,
+)
+
 GATEWAY_OPERATOR_STATUS_SCHEMA = "gateway_operator_status_v1"
 GATEWAY_OPERATOR_RUNS_SCHEMA = "gateway_operator_runs_v1"
 GATEWAY_OPERATOR_HISTORY_SCHEMA = "gateway_operator_history_v1"
@@ -79,6 +87,11 @@ HISTORY_SOURCE_SPECS: dict[str, dict[str, str | None]] = {
         "expected_mode": "gateway_v1_smoke",
         "expected_scenario": "automation",
     },
+    "gateway_combo_a": {
+        "root_subdir": "ci-smoke-gateway-combo-a",
+        "expected_mode": "gateway_v1_smoke",
+        "expected_scenario": "combo_a",
+    },
     "gateway_http_core": {
         "root_subdir": "ci-smoke-gateway-http-core",
         "expected_mode": "gateway_v1_http_smoke",
@@ -94,8 +107,18 @@ HISTORY_SOURCE_SPECS: dict[str, dict[str, str | None]] = {
         "expected_mode": "gateway_v1_http_smoke",
         "expected_scenario": "automation",
     },
+    "gateway_http_combo_a": {
+        "root_subdir": "ci-smoke-gateway-http-combo-a",
+        "expected_mode": "gateway_v1_http_smoke",
+        "expected_scenario": "combo_a",
+    },
     "cross_service_suite": {
         "root_subdir": "ci-smoke-cross-service-suite",
+        "expected_mode": "cross_service_benchmark_suite",
+        "expected_scenario": None,
+    },
+    "cross_service_suite_combo_a": {
+        "root_subdir": "nightly-combo-a-cross-service-suite",
         "expected_mode": "cross_service_benchmark_suite",
         "expected_scenario": None,
     },
@@ -115,10 +138,15 @@ def canonical_summary_sources(runs_dir: Path) -> dict[str, Path]:
         "gateway_core": base / "ci-smoke-gateway-core" / "gateway_smoke_summary.json",
         "gateway_hybrid": base / "ci-smoke-gateway-hybrid" / "gateway_smoke_summary.json",
         "gateway_automation": base / "ci-smoke-gateway-automation" / "gateway_smoke_summary.json",
+        "gateway_combo_a": base / "ci-smoke-gateway-combo-a" / "gateway_smoke_summary.json",
         "gateway_http_core": base / "ci-smoke-gateway-http-core" / "gateway_http_smoke_summary.json",
         "gateway_http_hybrid": base / "ci-smoke-gateway-http-hybrid" / "gateway_http_smoke_summary.json",
         "gateway_http_automation": base / "ci-smoke-gateway-http-automation" / "gateway_http_smoke_summary.json",
+        "gateway_http_combo_a": base / "ci-smoke-gateway-http-combo-a" / "gateway_http_smoke_summary.json",
         "cross_service_suite": base / "ci-smoke-cross-service-suite" / "cross_service_benchmark_suite.json",
+        "cross_service_suite_combo_a": base
+        / "nightly-combo-a-cross-service-suite"
+        / "cross_service_benchmark_suite.json",
     }
 
 
@@ -819,9 +847,11 @@ def _parse_history_row(source: str, run_dir: Path) -> tuple[dict[str, Any] | Non
         "gateway_core",
         "gateway_hybrid",
         "gateway_automation",
+        "gateway_combo_a",
         "gateway_http_core",
         "gateway_http_hybrid",
         "gateway_http_automation",
+        "gateway_http_combo_a",
     }:
         result_payload = run_payload.get("result")
         if isinstance(result_payload, dict):
@@ -851,7 +881,7 @@ def _parse_history_row(source: str, run_dir: Path) -> tuple[dict[str, Any] | Non
         row["mean_mrr_at_k"] = metrics_payload.get("mean_mrr_at_k")
         return row, None
 
-    if source == "cross_service_suite":
+    if source in {"cross_service_suite", "cross_service_suite_combo_a"}:
         summary_path = Path(str(summary_json)) if isinstance(summary_json, str) else (run_dir / "cross_service_benchmark_suite.json")
         summary_payload, summary_error = load_json_object(summary_path)
         if summary_error is not None or summary_payload is None:
@@ -1054,6 +1084,10 @@ def build_operator_product_snapshot(
     operator_runs_dir: Path | None = None,
     voice_service_url: str | None = None,
     tts_service_url: str | None = None,
+    qdrant_url: str | None = None,
+    neo4j_url: str | None = None,
+    neo4j_database: str = DEFAULT_COMBO_A_NEO4J_DATABASE,
+    neo4j_user: str = DEFAULT_COMBO_A_NEO4J_USER,
     health_timeout_sec: float = 1.5,
     service_token: str | None = None,
 ) -> dict[str, Any]:
@@ -1085,11 +1119,53 @@ def build_operator_product_snapshot(
         timeout_sec=health_timeout_sec,
         service_token=service_token,
     )
-    for service_health in (voice_health, tts_health):
+    qdrant_health = probe_qdrant_service(
+        qdrant_url=qdrant_url,
+        timeout_sec=health_timeout_sec,
+    )
+    neo4j_health = probe_neo4j_service(
+        neo4j_url=neo4j_url,
+        neo4j_database=neo4j_database,
+        neo4j_user=neo4j_user,
+        neo4j_password=None,
+        timeout_sec=health_timeout_sec,
+    )
+    for service_health in (voice_health, tts_health, qdrant_health, neo4j_health):
         if service_health.get("error") is not None:
             service_warnings.append(
                 f"{service_health.get('service_name')}: {service_health.get('error')}"
             )
+
+    combo_a_profile_available = all(
+        str(service.get("status", "")).strip() == "ok"
+        for service in (voice_health, tts_health, qdrant_health, neo4j_health)
+    )
+    combo_a_missing_config = [
+        service.get("service_name")
+        for service in (voice_health, tts_health, qdrant_health, neo4j_health)
+        if bool(service.get("configured")) is False
+    ]
+    combo_a_readiness = {
+        "profile": COMBO_A_PROFILE,
+        "availability_status": (
+            "ready"
+            if combo_a_profile_available
+            else ("partial" if any(service.get("configured") for service in (voice_health, tts_health, qdrant_health, neo4j_health)) else "not_configured")
+        ),
+        "available": combo_a_profile_available,
+        "missing_config": combo_a_missing_config,
+        "warnings": [
+            service.get("error")
+            for service in (voice_health, tts_health, qdrant_health, neo4j_health)
+            if service.get("error")
+        ],
+        "services": {
+            "voice_runtime_service": voice_health,
+            "tts_runtime_service": tts_health,
+            "qdrant": qdrant_health,
+            "neo4j": neo4j_health,
+        },
+    }
 
     return {
         "schema_version": GATEWAY_OPERATOR_STATUS_SCHEMA,
@@ -1108,6 +1184,8 @@ def build_operator_product_snapshot(
             },
             "voice_runtime_service": voice_health,
             "tts_runtime_service": tts_health,
+            "qdrant": qdrant_health,
+            "neo4j": neo4j_health,
         },
         "operator_context": {
             "artifact_roots": {
@@ -1116,6 +1194,13 @@ def build_operator_product_snapshot(
             },
             "startup": startup_snapshot,
             "governance": governance_summary,
+            "profiles": {
+                "default_profile": gateway_health.get("supported_profiles", ["baseline_first"])[0]
+                if isinstance(gateway_health.get("supported_profiles"), list) and gateway_health.get("supported_profiles")
+                else "baseline_first",
+                "supported_profiles": gateway_health.get("supported_profiles", ["baseline_first"]),
+                "combo_a": combo_a_readiness,
+            },
         },
         "latest_metrics": {
             "summary_matrix": build_metrics_rows(canonical_summary_sources(runs_dir)),
@@ -1135,5 +1220,6 @@ def build_operator_product_snapshot(
             ],
             "service_probes": service_warnings,
             "startup": startup_warnings,
+            "profile_readiness": combo_a_readiness["warnings"],
         },
     }

@@ -28,7 +28,7 @@ from scripts.operator_product_snapshot import (
     build_operator_product_snapshot,
     build_operator_runs_payload,
 )
-from scripts.gateway_v1_local import SUPPORTED_OPERATIONS, run_gateway_request
+from scripts.gateway_v1_local import SUPPORTED_OPERATIONS, SUPPORTED_PROFILES, run_gateway_request
 
 RESPONSE_SCHEMA_VERSION = "gateway_response_v1"
 FastAPIRequest = Any
@@ -216,6 +216,7 @@ def _build_health_payload(
         "runs_dir": str(runs_dir),
         "operator_runs_dir": str(operator_runs_dir),
         "supported_operations": list(SUPPORTED_OPERATIONS),
+        "supported_profiles": list(SUPPORTED_PROFILES),
         "auth_enabled": bool(service_token),
         "api_docs_exposed": bool(expose_openapi),
         "policy": asdict(policy),
@@ -308,6 +309,10 @@ def create_app(
     expose_openapi: bool = False,
     voice_service_url: str | None = None,
     tts_service_url: str | None = None,
+    qdrant_url: str | None = None,
+    neo4j_url: str | None = None,
+    neo4j_database: str = "neo4j",
+    neo4j_user: str = "neo4j",
     operator_health_timeout_sec: float = 1.5,
 ) -> Any:
     effective_operator_runs_dir = Path(operator_runs_dir) if operator_runs_dir is not None else Path(runs_dir)
@@ -392,6 +397,10 @@ def create_app(
             operator_runs_dir=effective_operator_runs_dir,
             voice_service_url=voice_service_url,
             tts_service_url=tts_service_url,
+            qdrant_url=qdrant_url,
+            neo4j_url=neo4j_url,
+            neo4j_database=neo4j_database,
+            neo4j_user=neo4j_user,
             health_timeout_sec=operator_health_timeout_sec,
             service_token=effective_service_token,
         )
@@ -823,6 +832,30 @@ def parse_args() -> argparse.Namespace:
         help="Optional base URL for tts_runtime_service health probes in the operator snapshot.",
     )
     parser.add_argument(
+        "--qdrant-url",
+        type=str,
+        default=None,
+        help="Optional base URL for external Qdrant readiness probes in the operator snapshot.",
+    )
+    parser.add_argument(
+        "--neo4j-url",
+        type=str,
+        default=None,
+        help="Optional base URL for external Neo4j readiness probes in the operator snapshot.",
+    )
+    parser.add_argument(
+        "--neo4j-database",
+        type=str,
+        default="neo4j",
+        help="Neo4j database name for operator readiness probes.",
+    )
+    parser.add_argument(
+        "--neo4j-user",
+        type=str,
+        default="neo4j",
+        help="Neo4j user for operator readiness probes.",
+    )
+    parser.add_argument(
         "--operator-health-timeout-sec",
         type=float,
         default=1.5,
@@ -861,6 +894,10 @@ def main() -> int:
         expose_openapi=args.expose_openapi,
         voice_service_url=args.voice_service_url,
         tts_service_url=args.tts_service_url,
+        qdrant_url=args.qdrant_url,
+        neo4j_url=args.neo4j_url,
+        neo4j_database=args.neo4j_database,
+        neo4j_user=args.neo4j_user,
         operator_health_timeout_sec=args.operator_health_timeout_sec,
     )
     try:

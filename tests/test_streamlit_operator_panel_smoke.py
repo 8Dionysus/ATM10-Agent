@@ -42,6 +42,14 @@ def _write_canonical_sources(runs_dir: Path) -> None:
         path.write_text(json.dumps({"status": "ok", "paths": {"run_dir": str(path.parent)}}), encoding="utf-8")
 
 
+def _write_required_canonical_sources(runs_dir: Path) -> None:
+    for source_name, path in panel.canonical_summary_sources(runs_dir).items():
+        if source_name in smoke.OPTIONAL_SUMMARY_SOURCE_KEYS:
+            continue
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps({"status": "ok", "paths": {"run_dir": str(path.parent)}}), encoding="utf-8")
+
+
 def _write_optional_progress_sources(runs_dir: Path) -> None:
     sources = panel.canonical_fail_nightly_progress_sources(runs_dir)
     sources["readiness"].parent.mkdir(parents=True, exist_ok=True)
@@ -210,7 +218,7 @@ def test_streamlit_operator_panel_smoke_happy_path(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     panel_runs_dir = tmp_path / "panel-runs"
-    _write_canonical_sources(panel_runs_dir)
+    _write_required_canonical_sources(panel_runs_dir)
 
     fake_process = _FakeProcess()
 
@@ -238,7 +246,10 @@ def test_streamlit_operator_panel_smoke_happy_path(
     assert summary["viewport_baseline"] == {"width": 390, "height": 844, "orientation": "portrait"}
     assert summary["missing_sources"] == []
     assert summary["required_missing_sources"] == []
-    assert len(summary["optional_missing_sources"]) == 7
+    assert len(summary["optional_missing_sources"]) == 10
+    assert str(panel.canonical_summary_sources(panel_runs_dir)["gateway_combo_a"]) in summary["optional_missing_sources"]
+    assert str(panel.canonical_summary_sources(panel_runs_dir)["gateway_http_combo_a"]) in summary["optional_missing_sources"]
+    assert str(panel.canonical_summary_sources(panel_runs_dir)["cross_service_suite_combo_a"]) in summary["optional_missing_sources"]
     assert str(panel.canonical_operating_cycle_source(panel_runs_dir)) in summary["optional_missing_sources"]
     assert str(panel.canonical_fail_nightly_remediation_source(panel_runs_dir)) in summary["optional_missing_sources"]
     assert str(panel.canonical_fail_nightly_transition_source(panel_runs_dir)) in summary["optional_missing_sources"]

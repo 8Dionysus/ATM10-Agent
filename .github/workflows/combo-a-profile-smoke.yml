@@ -1,0 +1,245 @@
+name: Combo A Profile Smoke
+
+on:
+  schedule:
+    - cron: "50 3 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  combo_a_profile:
+    runs-on: ubuntu-latest
+    env:
+      # Ephemeral local CI credential for the service container; not a deployment secret.
+      NEO4J_PASSWORD: local-ci-only-not-secret
+    services:
+      qdrant:
+        image: qdrant/qdrant
+        ports:
+          - 6333:6333
+      neo4j:
+        image: neo4j:5
+        env:
+          NEO4J_AUTH: neo4j/${{ env.NEO4J_PASSWORD }}
+        ports:
+          - 7474:7474
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+
+      - name: Setup Python
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-dev.txt
+          pip install -r requirements-voice.txt
+
+      - name: Wait for Qdrant HTTP
+        run: |
+          for i in {1..40}; do
+            if curl -fsS http://127.0.0.1:6333/collections > /dev/null; then
+              echo "Qdrant is ready"
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "Qdrant did not start in time" >&2
+          exit 1
+
+      - name: Wait for Neo4j HTTP
+        run: |
+          for i in {1..40}; do
+            if curl -fsS -u "neo4j:${NEO4J_PASSWORD}" http://127.0.0.1:7474 > /dev/null; then
+              echo "Neo4j is ready"
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "Neo4j did not start in time" >&2
+          exit 1
+
+      - name: Start Voice Runtime Service
+        run: |
+          mkdir -p runs/nightly-combo-a-voice-runtime
+          nohup python scripts/voice_runtime_service.py \
+            --host 127.0.0.1 \
+            --port 8765 \
+            --runs-dir runs/nightly-combo-a-voice-runtime \
+            --no-preload-asr \
+            --no-preload-tts \
+            > runs/nightly-combo-a-voice-runtime/service.log 2>&1 &
+
+      - name: Start TTS Runtime Service
+        run: |
+          mkdir -p runs/nightly-combo-a-tts-runtime
+          nohup python scripts/tts_runtime_service.py \
+            --host 127.0.0.1 \
+            --port 8780 \
+            --runs-dir runs/nightly-combo-a-tts-runtime \
+            --no-prewarm \
+            > runs/nightly-combo-a-tts-runtime/service.log 2>&1 &
+
+      - name: Start Gateway Operator Service
+        run: |
+          mkdir -p runs/nightly-combo-a-gateway-http-live
+          nohup python scripts/gateway_v1_http_service.py \
+            --host 127.0.0.1 \
+            --port 8770 \
+            --runs-dir runs/nightly-combo-a-gateway-http-live \
+            --qdrant-url http://127.0.0.1:6333 \
+            --neo4j-url http://127.0.0.1:7474 \
+            --neo4j-database neo4j \
+            --neo4j-user neo4j \
+            --voice-service-url http://127.0.0.1:8765 \
+            --tts-service-url http://127.0.0.1:8780 \
+            > runs/nightly-combo-a-gateway-http-live/service.log 2>&1 &
+
+      - name: Wait for Gateway Operator Service
+        run: |
+          for i in {1..40}; do
+            if curl -fsS http://127.0.0.1:8770/healthz > /dev/null; then
+              echo "Gateway operator service is ready"
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "Gateway operator service did not start in time" >&2
+          exit 1
+
+      - name: Capture Combo A Operator Snapshot
+        run: |
+          python - <<'PY'
+          import json
+          import pathlib
+          from urllib import request
+
+          out_dir = pathlib.Path("runs/nightly-combo-a-operator-probes")
+          out_dir.mkdir(parents=True, exist_ok=True)
+          targets = {
+              "healthz": "http://127.0.0.1:8770/healthz",
+              "operator_snapshot": "http://127.0.0.1:8770/v1/operator/snapshot",
+          }
+          for name, url in targets.items():
+              with request.urlopen(url, timeout=20) as response:
+                  payload = json.loads(response.read().decode("utf-8"))
+              (out_dir / f"{name}.json").write_text(
+                  json.dumps(payload, indent=2, ensure_ascii=False),
+                  encoding="utf-8",
+              )
+          PY
+
+      - name: Smoke - Gateway v1 (combo_a scenario)
+        run: |
+          python scripts/gateway_v1_smoke.py \
+            --scenario combo_a \
+            --runs-dir runs/ci-smoke-gateway-combo-a \
+            --summary-json runs/ci-smoke-gateway-combo-a/gateway_smoke_summary.json \
+            --qdrant-url http://127.0.0.1:6333 \
+            --neo4j-url http://127.0.0.1:7474 \
+            --neo4j-database neo4j \
+            --neo4j-user neo4j
+
+      - name: Smoke - Gateway v1 HTTP (combo_a scenario)
+        run: |
+          python scripts/gateway_v1_http_smoke.py \
+            --scenario combo_a \
+            --runs-dir runs/ci-smoke-gateway-http-combo-a \
+            --summary-json runs/ci-smoke-gateway-http-combo-a/gateway_http_smoke_summary.json \
+            --qdrant-url http://127.0.0.1:6333 \
+            --neo4j-url http://127.0.0.1:7474 \
+            --neo4j-database neo4j \
+            --neo4j-user neo4j
+
+      - name: Smoke - Cross-service benchmark suite (combo_a)
+        run: |
+          python scripts/cross_service_benchmark_suite.py \
+            --profile combo_a \
+            --runs-dir runs/nightly-combo-a-cross-service-suite \
+            --summary-json runs/nightly-combo-a-cross-service-suite/cross_service_benchmark_suite.json \
+            --voice-service-url http://127.0.0.1:8765 \
+            --tts-service-url http://127.0.0.1:8780 \
+            --qdrant-url http://127.0.0.1:6333 \
+            --neo4j-url http://127.0.0.1:7474 \
+            --neo4j-database neo4j \
+            --neo4j-user neo4j
+
+      - name: Summary - Combo A gateway smoke
+        shell: pwsh
+        run: |
+          $local = Get-Content "runs/ci-smoke-gateway-combo-a/gateway_smoke_summary.json" | ConvertFrom-Json
+          $http = Get-Content "runs/ci-smoke-gateway-http-combo-a/gateway_http_smoke_summary.json" | ConvertFrom-Json
+          $lines = @(
+            "## Combo A Gateway Smoke",
+            "",
+            "| surface | status | request_count | failed_requests_count |",
+            "|---|---|---:|---:|",
+            "| local | $($local.status) | $($local.request_count) | $($local.failed_requests_count) |",
+            "| http | $($http.status) | $($http.request_count) | $($http.failed_requests_count) |"
+          )
+          $lines -join "`n" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
+
+      - name: Summary - Combo A cross-service suite
+        shell: pwsh
+        run: |
+          $suite = Get-Content "runs/nightly-combo-a-cross-service-suite/cross_service_benchmark_suite.json" | ConvertFrom-Json
+          function FmtOpt([object]$value) {
+            if ($null -eq $value) { return "-" }
+            $text = "$value".Trim()
+            if ([string]::IsNullOrEmpty($text)) { return "-" }
+            return $text
+          }
+          $degradedCount = if ($null -eq $suite.degraded_services) { 0 } else { $suite.degraded_services.Count }
+          $lines = @(
+            "## Combo A Cross-Service Suite",
+            "",
+            "| status | overall_sla_status | degraded_services_count |",
+            "|---|---|---:|",
+            "| $($suite.status) | $($suite.overall_sla_status) | $degradedCount |",
+            "",
+            "| service | status | sla_status | sample_count | latency_p95_ms |",
+            "|---|---|---|---:|---:|"
+          )
+          foreach ($row in @($suite.summary_matrix)) {
+            $lines += "| $($row.source) | $($row.status) | $($row.sla_status) | $(FmtOpt $row.sample_count) | $(FmtOpt $row.latency_p95_ms) |"
+          }
+          $lines -join "`n" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
+
+      - name: Summary - Combo A operator probes
+        shell: pwsh
+        run: |
+          $snapshot = Get-Content "runs/nightly-combo-a-operator-probes/operator_snapshot.json" | ConvertFrom-Json
+          $comboA = $snapshot.operator_context.profiles.combo_a
+          $qdrant = $snapshot.stack_services.qdrant
+          $neo4j = $snapshot.stack_services.neo4j
+          $lines = @(
+            "## Combo A Operator Probes",
+            "",
+            "| combo_a_status | qdrant_status | neo4j_status |",
+            "|---|---|---|",
+            "| $($comboA.availability_status) | $($qdrant.status) | $($neo4j.status) |"
+          )
+          $lines -join "`n" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
+
+      - name: Upload artifact - Combo A profile runs
+        if: always()
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f
+        with:
+          name: combo-a-profile-runs
+          path: |
+            runs/ci-smoke-gateway-combo-a/**/run.json
+            runs/ci-smoke-gateway-combo-a/**/gateway_smoke_summary.json
+            runs/ci-smoke-gateway-http-combo-a/**/run.json
+            runs/ci-smoke-gateway-http-combo-a/**/gateway_http_smoke_summary.json
+            runs/nightly-combo-a-cross-service-suite/**/run.json
+            runs/nightly-combo-a-cross-service-suite/**/cross_service_benchmark_suite.json
+            runs/nightly-combo-a-cross-service-suite/**/summary.md
+            runs/nightly-combo-a-cross-service-suite/**/service_sla_summary.json
+            runs/nightly-combo-a-operator-probes/healthz.json
+            runs/nightly-combo-a-operator-probes/operator_snapshot.json

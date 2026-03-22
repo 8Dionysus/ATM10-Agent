@@ -68,6 +68,7 @@ def _build_requests() -> list[dict[str, object]]:
 def _assert_semantic_result_parity(operation: str, cli_result: dict[str, object], http_result: dict[str, object]) -> None:
     if operation == "health":
         assert sorted(http_result["supported_operations"]) == sorted(cli_result["supported_operations"])
+        assert sorted(http_result["supported_profiles"]) == sorted(cli_result["supported_profiles"])
         return
     if operation == "retrieval_query":
         for field in ("query", "backend", "results_count", "topk", "candidate_k", "reranker"):

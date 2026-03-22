@@ -34,6 +34,7 @@ def test_gateway_v1_local_health_ok(tmp_path: Path) -> None:
     assert response_payload["operation"] == "health"
     assert response_payload["status"] == "ok"
     assert sorted(response_payload["result"]["supported_operations"]) == sorted(gateway.SUPPORTED_OPERATIONS)
+    assert sorted(response_payload["result"]["supported_profiles"]) == sorted(gateway.SUPPORTED_PROFILES)
     assert run_payload["status"] == "ok"
     assert (run_dir / "request.json").exists()
 
@@ -95,6 +96,82 @@ def test_gateway_v1_local_retrieval_query_ok(tmp_path: Path) -> None:
     assert (child_run_dir / "retrieval_results.json").exists()
 
 
+def test_gateway_v1_local_retrieval_query_qdrant_ok(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def _fake_retrieve_top_k_qdrant(
+        query: str,
+        *,
+        collection: str,
+        topk: int,
+        candidate_k: int,
+        reranker: str,
+        reranker_model: str,
+        reranker_max_length: int,
+        reranker_runtime: str,
+        reranker_device: str,
+        host: str,
+        port: int,
+        vector_size: int,
+        timeout_sec: float,
+    ) -> list[dict[str, object]]:
+        assert query == "steel tools"
+        assert collection == "atm10_combo_a_fixture_gateway_smoke"
+        assert host == "127.0.0.1"
+        assert port == 6333
+        assert vector_size == 64
+        assert timeout_sec == 10.0
+        assert topk == 3
+        assert candidate_k == 10
+        assert reranker == "none"
+        assert reranker_model == "Qwen/Qwen3-Reranker-0.6B"
+        assert reranker_runtime == "torch"
+        assert reranker_device == "AUTO"
+        assert reranker_max_length == 1024
+        return [
+            {
+                "id": "doc:steel_tools",
+                "source": "ftbquests",
+                "title": "Steel Tools",
+                "text": "Craft steel tools.",
+                "score": 1.0,
+                "citation": {
+                    "id": "doc:steel_tools",
+                    "source": "ftbquests",
+                    "path": "tests/fixtures/retrieval_docs_sample.jsonl",
+                },
+            }
+        ]
+
+    monkeypatch.setattr(gateway, "retrieve_top_k_qdrant", _fake_retrieve_top_k_qdrant)
+
+    result = gateway.run_gateway_request(
+        request_payload={
+            "schema_version": "gateway_request_v1",
+            "operation": "retrieval_query",
+            "payload": {
+                "backend": "qdrant",
+                "query": "steel tools",
+                "collection": "atm10_combo_a_fixture_gateway_smoke",
+                "host": "127.0.0.1",
+                "port": 6333,
+                "vector_size": 64,
+                "topk": 3,
+                "candidate_k": 10,
+                "reranker": "none",
+            },
+        },
+        runs_dir=tmp_path / "runs",
+        now=datetime(2026, 2, 27, 10, 2, 30, tzinfo=timezone.utc),
+    )
+
+    response_payload = result["response_payload"]
+    assert result["ok"] is True
+    assert response_payload["status"] == "ok"
+    assert response_payload["result"]["backend"] == "qdrant"
+    assert response_payload["result"]["results_count"] == 1
+
+
 def test_gateway_v1_local_kag_query_file_ok(tmp_path: Path) -> None:
     result = gateway.run_gateway_request(
         request_payload={
@@ -145,6 +222,114 @@ def test_gateway_v1_local_hybrid_query_ok(tmp_path: Path) -> None:
     child_run_dir = Path(response_payload["artifacts"]["child_runs"]["hybrid_query"])
     assert (child_run_dir / "run.json").exists()
     assert (child_run_dir / "hybrid_query_results.json").exists()
+
+
+def test_gateway_v1_local_hybrid_query_combo_a_allows_missing_docs_path(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def _fake_run_hybrid_query(
+        *,
+        query: str,
+        docs_path: Path | None,
+        topk: int,
+        candidate_k: int,
+        reranker: str,
+        reranker_model: str,
+        reranker_runtime: str,
+        reranker_device: str,
+        reranker_max_length: int,
+        max_entities_per_doc: int,
+        runs_dir: Path,
+        profile: str,
+        retrieval_backend: str,
+        kag_backend: str,
+        qdrant_collection: str | None,
+        qdrant_host: str,
+        qdrant_port: int,
+        qdrant_vector_size: int,
+        qdrant_timeout_sec: float,
+        neo4j_url: str | None,
+        neo4j_database: str,
+        neo4j_user: str,
+        neo4j_password: str | None,
+        neo4j_timeout_sec: float,
+        neo4j_dataset_tag: str | None,
+        now: datetime | None,
+    ) -> dict[str, object]:
+        assert query == "steel tools"
+        assert docs_path is None
+        assert profile == "combo_a"
+        assert retrieval_backend == "qdrant"
+        assert kag_backend == "neo4j"
+        assert qdrant_collection == "atm10_combo_a_fixture_gateway_smoke"
+        assert qdrant_host == "127.0.0.1"
+        assert qdrant_port == 6333
+        assert qdrant_vector_size == 64
+        assert qdrant_timeout_sec == 10.0
+        assert neo4j_url == "http://127.0.0.1:7474"
+        assert neo4j_database == "neo4j"
+        assert neo4j_user == "neo4j"
+        assert neo4j_password is None
+        assert neo4j_timeout_sec == 10.0
+        assert neo4j_dataset_tag == "atm10_combo_a_fixture_gateway_smoke"
+        assert now is not None
+        run_dir = runs_dir / "20260227_100330-hybrid-query"
+        run_dir.mkdir(parents=True, exist_ok=True)
+        (run_dir / "run.json").write_text("{}", encoding="utf-8")
+        (run_dir / "hybrid_query_results.json").write_text("{}", encoding="utf-8")
+        return {
+            "ok": True,
+            "run_dir": run_dir,
+            "run_payload": {"status": "ok"},
+            "results_payload": {
+                "schema_version": "hybrid_query_results_v1",
+                "query": query,
+                "planner_mode": "retrieval_first_kag_expansion",
+                "planner_status": "hybrid_merged",
+                "degraded": False,
+                "retrieval_backend": retrieval_backend,
+                "kag_backend": kag_backend,
+                "retrieval_results_count": 1,
+                "kag_results_count": 1,
+                "results_count": 1,
+            },
+        }
+
+    monkeypatch.setattr(gateway, "run_hybrid_query", _fake_run_hybrid_query)
+
+    result = gateway.run_gateway_request(
+        request_payload={
+            "schema_version": "gateway_request_v1",
+            "operation": "hybrid_query",
+            "payload": {
+                "profile": "combo_a",
+                "query": "steel tools",
+                "retrieval_backend": "qdrant",
+                "kag_backend": "neo4j",
+                "collection": "atm10_combo_a_fixture_gateway_smoke",
+                "host": "127.0.0.1",
+                "port": 6333,
+                "vector_size": 64,
+                "neo4j_url": "http://127.0.0.1:7474",
+                "neo4j_database": "neo4j",
+                "neo4j_user": "neo4j",
+                "neo4j_dataset_tag": "atm10_combo_a_fixture_gateway_smoke",
+                "topk": 5,
+                "candidate_k": 10,
+                "reranker": "none",
+            },
+        },
+        runs_dir=tmp_path / "runs",
+        now=datetime(2026, 2, 27, 10, 3, 30, tzinfo=timezone.utc),
+    )
+
+    response_payload = result["response_payload"]
+    assert result["ok"] is True
+    assert response_payload["status"] == "ok"
+    assert response_payload["result"]["backend"] == "hybrid_combo_a"
+    assert response_payload["result"]["profile"] == "combo_a"
+    assert response_payload["result"]["retrieval_backend"] == "qdrant"
+    assert response_payload["result"]["kag_backend"] == "neo4j"
 
 
 def test_gateway_v1_local_automation_dry_run_ok(tmp_path: Path) -> None:

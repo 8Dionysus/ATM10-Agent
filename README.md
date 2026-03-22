@@ -14,9 +14,10 @@ Local-first game companion for ATM10 on Windows 11 + PowerShell 7.
 - Phase A vision smoke path with artifacted runs via `scripts/phase_a_smoke.py`
 - Retrieval and evaluation loops for local docs and fixtures
 - KAG file baseline plus Neo4j path, with nightly guardrail and trend snapshots
-- Hybrid planner baseline (`retrieval first + KAG expansion/citations`) via CLI runner and additive gateway flow
-- Cross-service benchmark suite with normalized `service_sla_summary_v1` artifacts for `voice_asr`, `voice_tts`, `retrieval`, and file-backed `kag`
+- Hybrid planner baseline (`retrieval first + KAG expansion/citations`) plus additive `combo_a` profile (`qdrant + neo4j`) via CLI runner and gateway flow
+- Cross-service benchmark suite with normalized `service_sla_summary_v1` artifacts for `voice_asr`, `voice_tts`, `retrieval`, and `kag`, with `baseline_first` as default and additive `combo_a` profile support
 - Gateway v1 local + HTTP paths, Streamlit operator panel, and the primary launcher `scripts/start_operator_product.py`
+- Operator startup/snapshot readiness for external `Qdrant` + `Neo4j`, plus profile-aware `combo_a` smoke/safe-action surfaces
 - Safe automation intent -> plan -> dry-run chain with public rollout records under `M6.19` for `open_quest_book`, `check_inventory_tool`, and `open_world_map`
 
 For the full current public snapshot, use `MANIFEST.md`. For runnable command depth, use `docs/RUNBOOK.md`.
@@ -77,6 +78,17 @@ python scripts/cross_service_benchmark_suite.py --runs-dir runs\cross-service-su
 ```
 
 This baseline-first suite runs `voice_asr -> voice_tts -> retrieval -> kag_file`, writes normalized `service_sla_summary.json` artifacts per service, and aggregates them into `cross_service_benchmark_suite.json`.
+
+### Combo A parity profile
+
+```powershell
+cd <repo-root>
+.\.venv\Scripts\Activate.ps1
+$env:NEO4J_PASSWORD="<set-local-neo4j-password>"
+python scripts/cross_service_benchmark_suite.py --profile combo_a --runs-dir runs\nightly-combo-a-cross-service-suite --summary-json runs\nightly-combo-a-cross-service-suite\cross_service_benchmark_suite.json --voice-service-url http://127.0.0.1:8765 --tts-service-url http://127.0.0.1:8780 --qdrant-url http://127.0.0.1:6333 --neo4j-url http://127.0.0.1:7474 --neo4j-database neo4j --neo4j-user neo4j
+```
+
+`combo_a` stays additive: baseline remains the default, while `combo_a` switches retrieval to `Qdrant`, KAG to `Neo4j`, and the suite child order to `voice_asr -> voice_tts -> retrieval -> kag_neo4j`.
 
 ### Optional service auth hardening
 

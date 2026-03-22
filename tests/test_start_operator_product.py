@@ -73,6 +73,35 @@ def test_build_startup_plan_passes_optional_runtime_urls() -> None:
     assert "http://127.0.0.1:8780" in plan["gateway"]["command"]
 
 
+def test_build_startup_plan_tracks_combo_a_external_services() -> None:
+    args = start_operator_product.parse_args(
+        [
+            "--qdrant-url",
+            "http://127.0.0.1:6333",
+            "--neo4j-url",
+            "http://127.0.0.1:7474",
+            "--neo4j-database",
+            "neo4j",
+            "--neo4j-user",
+            "neo4j",
+        ]
+    )
+
+    plan = start_operator_product.build_startup_plan(args)
+    session_state = start_operator_product._build_initial_session_state(plan, Path("runs") / "startup")
+
+    assert plan["external_services"]["qdrant"]["managed"] is False
+    assert plan["external_services"]["qdrant"]["url"] == "http://127.0.0.1:6333"
+    assert plan["external_services"]["neo4j"]["managed"] is False
+    assert plan["external_services"]["neo4j"]["url"] == "http://127.0.0.1:7474"
+    assert plan["external_services"]["neo4j"]["database"] == "neo4j"
+    assert plan["external_services"]["neo4j"]["user"] == "neo4j"
+    assert "--qdrant-url" in plan["gateway"]["command"]
+    assert "--neo4j-url" in plan["gateway"]["command"]
+    assert session_state["qdrant"]["status"] == "external"
+    assert session_state["neo4j"]["status"] == "external"
+
+
 def test_build_startup_plan_manages_opt_in_runtimes() -> None:
     args = start_operator_product.parse_args(
         [
