@@ -935,6 +935,45 @@ def _render_snapshot_warnings(title: str, warnings: list[str]) -> None:
     st.warning(f"{title} ({len(warnings)}):\n{sample}{suffix}")
 
 
+def _render_operator_triage_section(triage: dict[str, Any] | None) -> None:
+    if not isinstance(triage, dict):
+        return
+    attention_services = triage.get("attention_services")
+    attention_services = (
+        [str(item) for item in attention_services if str(item).strip()]
+        if isinstance(attention_services, list)
+        else []
+    )
+    st.subheader("Operator triage")
+    st.dataframe(
+        [
+            {
+                "overall_state": triage.get("overall_state"),
+                "primary_surface": triage.get("primary_surface"),
+                "primary_code": triage.get("primary_code"),
+                "next_safe_action": triage.get("next_safe_action"),
+                "startup_overall_state": triage.get("startup_overall_state"),
+                "governance_decision_status": triage.get("governance_decision_status"),
+                "combo_a_availability_status": triage.get("combo_a_availability_status"),
+                "combo_a_promotion_state": triage.get("combo_a_promotion_state"),
+                "attention_service_count": len(attention_services),
+            }
+        ],
+        width="stretch",
+    )
+    primary_message = str(triage.get("primary_message", "")).strip()
+    if primary_message:
+        st.caption("Primary message")
+        st.info(primary_message)
+    next_step = str(triage.get("next_step", "")).strip()
+    if next_step:
+        st.caption("Next step")
+        st.info(next_step)
+    if attention_services:
+        st.caption("Attention services")
+        st.dataframe([{"attention_services": ", ".join(attention_services)}], width="stretch")
+
+
 def _render_operator_startup_section(snapshot: dict[str, Any] | None, warnings: list[str]) -> None:
     _render_snapshot_warnings(
         "Some operator startup artifacts were skipped due to parse/contract issues",
@@ -982,23 +1021,47 @@ def _render_operator_startup_section(snapshot: dict[str, Any] | None, warnings: 
     diagnostics = snapshot.get("diagnostics")
     diagnostics = diagnostics if isinstance(diagnostics, dict) else {}
     if diagnostics:
+        service_rollup = diagnostics.get("service_rollup")
+        service_rollup = service_rollup if isinstance(service_rollup, dict) else {}
         st.caption("Startup diagnostics")
         st.dataframe(
             [
                 {
                     "overall_state": diagnostics.get("overall_state"),
                     "primary_issue": diagnostics.get("primary_issue"),
+                    "configured_services": service_rollup.get("configured_services"),
+                    "healthy_services": service_rollup.get("healthy_services"),
+                    "attention_services": service_rollup.get("attention_services"),
+                    "next_step_code": diagnostics.get("next_step_code"),
                 }
             ],
             width="stretch",
         )
+        attention_services = diagnostics.get("attention_services")
+        attention_services = attention_services if isinstance(attention_services, list) else []
+        if attention_services:
+            st.caption("Attention services")
+            st.dataframe(attention_services, width="stretch")
+        next_step = diagnostics.get("next_step")
+        if isinstance(next_step, str) and next_step.strip():
+            st.caption("Next step")
+            st.write(next_step)
 
     session_state = snapshot.get("session_state")
     session_state = session_state if isinstance(session_state, dict) else {}
     if session_state:
-        service_order = ("gateway", "streamlit", "voice_runtime_service", "tts_runtime_service")
+        service_order = (
+            "gateway",
+            "streamlit",
+            "voice_runtime_service",
+            "tts_runtime_service",
+            "qdrant",
+            "neo4j",
+        )
+        ordered_services = [name for name in service_order if name in session_state]
+        ordered_services.extend(sorted(name for name in session_state.keys() if name not in service_order))
         service_rows: list[dict[str, Any]] = []
-        for service_name in service_order:
+        for service_name in ordered_services:
             entry = session_state.get(service_name)
             if not isinstance(entry, dict):
                 continue
@@ -1557,6 +1620,9 @@ def _render_stack_health_tab(
 
     if operator_snapshot_payload is not None:
         st.success("Gateway operator snapshot loaded.")
+        triage = _nested_get(operator_snapshot_payload, "operator_context", "triage")
+        triage = triage if isinstance(triage, dict) else None
+        _render_operator_triage_section(triage)
         stack_services = operator_snapshot_payload.get("stack_services")
         stack_services = stack_services if isinstance(stack_services, dict) else {}
         service_rows: list[dict[str, Any]] = []

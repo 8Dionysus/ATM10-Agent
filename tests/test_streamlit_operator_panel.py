@@ -38,6 +38,42 @@ def _create_history_run(
     return run_dir
 
 
+class _FakeStreamlit:
+    def __init__(self) -> None:
+        self.subheaders: list[str] = []
+        self.dataframes: list[object] = []
+        self.successes: list[str] = []
+        self.infos: list[str] = []
+        self.errors: list[str] = []
+        self.warnings: list[str] = []
+        self.captions: list[str] = []
+        self.json_payloads: list[object] = []
+
+    def subheader(self, value: str) -> None:
+        self.subheaders.append(value)
+
+    def dataframe(self, value: object, **_kwargs: object) -> None:
+        self.dataframes.append(value)
+
+    def success(self, value: str) -> None:
+        self.successes.append(value)
+
+    def info(self, value: str) -> None:
+        self.infos.append(value)
+
+    def error(self, value: str) -> None:
+        self.errors.append(value)
+
+    def warning(self, value: str) -> None:
+        self.warnings.append(value)
+
+    def caption(self, value: str) -> None:
+        self.captions.append(value)
+
+    def json(self, value: object) -> None:
+        self.json_payloads.append(value)
+
+
 def test_canonical_summary_sources_returns_expected_paths(tmp_path: Path) -> None:
     sources = panel.canonical_summary_sources(tmp_path)
     assert list(sources.keys()) == [
@@ -447,6 +483,7 @@ def test_safe_actions_tab_source_uses_gateway_and_not_local_subprocess() -> None
     source_text = panel.REPO_ROOT.joinpath("scripts", "streamlit_operator_panel.py").read_text(encoding="utf-8")
     assert "run_gateway_safe_action(" in source_text
     assert "Safe Actions require a reachable gateway operator API." in source_text
+    assert "Operator triage" in source_text
     assert "Combo A Promotion" in source_text
     assert "Current Policy" in source_text
     assert "Why Hold" in source_text
@@ -454,7 +491,108 @@ def test_safe_actions_tab_source_uses_gateway_and_not_local_subprocess() -> None
     assert "Live Readiness" in source_text
     assert "Manual Fallback Status" in source_text
     assert "Startup diagnostics" in source_text
+    assert "Attention services" in source_text
+    assert "Next step" in source_text
     assert "Governance diagnostics" in source_text
+
+
+def test_render_stack_health_tab_renders_snapshot_driven_operator_triage(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    fake_st = _FakeStreamlit()
+    monkeypatch.setattr(panel, "st", fake_st)
+    monkeypatch.setattr(panel, "_render_combo_a_promotion_section", lambda *args, **kwargs: None)
+    monkeypatch.setattr(panel, "_render_operator_startup_section", lambda *args, **kwargs: None)
+    monkeypatch.setattr(panel, "_render_snapshot_warnings", lambda *args, **kwargs: None)
+
+    panel._render_stack_health_tab(
+        health_payload={"status": "ok"},
+        health_error=None,
+        operator_snapshot_payload={
+            "schema_version": "gateway_operator_status_v1",
+            "status": "ok",
+            "stack_services": {
+                "gateway_v1_http_service": {
+                    "configured": True,
+                    "status": "ok",
+                    "payload": {"auth_enabled": False, "api_docs_exposed": False},
+                    "url": None,
+                    "error": None,
+                }
+            },
+            "operator_context": {
+                "triage": {
+                    "overall_state": "attention",
+                    "primary_surface": "governance",
+                    "primary_code": "remediation_backlog_pending",
+                    "primary_message": "Resolve the remediation backlog before promoting nightly policy.",
+                    "next_step_code": "run_safe_action",
+                    "next_step": "Run safe action gateway_sla_operating_cycle_smoke from the gateway operator surface.",
+                    "next_safe_action": "gateway_sla_operating_cycle_smoke",
+                    "attention_services": ["voice_runtime_service"],
+                    "stack_rollup": {
+                        "total_services": 5,
+                        "configured_services": 2,
+                        "healthy_services": 1,
+                        "attention_services": 1,
+                        "not_configured_services": 3,
+                    },
+                    "startup_overall_state": "healthy",
+                    "governance_decision_status": "remediate",
+                    "governance_top_blocker": "remediation_backlog_pending",
+                    "combo_a_availability_status": "partial",
+                    "combo_a_promotion_state": "hold",
+                },
+                "profiles": {"combo_a": {}},
+            },
+            "warnings": {"service_probes": [], "combo_a_policy_surface": []},
+        },
+        operator_snapshot_error=None,
+        operator_startup_payload=None,
+        operator_startup_warnings=[],
+    )
+
+    assert "Operator triage" in fake_st.subheaders
+    triage_table = next(
+        item
+        for item in fake_st.dataframes
+        if isinstance(item, list)
+        and item
+        and isinstance(item[0], dict)
+        and item[0].get("primary_surface") == "governance"
+    )
+    assert triage_table[0]["overall_state"] == "attention"
+    assert triage_table[0]["next_safe_action"] == "gateway_sla_operating_cycle_smoke"
+    assert triage_table[0]["attention_service_count"] == 1
+    assert any("Resolve the remediation backlog" in item for item in fake_st.infos)
+    assert any("Run safe action gateway_sla_operating_cycle_smoke" in item for item in fake_st.infos)
+
+
+def test_render_stack_health_tab_does_not_synthesize_operator_triage_without_snapshot_field(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    fake_st = _FakeStreamlit()
+    monkeypatch.setattr(panel, "st", fake_st)
+    monkeypatch.setattr(panel, "_render_combo_a_promotion_section", lambda *args, **kwargs: None)
+    monkeypatch.setattr(panel, "_render_operator_startup_section", lambda *args, **kwargs: None)
+    monkeypatch.setattr(panel, "_render_snapshot_warnings", lambda *args, **kwargs: None)
+
+    panel._render_stack_health_tab(
+        health_payload={"status": "ok"},
+        health_error=None,
+        operator_snapshot_payload={
+            "schema_version": "gateway_operator_status_v1",
+            "status": "ok",
+            "stack_services": {},
+            "operator_context": {"profiles": {"combo_a": {}}},
+            "warnings": {"service_probes": [], "combo_a_policy_surface": []},
+        },
+        operator_snapshot_error=None,
+        operator_startup_payload=None,
+        operator_startup_warnings=[],
+    )
+
+    assert "Operator triage" not in fake_st.subheaders
 
 
 def test_safe_actions_audit_append_and_load_newest_first(tmp_path: Path) -> None:
@@ -633,7 +771,11 @@ def test_build_metrics_history_rows_collects_valid_rows(tmp_path: Path) -> None:
     assert len(rows) == 2
     assert rows[0]["run_dir"] == str(run_2)
     assert rows[1]["run_dir"] == str(run_1)
+    assert rows[0]["surface"] == "retrieval"
+    assert rows[0]["mode"] == "retrieve_demo"
+    assert rows[0]["scenario"] is None
     assert rows[0]["results_count"] == 3
+    assert rows[0]["result_summary"] == "results=3"
 
 
 def test_build_metrics_history_rows_supports_hybrid_gateway_sources(tmp_path: Path) -> None:
@@ -669,8 +811,12 @@ def test_build_metrics_history_rows_supports_hybrid_gateway_sources(tmp_path: Pa
     assert warnings == []
     assert len(rows) == 1
     assert rows[0]["source"] == "gateway_hybrid"
+    assert rows[0]["surface"] == "gateway_local"
+    assert rows[0]["mode"] == "gateway_v1_smoke"
+    assert rows[0]["scenario"] == "hybrid"
     assert rows[0]["request_count"] == 1
     assert rows[0]["failed_requests_count"] == 0
+    assert rows[0]["result_summary"] == "requests=1, failed=0"
 
 
 def test_build_metrics_history_rows_supports_cross_service_suite_source(tmp_path: Path) -> None:
@@ -719,9 +865,63 @@ def test_build_metrics_history_rows_supports_cross_service_suite_source(tmp_path
     assert warnings == []
     assert len(rows) == 1
     assert rows[0]["source"] == "cross_service_suite"
+    assert rows[0]["surface"] == "cross_service_suite"
+    assert rows[0]["mode"] == "cross_service_benchmark_suite"
+    assert rows[0]["scenario"] is None
     assert rows[0]["request_count"] == 4
     assert rows[0]["failed_requests_count"] == 1
     assert rows[0]["details"] == "breach"
+    assert rows[0]["result_summary"] == "sla=breach, services=4, degraded=1"
+
+
+def test_build_metrics_history_rows_supports_combo_a_operating_cycle_source(tmp_path: Path) -> None:
+    roots = panel.canonical_history_roots(tmp_path)
+    run_dir = _create_history_run(
+        root=roots["combo_a_operating_cycle"],
+        run_name="20260322_191000-combo-a-operating-cycle",
+        mode="combo_a_operating_cycle",
+        scenario="combo_a_policy",
+        timestamp_utc="2026-03-22T19:10:00+00:00",
+    )
+    summary_path = run_dir / "operating_cycle_summary.json"
+    _write_json(
+        run_dir / "run.json",
+        {
+            "mode": "combo_a_operating_cycle",
+            "status": "ok",
+            "scenario": "combo_a_policy",
+            "timestamp_utc": "2026-03-22T19:10:00+00:00",
+            "paths": {
+                "run_json": str(run_dir / "run.json"),
+                "summary_json": str(summary_path),
+            },
+        },
+    )
+    _write_json(
+        summary_path,
+        {
+            "schema_version": "combo_a_operating_cycle_summary_v1",
+            "status": "ok",
+            "effective_policy": "observe_only",
+            "promotion_state": "hold",
+            "blocking_reason_codes": ["required_sources_not_fresh"],
+        },
+    )
+
+    rows, warnings = panel.build_metrics_history_rows(
+        tmp_path,
+        selected_sources=["combo_a_operating_cycle"],
+        selected_statuses=["ok", "error"],
+        limit_per_source=10,
+    )
+    assert warnings == []
+    assert len(rows) == 1
+    assert rows[0]["surface"] == "combo_a_policy"
+    assert rows[0]["mode"] == "combo_a_operating_cycle"
+    assert rows[0]["scenario"] == "combo_a_policy"
+    assert rows[0]["details"] == "observe_only/hold"
+    assert rows[0]["failed_requests_count"] == 1
+    assert rows[0]["result_summary"] == "policy=observe_only/hold, blockers=1"
 
 
 def test_build_metrics_history_rows_applies_source_filter(tmp_path: Path) -> None:
@@ -1043,6 +1243,100 @@ def test_load_latest_operator_startup_status_happy_path(tmp_path: Path) -> None:
     assert snapshot["status"] == "running"
     assert snapshot["checkpoint_count"] == 1
     assert snapshot["session_state"]["gateway"]["pid"] == 1234
+    assert snapshot["diagnostics"]["overall_state"] == "healthy"
+    assert snapshot["diagnostics"]["service_rollup"]["total_services"] == 1
+    assert snapshot["diagnostics"]["service_rollup"]["healthy_services"] == 1
+    assert snapshot["diagnostics"]["service_rollup"]["attention_services"] == 0
+    assert snapshot["diagnostics"]["next_step_code"] == "none"
+    assert snapshot["diagnostics"]["next_step"] is None
+
+
+def test_load_latest_operator_startup_status_builds_attention_service_triage(tmp_path: Path) -> None:
+    run_dir = tmp_path / "20260322_121500-start-operator-product"
+    run_dir.mkdir(parents=True, exist_ok=True)
+    run_json_path = run_dir / "run.json"
+    startup_plan_json = run_dir / "startup_plan.json"
+    startup_plan_json.write_text("{}", encoding="utf-8")
+    _write_json(
+        run_json_path,
+        {
+            "schema_version": "operator_product_startup_v1",
+            "mode": "start_operator_product",
+            "status": "running",
+            "profile": "operator_product_core",
+            "timestamp_utc": "2026-03-22T12:15:00+00:00",
+            "gateway_url": "http://127.0.0.1:8770",
+            "streamlit_url": "http://127.0.0.1:8501",
+            "paths": {
+                "run_json": str(run_json_path),
+                "startup_plan_json": str(startup_plan_json),
+                "gateway_log": str(run_dir / "gateway.log"),
+                "streamlit_log": str(run_dir / "streamlit.log"),
+            },
+            "session_state": {
+                "gateway": {
+                    "service_name": "gateway",
+                    "managed": True,
+                    "configured": True,
+                    "effective_url": "http://127.0.0.1:8770",
+                    "status": "running",
+                    "pid": 1234,
+                    "last_probe": {"status": "ok"},
+                    "log_path": str(run_dir / "gateway.log"),
+                },
+                "streamlit": {
+                    "service_name": "streamlit",
+                    "managed": True,
+                    "configured": True,
+                    "effective_url": "http://127.0.0.1:8501",
+                    "status": "starting",
+                    "pid": 1235,
+                    "log_path": str(run_dir / "streamlit.log"),
+                },
+                "qdrant": {
+                    "service_name": "qdrant",
+                    "managed": False,
+                    "configured": True,
+                    "effective_url": "http://127.0.0.1:6333",
+                    "status": "error",
+                    "error": "connection refused",
+                },
+                "neo4j": {
+                    "service_name": "neo4j",
+                    "managed": False,
+                    "configured": False,
+                    "status": "not_configured",
+                },
+            },
+            "child_processes": {
+                "gateway": {"pid": 1234, "return_code": None},
+                "streamlit": {"pid": 1235, "return_code": None},
+            },
+            "startup_checkpoints": [{"stage": "launch", "status": "ok"}],
+            "last_checkpoint": {"stage": "launch", "status": "ok"},
+        },
+    )
+
+    snapshot, warnings = panel.load_latest_operator_startup_status(tmp_path)
+    assert warnings == []
+    assert snapshot is not None
+    assert snapshot["diagnostics"]["overall_state"] == "degraded"
+    assert snapshot["diagnostics"]["primary_issue"] == "qdrant: connection refused"
+    assert snapshot["diagnostics"]["service_rollup"] == {
+        "total_services": 4,
+        "configured_services": 3,
+        "managed_services": 2,
+        "healthy_services": 1,
+        "attention_services": 2,
+        "not_configured_services": 1,
+        "unknown_services": 0,
+    }
+    attention_services = snapshot["diagnostics"]["attention_services"]
+    assert [item["service_name"] for item in attention_services] == ["streamlit", "qdrant"]
+    assert attention_services[0]["attention_kind"] == "pending"
+    assert attention_services[1]["attention_kind"] == "service_error"
+    assert snapshot["diagnostics"]["next_step_code"] == "check_service_connectivity"
+    assert snapshot["diagnostics"]["next_step"] == "Check connectivity and credentials for qdrant."
 
 
 def test_build_operator_governance_summary_prefers_repair_and_transition_when_available() -> None:

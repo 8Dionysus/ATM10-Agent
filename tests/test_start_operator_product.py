@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -172,6 +174,11 @@ def test_start_operator_product_smoke_managed_runtime_path(
         lambda gateway_url, timeout_sec: ({"status": "ok", "checked_at_utc": "2026-03-21T12:00:00+00:00"}, None),
     )
     monkeypatch.setattr(
+        start_operator_product,
+        "_wait_for_streamlit_ready",
+        lambda streamlit_url, timeout_sec, process=None: ({"status": "ok", "url": streamlit_url.rstrip('/') + "/"}, None),
+    )
+    monkeypatch.setattr(
         start_operator_product.time,
         "sleep",
         lambda seconds: (_ for _ in ()).throw(KeyboardInterrupt()),
@@ -203,6 +210,8 @@ def test_start_operator_product_smoke_managed_runtime_path(
     assert run_payload["managed_processes"]["voice_runtime_service"]["managed"] is True
     assert run_payload["session_state"]["gateway"]["status"] == "stopped"
     assert run_payload["session_state"]["voice_runtime_service"]["last_probe"]["status"] == "ok"
+    assert run_payload["session_state"]["streamlit"]["status"] == "stopped"
+    assert run_payload["session_state"]["streamlit"]["last_probe"]["status"] == "ok"
     assert run_payload["startup_checkpoints"]
 
 
@@ -261,10 +270,93 @@ def test_start_operator_product_marks_never_launched_streamlit_not_started(
     assert run_payload["session_state"]["streamlit"]["status"] == "not_started"
 
 
+def test_start_operator_product_marks_streamlit_probe_failure(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    class _FakeProcess:
+        _next_pid = 7000
+
+        def __init__(self) -> None:
+            type(self)._next_pid += 1
+            self.pid = type(self)._next_pid
+            self.returncode = None
+
+        def poll(self):
+            return self.returncode
+
+        def terminate(self):
+            return None
+
+        def wait(self, timeout: float | None = None):
+            self.returncode = 0
+            return 0
+
+        def kill(self):
+            self.returncode = 1
+            return None
+
+    def _fake_launch_process(command: list[str], log_path: Path):
+        _ = command
+        log_path.parent.mkdir(parents=True, exist_ok=True)
+        log_path.write_text("", encoding="utf-8")
+        return _FakeProcess()
+
+    monkeypatch.setattr(start_operator_product, "_launch_process", _fake_launch_process)
+    monkeypatch.setattr(
+        start_operator_product,
+        "_wait_for_gateway_operator_snapshot",
+        lambda gateway_url, timeout_sec: ({"status": "ok", "checked_at_utc": "2026-03-21T12:00:00+00:00"}, None),
+    )
+    monkeypatch.setattr(
+        start_operator_product,
+        "_wait_for_streamlit_ready",
+        lambda streamlit_url, timeout_sec, process=None: (None, "streamlit startup timeout after 20.0s"),
+    )
+
+    exit_code = start_operator_product.main(
+        [
+            "--runs-dir",
+            str(tmp_path / "runs"),
+            "--gateway-runs-dir",
+            str(tmp_path / "gateway"),
+            "--panel-runs-dir",
+            str(tmp_path / "panel"),
+        ]
+    )
+
+    assert exit_code == 2
+    run_dirs = sorted((tmp_path / "runs").glob("*-start-operator-product*"))
+    assert run_dirs
+    run_payload = json.loads((run_dirs[0] / "run.json").read_text(encoding="utf-8"))
+    assert run_payload["status"] == "error"
+    assert run_payload["session_state"]["gateway"]["status"] == "stopped"
+    assert run_payload["session_state"]["streamlit"]["status"] == "error"
+    assert run_payload["session_state"]["streamlit"]["last_probe"]["status"] == "error"
+    assert run_payload["session_state"]["streamlit"]["last_event"] == "probe_error"
+    assert "streamlit startup timeout" in run_payload["session_state"]["streamlit"]["error"]
+
+
 def test_start_operator_product_print_plan_json(capsys) -> None:
     exit_code = start_operator_product.main(["--print-plan-json"])
     captured = capsys.readouterr()
     assert exit_code == 0
     payload = json.loads(captured.out)
+    assert payload["schema_version"] == "operator_product_startup_v1"
+    assert payload["profile"] == "operator_product_core"
+
+
+def test_start_operator_product_script_entrypoint_print_plan_json() -> None:
+    repo_root = Path(__file__).resolve().parents[1]
+    result = subprocess.run(
+        [sys.executable, "scripts/start_operator_product.py", "--print-plan-json"],
+        cwd=repo_root,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
     assert payload["schema_version"] == "operator_product_startup_v1"
     assert payload["profile"] == "operator_product_core"

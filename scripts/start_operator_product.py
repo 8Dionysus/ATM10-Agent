@@ -11,6 +11,10 @@ from typing import Any
 from urllib import error as url_error
 from urllib import request
 
+REPO_ROOT = Path(__file__).resolve().parents[1]
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+
 from src.agent_core.combo_a_profile import (
     DEFAULT_COMBO_A_NEO4J_DATABASE,
     DEFAULT_COMBO_A_NEO4J_URL,
@@ -443,6 +447,28 @@ def _wait_for_runtime_health(
     return None, last_error
 
 
+def _wait_for_streamlit_ready(
+    streamlit_url: str,
+    *,
+    timeout_sec: float,
+    process: subprocess.Popen[str] | None = None,
+) -> tuple[dict[str, Any] | None, str | None]:
+    deadline = time.time() + max(timeout_sec, 0.1)
+    last_error = "streamlit did not become ready"
+    url = streamlit_url.rstrip("/") + "/"
+    while time.time() < deadline:
+        if process is not None and process.poll() is not None:
+            return None, f"streamlit process exited early with code {process.returncode}"
+        req = request.Request(url=url, method="GET")
+        try:
+            with request.urlopen(req, timeout=min(2.0, timeout_sec)):
+                return {"status": "ok", "url": url}, None
+        except Exception as exc:
+            last_error = f"{exc}"
+        time.sleep(0.5)
+    return None, last_error
+
+
 def _launch_process(command: list[str], log_path: Path) -> subprocess.Popen[str]:
     log_path.parent.mkdir(parents=True, exist_ok=True)
     log_handle = log_path.open("a", encoding="utf-8", newline="\n")
@@ -514,7 +540,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         "--startup-timeout-sec",
         type=float,
         default=20.0,
-        help="Timeout waiting for the gateway operator snapshot to become ready.",
+        help="Timeout waiting for managed services, gateway, and Streamlit to become ready.",
     )
     parser.add_argument(
         "--voice-runtime-url",
@@ -818,7 +844,7 @@ def main(argv: list[str] | None = None) -> int:
         _update_session_entry(
             run_payload,
             "streamlit",
-            status="running",
+            status="starting",
             pid=streamlit_process.pid,
             started_at_utc=_utc_now(),
             last_event="process_started",
@@ -831,6 +857,46 @@ def main(argv: list[str] | None = None) -> int:
             service_name="streamlit",
             message="streamlit process started",
             details={"pid": streamlit_process.pid, "url": plan["streamlit"]["url"]},
+        )
+        _write_json(run_json_path, run_payload)
+        streamlit_payload, streamlit_error = _wait_for_streamlit_ready(
+            plan["streamlit"]["url"],
+            timeout_sec=args.startup_timeout_sec,
+            process=streamlit_process,
+        )
+        if streamlit_payload is None:
+            _mark_probe_result(
+                run_payload,
+                "streamlit",
+                payload=None,
+                error=streamlit_error,
+            )
+            _append_startup_checkpoint(
+                run_payload,
+                stage="probe",
+                status="error",
+                service_name="streamlit",
+                message="streamlit readiness probe failed",
+                details={"error": streamlit_error},
+            )
+            _write_json(run_json_path, run_payload)
+            raise RuntimeError(
+                "Streamlit did not become ready within startup timeout: "
+                f"{streamlit_error}"
+            )
+        _mark_probe_result(
+            run_payload,
+            "streamlit",
+            payload=streamlit_payload,
+            error=None,
+        )
+        _append_startup_checkpoint(
+            run_payload,
+            stage="probe",
+            status="ok",
+            service_name="streamlit",
+            message="streamlit readiness probe succeeded",
+            details={"url": streamlit_payload.get("url")},
         )
         run_payload["status"] = "running"
         run_payload["started_at_utc"] = _utc_now()

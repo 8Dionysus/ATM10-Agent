@@ -139,8 +139,15 @@ def test_gateway_v1_http_service_operator_snapshot_returns_gateway_centered_payl
     assert payload["operator_context"]["profiles"]["supported_profiles"] == list(gateway_http.SUPPORTED_PROFILES)
     assert payload["operator_context"]["artifact_roots"]["operator_runs_dir"] == str(tmp_path / "runs")
     assert payload["operator_context"]["governance"]["diagnostics"]["top_blocker"] == "remediation_backlog_pending"
+    assert payload["operator_context"]["triage"]["overall_state"] == "attention"
+    assert payload["operator_context"]["triage"]["primary_surface"] == "startup"
+    assert payload["operator_context"]["triage"]["primary_code"] == "launch_operator_product"
     assert (
         payload["operator_context"]["governance"]["diagnostics"]["next_safe_action"]
+        == "gateway_sla_operating_cycle_smoke"
+    )
+    assert (
+        payload["operator_context"]["triage"]["next_safe_action"]
         == "gateway_sla_operating_cycle_smoke"
     )
     assert isinstance(payload["latest_metrics"]["summary_matrix"], list)
@@ -245,6 +252,15 @@ def test_gateway_v1_http_service_operator_snapshot_reads_latest_startup_artifact
     assert payload["operator_context"]["startup"]["paths"]["run_json"] == str(run_json_path)
     assert payload["operator_context"]["startup"]["diagnostics"]["overall_state"] == "healthy"
     assert payload["operator_context"]["startup"]["diagnostics"]["primary_issue"] is None
+    assert payload["operator_context"]["startup"]["diagnostics"]["service_rollup"]["total_services"] == 1
+    assert payload["operator_context"]["startup"]["diagnostics"]["service_rollup"]["healthy_services"] == 1
+    assert payload["operator_context"]["startup"]["diagnostics"]["next_step_code"] == "none"
+    assert payload["operator_context"]["triage"]["primary_surface"] == "governance"
+    assert payload["operator_context"]["triage"]["primary_code"] == "required_sources_not_fresh"
+    assert (
+        payload["operator_context"]["triage"]["next_safe_action"]
+        == "gateway_sla_operating_cycle_smoke"
+    )
 
 
 def test_gateway_v1_http_service_operator_runs_returns_schema(tmp_path: Path) -> None:
