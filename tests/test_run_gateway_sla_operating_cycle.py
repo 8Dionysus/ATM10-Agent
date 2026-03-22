@@ -173,6 +173,10 @@ def test_operating_cycle_reuses_fresh_manual_backed_snapshot(tmp_path: Path) -> 
     assert summary["cycle"]["source"] == "manual"
     assert summary["cycle"]["operating_mode"] == "reuse_fresh_latest"
     assert summary["cycle"]["used_manual_fallback"] is False
+    assert summary["effective_policy"] == "signal_only"
+    assert summary["promotion_state"] == "blocked"
+    assert "remediation_backlog_pending" in summary["blocking_reason_codes"]
+    assert summary["recommended_actions"][0]["action_key"] == "gateway_sla_operating_cycle_smoke"
     assert summary["triage"]["remaining_for_window"] == 11
     assert summary["triage"]["candidate_item_count"] == 2
     assert summary["interpretation"]["telemetry_repair_required"] is False
@@ -200,6 +204,8 @@ def test_operating_cycle_reuses_fresh_nightly_snapshot_without_manual_runner(tmp
     assert summary["cycle"]["source"] == "nightly"
     assert summary["cycle"]["operating_mode"] == "reuse_fresh_latest"
     assert summary["cycle"]["used_manual_fallback"] is False
+    assert summary["effective_policy"] == "signal_only"
+    assert summary["promotion_state"] == "blocked"
 
 
 def test_operating_cycle_runs_manual_fallback_in_fixed_order(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -257,6 +263,7 @@ def test_operating_cycle_runs_manual_fallback_in_fixed_order(tmp_path: Path, mon
     assert summary["cycle"]["source"] == "manual"
     assert summary["cycle"]["operating_mode"] == "manual_fallback"
     assert summary["cycle"]["used_manual_fallback"] is True
+    assert summary["effective_policy"] == "signal_only"
     assert summary["triage"]["remaining_for_window"] == 11
 
 
@@ -287,9 +294,89 @@ def test_operating_cycle_prioritizes_telemetry_repair_for_integrity_attention(tm
     )
 
     interpretation = result["summary_payload"]["interpretation"]
+    summary = result["summary_payload"]
     assert interpretation["telemetry_repair_required"] is True
     assert interpretation["remediation_backlog_primary"] is False
     assert interpretation["next_action_hint"] == "repair_telemetry_first"
+    assert summary["promotion_state"] == "blocked"
+    assert "telemetry_repair_required" in summary["blocking_reason_codes"]
+
+
+def test_operating_cycle_marks_fail_nightly_eligible_when_transition_is_clear(tmp_path: Path) -> None:
+    runs_dir = tmp_path / "runs"
+    manual_checked = "2026-03-12T21:53:15+00:00"
+    checked = "2026-03-12T21:53:16+00:00"
+    next_dispatch = "2026-03-13T03:35:00+00:00"
+    _write_json(
+        _summary_path(runs_dir, "manual_runner"),
+        _manual_runner_payload(
+            checked_at_utc=manual_checked,
+            execution_mode="accounted",
+            decision_status="allow_accounted_dispatch",
+            next_dispatch=next_dispatch,
+        ),
+    )
+    _write_json(_summary_path(runs_dir, "readiness"), _readiness_payload(checked_at_utc=checked))
+    _write_json(
+        _summary_path(runs_dir, "governance"),
+        {
+            "schema_version": "gateway_sla_fail_nightly_governance_v1",
+            "status": "ok",
+            "checked_at_utc": checked,
+            "decision_status": "go",
+        },
+    )
+    _write_json(
+        _summary_path(runs_dir, "progress"),
+        {
+            "schema_version": "gateway_sla_fail_nightly_progress_v1",
+            "status": "ok",
+            "checked_at_utc": checked,
+            "decision_status": "go",
+            "observed": {
+                "readiness": {
+                    "remaining_for_window": 0,
+                    "remaining_for_streak": 0,
+                }
+            },
+        },
+    )
+    _write_json(
+        _summary_path(runs_dir, "transition"),
+        {
+            "schema_version": "gateway_sla_fail_nightly_transition_v1",
+            "status": "ok",
+            "checked_at_utc": checked,
+            "decision_status": "allow",
+            "allow_switch": True,
+        },
+    )
+    _write_json(
+        _summary_path(runs_dir, "remediation"),
+        {
+            "schema_version": "gateway_sla_fail_nightly_remediation_v1",
+            "status": "ok",
+            "checked_at_utc": checked,
+            "reason_codes": [],
+            "candidate_items": [],
+        },
+    )
+    _write_json(_summary_path(runs_dir, "integrity"), _integrity_payload(checked_at_utc=checked))
+    _write_json(_summary_path(runs_dir, "cadence"), _cadence_payload(checked_at_utc=checked, next_dispatch=next_dispatch))
+
+    result = operating_cycle.run_gateway_sla_operating_cycle(
+        runs_dir=runs_dir,
+        policy="report_only",
+        now=datetime(2026, 3, 12, 22, 2, 55, tzinfo=timezone.utc),
+    )
+
+    summary = result["summary_payload"]
+    assert result["exit_code"] == 0
+    assert summary["effective_policy"] == "fail_nightly"
+    assert summary["promotion_state"] == "eligible"
+    assert summary["blocking_reason_codes"] == []
+    assert summary["recommended_actions"] == []
+    assert summary["next_review_at_utc"] == next_dispatch
 
 
 def test_operating_cycle_cli_help_exits_zero(monkeypatch: pytest.MonkeyPatch) -> None:

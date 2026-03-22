@@ -85,6 +85,13 @@ SAFE_ACTIONS: dict[str, dict[str, Any]] = {
         "summary_name": "cross_service_benchmark_suite.json",
         "extra_args": ["--profile", "combo_a"],
     },
+    "gateway_sla_operating_cycle_smoke": {
+        "label": "Gateway SLA operating cycle smoke",
+        "script": "scripts/run_gateway_sla_operating_cycle.py",
+        "scenario": "policy_surface",
+        "runs_subdir": "ui-safe-gateway-sla-operating-cycle",
+        "summary_name": "operating_cycle_summary.json",
+    },
 }
 
 

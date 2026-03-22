@@ -423,12 +423,24 @@ def load_operating_cycle_snapshot(
         "status": payload.get("status"),
         "checked_at_utc": payload.get("checked_at_utc"),
         "policy": payload.get("policy"),
+        "effective_policy": payload.get("effective_policy"),
+        "promotion_state": payload.get("promotion_state"),
+        "enforcement_surface": payload.get("enforcement_surface"),
+        "blocking_reason_codes": _normalize_reason_codes(payload.get("blocking_reason_codes")),
+        "recommended_actions": payload.get("recommended_actions")
+        if isinstance(payload.get("recommended_actions"), list)
+        else [],
+        "next_review_at_utc": payload.get("next_review_at_utc"),
+        "profile_scope": payload.get("profile_scope"),
+        "actionable_message": payload.get("actionable_message"),
         "cycle": cycle,
         "triage": triage,
         "interpretation": interpretation,
         "paths": {
             "summary_json": _coalesce(paths_payload.get("summary_json"), str(path)),
+            "history_summary_json": paths_payload.get("history_summary_json"),
             "brief_md": paths_payload.get("brief_md"),
+            "history_brief_md": paths_payload.get("history_brief_md"),
         },
         "source_path": str(path),
     }
@@ -614,6 +626,61 @@ def build_operator_governance_summary(
         len(remediation_candidate_items),
         0,
     )
+    synthetic_blocking_reason_codes: list[str] = []
+    if telemetry_repair_required or str(integrity_status).strip() == "attention":
+        synthetic_blocking_reason_codes.append("telemetry_repair_required")
+    if remediation_backlog_primary or int(candidate_item_count) > 0:
+        synthetic_blocking_reason_codes.append("remediation_backlog_pending")
+    if degraded_sources:
+        synthetic_blocking_reason_codes.append("required_sources_not_fresh")
+
+    effective_policy = _coalesce(
+        _nested_get(operating_cycle_snapshot, "effective_policy"),
+        "fail_nightly"
+        if transition_allow_switch and not synthetic_blocking_reason_codes
+        else "signal_only",
+    )
+    promotion_state = _coalesce(
+        _nested_get(operating_cycle_snapshot, "promotion_state"),
+        (
+            "eligible"
+            if transition_allow_switch and not synthetic_blocking_reason_codes
+            else ("blocked" if synthetic_blocking_reason_codes else "hold")
+        ),
+    )
+    blocking_reason_codes = _unique_strings(
+        _nested_get(operating_cycle_snapshot, "blocking_reason_codes"),
+        synthetic_blocking_reason_codes,
+        transition_recommendation.get("reason_codes"),
+        _nested_get(progress_snapshot, "reason_codes"),
+        _nested_get(remediation_snapshot, "reason_codes"),
+        integrity_decision.get("reason_codes"),
+    )
+    recommended_actions = _nested_get(operating_cycle_snapshot, "recommended_actions")
+    if not isinstance(recommended_actions, list):
+        recommended_actions = []
+    if not recommended_actions and promotion_state != "eligible":
+        recommended_actions = [
+            {
+                "action_key": "gateway_sla_operating_cycle_smoke",
+                "label": "Gateway SLA operating cycle smoke",
+                "reason": "Refresh the promoted-policy decision surface after the next nightly evidence update.",
+                "surface": "gateway_safe_action",
+            }
+        ]
+    next_review_at_utc = _coalesce(
+        _nested_get(operating_cycle_snapshot, "next_review_at_utc"),
+        _nested_get(operating_cycle_snapshot, "cycle", "next_accounted_dispatch_at_utc"),
+        operating_cycle_triage.get("earliest_go_candidate_at_utc"),
+    )
+    enforcement_surface = _coalesce(
+        _nested_get(operating_cycle_snapshot, "enforcement_surface"),
+        "nightly_only",
+    )
+    profile_scope = _coalesce(
+        _nested_get(operating_cycle_snapshot, "profile_scope"),
+        "baseline_first",
+    )
 
     decision_status = "hold"
     actionable_message = "Keep signal_only until governance surfaces converge."
@@ -629,6 +696,10 @@ def build_operator_governance_summary(
     elif blocked_manual_gate:
         decision_status = "hold"
         actionable_message = "Wait for the manual gate to clear before the next accounted dispatch."
+    actionable_message = _coalesce(
+        _nested_get(operating_cycle_snapshot, "actionable_message"),
+        actionable_message,
+    )
 
     status = "ok" if not degraded_sources else "degraded"
     if not available_sources:
@@ -639,6 +710,13 @@ def build_operator_governance_summary(
         "status": status,
         "decision_status": decision_status,
         "recommended_policy": recommended_policy,
+        "effective_gateway_sla_policy": effective_policy,
+        "promotion_state": promotion_state,
+        "enforcement_surface": enforcement_surface,
+        "blocking_reason_codes": blocking_reason_codes,
+        "recommended_actions": recommended_actions,
+        "next_review_at_utc": next_review_at_utc,
+        "profile_scope": profile_scope,
         "actionable_message": actionable_message,
         "reason_codes": _unique_strings(
             transition_recommendation.get("reason_codes"),
@@ -666,6 +744,40 @@ def build_operator_governance_summary(
         "missing_sources": missing_sources,
         "source_paths": source_paths,
     }
+
+
+def load_operator_policy_surface_context(
+    runs_dir: Path,
+) -> tuple[dict[str, Any], dict[str, list[str]]]:
+    progress_snapshot, progress_warnings = load_fail_nightly_progress_snapshot(runs_dir)
+    transition_snapshot, transition_warnings = load_fail_nightly_transition_snapshot(runs_dir)
+    remediation_snapshot, remediation_warnings = load_fail_nightly_remediation_snapshot(runs_dir)
+    integrity_snapshot, integrity_warnings = load_fail_nightly_integrity_snapshot(runs_dir)
+    operating_cycle_snapshot, operating_cycle_warnings = load_operating_cycle_snapshot(runs_dir)
+    governance_summary = build_operator_governance_summary(
+        progress_snapshot=progress_snapshot,
+        transition_snapshot=transition_snapshot,
+        remediation_snapshot=remediation_snapshot,
+        integrity_snapshot=integrity_snapshot,
+        operating_cycle_snapshot=operating_cycle_snapshot,
+    )
+    return (
+        {
+            "progress": progress_snapshot,
+            "transition": transition_snapshot,
+            "remediation": remediation_snapshot,
+            "integrity": integrity_snapshot,
+            "operating_cycle": operating_cycle_snapshot,
+            "governance": governance_summary,
+        },
+        {
+            "progress": progress_warnings,
+            "transition": transition_warnings,
+            "remediation": remediation_warnings,
+            "integrity": integrity_warnings,
+            "operating_cycle": operating_cycle_warnings,
+        },
+    )
 
 
 def build_metrics_rows(sources: dict[str, Path]) -> list[dict[str, Any]]:
@@ -944,6 +1056,7 @@ def build_operator_runs_payload(
 ) -> dict[str, Any]:
     effective_operator_runs_dir = Path(operator_runs_dir) if operator_runs_dir is not None else Path(runs_dir)
     startup_status, startup_warnings = load_latest_operator_startup_status(effective_operator_runs_dir)
+    policy_context, policy_warnings = load_operator_policy_surface_context(runs_dir)
     rows = build_run_explorer_rows(canonical_summary_sources(runs_dir))
     return {
         "schema_version": GATEWAY_OPERATOR_RUNS_SCHEMA,
@@ -957,9 +1070,12 @@ def build_operator_runs_payload(
         },
         "operator_context": {
             "startup": startup_status,
+            "governance": policy_context["governance"],
+            "operating_cycle": policy_context["operating_cycle"],
         },
         "warnings": {
             "startup": startup_warnings,
+            "policy_surface": policy_warnings,
         },
     }
 
@@ -972,6 +1088,7 @@ def build_operator_history_payload(
     limit_per_source: int = 10,
     max_candidates_per_source: int = 200,
 ) -> dict[str, Any]:
+    policy_context, policy_warnings = load_operator_policy_surface_context(runs_dir)
     rows, warnings = build_metrics_history_rows(
         runs_dir,
         selected_sources=selected_sources,
@@ -989,6 +1106,13 @@ def build_operator_history_payload(
         "rows": rows,
         "warnings": warnings,
         "available_sources": list(canonical_history_roots(runs_dir).keys()),
+        "operator_context": {
+            "governance": policy_context["governance"],
+            "operating_cycle": policy_context["operating_cycle"],
+        },
+        "operator_warnings": {
+            "policy_surface": policy_warnings,
+        },
     }
 
 
@@ -1092,19 +1216,14 @@ def build_operator_product_snapshot(
     service_token: str | None = None,
 ) -> dict[str, Any]:
     effective_operator_runs_dir = Path(operator_runs_dir) if operator_runs_dir is not None else Path(runs_dir)
-    progress_snapshot, progress_warnings = load_fail_nightly_progress_snapshot(runs_dir)
-    transition_snapshot, transition_warnings = load_fail_nightly_transition_snapshot(runs_dir)
-    remediation_snapshot, remediation_warnings = load_fail_nightly_remediation_snapshot(runs_dir)
-    integrity_snapshot, integrity_warnings = load_fail_nightly_integrity_snapshot(runs_dir)
-    operating_cycle_snapshot, operating_cycle_warnings = load_operating_cycle_snapshot(runs_dir)
+    policy_context, policy_warnings = load_operator_policy_surface_context(runs_dir)
+    progress_snapshot = policy_context["progress"]
+    transition_snapshot = policy_context["transition"]
+    remediation_snapshot = policy_context["remediation"]
+    integrity_snapshot = policy_context["integrity"]
+    operating_cycle_snapshot = policy_context["operating_cycle"]
     startup_snapshot, startup_warnings = load_latest_operator_startup_status(effective_operator_runs_dir)
-    governance_summary = build_operator_governance_summary(
-        progress_snapshot=progress_snapshot,
-        transition_snapshot=transition_snapshot,
-        remediation_snapshot=remediation_snapshot,
-        integrity_snapshot=integrity_snapshot,
-        operating_cycle_snapshot=operating_cycle_snapshot,
-    )
+    governance_summary = policy_context["governance"]
 
     service_warnings: list[str] = []
     voice_health = fetch_service_health(
@@ -1212,14 +1331,15 @@ def build_operator_product_snapshot(
         },
         "warnings": {
             "metrics": [
-                *progress_warnings,
-                *transition_warnings,
-                *remediation_warnings,
-                *integrity_warnings,
-                *operating_cycle_warnings,
+                *policy_warnings["progress"],
+                *policy_warnings["transition"],
+                *policy_warnings["remediation"],
+                *policy_warnings["integrity"],
+                *policy_warnings["operating_cycle"],
             ],
             "service_probes": service_warnings,
             "startup": startup_warnings,
             "profile_readiness": combo_a_readiness["warnings"],
+            "policy_surface": policy_warnings,
         },
     }

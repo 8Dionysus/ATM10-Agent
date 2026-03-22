@@ -37,6 +37,7 @@ jobs:
             runs/nightly-gateway-sla-transition
             runs/nightly-gateway-sla-remediation
             runs/nightly-gateway-sla-integrity
+            runs/nightly-gateway-sla-operating-cycle
           key: gateway-sla-history-v1-${{ github.run_id }}
           restore-keys: |
             gateway-sla-history-v1-
@@ -79,7 +80,27 @@ jobs:
         run: |
           python scripts/check_gateway_sla_fail_nightly_integrity.py --runs-dir runs --policy report_only --summary-json runs/nightly-gateway-sla-integrity/integrity_summary.json
 
-      - name: Smoke - Gateway SLA trend snapshot (fail_nightly strict gate)
+      - name: Operating cycle - Gateway SLA policy decision surface (report_only)
+        if: always()
+        run: |
+          python scripts/run_gateway_sla_operating_cycle.py --runs-dir runs --policy report_only --summary-json runs/nightly-gateway-sla-operating-cycle/operating_cycle_summary.json --brief-md runs/nightly-gateway-sla-operating-cycle/triage_brief.md
+
+      - name: Resolve - Gateway SLA effective policy
+        if: always()
+        shell: pwsh
+        run: |
+          $path = "runs/nightly-gateway-sla-operating-cycle/operating_cycle_summary.json"
+          $effectivePolicy = "signal_only"
+          if (Test-Path $path) {
+            $operatingCycle = Get-Content $path | ConvertFrom-Json
+            if ($null -ne $operatingCycle.effective_policy -and "$($operatingCycle.effective_policy)".Trim() -ne "") {
+              $effectivePolicy = "$($operatingCycle.effective_policy)".Trim()
+            }
+          }
+          Add-Content -Path $env:GITHUB_ENV -Value "GATEWAY_SLA_EFFECTIVE_POLICY=$effectivePolicy"
+
+      - name: Smoke - Gateway SLA trend snapshot (promoted fail_nightly strict gate)
+        if: env.GATEWAY_SLA_EFFECTIVE_POLICY == 'fail_nightly'
         run: |
           python scripts/gateway_sla_trend_snapshot.py --sla-runs-dir runs/nightly-gateway-sla-history --history-limit 30 --baseline-window 5 --critical-policy fail_nightly --runs-dir runs/nightly-gateway-sla-trend-history
 
@@ -186,22 +207,47 @@ jobs:
             $lines = @(
               "## Gateway SLA Fail-Nightly Transition",
               "",
-              "| status | decision_status | strict_gate_policy | summary_json |",
+              "| status | decision_status | promoted_surface | summary_json |",
               "|---|---|---|---|",
-              "| missing | - | fail_nightly | $path (missing) |",
-              "",
-              "- `strict_gate_executed`: true"
+              "| missing | - | nightly_only | $path (missing) |"
             )
           } else {
             $transition = Get-Content $path | ConvertFrom-Json
             $lines = @(
               "## Gateway SLA Fail-Nightly Transition",
               "",
-              "| status | decision_status | strict_gate_policy | summary_json |",
+              "| status | decision_status | promoted_surface | summary_json |",
               "|---|---|---|---|",
-              "| $($transition.status) | $($transition.decision_status) | fail_nightly | $path |",
+              "| $($transition.status) | $($transition.decision_status) | nightly_only | $path |"
+            )
+          }
+          $lines -join "`n" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
+
+      - name: Summary - Gateway SLA operating cycle
+        if: always()
+        shell: pwsh
+        run: |
+          $path = "runs/nightly-gateway-sla-operating-cycle/operating_cycle_summary.json"
+          if (-not (Test-Path $path)) {
+            $lines = @(
+              "## Gateway SLA Operating Cycle",
               "",
-              "- `strict_gate_executed`: true"
+              "| status | effective_policy | promotion_state | enforcement_surface |",
+              "|---|---|---|---|",
+              "| missing | signal_only | hold | nightly_only |",
+              "",
+              "- `operating_cycle_summary_json`: $path (missing)"
+            )
+          } else {
+            $operatingCycle = Get-Content $path | ConvertFrom-Json
+            $lines = @(
+              "## Gateway SLA Operating Cycle",
+              "",
+              "| status | effective_policy | promotion_state | enforcement_surface |",
+              "|---|---|---|---|",
+              "| $($operatingCycle.status) | $($operatingCycle.effective_policy) | $($operatingCycle.promotion_state) | $($operatingCycle.enforcement_surface) |",
+              "",
+              "- `operating_cycle_summary_json`: $path"
             )
           }
           $lines -join "`n" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
@@ -280,6 +326,7 @@ jobs:
             runs/nightly-gateway-sla-transition
             runs/nightly-gateway-sla-remediation
             runs/nightly-gateway-sla-integrity
+            runs/nightly-gateway-sla-operating-cycle
           key: gateway-sla-history-v1-${{ github.run_id }}
 
       - name: Upload artifact - Gateway SLA readiness nightly runs
@@ -305,3 +352,6 @@ jobs:
             runs/nightly-gateway-sla-remediation/**/remediation_summary.json
             runs/nightly-gateway-sla-integrity/integrity_summary.json
             runs/nightly-gateway-sla-integrity/**/integrity_summary.json
+            runs/nightly-gateway-sla-operating-cycle/operating_cycle_summary.json
+            runs/nightly-gateway-sla-operating-cycle/**/operating_cycle_summary.json
+            runs/nightly-gateway-sla-operating-cycle/**/triage_brief.md

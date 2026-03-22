@@ -276,6 +276,7 @@ def test_safe_action_catalog_includes_cross_service_suite_smoke() -> None:
     assert "cross_service_suite_combo_a_smoke" in action_keys
     assert "gateway_local_combo_a" in action_keys
     assert "gateway_http_combo_a" in action_keys
+    assert "gateway_sla_operating_cycle_smoke" in action_keys
 
 
 def test_run_gateway_safe_action_surfaces_http_error(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -375,6 +376,13 @@ def test_resolve_safe_action_supports_combo_a_smokes(tmp_path: Path) -> None:
     assert str(suite_summary).endswith("cross_service_benchmark_suite.json")
 
 
+def test_resolve_safe_action_supports_gateway_sla_operating_cycle(tmp_path: Path) -> None:
+    command, summary_path = panel.resolve_safe_action("gateway_sla_operating_cycle_smoke", tmp_path)
+    assert "scripts/run_gateway_sla_operating_cycle.py" in command
+    assert "--scenario" not in command
+    assert str(summary_path).endswith("operating_cycle_summary.json")
+
+
 def test_run_safe_action_fails_when_summary_missing(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -395,6 +403,10 @@ def test_safe_actions_tab_source_uses_gateway_and_not_local_subprocess() -> None
     source_text = panel.REPO_ROOT.joinpath("scripts", "streamlit_operator_panel.py").read_text(encoding="utf-8")
     assert "run_gateway_safe_action(" in source_text
     assert "Safe Actions require a reachable gateway operator API." in source_text
+    assert "Current Policy" in source_text
+    assert "Why Hold" in source_text
+    assert "Next Action" in source_text
+    assert "Manual Fallback Status" in source_text
 
 
 def test_safe_actions_audit_append_and_load_newest_first(tmp_path: Path) -> None:
@@ -1029,6 +1041,11 @@ def test_build_operator_governance_summary_prefers_repair_and_transition_when_av
     assert summary is not None
     assert summary["decision_status"] == "repair"
     assert summary["recommended_policy"] == "fail_nightly"
+    assert summary["effective_gateway_sla_policy"] == "signal_only"
+    assert summary["promotion_state"] == "blocked"
+    assert "telemetry_repair_required" in summary["blocking_reason_codes"]
+    assert summary["profile_scope"] == "baseline_first"
+    assert summary["recommended_actions"][0]["action_key"] == "gateway_sla_operating_cycle_smoke"
     assert summary["next_action_hint"] == "repair_telemetry_first"
     assert summary["integrity_status"] == "attention"
 
@@ -1120,6 +1137,19 @@ def test_load_operating_cycle_snapshot_happy_path(tmp_path: Path) -> None:
             "status": "ok",
             "checked_at_utc": "2026-03-12T22:10:02.928361+00:00",
             "policy": "report_only",
+            "effective_policy": "signal_only",
+            "promotion_state": "blocked",
+            "enforcement_surface": "nightly_only",
+            "blocking_reason_codes": ["remediation_backlog_pending"],
+            "recommended_actions": [
+                {
+                    "action_key": "gateway_sla_operating_cycle_smoke",
+                    "reason": "Refresh the promoted-policy decision surface after the next nightly evidence update.",
+                }
+            ],
+            "next_review_at_utc": "2026-03-22T21:53:16.661488+00:00",
+            "profile_scope": "baseline_first",
+            "actionable_message": "Resolve the remediation backlog before promoting nightly policy.",
             "cycle": {
                 "source": "manual",
                 "operating_mode": "reuse_fresh_latest",
@@ -1169,6 +1199,13 @@ def test_load_operating_cycle_snapshot_happy_path(tmp_path: Path) -> None:
     assert snapshot is not None
     assert snapshot["status"] == "ok"
     assert snapshot["policy"] == "report_only"
+    assert snapshot["effective_policy"] == "signal_only"
+    assert snapshot["promotion_state"] == "blocked"
+    assert snapshot["enforcement_surface"] == "nightly_only"
+    assert snapshot["blocking_reason_codes"] == ["remediation_backlog_pending"]
+    assert snapshot["recommended_actions"][0]["action_key"] == "gateway_sla_operating_cycle_smoke"
+    assert snapshot["next_review_at_utc"] == "2026-03-22T21:53:16.661488+00:00"
+    assert snapshot["profile_scope"] == "baseline_first"
     assert snapshot["cycle"]["manual_execution_mode"] == "accounted"
     assert snapshot["triage"]["remaining_for_window"] == 11
     assert snapshot["interpretation"]["next_action_hint"] == "continue_g2_backlog"

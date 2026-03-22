@@ -22,14 +22,18 @@ def test_gateway_sla_readiness_nightly_contains_transition_wiring() -> None:
     assert "check_gateway_sla_fail_nightly_transition.py" in text
     assert "check_gateway_sla_fail_nightly_remediation.py" in text
     assert "check_gateway_sla_fail_nightly_integrity.py" in text
+    assert "run_gateway_sla_operating_cycle.py" in text
+    assert "Resolve - Gateway SLA effective policy" in text
     assert "Summary - Gateway SLA fail_nightly progress" in text
     assert "Summary - Gateway SLA fail_nightly transition" in text
+    assert "Summary - Gateway SLA operating cycle" in text
     assert "Summary - Gateway SLA fail_nightly remediation" in text
     assert "Summary - Gateway SLA fail_nightly integrity" in text
     assert "runs/nightly-gateway-sla-progress/progress_summary.json" in text
     assert "runs/nightly-gateway-sla-transition/transition_summary.json" in text
     assert "runs/nightly-gateway-sla-remediation/remediation_summary.json" in text
     assert "runs/nightly-gateway-sla-integrity/integrity_summary.json" in text
+    assert "runs/nightly-gateway-sla-operating-cycle/operating_cycle_summary.json" in text
     assert "--critical-policy fail_nightly" in text
     assert "Resolve - Gateway SLA transition gate" not in text
 
@@ -41,14 +45,20 @@ def test_gateway_sla_readiness_nightly_contains_transition_wiring() -> None:
         text,
         "Integrity - Gateway SLA fail_nightly invariants (report_only)",
     )
+    operating_cycle_block = _extract_step_block(
+        text,
+        "Operating cycle - Gateway SLA policy decision surface (report_only)",
+    )
+    resolve_policy_block = _extract_step_block(text, "Resolve - Gateway SLA effective policy")
     strict_gate_block = _extract_step_block(
         text,
-        "Smoke - Gateway SLA trend snapshot (fail_nightly strict gate)",
+        "Smoke - Gateway SLA trend snapshot (promoted fail_nightly strict gate)",
     )
     readiness_summary_block = _extract_step_block(text, "Summary - Gateway SLA fail_nightly readiness")
     governance_summary_block = _extract_step_block(text, "Summary - Gateway SLA fail_nightly governance")
     progress_summary_block = _extract_step_block(text, "Summary - Gateway SLA fail_nightly progress")
     transition_summary_block = _extract_step_block(text, "Summary - Gateway SLA fail_nightly transition")
+    operating_cycle_summary_block = _extract_step_block(text, "Summary - Gateway SLA operating cycle")
     remediation_summary_block = _extract_step_block(text, "Summary - Gateway SLA fail_nightly remediation")
     integrity_summary_block = _extract_step_block(text, "Summary - Gateway SLA fail_nightly integrity")
 
@@ -56,12 +66,16 @@ def test_gateway_sla_readiness_nightly_contains_transition_wiring() -> None:
     assert "--policy report_only" in remediation_block
     assert "if: always()" in integrity_block
     assert "--policy report_only" in integrity_block
-    assert "if:" not in strict_gate_block
+    assert "if: always()" in operating_cycle_block
+    assert "--summary-json runs/nightly-gateway-sla-operating-cycle/operating_cycle_summary.json" in operating_cycle_block
+    assert "GATEWAY_SLA_EFFECTIVE_POLICY" in resolve_policy_block
+    assert "if: env.GATEWAY_SLA_EFFECTIVE_POLICY == 'fail_nightly'" in strict_gate_block
     for block in (
         readiness_summary_block,
         governance_summary_block,
         progress_summary_block,
         transition_summary_block,
+        operating_cycle_summary_block,
         remediation_summary_block,
         integrity_summary_block,
     ):
@@ -77,6 +91,7 @@ def test_gateway_sla_readiness_nightly_contains_transition_wiring() -> None:
         assert "runs/nightly-gateway-sla-transition" in block
         assert "runs/nightly-gateway-sla-remediation" in block
         assert "runs/nightly-gateway-sla-integrity" in block
+        assert "runs/nightly-gateway-sla-operating-cycle" in block
 
     assert "gateway_http_smoke_summary.json" in upload_artifact_block
     assert "gateway_sla_summary.json" in upload_artifact_block
@@ -87,3 +102,4 @@ def test_gateway_sla_readiness_nightly_contains_transition_wiring() -> None:
     assert "transition_summary.json" in upload_artifact_block
     assert "remediation_summary.json" in upload_artifact_block
     assert "integrity_summary.json" in upload_artifact_block
+    assert "operating_cycle_summary.json" in upload_artifact_block

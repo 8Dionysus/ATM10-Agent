@@ -228,6 +228,8 @@ def test_gateway_v1_http_service_safe_actions_overview_returns_schema(tmp_path: 
     assert payload["schema_version"] == "gateway_operator_safe_actions_v1"
     assert payload["status"] == "ok"
     assert isinstance(payload["catalog"], list)
+    action_keys = {item["action_key"] for item in payload["catalog"]}
+    assert "gateway_sla_operating_cycle_smoke" in action_keys
 
 
 def test_gateway_v1_http_service_safe_action_run_happy_path(
