@@ -207,6 +207,64 @@ def test_build_silero_engine_uses_remote_with_opt_in_and_pinned_ref(monkeypatch:
     assert captured["source"] == "github"
 
 
+def test_build_default_service_degrades_silero_to_disabled_engine(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("SILERO_REPO_OR_DIR", "snakers4/silero-models")
+    monkeypatch.delenv("SILERO_ALLOW_REMOTE_HUB", raising=False)
+    monkeypatch.delenv("SILERO_REPO_REF", raising=False)
+    monkeypatch.delenv("PIPER_MODEL_PATH", raising=False)
+
+    service = tts_runtime_service._build_default_service(
+        cache_items=32,
+        chunk_chars=220,
+        queue_size=16,
+    )
+
+    prewarm_status = service.prewarm()
+    assert service.silero_engine is not None
+    assert prewarm_status["silero_ru_service"]["ok"] is False
+    assert "disabled by default" in str(prewarm_status["silero_ru_service"]["error"])
+
+    with pytest.raises(tts_runtime_service.TTSRuntimeError, match="disabled by default"):
+        service.synthesize(
+            tts_runtime_service.TTSRequest(
+                text="служебное сообщение",
+                language="ru",
+                service_voice=True,
+            )
+        )
+
+
+def test_tts_runtime_service_main_starts_with_disabled_silero_config(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    fake_uvicorn = types.ModuleType("uvicorn")
+    fake_uvicorn.run = lambda app, host, port, log_level: None
+    monkeypatch.setitem(sys.modules, "uvicorn", fake_uvicorn)
+    monkeypatch.setenv("SILERO_REPO_OR_DIR", "snakers4/silero-models")
+    monkeypatch.delenv("SILERO_ALLOW_REMOTE_HUB", raising=False)
+    monkeypatch.delenv("SILERO_REPO_REF", raising=False)
+    monkeypatch.delenv("PIPER_MODEL_PATH", raising=False)
+
+    exit_code = tts_runtime_service.main(
+        [
+            "--host",
+            "127.0.0.1",
+            "--port",
+            "8780",
+            "--runs-dir",
+            str(tmp_path / "runs"),
+            "--no-prewarm",
+        ]
+    )
+
+    assert exit_code == 0
+    run_dirs = sorted((tmp_path / "runs").glob("*-tts-service*"))
+    assert run_dirs
+    run_payload = json.loads((run_dirs[0] / "run.json").read_text(encoding="utf-8"))
+    assert run_payload["status"] == "stopped"
+    assert run_payload["service"]["base_url"] == "http://127.0.0.1:8780"
+
+
 def test_tts_stream_endpoint_uses_iter_synthesize_without_submit() -> None:
     from fastapi.testclient import TestClient
 
