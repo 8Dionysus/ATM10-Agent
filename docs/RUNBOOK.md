@@ -198,6 +198,7 @@ Expected result:
 * `cross_service_benchmark_suite.json` contains `schema_version = cross_service_benchmark_suite_v1`, `services`, `summary_matrix`, `degraded_services`, and `paths.child_runs`.
 * `--smoke-stub-voice-asr` keeps the suite reproducible in CI and local smoke paths without a live ASR backend.
 * For `profile=combo_a`, the child order becomes `voice_asr -> voice_tts -> retrieval -> kag_neo4j`, retrieval uses `Qdrant`, KAG uses `Neo4j`, and the suite writes `paths.combo_a_seed_run_dir` for the isolated fixture seeding step.
+* For `profile=combo_a`, the live nightly workflow can additionally aggregate the suite output into `combo_a_operating_cycle_v1` for nightly-only promotion decisions.
 
 ### Gateway smoke scenarios
 
@@ -217,6 +218,7 @@ Expected result:
 * The `hybrid` script checks additive `hybrid_query` (`retrieval first + file KAG expansion + RRF merge`).
 * The `automation` script checks `automation_dry_run` through fixture.
 * The `combo_a` script seeds isolated fixture data into `Qdrant` + `Neo4j`, then checks `health`, `retrieval_query(qdrant)`, `kag_query(neo4j)`, and `hybrid_query(profile=combo_a)`.
+* `combo_a` smoke summaries additively publish `profile=combo_a` and `surface=local`.
 * In each `--summary-json`, a `status=ok|error` is fixed; any `error` returns a non-zero exit code.
 
 ## M7.1/M7.2: Gateway v1 HTTP transport + hardening
@@ -345,6 +347,7 @@ Expected result:
 * `hybrid` contains additive `hybrid_query`.
 * `automation_dry_run` passes through `automation`.
 * `combo_a` seeds isolated external fixture data and validates the same additive `combo_a` request set through HTTP transport.
+* `combo_a` HTTP smoke summaries additively publish `profile=combo_a` and `surface=http`.
 * Any error in the gateway body/HTTP status causes smoke `status=error` and non-zero exit code.
 
 ## M8.pre: Primary operator product startup profile
@@ -396,7 +399,7 @@ Purpose:
 
 * keep `baseline_first` as the default PR path
 * run additive `combo_a` parity checks on a separate nightly/manual workflow
-* publish machine-readable combo_a gateway summaries, cross-service suite summary, and operator probe artifacts
+* publish machine-readable combo_a gateway summaries, cross-service suite summary, operator probe artifacts, and the canonical `combo_a_operating_cycle_v1` decision surface
 
 Workflow outputs:
 
@@ -404,12 +407,43 @@ Workflow outputs:
 * `runs/ci-smoke-gateway-http-combo-a/gateway_http_smoke_summary.json`
 * `runs/nightly-combo-a-cross-service-suite/cross_service_benchmark_suite.json`
 * `runs/nightly-combo-a-cross-service-suite/<timestamp>-cross-service-suite/child_runs/<service>/<timestamp>-.../service_sla_summary.json`
+* `runs/nightly-combo-a-operating-cycle/operating_cycle_summary.json`
+* `runs/nightly-combo-a-operating-cycle/<timestamp>-combo-a-operating-cycle/summary.md`
 * `runs/nightly-combo-a-operator-probes/operator_snapshot.json`
+
+Combo A operating cycle command:
+
+```powershell
+cd <repo-root>
+.\.venv\Scripts\Activate.ps1
+python scripts/run_combo_a_operating_cycle.py --runs-dir runs --policy report_only --summary-json runs\nightly-combo-a-operating-cycle\operating_cycle_summary.json --summary-md runs\nightly-combo-a-operating-cycle\summary.md
+```
+
+Operating cycle contract (`combo_a_operating_cycle_v1`):
+
+* `schema_version = combo_a_operating_cycle_v1`
+* `status = ok|error`
+* `policy = report_only|fail_on_hold`
+* `effective_policy = observe_only|promoted_nightly`
+* `promotion_state = hold|eligible|promoted`
+* `enforcement_surface = nightly_only`
+* `blocking_reason_codes`
+* `recommended_actions`
+* `next_review_at_utc`
+* `profile_scope = combo_a`
+* `availability_status`
+* `sources.gateway_combo_a|gateway_http_combo_a|cross_service_suite_combo_a|healthz|operator_snapshot`
+  * `status = present|missing|invalid`
+  * `fresh_within_window = true|false`
+  * `checked_at_utc`
+* `live_readiness.available`, `live_readiness.availability_status`, `live_readiness.services`
+* `paths.summary_json`, `paths.history_summary_json`, `paths.summary_md`, `paths.history_summary_md`
 
 Notes:
 
 * `Qdrant` and `Neo4j` are treated as external services; the workflow only probes and seeds isolated fixture namespaces/collections.
 * `voice_runtime_service` and `tts_runtime_service` are started as live loopback services for the suite profile.
+* The workflow first writes `report_only` Combo A operating-cycle evidence, resolves `COMBO_A_EFFECTIVE_POLICY`, and only then runs the strict `fail_on_hold` pass when the live profile is already eligible.
 * The workflow is additive and is not part of the default PR gate.
 
 ## M7.post: Gateway SLA/Observability baseline

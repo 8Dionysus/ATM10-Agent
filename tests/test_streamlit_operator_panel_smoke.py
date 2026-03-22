@@ -227,6 +227,47 @@ def _write_operating_cycle_source(runs_dir: Path) -> None:
     )
 
 
+def _write_combo_a_operating_cycle_source(runs_dir: Path) -> None:
+    summary_path = panel.canonical_combo_a_operating_cycle_source(runs_dir)
+    summary_path.parent.mkdir(parents=True, exist_ok=True)
+    summary_path.write_text(
+        json.dumps(
+            {
+                "schema_version": "combo_a_operating_cycle_v1",
+                "status": "ok",
+                "checked_at_utc": "2026-03-22T18:10:00+00:00",
+                "scenario": "combo_a_policy",
+                "policy": "report_only",
+                "effective_policy": "observe_only",
+                "promotion_state": "hold",
+                "enforcement_surface": "nightly_only",
+                "blocking_reason_codes": ["cross_service_suite_combo_a_breach"],
+                "recommended_actions": [
+                    {
+                        "action_key": "cross_service_suite_combo_a_smoke",
+                        "reason": "Refresh the Combo A cross-service suite artifact before the next nightly review.",
+                    }
+                ],
+                "next_review_at_utc": "2026-03-23T18:10:00+00:00",
+                "profile_scope": "combo_a",
+                "availability_status": "partial",
+                "actionable_message": "Combo A promotion is held until the live cross-service suite is green again.",
+                "live_readiness": {
+                    "profile": "combo_a",
+                    "available": False,
+                    "availability_status": "partial",
+                    "services": {},
+                },
+                "sources": {},
+                "paths": {
+                    "summary_json": str(summary_path),
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+
+
 def test_streamlit_operator_panel_smoke_happy_path(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -259,10 +300,11 @@ def test_streamlit_operator_panel_smoke_happy_path(
     assert summary["viewport_baseline"] == {"width": 390, "height": 844, "orientation": "portrait"}
     assert summary["missing_sources"] == []
     assert summary["required_missing_sources"] == []
-    assert len(summary["optional_missing_sources"]) == 10
+    assert len(summary["optional_missing_sources"]) == 11
     assert str(panel.canonical_summary_sources(panel_runs_dir)["gateway_combo_a"]) in summary["optional_missing_sources"]
     assert str(panel.canonical_summary_sources(panel_runs_dir)["gateway_http_combo_a"]) in summary["optional_missing_sources"]
     assert str(panel.canonical_summary_sources(panel_runs_dir)["cross_service_suite_combo_a"]) in summary["optional_missing_sources"]
+    assert str(panel.canonical_summary_sources(panel_runs_dir)["combo_a_operating_cycle"]) in summary["optional_missing_sources"]
     assert str(panel.canonical_operating_cycle_source(panel_runs_dir)) in summary["optional_missing_sources"]
     assert str(panel.canonical_fail_nightly_remediation_source(panel_runs_dir)) in summary["optional_missing_sources"]
     assert str(panel.canonical_fail_nightly_transition_source(panel_runs_dir)) in summary["optional_missing_sources"]
@@ -276,6 +318,7 @@ def test_streamlit_operator_panel_smoke_happy_path_with_optional_sources(
     _write_canonical_sources(panel_runs_dir)
     _write_optional_progress_sources(panel_runs_dir)
     _write_operating_cycle_source(panel_runs_dir)
+    _write_combo_a_operating_cycle_source(panel_runs_dir)
 
     fake_process = _FakeProcess()
     monkeypatch.setattr(

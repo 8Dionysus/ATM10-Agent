@@ -16,6 +16,7 @@ Local-first game companion for ATM10 on Windows 11 + PowerShell 7.
 - KAG file baseline plus Neo4j path, with nightly guardrail and trend snapshots
 - Hybrid planner baseline (`retrieval first + KAG expansion/citations`) plus additive `combo_a` profile (`qdrant + neo4j`) via CLI runner and gateway flow
 - Cross-service benchmark suite with normalized `service_sla_summary_v1` artifacts for `voice_asr`, `voice_tts`, `retrieval`, and `kag`, with `baseline_first` as default and additive `combo_a` profile support
+- Combo A nightly promotion surface via `combo_a_operating_cycle_v1`, keeping live `combo_a` parity governed on a separate nightly/manual path
 - Gateway v1 local + HTTP paths, Streamlit operator panel, and the primary launcher `scripts/start_operator_product.py`
 - Operator startup/snapshot readiness for external `Qdrant` + `Neo4j`, plus profile-aware `combo_a` smoke/safe-action surfaces
 - Safe automation intent -> plan -> dry-run chain with public rollout records under `M6.19` for `open_quest_book`, `check_inventory_tool`, and `open_world_map`
@@ -89,6 +90,16 @@ python scripts/cross_service_benchmark_suite.py --profile combo_a --runs-dir run
 ```
 
 `combo_a` stays additive: baseline remains the default, while `combo_a` switches retrieval to `Qdrant`, KAG to `Neo4j`, and the suite child order to `voice_asr -> voice_tts -> retrieval -> kag_neo4j`.
+
+### Combo A operating cycle
+
+```powershell
+cd <repo-root>
+.\.venv\Scripts\Activate.ps1
+python scripts/run_combo_a_operating_cycle.py --runs-dir runs --policy report_only --summary-json runs\nightly-combo-a-operating-cycle\operating_cycle_summary.json --summary-md runs\nightly-combo-a-operating-cycle\summary.md
+```
+
+This evaluates the latest live `combo_a` artifacts and writes the canonical nightly decision surface with `effective_policy`, `promotion_state`, `blocking_reason_codes`, and `next_review_at_utc`.
 
 ### Optional service auth hardening
 

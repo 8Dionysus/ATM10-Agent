@@ -26,10 +26,13 @@ from scripts.operator_product_snapshot import (
     FAIL_NIGHTLY_REMEDIATION_SOURCE_SPEC,
     FAIL_NIGHTLY_TRANSITION_SOURCE_SPEC,
     OPERATING_CYCLE_SOURCE_SPEC,
+    COMBO_A_OPERATING_CYCLE_SOURCE_SPEC,
     build_operator_governance_summary as shared_build_operator_governance_summary,
+    build_operator_combo_a_profile_summary as shared_build_operator_combo_a_profile_summary,
     build_metrics_history_rows as shared_build_metrics_history_rows,
     build_metrics_rows as shared_build_metrics_rows,
     build_run_explorer_rows as shared_build_run_explorer_rows,
+    canonical_combo_a_operating_cycle_source as shared_canonical_combo_a_operating_cycle_source,
     canonical_fail_nightly_integrity_source as shared_canonical_fail_nightly_integrity_source,
     canonical_fail_nightly_progress_sources as shared_canonical_fail_nightly_progress_sources,
     canonical_fail_nightly_remediation_source as shared_canonical_fail_nightly_remediation_source,
@@ -37,6 +40,7 @@ from scripts.operator_product_snapshot import (
     canonical_history_roots as shared_canonical_history_roots,
     canonical_operating_cycle_source as shared_canonical_operating_cycle_source,
     canonical_summary_sources as shared_canonical_summary_sources,
+    load_combo_a_operating_cycle_snapshot as shared_load_combo_a_operating_cycle_snapshot,
     load_fail_nightly_integrity_snapshot as shared_load_fail_nightly_integrity_snapshot,
     load_fail_nightly_progress_snapshot as shared_load_fail_nightly_progress_snapshot,
     load_fail_nightly_remediation_snapshot as shared_load_fail_nightly_remediation_snapshot,
@@ -129,6 +133,12 @@ SAFE_ACTIONS: dict[str, dict[str, Any]] = {
         "summary_name": "cross_service_benchmark_suite.json",
         "extra_args": ["--profile", "combo_a"],
     },
+    "combo_a_operating_cycle_smoke": {
+        "script": "scripts/run_combo_a_operating_cycle.py",
+        "scenario": "policy_surface",
+        "runs_subdir": "ui-safe-combo-a-operating-cycle",
+        "summary_name": "operating_cycle_summary.json",
+    },
     "gateway_sla_operating_cycle_smoke": {
         "script": "scripts/run_gateway_sla_operating_cycle.py",
         "scenario": "policy_surface",
@@ -203,6 +213,11 @@ HISTORY_SOURCE_SPECS: dict[str, dict[str, str | None]] = {
         "expected_mode": "cross_service_benchmark_suite",
         "expected_scenario": None,
     },
+    "combo_a_operating_cycle": {
+        "root_subdir": "nightly-combo-a-operating-cycle",
+        "expected_mode": "combo_a_operating_cycle",
+        "expected_scenario": "combo_a_policy",
+    },
 }
 
 FAIL_NIGHTLY_PROGRESS_SOURCE_SPECS: dict[str, dict[str, tuple[str, ...] | str]] = {
@@ -238,6 +253,11 @@ FAIL_NIGHTLY_INTEGRITY_SOURCE_SPEC: dict[str, tuple[str, ...] | str] = {
 OPERATING_CYCLE_SOURCE_SPEC: dict[str, tuple[str, ...] | str] = {
     "path_parts": ("nightly-gateway-sla-operating-cycle", "operating_cycle_summary.json"),
     "schema_version": "gateway_sla_operating_cycle_v1",
+}
+
+COMBO_A_OPERATING_CYCLE_SOURCE_SPEC: dict[str, tuple[str, ...] | str] = {
+    "path_parts": ("nightly-combo-a-operating-cycle", "operating_cycle_summary.json"),
+    "schema_version": "combo_a_operating_cycle_v1",
 }
 
 
@@ -335,6 +355,9 @@ def canonical_summary_sources(runs_dir: Path) -> dict[str, Path]:
         "cross_service_suite_combo_a": base
         / "nightly-combo-a-cross-service-suite"
         / "cross_service_benchmark_suite.json",
+        "combo_a_operating_cycle": base
+        / "nightly-combo-a-operating-cycle"
+        / "operating_cycle_summary.json",
     }
 
 
@@ -364,6 +387,11 @@ def canonical_fail_nightly_integrity_source(runs_dir: Path) -> Path:
 def canonical_operating_cycle_source(runs_dir: Path) -> Path:
     base = Path(runs_dir)
     return base.joinpath(*tuple(OPERATING_CYCLE_SOURCE_SPEC["path_parts"]))
+
+
+def canonical_combo_a_operating_cycle_source(runs_dir: Path) -> Path:
+    base = Path(runs_dir)
+    return base.joinpath(*tuple(COMBO_A_OPERATING_CYCLE_SOURCE_SPEC["path_parts"]))
 
 
 def canonical_history_roots(runs_dir: Path) -> dict[str, Path]:
@@ -703,12 +731,14 @@ canonical_fail_nightly_remediation_source = shared_canonical_fail_nightly_remedi
 canonical_fail_nightly_transition_source = shared_canonical_fail_nightly_transition_source
 canonical_fail_nightly_integrity_source = shared_canonical_fail_nightly_integrity_source
 canonical_operating_cycle_source = shared_canonical_operating_cycle_source
+canonical_combo_a_operating_cycle_source = shared_canonical_combo_a_operating_cycle_source
 load_json_object = shared_load_json_object
 load_fail_nightly_progress_snapshot = shared_load_fail_nightly_progress_snapshot
 load_fail_nightly_remediation_snapshot = shared_load_fail_nightly_remediation_snapshot
 load_fail_nightly_transition_snapshot = shared_load_fail_nightly_transition_snapshot
 load_fail_nightly_integrity_snapshot = shared_load_fail_nightly_integrity_snapshot
 load_operating_cycle_snapshot = shared_load_operating_cycle_snapshot
+load_combo_a_operating_cycle_snapshot = shared_load_combo_a_operating_cycle_snapshot
 load_latest_operator_startup_status = shared_load_latest_operator_startup_status
 build_operator_governance_summary = shared_build_operator_governance_summary
 build_metrics_rows = shared_build_metrics_rows
@@ -1072,6 +1102,111 @@ def _render_operator_governance_section(summary: dict[str, Any] | None) -> None:
     st.json(summary.get("source_paths"))
 
 
+def _render_combo_a_promotion_section(
+    summary: dict[str, Any] | None,
+    warnings: list[str],
+) -> None:
+    _render_snapshot_warnings(
+        "Some Combo A promotion artifacts were skipped due to parse/contract issues",
+        warnings,
+    )
+    if summary is None:
+        st.info(
+            "Combo A promotion surface is not available yet. "
+            "Run the live Combo A workflow or trigger safe action `combo_a_operating_cycle_smoke` "
+            "to re-evaluate the latest live artifacts."
+        )
+        return
+
+    blocking_reason_codes = _normalize_reason_codes(summary.get("blocking_reason_codes"))
+    recommended_actions = summary.get("recommended_actions")
+    recommended_actions = recommended_actions if isinstance(recommended_actions, list) else []
+    actionable_message = _coalesce(summary.get("actionable_message"), "No Combo A promotion guidance available yet.")
+    promotion_state = str(summary.get("promotion_state", "")).strip()
+    availability_status = _coalesce(summary.get("availability_status"), "unknown")
+    if promotion_state in {"eligible", "promoted"}:
+        st.success(actionable_message)
+    elif blocking_reason_codes:
+        st.warning(actionable_message)
+    else:
+        st.info(actionable_message)
+
+    recommended_action_labels = ", ".join(
+        str(item.get("action_key"))
+        for item in recommended_actions
+        if isinstance(item, dict) and str(item.get("action_key", "")).strip()
+    )
+    scenario_rows = [
+        {
+            "scenario": "Current Policy",
+            "value": _coalesce(summary.get("effective_policy"), "observe_only"),
+            "details": _coalesce(summary.get("promotion_state"), "hold"),
+        },
+        {
+            "scenario": "Why Hold",
+            "value": ", ".join(blocking_reason_codes) if blocking_reason_codes else "-",
+            "details": actionable_message,
+        },
+        {
+            "scenario": "Next Action",
+            "value": recommended_action_labels or "-",
+            "details": _coalesce(summary.get("next_review_at_utc"), "not scheduled"),
+        },
+        {
+            "scenario": "Live Readiness",
+            "value": availability_status,
+            "details": "available" if bool(_nested_get(summary, "live_readiness", "available")) else "not ready",
+        },
+    ]
+    st.caption("Combo A promotion scenarios")
+    st.dataframe(scenario_rows, width="stretch")
+
+    readiness_row = {
+        "status": summary.get("status"),
+        "effective_policy": summary.get("effective_policy"),
+        "promotion_state": summary.get("promotion_state"),
+        "enforcement_surface": summary.get("enforcement_surface"),
+        "profile_scope": summary.get("profile_scope"),
+        "availability_status": availability_status,
+        "next_review_at_utc": summary.get("next_review_at_utc"),
+        "operating_cycle_path": summary.get("operating_cycle_path"),
+    }
+    st.dataframe([readiness_row], width="stretch")
+
+    services = _nested_get(summary, "services")
+    services = services if isinstance(services, dict) else {}
+    if services:
+        st.caption("Combo A live services")
+        st.dataframe(
+            [
+                {
+                    "service_name": service_name,
+                    "status": _coalesce(service_payload.get("status"), "-"),
+                    "configured": service_payload.get("configured"),
+                    "url": service_payload.get("url"),
+                    "error": service_payload.get("error"),
+                }
+                for service_name, service_payload in services.items()
+                if isinstance(service_payload, dict)
+            ],
+            width="stretch",
+        )
+    if recommended_actions:
+        st.caption("Combo A recommended safe actions")
+        st.dataframe(
+            [
+                {
+                    "action_key": item.get("action_key"),
+                    "reason": item.get("reason"),
+                    "next_review_at_utc": item.get("next_review_at_utc"),
+                }
+                for item in recommended_actions
+                if isinstance(item, dict)
+            ],
+            width="stretch",
+        )
+
+
 def _render_operating_cycle_section(snapshot: dict[str, Any] | None, warnings: list[str]) -> None:
     _render_snapshot_warnings(
         "Some G2 operating cycle artifacts were skipped due to parse/contract issues",
@@ -1402,10 +1537,19 @@ def _render_stack_health_tab(
             st.dataframe(service_rows, width="stretch")
         warning_payload = operator_snapshot_payload.get("warnings")
         warning_payload = warning_payload if isinstance(warning_payload, dict) else {}
+        combo_a_profile = _nested_get(operator_snapshot_payload, "operator_context", "profiles", "combo_a")
+        combo_a_profile = combo_a_profile if isinstance(combo_a_profile, dict) else None
+        combo_a_warnings = [
+            str(item)
+            for item in warning_payload.get("combo_a_policy_surface", [])
+            if str(item).strip()
+        ]
         _render_snapshot_warnings(
             "Some downstream service probes returned errors",
             [str(item) for item in warning_payload.get("service_probes", []) if str(item).strip()],
         )
+        st.subheader("Combo A Promotion")
+        _render_combo_a_promotion_section(combo_a_profile, combo_a_warnings)
     else:
         st.success("Gateway transport health loaded.")
         if operator_snapshot_error is not None:
@@ -1413,6 +1557,8 @@ def _render_stack_health_tab(
                 "Gateway operator snapshot unavailable; using direct gateway health only.\n"
                 f"{operator_snapshot_error}"
             )
+        st.subheader("Combo A Promotion")
+        _render_combo_a_promotion_section(None, [])
 
     st.json(health_payload)
     policy = health_payload.get("policy") if isinstance(health_payload, dict) else None
@@ -1528,6 +1674,39 @@ def _render_latest_metrics_tab(
     if operating_cycle_snapshot is None and latest_metrics_payload is None:
         operating_cycle_snapshot, operating_cycle_warnings = load_operating_cycle_snapshot(runs_dir)
     _render_operating_cycle_section(operating_cycle_snapshot, operating_cycle_warnings)
+
+    st.subheader("Combo A operating cycle")
+    combo_a_operating_cycle_snapshot = (
+        latest_metrics_payload.get("combo_a_operating_cycle") if latest_metrics_payload is not None else None
+    )
+    combo_a_operating_cycle_snapshot = (
+        combo_a_operating_cycle_snapshot if isinstance(combo_a_operating_cycle_snapshot, dict) else None
+    )
+    combo_a_operating_cycle_warnings = [
+        str(item)
+        for item in warning_payload.get("combo_a_policy_surface", [])
+        if str(item).strip()
+    ]
+    combo_a_profile_summary = (
+        _nested_get(operator_snapshot_payload, "operator_context", "profiles", "combo_a")
+        if isinstance(operator_snapshot_payload, dict)
+        else None
+    )
+    combo_a_profile_summary = combo_a_profile_summary if isinstance(combo_a_profile_summary, dict) else None
+    if combo_a_operating_cycle_snapshot is None and latest_metrics_payload is None:
+        combo_a_operating_cycle_snapshot, combo_a_operating_cycle_warnings = load_combo_a_operating_cycle_snapshot(
+            runs_dir
+        )
+        combo_a_profile_summary = shared_build_operator_combo_a_profile_summary(
+            combo_a_readiness=combo_a_profile_summary,
+            combo_a_operating_cycle_snapshot=combo_a_operating_cycle_snapshot,
+        )
+    if combo_a_profile_summary is None and combo_a_operating_cycle_snapshot is not None:
+        combo_a_profile_summary = shared_build_operator_combo_a_profile_summary(
+            combo_a_readiness=None,
+            combo_a_operating_cycle_snapshot=combo_a_operating_cycle_snapshot,
+        )
+    _render_combo_a_promotion_section(combo_a_profile_summary, combo_a_operating_cycle_warnings)
 
     st.subheader("Gateway fail_nightly progress")
     progress_snapshot = (

@@ -36,6 +36,7 @@ OPTIONAL_SUMMARY_SOURCE_KEYS = frozenset(
         "gateway_combo_a",
         "gateway_http_combo_a",
         "cross_service_suite_combo_a",
+        "combo_a_operating_cycle",
     }
 )
 

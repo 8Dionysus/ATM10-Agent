@@ -170,6 +170,39 @@ jobs:
             --neo4j-database neo4j \
             --neo4j-user neo4j
 
+      - name: Operating cycle - Combo A policy decision surface (report_only)
+        run: |
+          python scripts/run_combo_a_operating_cycle.py \
+            --runs-dir runs \
+            --policy report_only \
+            --summary-json runs/nightly-combo-a-operating-cycle/operating_cycle_summary.json \
+            --summary-md runs/nightly-combo-a-operating-cycle/summary.md
+
+      - name: Resolve - Combo A effective policy
+        run: |
+          effective_policy=$(python - <<'PY'
+          import json
+          from pathlib import Path
+
+          path = Path("runs/nightly-combo-a-operating-cycle/operating_cycle_summary.json")
+          if not path.is_file():
+              print("observe_only")
+          else:
+              payload = json.loads(path.read_text(encoding="utf-8"))
+              print(str(payload.get("effective_policy", "observe_only")).strip() or "observe_only")
+          PY
+          )
+          echo "COMBO_A_EFFECTIVE_POLICY=${effective_policy}" >> "$GITHUB_ENV"
+
+      - name: Strict gate - Combo A policy decision surface (promoted fail_on_hold)
+        if: env.COMBO_A_EFFECTIVE_POLICY == 'promoted_nightly'
+        run: |
+          python scripts/run_combo_a_operating_cycle.py \
+            --runs-dir runs \
+            --policy fail_on_hold \
+            --summary-json runs/nightly-combo-a-operating-cycle/operating_cycle_summary.json \
+            --summary-md runs/nightly-combo-a-operating-cycle/summary.md
+
       - name: Summary - Combo A gateway smoke
         shell: pwsh
         run: |
@@ -211,6 +244,19 @@ jobs:
           }
           $lines -join "`n" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
 
+      - name: Summary - Combo A operating cycle
+        shell: pwsh
+        run: |
+          $cycle = Get-Content "runs/nightly-combo-a-operating-cycle/operating_cycle_summary.json" | ConvertFrom-Json
+          $lines = @(
+            "## Combo A Operating Cycle",
+            "",
+            "| status | effective_policy | promotion_state | availability_status |",
+            "|---|---|---|---|",
+            "| $($cycle.status) | $($cycle.effective_policy) | $($cycle.promotion_state) | $($cycle.availability_status) |"
+          )
+          $lines -join "`n" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
+
       - name: Summary - Combo A operator probes
         shell: pwsh
         run: |
@@ -241,5 +287,7 @@ jobs:
             runs/nightly-combo-a-cross-service-suite/**/cross_service_benchmark_suite.json
             runs/nightly-combo-a-cross-service-suite/**/summary.md
             runs/nightly-combo-a-cross-service-suite/**/service_sla_summary.json
+            runs/nightly-combo-a-operating-cycle/**/operating_cycle_summary.json
+            runs/nightly-combo-a-operating-cycle/**/summary.md
             runs/nightly-combo-a-operator-probes/healthz.json
             runs/nightly-combo-a-operator-probes/operator_snapshot.json

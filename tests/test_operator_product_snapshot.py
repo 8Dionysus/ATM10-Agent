@@ -68,9 +68,57 @@ def _write_operating_cycle_summary(runs_dir: Path) -> Path:
     return summary_path
 
 
+def _write_combo_a_operating_cycle_summary(runs_dir: Path) -> Path:
+    summary_path = operator_snapshot.canonical_combo_a_operating_cycle_source(runs_dir)
+    _write_json(
+        summary_path,
+        {
+            "schema_version": "combo_a_operating_cycle_v1",
+            "status": "ok",
+            "checked_at_utc": "2026-03-22T18:10:00+00:00",
+            "scenario": "combo_a_policy",
+            "policy": "report_only",
+            "effective_policy": "observe_only",
+            "promotion_state": "hold",
+            "enforcement_surface": "nightly_only",
+            "blocking_reason_codes": ["cross_service_suite_combo_a_breach"],
+            "recommended_actions": [
+                {
+                    "action_key": "cross_service_suite_combo_a_smoke",
+                    "label": "Cross-service suite Combo A smoke",
+                    "reason": "Refresh the Combo A cross-service suite artifact before the next nightly review.",
+                    "surface": "gateway_safe_action",
+                }
+            ],
+            "next_review_at_utc": "2026-03-23T18:10:00+00:00",
+            "profile_scope": "combo_a",
+            "availability_status": "partial",
+            "actionable_message": "Combo A promotion is held until the live cross-service suite is green again.",
+            "live_readiness": {
+                "profile": "combo_a",
+                "available": False,
+                "availability_status": "partial",
+                "services": {
+                    "qdrant": {"service_name": "qdrant", "status": "ok", "configured": True},
+                    "neo4j": {"service_name": "neo4j", "status": "ok", "configured": True},
+                },
+            },
+            "sources": {},
+            "paths": {
+                "summary_json": str(summary_path),
+                "history_summary_json": str(summary_path.parent / "20260322_181000-combo-a-operating-cycle" / "operating_cycle_summary.json"),
+                "summary_md": str(summary_path.parent / "summary.md"),
+                "history_summary_md": str(summary_path.parent / "20260322_181000-combo-a-operating-cycle" / "summary.md"),
+            },
+        },
+    )
+    return summary_path
+
+
 def test_build_operator_product_snapshot_includes_policy_promotion_surface(tmp_path: Path) -> None:
     runs_dir = tmp_path / "runs"
     _write_operating_cycle_summary(runs_dir)
+    _write_combo_a_operating_cycle_summary(runs_dir)
 
     payload = operator_snapshot.build_operator_product_snapshot(
         runs_dir=runs_dir,
@@ -82,34 +130,49 @@ def test_build_operator_product_snapshot_includes_policy_promotion_surface(tmp_p
     )
 
     governance = payload["operator_context"]["governance"]
+    combo_a = payload["operator_context"]["profiles"]["combo_a"]
     assert governance["effective_gateway_sla_policy"] == "signal_only"
     assert governance["promotion_state"] == "blocked"
     assert governance["profile_scope"] == "baseline_first"
     assert governance["recommended_actions"][0]["action_key"] == "gateway_sla_operating_cycle_smoke"
+    assert combo_a["effective_policy"] == "observe_only"
+    assert combo_a["promotion_state"] == "hold"
+    assert combo_a["operating_cycle_path"] == str(operator_snapshot.canonical_combo_a_operating_cycle_source(runs_dir))
     assert payload["latest_metrics"]["operating_cycle"]["effective_policy"] == "signal_only"
+    assert payload["latest_metrics"]["combo_a_operating_cycle"]["effective_policy"] == "observe_only"
 
 
 def test_build_operator_runs_payload_includes_policy_context(tmp_path: Path) -> None:
     runs_dir = tmp_path / "runs"
     _write_operating_cycle_summary(runs_dir)
+    _write_combo_a_operating_cycle_summary(runs_dir)
 
     payload = operator_snapshot.build_operator_runs_payload(runs_dir)
 
     governance = payload["operator_context"]["governance"]
     operating_cycle = payload["operator_context"]["operating_cycle"]
+    combo_a = payload["operator_context"]["profiles"]["combo_a"]
     assert governance["effective_gateway_sla_policy"] == "signal_only"
     assert governance["promotion_state"] == "blocked"
     assert operating_cycle["profile_scope"] == "baseline_first"
     assert payload["warnings"]["policy_surface"]["operating_cycle"] == []
+    assert payload["warnings"]["policy_surface"]["combo_a_operating_cycle"] == []
+    assert combo_a["effective_policy"] == "observe_only"
+    assert combo_a["promotion_state"] == "hold"
 
 
 def test_build_operator_history_payload_includes_policy_context(tmp_path: Path) -> None:
     runs_dir = tmp_path / "runs"
     _write_operating_cycle_summary(runs_dir)
+    _write_combo_a_operating_cycle_summary(runs_dir)
 
     payload = operator_snapshot.build_operator_history_payload(runs_dir)
 
     governance = payload["operator_context"]["governance"]
+    combo_a = payload["operator_context"]["profiles"]["combo_a"]
     assert governance["effective_gateway_sla_policy"] == "signal_only"
     assert governance["promotion_state"] == "blocked"
     assert payload["operator_warnings"]["policy_surface"]["operating_cycle"] == []
+    assert payload["operator_warnings"]["policy_surface"]["combo_a_operating_cycle"] == []
+    assert combo_a["effective_policy"] == "observe_only"
+    assert combo_a["promotion_state"] == "hold"

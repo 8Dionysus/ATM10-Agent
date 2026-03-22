@@ -21,6 +21,8 @@ def test_gateway_v1_smoke_core_ok(tmp_path: Path) -> None:
     assert result["ok"] is True
     summary_payload = json.loads(summary_path.read_text(encoding="utf-8"))
     assert summary_payload["status"] == "ok"
+    assert summary_payload["profile"] == "baseline_first"
+    assert summary_payload["surface"] == "local"
     assert summary_payload["scenario"] == "core"
     assert summary_payload["started_at_utc"]
     assert summary_payload["finished_at_utc"]
@@ -47,6 +49,8 @@ def test_gateway_v1_smoke_automation_ok(tmp_path: Path) -> None:
     assert result["ok"] is True
     summary_payload = json.loads(summary_path.read_text(encoding="utf-8"))
     assert summary_payload["status"] == "ok"
+    assert summary_payload["profile"] == "baseline_first"
+    assert summary_payload["surface"] == "local"
     assert summary_payload["scenario"] == "automation"
     assert summary_payload["started_at_utc"]
     assert summary_payload["finished_at_utc"]
@@ -73,6 +77,8 @@ def test_gateway_v1_smoke_hybrid_ok(tmp_path: Path) -> None:
     assert result["ok"] is True
     summary_payload = json.loads(summary_path.read_text(encoding="utf-8"))
     assert summary_payload["status"] == "ok"
+    assert summary_payload["profile"] == "baseline_first"
+    assert summary_payload["surface"] == "local"
     assert summary_payload["scenario"] == "hybrid"
     assert summary_payload["request_count"] == 1
     assert summary_payload["failed_requests_count"] == 0
@@ -130,6 +136,8 @@ def test_gateway_v1_smoke_combo_a_ok(tmp_path: Path, monkeypatch: pytest.MonkeyP
     assert result["ok"] is True
     summary_payload = json.loads(summary_path.read_text(encoding="utf-8"))
     assert summary_payload["status"] == "ok"
+    assert summary_payload["profile"] == "combo_a"
+    assert summary_payload["surface"] == "local"
     assert summary_payload["scenario"] == "combo_a"
     assert summary_payload["request_count"] == 4
     assert summary_payload["failed_requests_count"] == 0
