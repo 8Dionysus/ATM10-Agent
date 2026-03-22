@@ -179,6 +179,19 @@ def _write_operating_cycle_source(runs_dir: Path) -> None:
                 "status": "ok",
                 "checked_at_utc": "2026-03-12T22:10:02.928361+00:00",
                 "policy": "report_only",
+                "effective_policy": "signal_only",
+                "promotion_state": "blocked",
+                "enforcement_surface": "nightly_only",
+                "blocking_reason_codes": ["remediation_backlog_pending"],
+                "recommended_actions": [
+                    {
+                        "action_key": "gateway_sla_operating_cycle_smoke",
+                        "reason": "Refresh the promoted-policy decision surface after the next nightly evidence update.",
+                    }
+                ],
+                "next_review_at_utc": "2026-03-22T21:53:16.661488+00:00",
+                "profile_scope": "baseline_first",
+                "actionable_message": "Resolve the remediation backlog before promoting nightly policy.",
                 "cycle": {
                     "source": "manual",
                     "operating_mode": "reuse_fresh_latest",

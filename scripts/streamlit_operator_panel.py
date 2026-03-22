@@ -129,6 +129,12 @@ SAFE_ACTIONS: dict[str, dict[str, Any]] = {
         "summary_name": "cross_service_benchmark_suite.json",
         "extra_args": ["--profile", "combo_a"],
     },
+    "gateway_sla_operating_cycle_smoke": {
+        "script": "scripts/run_gateway_sla_operating_cycle.py",
+        "scenario": "policy_surface",
+        "runs_subdir": "ui-safe-gateway-sla-operating-cycle",
+        "summary_name": "operating_cycle_summary.json",
+    },
 }
 
 HISTORY_SOURCE_SPECS: dict[str, dict[str, str | None]] = {
@@ -970,7 +976,8 @@ def _render_operator_governance_section(summary: dict[str, Any] | None) -> None:
     if summary is None:
         st.info(
             "Governance decision surface is not available yet. "
-            "Run `python scripts/run_gateway_sla_operating_cycle.py --runs-dir runs` to populate it."
+            "Run `python scripts/run_gateway_sla_operating_cycle.py --runs-dir runs` "
+            "or trigger safe action `gateway_sla_operating_cycle_smoke` to populate it."
         )
         return
 
@@ -983,11 +990,57 @@ def _render_operator_governance_section(summary: dict[str, Any] | None) -> None:
     else:
         st.info(actionable_message)
 
+    recommended_actions = summary.get("recommended_actions")
+    recommended_actions = recommended_actions if isinstance(recommended_actions, list) else []
+    blocking_reason_codes = _normalize_reason_codes(summary.get("blocking_reason_codes"))
+    recommended_action_labels = ", ".join(
+        str(item.get("action_key"))
+        for item in recommended_actions
+        if isinstance(item, dict) and str(item.get("action_key", "")).strip()
+    )
+    manual_fallback_status = "nightly_primary"
+    operating_mode = str(summary.get("operating_mode", "")).strip()
+    manual_execution_mode = str(summary.get("manual_execution_mode", "")).strip()
+    if operating_mode == "manual_fallback":
+        manual_fallback_status = "manual_fallback_active"
+    elif manual_execution_mode:
+        manual_fallback_status = f"manual_snapshot:{manual_execution_mode}"
+
+    scenario_rows = [
+        {
+            "scenario": "Current Policy",
+            "value": _coalesce(summary.get("effective_gateway_sla_policy"), "signal_only"),
+            "details": _coalesce(summary.get("promotion_state"), "hold"),
+        },
+        {
+            "scenario": "Why Hold",
+            "value": ", ".join(blocking_reason_codes) if blocking_reason_codes else "-",
+            "details": actionable_message,
+        },
+        {
+            "scenario": "Next Action",
+            "value": recommended_action_labels or _coalesce(summary.get("next_action_hint"), "-"),
+            "details": _coalesce(summary.get("next_review_at_utc"), "not scheduled"),
+        },
+        {
+            "scenario": "Manual Fallback Status",
+            "value": manual_fallback_status,
+            "details": _coalesce(summary.get("manual_execution_mode"), summary.get("operating_mode"), "-"),
+        },
+    ]
+    st.caption("Policy scenarios")
+    st.dataframe(scenario_rows, width="stretch")
+
     governance_row = {
         "status": summary.get("status"),
         "decision_status": summary.get("decision_status"),
         "recommended_policy": summary.get("recommended_policy"),
+        "effective_gateway_sla_policy": summary.get("effective_gateway_sla_policy"),
+        "promotion_state": summary.get("promotion_state"),
+        "enforcement_surface": summary.get("enforcement_surface"),
+        "profile_scope": summary.get("profile_scope"),
         "next_action_hint": summary.get("next_action_hint"),
+        "next_review_at_utc": summary.get("next_review_at_utc"),
         "transition_allow_switch": summary.get("transition_allow_switch"),
         "remaining_for_window": summary.get("remaining_for_window"),
         "remaining_for_streak": summary.get("remaining_for_streak"),
@@ -1001,6 +1054,20 @@ def _render_operator_governance_section(summary: dict[str, Any] | None) -> None:
     if reason_codes:
         st.caption("Governance reason codes")
         st.dataframe([{"reason_codes": ", ".join(reason_codes)}], width="stretch")
+    if recommended_actions:
+        st.caption("Recommended safe actions")
+        st.dataframe(
+            [
+                {
+                    "action_key": item.get("action_key"),
+                    "reason": item.get("reason"),
+                    "next_review_at_utc": item.get("next_review_at_utc"),
+                }
+                for item in recommended_actions
+                if isinstance(item, dict)
+            ],
+            width="stretch",
+        )
     st.caption("Governance source paths")
     st.json(summary.get("source_paths"))
 
@@ -1022,6 +1089,10 @@ def _render_operating_cycle_section(snapshot: dict[str, Any] | None, warnings: l
     interpretation = interpretation if isinstance(interpretation, dict) else {}
     operating_cycle_row = {
         "status": snapshot.get("status"),
+        "effective_policy": snapshot.get("effective_policy"),
+        "promotion_state": snapshot.get("promotion_state"),
+        "enforcement_surface": snapshot.get("enforcement_surface"),
+        "profile_scope": snapshot.get("profile_scope"),
         "cycle_source": cycle.get("source"),
         "operating_mode": cycle.get("operating_mode"),
         "used_manual_fallback": cycle.get("used_manual_fallback"),
@@ -1039,8 +1110,28 @@ def _render_operating_cycle_section(snapshot: dict[str, Any] | None, warnings: l
         "earliest_go_candidate_at_utc": triage.get("earliest_go_candidate_at_utc"),
         "next_accounted_dispatch_at_utc": triage.get("next_accounted_dispatch_at_utc"),
         "next_action_hint": interpretation.get("next_action_hint"),
+        "next_review_at_utc": snapshot.get("next_review_at_utc"),
     }
     st.dataframe([operating_cycle_row], width="stretch")
+    blocking_reason_codes = _normalize_reason_codes(snapshot.get("blocking_reason_codes"))
+    if blocking_reason_codes:
+        st.caption("Operating cycle hold reasons")
+        st.dataframe([{"blocking_reason_codes": ", ".join(blocking_reason_codes)}], width="stretch")
+    recommended_actions = snapshot.get("recommended_actions")
+    recommended_actions = recommended_actions if isinstance(recommended_actions, list) else []
+    if recommended_actions:
+        st.caption("Operating cycle recommended safe actions")
+        st.dataframe(
+            [
+                {
+                    "action_key": item.get("action_key"),
+                    "reason": item.get("reason"),
+                }
+                for item in recommended_actions
+                if isinstance(item, dict)
+            ],
+            width="stretch",
+        )
     candidate_item_ids = _normalize_reason_codes(triage.get("candidate_item_ids"))
     if candidate_item_ids:
         st.caption("Operating cycle candidate backlog")

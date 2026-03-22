@@ -27,6 +27,11 @@ _CRITICAL_INTEGRITY_CODES = {
     "dual_write_invariant_broken",
     "anti_double_count_invariant_broken",
 }
+_EFFECTIVE_POLICY_SIGNAL_ONLY = "signal_only"
+_EFFECTIVE_POLICY_FAIL_NIGHTLY = "fail_nightly"
+_ENFORCEMENT_SURFACE = "nightly_only"
+_PROFILE_SCOPE = "baseline_first"
+_OPERATING_CYCLE_SAFE_ACTION_KEY = "gateway_sla_operating_cycle_smoke"
 _EXPECTED_SCHEMAS: dict[str, str] = {
     "readiness": "gateway_sla_fail_nightly_readiness_v1",
     "governance": "gateway_sla_fail_nightly_governance_v1",
@@ -304,12 +309,138 @@ def _build_interpretation(*, triage: Mapping[str, Any], manual_details: Mapping[
     }
 
 
+def _dedupe_preserve(values: list[str]) -> list[str]:
+    seen: set[str] = set()
+    ordered: list[str] = []
+    for value in values:
+        normalized = str(value).strip()
+        if not normalized or normalized in seen:
+            continue
+        seen.add(normalized)
+        ordered.append(normalized)
+    return ordered
+
+
+def _coerce_non_negative_int(value: Any) -> int:
+    if value is None or isinstance(value, bool):
+        return 0
+    try:
+        coerced = int(value)
+    except Exception:
+        return 0
+    return max(0, coerced)
+
+
+def _build_recommended_actions(
+    *,
+    promotion_state: str,
+    next_action_hint: str | None,
+    next_review_at_utc: str | None,
+    blocking_reason_codes: list[str],
+) -> list[dict[str, Any]]:
+    normalized_next_action = str(next_action_hint or "").strip()
+    if promotion_state == "eligible":
+        return []
+
+    reason = "Refresh the gateway SLA operating cycle after the next nightly evidence update."
+    if "telemetry_repair_required" in blocking_reason_codes:
+        reason = "Refresh the operating cycle after telemetry and integrity repairs land."
+    elif "remediation_backlog_pending" in blocking_reason_codes:
+        reason = "Refresh the operating cycle after the remediation backlog shrinks."
+    elif normalized_next_action == "wait_for_utc_reset":
+        reason = "Refresh the operating cycle after the next accounted UTC window opens."
+    elif normalized_next_action == "run_recovery_only":
+        reason = "Refresh the operating cycle after recovery-mode evidence is collected."
+
+    return [
+        {
+            "action_key": _OPERATING_CYCLE_SAFE_ACTION_KEY,
+            "label": "Gateway SLA operating cycle smoke",
+            "reason": reason,
+            "next_review_at_utc": next_review_at_utc,
+            "surface": "gateway_safe_action",
+        }
+    ]
+
+
+def _build_policy_surface(
+    *,
+    sources: Mapping[str, Mapping[str, Any]],
+    cycle: Mapping[str, Any],
+    triage: Mapping[str, Any],
+    interpretation: Mapping[str, Any],
+) -> dict[str, Any]:
+    transition_allow_switch = bool(triage.get("transition_allow_switch"))
+    telemetry_repair_required = bool(interpretation.get("telemetry_repair_required"))
+    remediation_backlog_primary = bool(interpretation.get("remediation_backlog_primary"))
+    candidate_item_count = _coerce_non_negative_int(triage.get("candidate_item_count"))
+    degraded_required_sources = [
+        source_name
+        for source_name in _REQUIRED_SOURCES
+        if str(sources.get(source_name, {}).get("status", "")).strip() != _SOURCE_STATUS_PRESENT
+    ]
+
+    blocking_reason_codes = _coerce_string_list(triage.get("reason_codes"))
+    blocking_reason_codes.extend(_coerce_string_list(triage.get("integrity_reason_codes")))
+    if telemetry_repair_required:
+        blocking_reason_codes.append("telemetry_repair_required")
+    if remediation_backlog_primary or candidate_item_count > 0:
+        blocking_reason_codes.append("remediation_backlog_pending")
+    if degraded_required_sources:
+        blocking_reason_codes.append("required_sources_not_fresh")
+    if not transition_allow_switch and not blocking_reason_codes:
+        blocking_reason_codes.append("promotion_signal_not_ready")
+    blocking_reason_codes = _dedupe_preserve(blocking_reason_codes)
+
+    promotion_state = "hold"
+    if transition_allow_switch and not telemetry_repair_required and candidate_item_count == 0 and not degraded_required_sources:
+        promotion_state = "eligible"
+    elif telemetry_repair_required or remediation_backlog_primary or candidate_item_count > 0 or degraded_required_sources:
+        promotion_state = "blocked"
+
+    effective_policy = (
+        _EFFECTIVE_POLICY_FAIL_NIGHTLY if promotion_state == "eligible" else _EFFECTIVE_POLICY_SIGNAL_ONLY
+    )
+    next_review_at_utc = (
+        cycle.get("next_accounted_dispatch_at_utc")
+        or triage.get("next_accounted_dispatch_at_utc")
+        or triage.get("earliest_go_candidate_at_utc")
+    )
+    next_action_hint = interpretation.get("next_action_hint")
+    recommended_actions = _build_recommended_actions(
+        promotion_state=promotion_state,
+        next_action_hint=str(next_action_hint) if next_action_hint is not None else None,
+        next_review_at_utc=str(next_review_at_utc) if next_review_at_utc is not None else None,
+        blocking_reason_codes=blocking_reason_codes,
+    )
+
+    actionable_message = "Nightly-only policy remains on signal_only while evidence converges."
+    if promotion_state == "eligible":
+        actionable_message = "Nightly-only policy is eligible to promote to fail_nightly."
+    elif "telemetry_repair_required" in blocking_reason_codes:
+        actionable_message = "Repair telemetry and integrity signals before promoting nightly policy."
+    elif "remediation_backlog_pending" in blocking_reason_codes:
+        actionable_message = "Resolve the remediation backlog before promoting nightly policy."
+
+    return {
+        "effective_policy": effective_policy,
+        "promotion_state": promotion_state,
+        "enforcement_surface": _ENFORCEMENT_SURFACE,
+        "blocking_reason_codes": blocking_reason_codes,
+        "recommended_actions": recommended_actions,
+        "next_review_at_utc": next_review_at_utc,
+        "profile_scope": _PROFILE_SCOPE,
+        "actionable_message": actionable_message,
+    }
+
+
 def _render_brief_markdown(
     *,
     checked_at_utc: str,
     cycle: Mapping[str, Any],
     triage: Mapping[str, Any],
     interpretation: Mapping[str, Any],
+    policy_surface: Mapping[str, Any],
 ) -> str:
     lines = [
         "# G2 Operating Cycle Brief",
@@ -318,6 +449,9 @@ def _render_brief_markdown(
         f"- source: `{cycle.get('source')}`",
         f"- operating_mode: `{cycle.get('operating_mode')}`",
         f"- used_manual_fallback: `{cycle.get('used_manual_fallback')}`",
+        f"- effective_policy: `{policy_surface.get('effective_policy')}`",
+        f"- promotion_state: `{policy_surface.get('promotion_state')}`",
+        f"- enforcement_surface: `{policy_surface.get('enforcement_surface')}`",
     ]
     if cycle.get("manual_execution_mode") is not None:
         lines.append(f"- manual_execution_mode: `{cycle.get('manual_execution_mode')}`")
@@ -338,6 +472,9 @@ def _render_brief_markdown(
             f"- telemetry_repair_required: `{interpretation.get('telemetry_repair_required')}`",
             f"- remediation_backlog_primary: `{interpretation.get('remediation_backlog_primary')}`",
             f"- next_action_hint: `{interpretation.get('next_action_hint')}`",
+            f"- blocking_reason_codes: `{', '.join(_coerce_string_list(policy_surface.get('blocking_reason_codes')))} `".rstrip(),
+            f"- next_review_at_utc: `{policy_surface.get('next_review_at_utc')}`",
+            f"- recommended_actions: `{', '.join(str(item.get('action_key')) for item in policy_surface.get('recommended_actions', []) if isinstance(item, Mapping) and item.get('action_key'))}`",
         ]
     )
     return "\n".join(lines) + "\n"
@@ -453,12 +590,26 @@ def run_gateway_sla_operating_cycle(
         manual_details = _extract_manual_runner_details(payloads)
         triage = _extract_triage(payloads)
         interpretation = _build_interpretation(triage=triage, manual_details=manual_details)
+        policy_surface = _build_policy_surface(
+            sources=sources,
+            cycle=manual_details,
+            triage=triage,
+            interpretation=interpretation,
+        )
 
         summary_payload: dict[str, Any] = {
             "schema_version": _SCHEMA_VERSION,
             "status": "ok",
             "checked_at_utc": now.isoformat(),
             "policy": policy,
+            "effective_policy": policy_surface["effective_policy"],
+            "promotion_state": policy_surface["promotion_state"],
+            "enforcement_surface": policy_surface["enforcement_surface"],
+            "blocking_reason_codes": policy_surface["blocking_reason_codes"],
+            "recommended_actions": policy_surface["recommended_actions"],
+            "next_review_at_utc": policy_surface["next_review_at_utc"],
+            "profile_scope": policy_surface["profile_scope"],
+            "actionable_message": policy_surface["actionable_message"],
             "precheck": {
                 "required_sources_fresh_current_utc_day": fresh_latest_available,
                 "sources": {name: precheck_sources[name] for name in _SOURCE_ORDER if name in precheck_sources},
@@ -493,6 +644,7 @@ def run_gateway_sla_operating_cycle(
             cycle=summary_payload["cycle"],
             triage=triage,
             interpretation=interpretation,
+            policy_surface=policy_surface,
         )
 
         _write_json(history_summary_path, summary_payload)
@@ -507,6 +659,12 @@ def run_gateway_sla_operating_cycle(
             "used_manual_fallback": used_manual_fallback,
             "telemetry_repair_required": interpretation["telemetry_repair_required"],
             "next_action_hint": interpretation["next_action_hint"],
+            "effective_policy": policy_surface["effective_policy"],
+            "promotion_state": policy_surface["promotion_state"],
+            "enforcement_surface": policy_surface["enforcement_surface"],
+            "blocking_reason_codes": policy_surface["blocking_reason_codes"],
+            "next_review_at_utc": policy_surface["next_review_at_utc"],
+            "profile_scope": policy_surface["profile_scope"],
         }
         _write_json(run_json_path, run_payload)
         return {
@@ -523,6 +681,22 @@ def run_gateway_sla_operating_cycle(
             "status": "error",
             "checked_at_utc": now.isoformat(),
             "policy": policy,
+            "effective_policy": _EFFECTIVE_POLICY_SIGNAL_ONLY,
+            "promotion_state": "hold",
+            "enforcement_surface": _ENFORCEMENT_SURFACE,
+            "blocking_reason_codes": ["operating_cycle_error"],
+            "recommended_actions": [
+                {
+                    "action_key": _OPERATING_CYCLE_SAFE_ACTION_KEY,
+                    "label": "Gateway SLA operating cycle smoke",
+                    "reason": "Refresh the policy decision surface after the operating cycle error is resolved.",
+                    "next_review_at_utc": None,
+                    "surface": "gateway_safe_action",
+                }
+            ],
+            "next_review_at_utc": None,
+            "profile_scope": _PROFILE_SCOPE,
+            "actionable_message": "Operating cycle failed before a policy decision surface could be refreshed.",
             "precheck": {},
             "cycle": {
                 "source": "unknown",

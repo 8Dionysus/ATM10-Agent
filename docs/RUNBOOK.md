@@ -921,10 +921,11 @@ Operator interpretation:
 * `attention_state=run_recovery_only` -> only recovery-path without progression credit is allowed.
 * `attention_state=source_repair_required` -> first restore required summaries (`manual_cycle`, `progress`).
 
-## G2.3: Gateway SLA fail_nightly transition telemetry + strict nightly gate
+## G2.3: Gateway SLA fail_nightly transition telemetry + managed nightly promotion
 
 Transition checker preserves formal decision telemetry for readiness/governance/progress,
-and nightly strict gate is executed stably (`fail_nightly`) without changing the PR/CI `signal_only` policy.
+while the nightly strict gate remains `nightly_only` and is promoted to `fail_nightly`
+only when the operating-cycle decision surface marks baseline eligible.
 
 ```powershell
 cd <repo-root>
@@ -936,9 +937,11 @@ Nightly transition integration:
 
 * `.github/workflows/gateway-sla-readiness-nightly.yml` adds:
   * step `Transition - Gateway SLA fail_nightly switch gate (report_only)`,
-  * stable strict step `gateway_sla_trend_snapshot --critical-policy fail_nightly` on every nightly run,
+  * step `Operating cycle - Gateway SLA policy decision surface (report_only)`,
+  * promoted strict step `gateway_sla_trend_snapshot --critical-policy fail_nightly` only when `operating_cycle_summary.json.effective_policy = fail_nightly`,
   * summary section `Gateway SLA Fail-Nightly Transition`,
-  * cache/artifact path `runs/nightly-gateway-sla-transition`.
+  * summary section `Gateway SLA Operating Cycle`,
+  * cache/artifact paths `runs/nightly-gateway-sla-transition` and `runs/nightly-gateway-sla-operating-cycle`.
 
 Recovery rule (calendar-day guardrail compatible):
 
@@ -956,33 +959,22 @@ History consistency hotfix (`2026-03-03`):
 * Backfill is not done for old runs: a valid accumulation window for `valid_count` is considered
   from the first nightly run after merge hotfix.
 
-## G2 Stable Strict Nightly (active policy)
+## G2 Managed Nightly Promotion
 
-Operational goal: keep nightly strict enforcement (`critical_policy=fail_nightly`) as
-stable operating mode without changing runtime API, using `readiness/governance/progress/transition`
-like telemetry/remediation layer.
+Operational goal: keep `pytest.yml` and local smoke on `signal_only`, while nightly promotion to
+`fail_nightly` is decided by `gateway_sla_operating_cycle_v1` and remains additive to the runtime API.
 
-Update (`2026-03-03`, manual switch override):
+Managed policy semantics:
 
-* Nightly strict gate is enabled stably: `gateway_sla_trend_snapshot --critical-policy fail_nightly`
-  executed on every nightly run.
-* `readiness/governance/progress/transition` remain decision telemetry layer (reason-codes/remaining gap),
-  not runtime gate condition.
-* `pytest.yml` remains `signal_only` (`nightly_only` strict enforcement surface).
-
-Historical baseline (locked on `2026-03-03` before stable strict switch):
-
-* `python -m pytest -q`: `383 passed`.
-* `progress.remaining_for_window = 12`.
-* `progress.remaining_for_streak = 3`.
-* `transition.allow_switch = false`.
-* `transition.decision_status = hold`.
-* `cadence.forecast.earliest_go_candidate_at_utc = 2026-03-14T16:56:45.954644+00:00`.
-
-Historical note:
-
-* This baseline belongs to the conservative gate phase and is saved only for traceability.
-* After manual switch, override nightly strict gate no longer depends on `transition.allow_switch`.
+* PR/local baseline stays `signal_only`.
+* Nightly strict enforcement surface stays `nightly_only`.
+* `run_gateway_sla_operating_cycle.py` is the canonical decision surface for:
+  * `effective_policy`
+  * `promotion_state`
+  * `blocking_reason_codes`
+  * `recommended_actions`
+  * `next_review_at_utc`
+* If `promotion_state != eligible`, nightly continues publishing `signal_only` posture and skips the promoted strict `fail_nightly` step.
 
 ### Daily loop (primary = nightly, fallback = manual)
 
@@ -1013,6 +1005,13 @@ Operating cycle contract (`gateway_sla_operating_cycle_v1`):
 * `schema_version = gateway_sla_operating_cycle_v1`
 * `status = ok|error`
 * `policy = report_only`
+* `effective_policy = signal_only|fail_nightly`
+* `promotion_state = hold|blocked|eligible`
+* `enforcement_surface = nightly_only`
+* `blocking_reason_codes`
+* `recommended_actions`
+* `next_review_at_utc`
+* `profile_scope = baseline_first`
 * `precheck.required_sources_fresh_current_utc_day = true|false`
 * `precheck.manual_snapshot_reused = true|false`
 * `cycle.source = nightly|manual|unknown`
@@ -1054,6 +1053,7 @@ Behavior:
   * `check_gateway_sla_fail_nightly_remediation.py`
   * `check_gateway_sla_fail_nightly_integrity.py`
 * The fallback order is fixed: `cadence` must be updated to `remediation/integrity` in order for the optional source `manual_cadence` to be consistent in the same loop.
+* Gateway safe actions additionally expose `gateway_sla_operating_cycle_smoke` as the canonical smoke-only action for refreshing the policy decision surface through the operator API.
 
 Daily acceptance checks:
 
@@ -1070,16 +1070,16 @@ Daily acceptance checks:
 * `remaining_for_window` decreases by accounted run.
 * `next_accounted_dispatch_at_utc` does not violate the guardrail of `1 accounted run / UTC day`.
 
-### Post-switch monitoring
+### Post-promotion monitoring
 
-* In nightly-loop the following are required:
-  * strict trend gate (`fail_nightly`);
+* In the nightly loop the following are required:
+  * promoted strict trend gate (`fail_nightly`) only when `effective_policy = fail_nightly`;
   * decision telemetry summaries (`readiness/governance/progress/transition`);
-  * remediation snapshot (`runs/nightly-gateway-sla-remediation/remediation_summary.json`).
-  * integrity snapshot (`runs/nightly-gateway-sla-integrity/integrity_summary.json`).
-* If nightly fail source-of-truth for triage - workflow-published `remediation_summary.json`; `candidate_items` is expanded into 3-5 `G2`-only paragraphs in the session/TODO docs.
-* `transition.allow_switch` and related reason-codes are used only for diagnostics/traceability
-  and do not block the launch of strict nightly.
+  * remediation snapshot (`runs/nightly-gateway-sla-remediation/remediation_summary.json`);
+  * integrity snapshot (`runs/nightly-gateway-sla-integrity/integrity_summary.json`);
+  * operating-cycle summary (`runs/nightly-gateway-sla-operating-cycle/operating_cycle_summary.json`).
+* If nightly fails, source-of-truth for baseline promotion triage is the workflow-published `operating_cycle_summary.json`
+  plus `remediation_summary.json`.
 
 ## G2.4: Gateway SLA fail_nightly remediation snapshot
 

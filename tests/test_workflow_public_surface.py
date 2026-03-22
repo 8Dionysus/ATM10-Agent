@@ -75,6 +75,7 @@ def test_gateway_nightly_public_summary_is_sanitized() -> None:
     governance_block = _extract_step_block(text, "Summary - Gateway SLA fail_nightly governance")
     progress_block = _extract_step_block(text, "Summary - Gateway SLA fail_nightly progress")
     transition_block = _extract_step_block(text, "Summary - Gateway SLA fail_nightly transition")
+    operating_cycle_block = _extract_step_block(text, "Summary - Gateway SLA operating cycle")
     remediation_block = _extract_step_block(text, "Summary - Gateway SLA fail_nightly remediation")
     integrity_block = _extract_step_block(text, "Summary - Gateway SLA fail_nightly integrity")
     upload_artifact_block = _extract_step_block(text, "Upload artifact - Gateway SLA readiness nightly runs")
@@ -87,6 +88,8 @@ def test_gateway_nightly_public_summary_is_sanitized() -> None:
         assert token not in progress_block
     for token in ("allow_switch", "latest_ready_streak", "invalid_or_mismatched_count", "target_policy", "reason_codes"):
         assert token not in transition_block
+    for token in ("blocking_reason_codes", "recommended_actions", "actionable_message", "profile_scope"):
+        assert token not in operating_cycle_block
     for token in ("candidate_item_ids", "reason_codes"):
         assert token not in remediation_block
     for token in ("telemetry_ok", "dual_write_ok", "anti_double_count_ok", "utc_guardrail_status", "reason_codes"):
@@ -99,6 +102,8 @@ def test_gateway_nightly_public_summary_is_sanitized() -> None:
     assert "transition_summary.json" in upload_artifact_block
     assert "remediation_summary.json" in upload_artifact_block
     assert "integrity_summary.json" in upload_artifact_block
+    assert "operating_cycle_summary.json" in upload_artifact_block
+    assert "triage_brief.md" in upload_artifact_block
     for line in (
         "runs/nightly-gateway-sla-history",
         "runs/nightly-gateway-sla-trend-history",
@@ -108,6 +113,7 @@ def test_gateway_nightly_public_summary_is_sanitized() -> None:
         "runs/nightly-gateway-sla-transition",
         "runs/nightly-gateway-sla-remediation",
         "runs/nightly-gateway-sla-integrity",
+        "runs/nightly-gateway-sla-operating-cycle",
     ):
         assert f"{line}\n" not in upload_artifact_block
 
