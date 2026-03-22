@@ -26,6 +26,53 @@ def _set_mtime(path: Path, dt: datetime) -> None:
     os.utime(path, (ts, ts))
 
 
+def _write_operating_cycle_summary(
+    runs_dir: Path,
+    *,
+    promotion_state: str = "blocked",
+    blocking_reason_codes: list[str] | None = None,
+    recommended_actions: list[dict[str, object]] | None = None,
+) -> Path:
+    summary_path = runs_dir / "nightly-gateway-sla-operating-cycle" / "operating_cycle_summary.json"
+    summary_path.parent.mkdir(parents=True, exist_ok=True)
+    summary_path.write_text(
+        json.dumps(
+            {
+                "schema_version": "gateway_sla_operating_cycle_v1",
+                "status": "ok",
+                "checked_at_utc": "2026-03-22T18:00:00+00:00",
+                "policy": "report_only",
+                "effective_policy": "signal_only",
+                "promotion_state": promotion_state,
+                "enforcement_surface": "nightly_only",
+                "blocking_reason_codes": blocking_reason_codes or [],
+                "recommended_actions": recommended_actions or [],
+                "next_review_at_utc": "2026-03-23T03:35:00+00:00",
+                "profile_scope": "baseline_first",
+                "actionable_message": "Operator cycle summary for tests.",
+                "triage": {
+                    "remaining_for_window": 0,
+                    "remaining_for_streak": 0,
+                    "transition_allow_switch": promotion_state == "eligible",
+                    "candidate_item_count": 0,
+                    "integrity_status": "clean",
+                    "attention_state": "ready_for_accounted_run",
+                },
+                "interpretation": {
+                    "telemetry_repair_required": False,
+                    "remediation_backlog_primary": False,
+                    "blocked_manual_gate": False,
+                    "next_action_hint": "continue",
+                },
+                "paths": {"summary_json": str(summary_path)},
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+    return summary_path
+
+
 def test_gateway_v1_http_service_healthz_ok(tmp_path: Path) -> None:
     policy = gateway_http.GatewayHTTPPolicy(
         max_request_body_bytes=10_000,
@@ -64,6 +111,17 @@ def test_gateway_v1_http_service_healthz_ok(tmp_path: Path) -> None:
 
 
 def test_gateway_v1_http_service_operator_snapshot_returns_gateway_centered_payload(tmp_path: Path) -> None:
+    _write_operating_cycle_summary(
+        tmp_path / "runs",
+        promotion_state="blocked",
+        blocking_reason_codes=["remediation_backlog_pending"],
+        recommended_actions=[
+            {
+                "action_key": "gateway_sla_operating_cycle_smoke",
+                "reason": "Refresh policy surface",
+            }
+        ],
+    )
     app = gateway_http.create_app(runs_dir=tmp_path / "runs")
     with TestClient(app) as client:
         response = client.get("/v1/operator/snapshot")
@@ -80,6 +138,11 @@ def test_gateway_v1_http_service_operator_snapshot_returns_gateway_centered_payl
     assert payload["stack_services"]["neo4j"]["status"] == "not_configured"
     assert payload["operator_context"]["profiles"]["supported_profiles"] == list(gateway_http.SUPPORTED_PROFILES)
     assert payload["operator_context"]["artifact_roots"]["operator_runs_dir"] == str(tmp_path / "runs")
+    assert payload["operator_context"]["governance"]["diagnostics"]["top_blocker"] == "remediation_backlog_pending"
+    assert (
+        payload["operator_context"]["governance"]["diagnostics"]["next_safe_action"]
+        == "gateway_sla_operating_cycle_smoke"
+    )
     assert isinstance(payload["latest_metrics"]["summary_matrix"], list)
 
 
@@ -126,6 +189,7 @@ def test_gateway_v1_http_service_operator_snapshot_passes_optional_service_urls(
 
 
 def test_gateway_v1_http_service_operator_snapshot_reads_latest_startup_artifact(tmp_path: Path) -> None:
+    _write_operating_cycle_summary(tmp_path / "gateway-runs")
     operator_runs_dir = tmp_path / "operator-runs"
     startup_run_dir = operator_runs_dir / "20260322_120000-start-operator-product"
     startup_run_dir.mkdir(parents=True, exist_ok=True)
@@ -179,6 +243,8 @@ def test_gateway_v1_http_service_operator_snapshot_reads_latest_startup_artifact
     payload = response.json()
     assert payload["operator_context"]["startup"]["status"] == "running"
     assert payload["operator_context"]["startup"]["paths"]["run_json"] == str(run_json_path)
+    assert payload["operator_context"]["startup"]["diagnostics"]["overall_state"] == "healthy"
+    assert payload["operator_context"]["startup"]["diagnostics"]["primary_issue"] is None
 
 
 def test_gateway_v1_http_service_operator_runs_returns_schema(tmp_path: Path) -> None:

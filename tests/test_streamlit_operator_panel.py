@@ -453,6 +453,8 @@ def test_safe_actions_tab_source_uses_gateway_and_not_local_subprocess() -> None
     assert "Next Action" in source_text
     assert "Live Readiness" in source_text
     assert "Manual Fallback Status" in source_text
+    assert "Startup diagnostics" in source_text
+    assert "Governance diagnostics" in source_text
 
 
 def test_safe_actions_audit_append_and_load_newest_first(tmp_path: Path) -> None:
@@ -1094,6 +1096,95 @@ def test_build_operator_governance_summary_prefers_repair_and_transition_when_av
     assert summary["recommended_actions"][0]["action_key"] == "gateway_sla_operating_cycle_smoke"
     assert summary["next_action_hint"] == "repair_telemetry_first"
     assert summary["integrity_status"] == "attention"
+    assert summary["diagnostics"]["top_blocker"] == "telemetry_repair_required"
+    assert summary["diagnostics"]["next_safe_action"] == "gateway_sla_operating_cycle_smoke"
+
+
+def test_build_operator_governance_summary_diagnostics_allow_state() -> None:
+    summary = panel.build_operator_governance_summary(
+        progress_snapshot={
+            "reason_codes": [],
+            "remaining_for_window": 0,
+            "remaining_for_streak": 0,
+            "missing_sources": [],
+            "source_paths": {"readiness": "runs/readiness.json"},
+        },
+        transition_snapshot={
+            "allow_switch": True,
+            "recommendation": {"target_critical_policy": "fail_nightly", "reason_codes": []},
+            "paths": {"summary_json": "runs/transition.json"},
+        },
+        remediation_snapshot={
+            "candidate_items": [],
+            "reason_codes": [],
+            "paths": {"summary_json": "runs/remediation.json"},
+        },
+        integrity_snapshot={
+            "decision": {"integrity_status": "clean", "reason_codes": []},
+            "paths": {"summary_json": "runs/integrity.json"},
+        },
+        operating_cycle_snapshot={
+            "effective_policy": "fail_nightly",
+            "promotion_state": "eligible",
+            "blocking_reason_codes": [],
+            "recommended_actions": [
+                {
+                    "action_key": "gateway_sla_operating_cycle_smoke",
+                    "reason": "keep policy evidence fresh",
+                }
+            ],
+            "triage": {
+                "remaining_for_window": 0,
+                "remaining_for_streak": 0,
+                "candidate_item_count": 0,
+                "attention_state": "ready_for_accounted_run",
+            },
+            "interpretation": {
+                "telemetry_repair_required": False,
+                "remediation_backlog_primary": False,
+                "blocked_manual_gate": False,
+            },
+            "cycle": {"operating_mode": "reuse_fresh_latest", "manual_execution_mode": "accounted"},
+            "paths": {"summary_json": "runs/operating_cycle.json"},
+        },
+    )
+
+    assert summary is not None
+    assert summary["promotion_state"] == "eligible"
+    assert summary["diagnostics"]["top_blocker"] == "none"
+    assert summary["diagnostics"]["next_safe_action"] == "gateway_sla_operating_cycle_smoke"
+
+
+def test_build_operator_governance_summary_diagnostics_missing_source_fallback() -> None:
+    summary = panel.build_operator_governance_summary(
+        progress_snapshot=None,
+        transition_snapshot=None,
+        remediation_snapshot=None,
+        integrity_snapshot=None,
+        operating_cycle_snapshot={
+            "effective_policy": "signal_only",
+            "promotion_state": "hold",
+            "blocking_reason_codes": [],
+            "recommended_actions": [],
+            "triage": {
+                "remaining_for_window": 0,
+                "remaining_for_streak": 0,
+                "candidate_item_count": 0,
+                "attention_state": "ready_for_accounted_run",
+            },
+            "interpretation": {
+                "telemetry_repair_required": False,
+                "remediation_backlog_primary": False,
+                "blocked_manual_gate": False,
+            },
+            "paths": {"summary_json": "runs/operating_cycle.json"},
+        },
+    )
+
+    assert summary is not None
+    assert summary["status"] == "degraded"
+    assert summary["diagnostics"]["top_blocker"] == "required_sources_not_fresh"
+    assert summary["diagnostics"]["next_safe_action"] == "gateway_sla_operating_cycle_smoke"
 
 
 def test_load_fail_nightly_remediation_snapshot_schema_mismatch_is_warning(tmp_path: Path) -> None:

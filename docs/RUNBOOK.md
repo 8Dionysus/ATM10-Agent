@@ -299,6 +299,16 @@ python scripts/gateway_v1_http_service.py --host 127.0.0.1 --port 8770 --runs-di
 
 With external services configured, `/v1/operator/snapshot` additively returns `operator_context.profiles.supported_profiles`, `operator_context.profiles.combo_a`, and probe rows for `qdrant` / `neo4j`.
 
+Operator diagnostics surface (additive, schema-compatible):
+
+* `operator_context.startup.diagnostics.overall_state = healthy|degraded|stopped|unknown|not_available`
+* `operator_context.startup.diagnostics.primary_issue` uses deterministic priority:
+  * launcher `error` field
+  * failing `last_checkpoint`
+  * failing service probe from `session_state`
+* `operator_context.governance.diagnostics.top_blocker` is the first `blocking_reason_codes` item (or `none`)
+* `operator_context.governance.diagnostics.next_safe_action` is the first recommended `action_key` (or `null`)
+
 ### Gateway request over HTTP
 
 ```powershell

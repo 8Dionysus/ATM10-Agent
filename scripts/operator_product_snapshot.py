@@ -671,8 +671,130 @@ def load_latest_operator_startup_status(
                 "tts_runtime_service_log": paths_payload.get("tts_runtime_service_log"),
             },
         }
+        summary["diagnostics"] = _build_startup_diagnostics(summary)
         return summary, warnings
     return None, warnings
+
+
+def _find_startup_service_probe_issue(
+    session_state: Mapping[str, Any] | None,
+) -> str | None:
+    if not isinstance(session_state, Mapping):
+        return None
+
+    preferred_order = ("gateway", "streamlit", "voice_runtime_service", "tts_runtime_service")
+    ordered_services: list[str] = [name for name in preferred_order if name in session_state]
+    ordered_services.extend(
+        sorted(str(name) for name in session_state.keys() if str(name) not in preferred_order)
+    )
+    for service_name in ordered_services:
+        entry = session_state.get(service_name)
+        if not isinstance(entry, Mapping):
+            continue
+        entry_status = str(entry.get("status", "")).strip().lower()
+        probe = entry.get("last_probe")
+        probe = probe if isinstance(probe, Mapping) else {}
+        probe_status = str(probe.get("status", "")).strip().lower()
+        if entry_status in {"error", "failed", "fail", "degraded"}:
+            issue = _coalesce(entry.get("error"), probe.get("error"), f"status={entry_status}")
+            return f"{service_name}: {issue}"
+        if probe_status in {"error", "failed", "fail", "degraded"}:
+            issue = _coalesce(probe.get("error"), f"last_probe.status={probe_status}")
+            return f"{service_name}: {issue}"
+    return None
+
+
+def _build_startup_diagnostics(
+    startup_snapshot: Mapping[str, Any] | None,
+) -> dict[str, Any]:
+    if not isinstance(startup_snapshot, Mapping):
+        return {
+            "overall_state": "not_available",
+            "primary_issue": "startup_artifact_not_found",
+        }
+
+    status = str(startup_snapshot.get("status", "")).strip().lower()
+    snapshot_error = startup_snapshot.get("error")
+    snapshot_error = snapshot_error.strip() if isinstance(snapshot_error, str) else None
+    last_checkpoint = startup_snapshot.get("last_checkpoint")
+    last_checkpoint = last_checkpoint if isinstance(last_checkpoint, Mapping) else {}
+    checkpoint_status = str(last_checkpoint.get("status", "")).strip().lower()
+    failing_checkpoint = checkpoint_status in {"error", "failed", "fail", "degraded"}
+    service_issue = _find_startup_service_probe_issue(startup_snapshot.get("session_state"))
+
+    primary_issue: str | None = None
+    if snapshot_error:
+        primary_issue = snapshot_error
+    elif failing_checkpoint:
+        stage = str(last_checkpoint.get("stage") or "checkpoint").strip()
+        message = str(last_checkpoint.get("message", "")).strip()
+        if message:
+            primary_issue = f"{stage}: {checkpoint_status}: {message}"
+        else:
+            primary_issue = f"{stage}: {checkpoint_status}"
+    elif service_issue:
+        primary_issue = service_issue
+
+    if status in {"error", "failed", "fail", "degraded"} or primary_issue is not None:
+        overall_state = "degraded"
+    elif status in {"running", "ok"}:
+        overall_state = "healthy"
+    elif status == "stopped":
+        overall_state = "stopped"
+    elif status in {"not_available", "missing"}:
+        overall_state = "not_available"
+    else:
+        overall_state = "unknown"
+
+    return {
+        "overall_state": overall_state,
+        "primary_issue": primary_issue,
+    }
+
+
+def _attach_startup_diagnostics(
+    startup_snapshot: dict[str, Any] | None,
+) -> dict[str, Any] | None:
+    if not isinstance(startup_snapshot, dict):
+        return startup_snapshot
+    enriched = dict(startup_snapshot)
+    enriched["diagnostics"] = _build_startup_diagnostics(startup_snapshot)
+    return enriched
+
+
+def _build_governance_diagnostics(
+    governance_summary: Mapping[str, Any] | None,
+) -> dict[str, Any]:
+    if not isinstance(governance_summary, Mapping):
+        return {
+            "top_blocker": "none",
+            "next_safe_action": None,
+        }
+    blocking_reason_codes = _normalize_reason_codes(governance_summary.get("blocking_reason_codes"))
+    recommended_actions = governance_summary.get("recommended_actions")
+    next_safe_action: str | None = None
+    if isinstance(recommended_actions, list):
+        for item in recommended_actions:
+            if not isinstance(item, Mapping):
+                continue
+            action_key = str(item.get("action_key", "")).strip()
+            if action_key:
+                next_safe_action = action_key
+                break
+    return {
+        "top_blocker": blocking_reason_codes[0] if blocking_reason_codes else "none",
+        "next_safe_action": next_safe_action,
+    }
+
+
+def _attach_governance_diagnostics(
+    governance_summary: dict[str, Any] | None,
+) -> dict[str, Any] | None:
+    if not isinstance(governance_summary, dict):
+        return governance_summary
+    enriched = dict(governance_summary)
+    enriched["diagnostics"] = _build_governance_diagnostics(governance_summary)
+    return enriched
 
 
 def build_operator_governance_summary(
@@ -824,7 +946,7 @@ def build_operator_governance_summary(
     if not available_sources:
         status = "not_available"
 
-    return {
+    summary = {
         "schema_version": GATEWAY_OPERATOR_GOVERNANCE_SCHEMA,
         "status": status,
         "decision_status": decision_status,
@@ -863,6 +985,8 @@ def build_operator_governance_summary(
         "missing_sources": missing_sources,
         "source_paths": source_paths,
     }
+    summary["diagnostics"] = _build_governance_diagnostics(summary)
+    return summary
 
 
 def load_operator_policy_surface_context(
@@ -1217,7 +1341,9 @@ def build_operator_runs_payload(
 ) -> dict[str, Any]:
     effective_operator_runs_dir = Path(operator_runs_dir) if operator_runs_dir is not None else Path(runs_dir)
     startup_status, startup_warnings = load_latest_operator_startup_status(effective_operator_runs_dir)
+    startup_status = _attach_startup_diagnostics(startup_status)
     policy_context, policy_warnings = load_operator_policy_surface_context(runs_dir)
+    governance_summary = _attach_governance_diagnostics(policy_context["governance"])
     combo_a_operating_cycle, combo_a_operating_cycle_warnings = load_combo_a_operating_cycle_snapshot(runs_dir)
     rows = build_run_explorer_rows(canonical_summary_sources(runs_dir))
     return {
@@ -1232,7 +1358,7 @@ def build_operator_runs_payload(
         },
         "operator_context": {
             "startup": startup_status,
-            "governance": policy_context["governance"],
+            "governance": governance_summary,
             "operating_cycle": policy_context["operating_cycle"],
             "profiles": {
                 "default_profile": DEFAULT_PROFILE,
@@ -1262,6 +1388,7 @@ def build_operator_history_payload(
     max_candidates_per_source: int = 200,
 ) -> dict[str, Any]:
     policy_context, policy_warnings = load_operator_policy_surface_context(runs_dir)
+    governance_summary = _attach_governance_diagnostics(policy_context["governance"])
     combo_a_operating_cycle, combo_a_operating_cycle_warnings = load_combo_a_operating_cycle_snapshot(runs_dir)
     rows, warnings = build_metrics_history_rows(
         runs_dir,
@@ -1281,7 +1408,7 @@ def build_operator_history_payload(
         "warnings": warnings,
         "available_sources": list(canonical_history_roots(runs_dir).keys()),
         "operator_context": {
-            "governance": policy_context["governance"],
+            "governance": governance_summary,
             "operating_cycle": policy_context["operating_cycle"],
             "profiles": {
                 "default_profile": DEFAULT_PROFILE,
@@ -1409,7 +1536,8 @@ def build_operator_product_snapshot(
     operating_cycle_snapshot = policy_context["operating_cycle"]
     combo_a_operating_cycle_snapshot, combo_a_operating_cycle_warnings = load_combo_a_operating_cycle_snapshot(runs_dir)
     startup_snapshot, startup_warnings = load_latest_operator_startup_status(effective_operator_runs_dir)
-    governance_summary = policy_context["governance"]
+    startup_snapshot = _attach_startup_diagnostics(startup_snapshot)
+    governance_summary = _attach_governance_diagnostics(policy_context["governance"])
 
     service_warnings: list[str] = []
     voice_health = fetch_service_health(

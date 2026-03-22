@@ -947,15 +947,23 @@ def _render_operator_startup_section(snapshot: dict[str, Any] | None, warnings: 
         )
         return
 
-    if str(snapshot.get("status")) == "error":
+    startup_status = str(snapshot.get("status", "")).strip().lower()
+    if startup_status == "not_available":
+        st.info(
+            "Operator startup artifacts are not available yet. "
+            "Launch the canonical stack with `python scripts/start_operator_product.py --runs-dir runs`."
+        )
+    elif startup_status == "error":
         st.error(
             "Latest operator startup run ended with status=error.\n"
             f"{_coalesce(snapshot.get('error'), 'See launcher artifacts for details.')}"
         )
-    elif str(snapshot.get("status")) == "stopped":
+    elif startup_status == "stopped":
         st.info("Latest operator startup run is stopped; the session artifact is still available for review.")
-    else:
+    elif startup_status in {"running", "ok"}:
         st.success("Latest operator startup artifact loaded.")
+    else:
+        st.info(f"Latest operator startup artifact loaded with status={startup_status or 'unknown'}.")
 
     last_checkpoint = snapshot.get("last_checkpoint")
     last_checkpoint = last_checkpoint if isinstance(last_checkpoint, dict) else {}
@@ -970,6 +978,20 @@ def _render_operator_startup_section(snapshot: dict[str, Any] | None, warnings: 
         "last_stage_message": last_checkpoint.get("message"),
     }
     st.dataframe([startup_row], width="stretch")
+
+    diagnostics = snapshot.get("diagnostics")
+    diagnostics = diagnostics if isinstance(diagnostics, dict) else {}
+    if diagnostics:
+        st.caption("Startup diagnostics")
+        st.dataframe(
+            [
+                {
+                    "overall_state": diagnostics.get("overall_state"),
+                    "primary_issue": diagnostics.get("primary_issue"),
+                }
+            ],
+            width="stretch",
+        )
 
     session_state = snapshot.get("session_state")
     session_state = session_state if isinstance(session_state, dict) else {}
@@ -1080,6 +1102,19 @@ def _render_operator_governance_section(summary: dict[str, Any] | None) -> None:
         "degraded_sources": ", ".join(_normalize_reason_codes(summary.get("degraded_sources"))),
     }
     st.dataframe([governance_row], width="stretch")
+    diagnostics = summary.get("diagnostics")
+    diagnostics = diagnostics if isinstance(diagnostics, dict) else {}
+    if diagnostics:
+        st.caption("Governance diagnostics")
+        st.dataframe(
+            [
+                {
+                    "top_blocker": diagnostics.get("top_blocker"),
+                    "next_safe_action": diagnostics.get("next_safe_action"),
+                }
+            ],
+            width="stretch",
+        )
     reason_codes = _normalize_reason_codes(summary.get("reason_codes"))
     if reason_codes:
         st.caption("Governance reason codes")
