@@ -115,6 +115,10 @@ jobs:
         run: |
           python scripts/gateway_v1_smoke.py --scenario core --runs-dir runs/ci-smoke-gateway-core --summary-json runs/ci-smoke-gateway-core/gateway_smoke_summary.json
 
+      - name: Smoke - Gateway v1 (hybrid scenario)
+        run: |
+          python scripts/gateway_v1_smoke.py --scenario hybrid --runs-dir runs/ci-smoke-gateway-hybrid --summary-json runs/ci-smoke-gateway-hybrid/gateway_smoke_summary.json
+
       - name: Smoke - Gateway v1 (automation scenario)
         run: |
           python scripts/gateway_v1_smoke.py --scenario automation --runs-dir runs/ci-smoke-gateway-automation --summary-json runs/ci-smoke-gateway-automation/gateway_smoke_summary.json
@@ -122,6 +126,10 @@ jobs:
       - name: Smoke - Gateway v1 HTTP (core scenario)
         run: |
           python scripts/gateway_v1_http_smoke.py --scenario core --runs-dir runs/ci-smoke-gateway-http-core --summary-json runs/ci-smoke-gateway-http-core/gateway_http_smoke_summary.json
+
+      - name: Smoke - Gateway v1 HTTP (hybrid scenario)
+        run: |
+          python scripts/gateway_v1_http_smoke.py --scenario hybrid --runs-dir runs/ci-smoke-gateway-http-hybrid --summary-json runs/ci-smoke-gateway-http-hybrid/gateway_http_smoke_summary.json
 
       - name: Smoke - Gateway v1 HTTP (automation scenario)
         run: |
@@ -184,6 +192,7 @@ jobs:
         shell: pwsh
         run: |
           $core = Get-Content "runs/ci-smoke-gateway-core/gateway_smoke_summary.json" | ConvertFrom-Json
+          $hybrid = Get-Content "runs/ci-smoke-gateway-hybrid/gateway_smoke_summary.json" | ConvertFrom-Json
           $automation = Get-Content "runs/ci-smoke-gateway-automation/gateway_smoke_summary.json" | ConvertFrom-Json
           $lines = @(
             "## Gateway Smoke Summaries",
@@ -191,6 +200,7 @@ jobs:
             "| scenario | status | request_count |",
             "|---|---|---:|",
             "| core | $($core.status) | $($core.request_count) |",
+            "| hybrid | $($hybrid.status) | $($hybrid.request_count) |",
             "| automation | $($automation.status) | $($automation.request_count) |"
           )
           $lines -join "`n" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
@@ -199,6 +209,7 @@ jobs:
         shell: pwsh
         run: |
           $core = Get-Content "runs/ci-smoke-gateway-http-core/gateway_http_smoke_summary.json" | ConvertFrom-Json
+          $hybrid = Get-Content "runs/ci-smoke-gateway-http-hybrid/gateway_http_smoke_summary.json" | ConvertFrom-Json
           $automation = Get-Content "runs/ci-smoke-gateway-http-automation/gateway_http_smoke_summary.json" | ConvertFrom-Json
           $lines = @(
             "## Gateway HTTP Smoke Summaries",
@@ -206,6 +217,7 @@ jobs:
             "| scenario | status | request_count | failed_requests_count |",
             "|---|---|---:|---:|",
             "| core | $($core.status) | $($core.request_count) | $($core.failed_requests_count) |",
+            "| hybrid | $($hybrid.status) | $($hybrid.request_count) | $($hybrid.failed_requests_count) |",
             "| automation | $($automation.status) | $($automation.request_count) | $($automation.failed_requests_count) |"
           )
           $lines -join "`n" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
@@ -303,8 +315,10 @@ jobs:
             runs/ci-smoke-automation-chain-inventory/contract_summary.json
             runs/ci-smoke-automation-chain-open-world-map/contract_summary.json
             runs/ci-smoke-gateway-core/gateway_smoke_summary.json
+            runs/ci-smoke-gateway-hybrid/gateway_smoke_summary.json
             runs/ci-smoke-gateway-automation/gateway_smoke_summary.json
             runs/ci-smoke-gateway-http-core/gateway_http_smoke_summary.json
+            runs/ci-smoke-gateway-http-hybrid/gateway_http_smoke_summary.json
             runs/ci-smoke-gateway-http-automation/gateway_http_smoke_summary.json
             runs/ci-smoke-gateway-sla/gateway_sla_summary.json
             runs/ci-smoke-gateway-sla-trend/**/gateway_sla_trend_snapshot.json
