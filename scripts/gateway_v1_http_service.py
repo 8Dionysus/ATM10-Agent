@@ -204,6 +204,7 @@ def _build_response(
 def _build_health_payload(
     *,
     runs_dir: Path,
+    operator_runs_dir: Path,
     policy: GatewayHTTPPolicy,
     service_token: str | None,
     expose_openapi: bool,
@@ -213,6 +214,7 @@ def _build_health_payload(
         "status": "ok",
         "service": "gateway_v1_http_service",
         "runs_dir": str(runs_dir),
+        "operator_runs_dir": str(operator_runs_dir),
         "auth_enabled": bool(service_token),
         "api_docs_exposed": bool(expose_openapi),
         "policy": asdict(policy),
@@ -299,6 +301,7 @@ def _parse_csv_values(raw_value: str | None) -> list[str] | None:
 def create_app(
     *,
     runs_dir: Path,
+    operator_runs_dir: Path | None = None,
     policy: GatewayHTTPPolicy | None = None,
     service_token: str | None = None,
     expose_openapi: bool = False,
@@ -306,6 +309,7 @@ def create_app(
     tts_service_url: str | None = None,
     operator_health_timeout_sec: float = 1.5,
 ) -> Any:
+    effective_operator_runs_dir = Path(operator_runs_dir) if operator_runs_dir is not None else Path(runs_dir)
     effective_policy = policy or GatewayHTTPPolicy()
     _validate_policy(effective_policy)
     effective_service_token = _resolve_service_token(service_token)
@@ -356,6 +360,7 @@ def create_app(
             return JSONResponse(status_code=map_gateway_http_status(response), content=response)
         return _build_health_payload(
             runs_dir=runs_dir,
+            operator_runs_dir=effective_operator_runs_dir,
             policy=effective_policy,
             service_token=effective_service_token,
             expose_openapi=expose_openapi,
@@ -375,6 +380,7 @@ def create_app(
             )
         gateway_health = _build_health_payload(
             runs_dir=runs_dir,
+            operator_runs_dir=effective_operator_runs_dir,
             policy=effective_policy,
             service_token=effective_service_token,
             expose_openapi=expose_openapi,
@@ -382,6 +388,7 @@ def create_app(
         return build_operator_product_snapshot(
             runs_dir=runs_dir,
             gateway_health=gateway_health,
+            operator_runs_dir=effective_operator_runs_dir,
             voice_service_url=voice_service_url,
             tts_service_url=tts_service_url,
             health_timeout_sec=operator_health_timeout_sec,
@@ -400,7 +407,11 @@ def create_app(
                     "error": "unauthorized",
                 },
             )
-        return build_operator_runs_payload(runs_dir=runs_dir, limit=limit)
+        return build_operator_runs_payload(
+            runs_dir=runs_dir,
+            operator_runs_dir=effective_operator_runs_dir,
+            limit=limit,
+        )
 
     @app.get("/v1/operator/history")
     def _operator_history(
@@ -708,6 +719,15 @@ def parse_args() -> argparse.Namespace:
         help="Run artifact base directory (default: runs/gateway-http).",
     )
     parser.add_argument(
+        "--operator-runs-dir",
+        type=Path,
+        default=None,
+        help=(
+            "Operator artifact base directory used to resolve launcher/session artifacts "
+            "(default: same as --runs-dir)."
+        ),
+    )
+    parser.add_argument(
         "--max-request-bytes",
         type=int,
         default=262_144,
@@ -834,6 +854,7 @@ def main() -> int:
     )
     app = create_app(
         runs_dir=args.runs_dir,
+        operator_runs_dir=args.operator_runs_dir,
         policy=policy,
         service_token=service_token,
         expose_openapi=args.expose_openapi,

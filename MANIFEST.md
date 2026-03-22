@@ -1,6 +1,6 @@
 # MANIFEST.md
 
-Current as of: 2026-03-20
+Current as of: 2026-03-22
 
 ## Snapshot
 
@@ -28,9 +28,9 @@ Current as of: 2026-03-20
 - Gateway manual fallback loop: `scripts/run_gateway_sla_manual_nightly.py` + `scripts/check_gateway_sla_manual_cycle_summary.py` + `scripts/check_gateway_sla_manual_cadence_brief.py`.
 - Gateway single-cycle operator helper: `scripts/run_gateway_sla_operating_cycle.py` (`gateway_sla_operating_cycle_v1`, reuse-fresh-latest or manual-fallback).
 - Gateway SLA readiness nightly: `.github/workflows/gateway-sla-readiness-nightly.yml` with `readiness/governance/progress/transition/remediation/integrity` summary/artifact wiring.
-- Gateway operator APIs: `GET /v1/operator/snapshot`, `GET /v1/operator/runs`, `GET /v1/operator/history`, `GET /v1/operator/safe-actions`, `POST /v1/operator/safe-actions/run` from `scripts/gateway_v1_http_service.py`.
-- Streamlit operator panel: `scripts/streamlit_operator_panel.py` + `scripts/streamlit_operator_panel_smoke.py`, with gateway-first `Stack Health`, `Run Explorer`, `Latest Metrics`, and gateway-mediated smoke-only `Safe Actions`.
-- Primary operator startup profile: `scripts/start_operator_product.py` (canonical local launch path for `gateway + Streamlit`, with opt-in managed `voice_runtime_service` / `tts_runtime_service`).
+- Gateway operator APIs: `GET /v1/operator/snapshot`, `GET /v1/operator/runs`, `GET /v1/operator/history`, `GET /v1/operator/safe-actions`, `POST /v1/operator/safe-actions/run` from `scripts/gateway_v1_http_service.py`, with additive `operator_context` / artifact-root wiring for startup-session and governance surfaces.
+- Streamlit operator panel: `scripts/streamlit_operator_panel.py` + `scripts/streamlit_operator_panel_smoke.py`, with gateway-first `Stack Health`, `Run Explorer`, `Latest Metrics`, gateway-mediated smoke-only `Safe Actions`, and scenario-first operator blocks for startup-session + governance posture.
+- Primary operator startup profile: `scripts/start_operator_product.py` (canonical local launch path for `gateway + Streamlit`, with opt-in managed `voice_runtime_service` / `tts_runtime_service`, `startup_plan.json`, session-state checkpoints, and artifact pointers for the operator surface).
 - Dependency profiles: `requirements-voice.txt`, `requirements-llm.txt`, `requirements-export.txt`, `requirements-audit.txt`.
 - Dependency audit: `scripts/dependency_audit.py` + report-only CI step with uploaded `dependency-audit-report` artifact.
 

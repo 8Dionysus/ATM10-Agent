@@ -78,6 +78,12 @@ def test_canonical_fail_nightly_remediation_source_returns_expected_path(tmp_pat
     )
 
 
+def test_canonical_fail_nightly_transition_source_returns_expected_path(tmp_path: Path) -> None:
+    assert panel.canonical_fail_nightly_transition_source(tmp_path) == (
+        tmp_path / "nightly-gateway-sla-transition" / "transition_summary.json"
+    )
+
+
 def test_canonical_fail_nightly_integrity_source_returns_expected_path(tmp_path: Path) -> None:
     assert panel.canonical_fail_nightly_integrity_source(tmp_path) == (
         tmp_path / "nightly-gateway-sla-integrity" / "integrity_summary.json"
@@ -667,6 +673,135 @@ def test_load_fail_nightly_remediation_snapshot_invalid_json_is_warning(tmp_path
     assert snapshot is None
     assert warnings
     assert any("failed to parse JSON" in item for item in warnings)
+
+
+def test_load_fail_nightly_transition_snapshot_happy_path(tmp_path: Path) -> None:
+    summary_path = panel.canonical_fail_nightly_transition_source(tmp_path)
+    _write_json(
+        summary_path,
+        {
+            "schema_version": "gateway_sla_fail_nightly_transition_v1",
+            "status": "ok",
+            "decision_status": "allow",
+            "allow_switch": True,
+            "checked_at_utc": "2026-03-12T08:05:00+00:00",
+            "policy": "report_only",
+            "observed": {
+                "progress": {
+                    "remaining_for_window": 0,
+                    "remaining_for_streak": 0,
+                }
+            },
+            "recommendation": {
+                "target_critical_policy": "fail_nightly",
+                "switch_surface": "nightly_only",
+                "reason_codes": [],
+            },
+            "paths": {"summary_json": str(summary_path)},
+        },
+    )
+
+    snapshot, warnings = panel.load_fail_nightly_transition_snapshot(tmp_path)
+    assert warnings == []
+    assert snapshot is not None
+    assert snapshot["decision_status"] == "allow"
+    assert snapshot["allow_switch"] is True
+    assert snapshot["recommendation"]["target_critical_policy"] == "fail_nightly"
+
+
+def test_load_latest_operator_startup_status_happy_path(tmp_path: Path) -> None:
+    run_dir = tmp_path / "20260322_120000-start-operator-product"
+    run_dir.mkdir(parents=True, exist_ok=True)
+    run_json_path = run_dir / "run.json"
+    startup_plan_json = run_dir / "startup_plan.json"
+    startup_plan_json.write_text("{}", encoding="utf-8")
+    _write_json(
+        run_json_path,
+        {
+            "schema_version": "operator_product_startup_v1",
+            "mode": "start_operator_product",
+            "status": "running",
+            "profile": "operator_product_core",
+            "timestamp_utc": "2026-03-22T12:00:00+00:00",
+            "gateway_url": "http://127.0.0.1:8770",
+            "streamlit_url": "http://127.0.0.1:8501",
+            "paths": {
+                "run_json": str(run_json_path),
+                "startup_plan_json": str(startup_plan_json),
+                "gateway_log": str(run_dir / "gateway.log"),
+                "streamlit_log": str(run_dir / "streamlit.log"),
+            },
+            "session_state": {
+                "gateway": {
+                    "service_name": "gateway",
+                    "managed": True,
+                    "configured": True,
+                    "effective_url": "http://127.0.0.1:8770",
+                    "status": "running",
+                    "pid": 1234,
+                    "last_probe": {"status": "ok"},
+                }
+            },
+            "child_processes": {"gateway": {"pid": 1234, "return_code": None}},
+            "startup_checkpoints": [{"stage": "probe", "status": "ok"}],
+            "last_checkpoint": {"stage": "probe", "status": "ok"},
+        },
+    )
+
+    snapshot, warnings = panel.load_latest_operator_startup_status(tmp_path)
+    assert warnings == []
+    assert snapshot is not None
+    assert snapshot["status"] == "running"
+    assert snapshot["checkpoint_count"] == 1
+    assert snapshot["session_state"]["gateway"]["pid"] == 1234
+
+
+def test_build_operator_governance_summary_prefers_repair_and_transition_when_available() -> None:
+    summary = panel.build_operator_governance_summary(
+        progress_snapshot={
+            "reason_codes": ["insufficient_window_observed"],
+            "remaining_for_window": 4,
+            "remaining_for_streak": 1,
+            "missing_sources": [],
+            "source_paths": {"readiness": "runs/readiness.json"},
+        },
+        transition_snapshot={
+            "allow_switch": True,
+            "recommendation": {"target_critical_policy": "fail_nightly", "reason_codes": []},
+            "paths": {"summary_json": "runs/transition.json"},
+        },
+        remediation_snapshot={
+            "candidate_items": [{"id": "window_accumulation"}],
+            "reason_codes": ["window_accumulation"],
+            "paths": {"summary_json": "runs/remediation.json"},
+        },
+        integrity_snapshot={
+            "decision": {"integrity_status": "attention", "reason_codes": ["required_sources_unhealthy"]},
+            "paths": {"summary_json": "runs/integrity.json"},
+        },
+        operating_cycle_snapshot={
+            "triage": {
+                "remaining_for_window": 4,
+                "remaining_for_streak": 1,
+                "candidate_item_count": 1,
+                "attention_state": "run_recovery_only",
+            },
+            "interpretation": {
+                "telemetry_repair_required": True,
+                "remediation_backlog_primary": False,
+                "blocked_manual_gate": False,
+                "next_action_hint": "repair_telemetry_first",
+            },
+            "cycle": {"operating_mode": "manual_fallback", "manual_execution_mode": "accounted"},
+            "paths": {"summary_json": "runs/operating_cycle.json"},
+        },
+    )
+
+    assert summary is not None
+    assert summary["decision_status"] == "repair"
+    assert summary["recommended_policy"] == "fail_nightly"
+    assert summary["next_action_hint"] == "repair_telemetry_first"
+    assert summary["integrity_status"] == "attention"
 
 
 def test_load_fail_nightly_remediation_snapshot_schema_mismatch_is_warning(tmp_path: Path) -> None:

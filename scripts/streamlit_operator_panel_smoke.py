@@ -21,6 +21,7 @@ from scripts.streamlit_operator_panel import (
     canonical_fail_nightly_integrity_source,
     canonical_fail_nightly_remediation_source,
     canonical_fail_nightly_progress_sources,
+    canonical_fail_nightly_transition_source,
     canonical_operating_cycle_source,
     canonical_summary_sources,
 )
@@ -260,6 +261,9 @@ def run_streamlit_operator_panel_smoke(
         remediation_path = canonical_fail_nightly_remediation_source(panel_runs_dir)
         if not remediation_path.is_file():
             optional_missing_sources.append(str(remediation_path))
+        transition_path = canonical_fail_nightly_transition_source(panel_runs_dir)
+        if not transition_path.is_file():
+            optional_missing_sources.append(str(transition_path))
         integrity_path = canonical_fail_nightly_integrity_source(panel_runs_dir)
         if not integrity_path.is_file():
             optional_missing_sources.append(str(integrity_path))

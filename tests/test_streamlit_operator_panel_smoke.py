@@ -103,6 +103,29 @@ def _write_optional_progress_sources(runs_dir: Path) -> None:
         ),
         encoding="utf-8",
     )
+    transition_path = panel.canonical_fail_nightly_transition_source(runs_dir)
+    transition_path.parent.mkdir(parents=True, exist_ok=True)
+    transition_path.write_text(
+        json.dumps(
+            {
+                "schema_version": "gateway_sla_fail_nightly_transition_v1",
+                "status": "ok",
+                "decision_status": "allow",
+                "allow_switch": True,
+                "checked_at_utc": "2026-03-12T08:05:00+00:00",
+                "policy": "report_only",
+                "observed": {
+                    "progress": {
+                        "remaining_for_window": 0,
+                        "remaining_for_streak": 0,
+                    }
+                },
+                "recommendation": {"target_critical_policy": "fail_nightly", "reason_codes": []},
+                "paths": {"summary_json": str(transition_path)},
+            }
+        ),
+        encoding="utf-8",
+    )
     integrity_path = panel.canonical_fail_nightly_integrity_source(runs_dir)
     integrity_path.parent.mkdir(parents=True, exist_ok=True)
     integrity_path.write_text(
@@ -215,9 +238,10 @@ def test_streamlit_operator_panel_smoke_happy_path(
     assert summary["viewport_baseline"] == {"width": 390, "height": 844, "orientation": "portrait"}
     assert summary["missing_sources"] == []
     assert summary["required_missing_sources"] == []
-    assert len(summary["optional_missing_sources"]) == 6
+    assert len(summary["optional_missing_sources"]) == 7
     assert str(panel.canonical_operating_cycle_source(panel_runs_dir)) in summary["optional_missing_sources"]
     assert str(panel.canonical_fail_nightly_remediation_source(panel_runs_dir)) in summary["optional_missing_sources"]
+    assert str(panel.canonical_fail_nightly_transition_source(panel_runs_dir)) in summary["optional_missing_sources"]
     assert str(panel.canonical_fail_nightly_integrity_source(panel_runs_dir)) in summary["optional_missing_sources"]
 
 

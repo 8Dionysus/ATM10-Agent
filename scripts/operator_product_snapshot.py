@@ -3,13 +3,15 @@ from __future__ import annotations
 import json
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, Mapping
 from urllib import error as url_error
 from urllib import request
 
 GATEWAY_OPERATOR_STATUS_SCHEMA = "gateway_operator_status_v1"
 GATEWAY_OPERATOR_RUNS_SCHEMA = "gateway_operator_runs_v1"
 GATEWAY_OPERATOR_HISTORY_SCHEMA = "gateway_operator_history_v1"
+GATEWAY_OPERATOR_GOVERNANCE_SCHEMA = "gateway_operator_governance_summary_v1"
+OPERATOR_PRODUCT_STARTUP_SCHEMA = "operator_product_startup_v1"
 
 FAIL_NIGHTLY_PROGRESS_SOURCE_SPECS: dict[str, dict[str, tuple[str, ...] | str]] = {
     "readiness": {
@@ -29,6 +31,11 @@ FAIL_NIGHTLY_PROGRESS_SOURCE_SPECS: dict[str, dict[str, tuple[str, ...] | str]] 
 FAIL_NIGHTLY_REMEDIATION_SOURCE_SPEC: dict[str, tuple[str, ...] | str] = {
     "path_parts": ("nightly-gateway-sla-remediation", "remediation_summary.json"),
     "schema_version": "gateway_sla_fail_nightly_remediation_v1",
+}
+
+FAIL_NIGHTLY_TRANSITION_SOURCE_SPEC: dict[str, tuple[str, ...] | str] = {
+    "path_parts": ("nightly-gateway-sla-transition", "transition_summary.json"),
+    "schema_version": "gateway_sla_fail_nightly_transition_v1",
 }
 
 FAIL_NIGHTLY_INTEGRITY_SOURCE_SPEC: dict[str, tuple[str, ...] | str] = {
@@ -110,6 +117,11 @@ def canonical_fail_nightly_remediation_source(runs_dir: Path) -> Path:
     return base.joinpath(*tuple(FAIL_NIGHTLY_REMEDIATION_SOURCE_SPEC["path_parts"]))
 
 
+def canonical_fail_nightly_transition_source(runs_dir: Path) -> Path:
+    base = Path(runs_dir)
+    return base.joinpath(*tuple(FAIL_NIGHTLY_TRANSITION_SOURCE_SPEC["path_parts"]))
+
+
 def canonical_fail_nightly_integrity_source(runs_dir: Path) -> Path:
     base = Path(runs_dir)
     return base.joinpath(*tuple(FAIL_NIGHTLY_INTEGRITY_SOURCE_SPEC["path_parts"]))
@@ -184,6 +196,18 @@ def _normalize_reason_codes(value: Any) -> list[str]:
     if isinstance(value, str) and value.strip():
         return [value.strip()]
     return []
+
+
+def _unique_strings(*values: Any) -> list[str]:
+    seen: set[str] = set()
+    items: list[str] = []
+    for value in values:
+        for item in _normalize_reason_codes(value):
+            if item in seen:
+                continue
+            seen.add(item)
+            items.append(item)
+    return items
 
 
 def load_fail_nightly_progress_snapshot(
@@ -268,6 +292,47 @@ def load_fail_nightly_remediation_snapshot(
     return payload, []
 
 
+def load_fail_nightly_transition_snapshot(
+    runs_dir: Path,
+) -> tuple[dict[str, Any] | None, list[str]]:
+    path = canonical_fail_nightly_transition_source(runs_dir)
+    payload, load_error = _load_optional_contract_payload(
+        "transition",
+        path,
+        expected_schema_version=str(FAIL_NIGHTLY_TRANSITION_SOURCE_SPEC["schema_version"]),
+    )
+    if payload is None:
+        if load_error is not None and load_error.startswith("missing file:"):
+            return None, []
+        return None, [] if load_error is None else [load_error]
+
+    observed = payload.get("observed")
+    observed = observed if isinstance(observed, dict) else {}
+    recommendation = payload.get("recommendation")
+    recommendation = recommendation if isinstance(recommendation, dict) else {}
+    latest = payload.get("latest")
+    latest = latest if isinstance(latest, dict) else {}
+    paths_payload = payload.get("paths")
+    paths_payload = paths_payload if isinstance(paths_payload, dict) else {}
+    snapshot = {
+        "schema_version": str(payload.get("schema_version")),
+        "status": payload.get("status"),
+        "decision_status": payload.get("decision_status"),
+        "allow_switch": payload.get("allow_switch"),
+        "checked_at_utc": payload.get("checked_at_utc"),
+        "policy": payload.get("policy"),
+        "observed": observed,
+        "latest": latest,
+        "recommendation": recommendation,
+        "paths": {
+            "summary_json": _coalesce(paths_payload.get("summary_json"), str(path)),
+            "history_summary_json": paths_payload.get("history_summary_json"),
+        },
+        "source_path": str(path),
+    }
+    return snapshot, []
+
+
 def load_fail_nightly_integrity_snapshot(
     runs_dir: Path,
 ) -> tuple[dict[str, Any] | None, list[str]]:
@@ -322,6 +387,239 @@ def load_operating_cycle_snapshot(
         "source_path": str(path),
     }
     return snapshot, []
+
+
+def _iter_operator_startup_run_dirs(operator_runs_dir: Path) -> list[Path]:
+    if not operator_runs_dir.is_dir():
+        return []
+    candidates = [
+        child
+        for child in operator_runs_dir.iterdir()
+        if child.is_dir()
+        and "start-operator-product" in child.name
+        and (child / "run.json").is_file()
+    ]
+    return sorted(candidates, key=lambda path: path.name, reverse=True)
+
+
+def _normalize_startup_session_state(
+    session_state: Any,
+    child_processes: Mapping[str, Any],
+) -> dict[str, dict[str, Any]]:
+    if not isinstance(session_state, dict):
+        return {}
+    normalized: dict[str, dict[str, Any]] = {}
+    for service_name, raw_entry in session_state.items():
+        entry = raw_entry if isinstance(raw_entry, dict) else {}
+        child_process = child_processes.get(service_name)
+        child_process = child_process if isinstance(child_process, dict) else {}
+        last_probe = entry.get("last_probe")
+        last_probe = last_probe if isinstance(last_probe, dict) else None
+        normalized[str(service_name)] = {
+            "service_name": str(service_name),
+            "managed": bool(entry.get("managed", False)),
+            "status": entry.get("status"),
+            "configured": entry.get("configured"),
+            "effective_url": _coalesce(entry.get("effective_url"), entry.get("url")),
+            "runs_dir": entry.get("runs_dir"),
+            "log_path": entry.get("log_path"),
+            "pid": _coalesce(entry.get("pid"), child_process.get("pid")),
+            "last_probe": last_probe,
+            "error": entry.get("error"),
+            "started_at_utc": entry.get("started_at_utc"),
+            "finished_at_utc": entry.get("finished_at_utc"),
+            "last_event": entry.get("last_event"),
+        }
+    return normalized
+
+
+def load_latest_operator_startup_status(
+    operator_runs_dir: Path,
+) -> tuple[dict[str, Any] | None, list[str]]:
+    root = Path(operator_runs_dir)
+    warnings: list[str] = []
+    for run_dir in _iter_operator_startup_run_dirs(root):
+        run_json_path = run_dir / "run.json"
+        payload, load_error = load_json_object(run_json_path)
+        if payload is None:
+            if load_error is not None:
+                warnings.append(f"{run_json_path}: skipped ({load_error})")
+            continue
+        if str(payload.get("schema_version", "")).strip() != OPERATOR_PRODUCT_STARTUP_SCHEMA:
+            warnings.append(
+                f"{run_json_path}: skipped (schema_version={payload.get('schema_version')!r} "
+                f"expected={OPERATOR_PRODUCT_STARTUP_SCHEMA!r})"
+            )
+            continue
+        if str(payload.get("mode", "")).strip() != "start_operator_product":
+            warnings.append(
+                f"{run_json_path}: skipped (mode={payload.get('mode')!r} expected='start_operator_product')"
+            )
+            continue
+
+        paths_payload = payload.get("paths")
+        paths_payload = paths_payload if isinstance(paths_payload, dict) else {}
+        child_processes = payload.get("child_processes")
+        child_processes = child_processes if isinstance(child_processes, dict) else {}
+        checkpoints = payload.get("startup_checkpoints")
+        checkpoints = checkpoints if isinstance(checkpoints, list) else []
+
+        summary = {
+            "schema_version": "operator_product_startup_status_v1",
+            "status": payload.get("status"),
+            "profile": payload.get("profile"),
+            "timestamp_utc": payload.get("timestamp_utc"),
+            "started_at_utc": payload.get("started_at_utc"),
+            "stopped_at_utc": payload.get("stopped_at_utc"),
+            "finished_at_utc": payload.get("finished_at_utc"),
+            "error": payload.get("error"),
+            "gateway_url": payload.get("gateway_url"),
+            "streamlit_url": payload.get("streamlit_url"),
+            "effective_urls": payload.get("effective_urls"),
+            "managed_processes": payload.get("managed_processes"),
+            "session_state": _normalize_startup_session_state(
+                payload.get("session_state"),
+                child_processes,
+            ),
+            "child_processes": child_processes,
+            "checkpoint_count": len(checkpoints),
+            "last_checkpoint": payload.get("last_checkpoint"),
+            "paths": {
+                "run_dir": str(run_dir),
+                "run_json": str(run_json_path),
+                "startup_plan_json": paths_payload.get("startup_plan_json"),
+                "gateway_log": paths_payload.get("gateway_log"),
+                "streamlit_log": paths_payload.get("streamlit_log"),
+                "voice_runtime_service_log": paths_payload.get("voice_runtime_service_log"),
+                "tts_runtime_service_log": paths_payload.get("tts_runtime_service_log"),
+            },
+        }
+        return summary, warnings
+    return None, warnings
+
+
+def build_operator_governance_summary(
+    *,
+    progress_snapshot: dict[str, Any] | None,
+    transition_snapshot: dict[str, Any] | None,
+    remediation_snapshot: dict[str, Any] | None,
+    integrity_snapshot: dict[str, Any] | None,
+    operating_cycle_snapshot: dict[str, Any] | None,
+) -> dict[str, Any] | None:
+    available_sources: list[str] = []
+    missing_sources: list[str] = []
+    source_paths: dict[str, Any] = {}
+
+    for source_name, snapshot in (
+        ("progress", progress_snapshot),
+        ("transition", transition_snapshot),
+        ("remediation", remediation_snapshot),
+        ("integrity", integrity_snapshot),
+        ("operating_cycle", operating_cycle_snapshot),
+    ):
+        if snapshot is None:
+            missing_sources.append(source_name)
+            continue
+        available_sources.append(source_name)
+        if source_name == "progress":
+            source_paths[source_name] = snapshot.get("source_paths")
+            continue
+        paths_payload = snapshot.get("paths")
+        paths_payload = paths_payload if isinstance(paths_payload, dict) else {}
+        source_paths[source_name] = _coalesce(
+            paths_payload.get("summary_json"),
+            snapshot.get("source_path"),
+        )
+
+    if not available_sources:
+        return None
+
+    operating_cycle_triage = _nested_get(operating_cycle_snapshot, "triage")
+    operating_cycle_triage = operating_cycle_triage if isinstance(operating_cycle_triage, dict) else {}
+    operating_cycle_interpretation = _nested_get(operating_cycle_snapshot, "interpretation")
+    operating_cycle_interpretation = (
+        operating_cycle_interpretation if isinstance(operating_cycle_interpretation, dict) else {}
+    )
+    transition_recommendation = _nested_get(transition_snapshot, "recommendation")
+    transition_recommendation = (
+        transition_recommendation if isinstance(transition_recommendation, dict) else {}
+    )
+    integrity_decision = _nested_get(integrity_snapshot, "decision")
+    integrity_decision = integrity_decision if isinstance(integrity_decision, dict) else {}
+    remediation_candidate_items = _nested_get(remediation_snapshot, "candidate_items")
+    remediation_candidate_items = (
+        remediation_candidate_items if isinstance(remediation_candidate_items, list) else []
+    )
+
+    degraded_sources = sorted(
+        set(_normalize_reason_codes(_nested_get(progress_snapshot, "missing_sources"))) | set(missing_sources)
+    )
+    recommended_policy = _coalesce(
+        transition_recommendation.get("target_critical_policy"),
+        _nested_get(progress_snapshot, "target_critical_policy"),
+    )
+    transition_allow_switch = bool(_nested_get(transition_snapshot, "allow_switch"))
+    integrity_status = integrity_decision.get("integrity_status")
+    telemetry_repair_required = bool(operating_cycle_interpretation.get("telemetry_repair_required"))
+    remediation_backlog_primary = bool(operating_cycle_interpretation.get("remediation_backlog_primary"))
+    blocked_manual_gate = bool(operating_cycle_interpretation.get("blocked_manual_gate"))
+    candidate_item_count = _coalesce(
+        operating_cycle_triage.get("candidate_item_count"),
+        len(remediation_candidate_items),
+        0,
+    )
+
+    decision_status = "hold"
+    actionable_message = "Keep signal_only until governance surfaces converge."
+    if telemetry_repair_required or str(integrity_status).strip() == "attention":
+        decision_status = "repair"
+        actionable_message = "Repair telemetry and integrity signals before tightening nightly policy."
+    elif transition_allow_switch:
+        decision_status = "allow"
+        actionable_message = "Operator surfaces indicate fail_nightly is ready on the nightly-only path."
+    elif remediation_backlog_primary or int(candidate_item_count) > 0:
+        decision_status = "remediate"
+        actionable_message = "Work the remediation backlog before switching to a stricter nightly policy."
+    elif blocked_manual_gate:
+        decision_status = "hold"
+        actionable_message = "Wait for the manual gate to clear before the next accounted dispatch."
+
+    status = "ok" if not degraded_sources else "degraded"
+    if not available_sources:
+        status = "not_available"
+
+    return {
+        "schema_version": GATEWAY_OPERATOR_GOVERNANCE_SCHEMA,
+        "status": status,
+        "decision_status": decision_status,
+        "recommended_policy": recommended_policy,
+        "actionable_message": actionable_message,
+        "reason_codes": _unique_strings(
+            transition_recommendation.get("reason_codes"),
+            _nested_get(progress_snapshot, "reason_codes"),
+            _nested_get(remediation_snapshot, "reason_codes"),
+            integrity_decision.get("reason_codes"),
+        ),
+        "next_action_hint": operating_cycle_interpretation.get("next_action_hint"),
+        "transition_allow_switch": transition_allow_switch,
+        "remaining_for_window": _coalesce(
+            operating_cycle_triage.get("remaining_for_window"),
+            _nested_get(progress_snapshot, "remaining_for_window"),
+        ),
+        "remaining_for_streak": _coalesce(
+            operating_cycle_triage.get("remaining_for_streak"),
+            _nested_get(progress_snapshot, "remaining_for_streak"),
+        ),
+        "candidate_item_count": candidate_item_count,
+        "attention_state": operating_cycle_triage.get("attention_state"),
+        "integrity_status": integrity_status,
+        "operating_mode": _nested_get(operating_cycle_snapshot, "cycle", "operating_mode"),
+        "manual_execution_mode": _nested_get(operating_cycle_snapshot, "cycle", "manual_execution_mode"),
+        "degraded_sources": degraded_sources,
+        "available_sources": available_sources,
+        "missing_sources": missing_sources,
+        "source_paths": source_paths,
+    }
 
 
 def build_metrics_rows(sources: dict[str, Path]) -> list[dict[str, Any]]:
@@ -512,8 +810,11 @@ def build_metrics_history_rows(
 def build_operator_runs_payload(
     runs_dir: Path,
     *,
+    operator_runs_dir: Path | None = None,
     limit: int = 20,
 ) -> dict[str, Any]:
+    effective_operator_runs_dir = Path(operator_runs_dir) if operator_runs_dir is not None else Path(runs_dir)
+    startup_status, startup_warnings = load_latest_operator_startup_status(effective_operator_runs_dir)
     rows = build_run_explorer_rows(canonical_summary_sources(runs_dir))
     return {
         "schema_version": GATEWAY_OPERATOR_RUNS_SCHEMA,
@@ -521,6 +822,16 @@ def build_operator_runs_payload(
         "status": "ok",
         "rows": rows[: max(int(limit), 1)],
         "available_sources": list(canonical_summary_sources(runs_dir).keys()),
+        "artifact_roots": {
+            "runs_dir": str(runs_dir),
+            "operator_runs_dir": str(effective_operator_runs_dir),
+        },
+        "operator_context": {
+            "startup": startup_status,
+        },
+        "warnings": {
+            "startup": startup_warnings,
+        },
     }
 
 
@@ -641,15 +952,26 @@ def build_operator_product_snapshot(
     *,
     runs_dir: Path,
     gateway_health: dict[str, Any],
+    operator_runs_dir: Path | None = None,
     voice_service_url: str | None = None,
     tts_service_url: str | None = None,
     health_timeout_sec: float = 1.5,
     service_token: str | None = None,
 ) -> dict[str, Any]:
+    effective_operator_runs_dir = Path(operator_runs_dir) if operator_runs_dir is not None else Path(runs_dir)
     progress_snapshot, progress_warnings = load_fail_nightly_progress_snapshot(runs_dir)
+    transition_snapshot, transition_warnings = load_fail_nightly_transition_snapshot(runs_dir)
     remediation_snapshot, remediation_warnings = load_fail_nightly_remediation_snapshot(runs_dir)
     integrity_snapshot, integrity_warnings = load_fail_nightly_integrity_snapshot(runs_dir)
     operating_cycle_snapshot, operating_cycle_warnings = load_operating_cycle_snapshot(runs_dir)
+    startup_snapshot, startup_warnings = load_latest_operator_startup_status(effective_operator_runs_dir)
+    governance_summary = build_operator_governance_summary(
+        progress_snapshot=progress_snapshot,
+        transition_snapshot=transition_snapshot,
+        remediation_snapshot=remediation_snapshot,
+        integrity_snapshot=integrity_snapshot,
+        operating_cycle_snapshot=operating_cycle_snapshot,
+    )
 
     service_warnings: list[str] = []
     voice_health = fetch_service_health(
@@ -688,20 +1010,31 @@ def build_operator_product_snapshot(
             "voice_runtime_service": voice_health,
             "tts_runtime_service": tts_health,
         },
+        "operator_context": {
+            "artifact_roots": {
+                "gateway_runs_dir": str(runs_dir),
+                "operator_runs_dir": str(effective_operator_runs_dir),
+            },
+            "startup": startup_snapshot,
+            "governance": governance_summary,
+        },
         "latest_metrics": {
             "summary_matrix": build_metrics_rows(canonical_summary_sources(runs_dir)),
             "operating_cycle": operating_cycle_snapshot,
             "fail_nightly_progress": progress_snapshot,
+            "fail_nightly_transition": transition_snapshot,
             "fail_nightly_remediation": remediation_snapshot,
             "fail_nightly_integrity": integrity_snapshot,
         },
         "warnings": {
             "metrics": [
                 *progress_warnings,
+                *transition_warnings,
                 *remediation_warnings,
                 *integrity_warnings,
                 *operating_cycle_warnings,
             ],
             "service_probes": service_warnings,
+            "startup": startup_warnings,
         },
     }

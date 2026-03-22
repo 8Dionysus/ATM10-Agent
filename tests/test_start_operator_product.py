@@ -14,12 +14,15 @@ def test_build_startup_plan_uses_primary_operator_profile_defaults() -> None:
 
     assert plan["schema_version"] == "operator_product_startup_v1"
     assert plan["profile"] == "operator_product_core"
+    assert plan["artifact_roots"]["operator_runs_dir"] == str(Path("runs"))
     assert plan["gateway"]["url"] == "http://127.0.0.1:8770"
     assert plan["streamlit"]["url"] == "http://127.0.0.1:8501"
     assert plan["gateway"]["runs_dir"] == str(Path("runs") / "gateway-http")
     assert plan["streamlit"]["runs_dir"] == str(Path("runs"))
     assert "scripts/gateway_v1_http_service.py" in plan["gateway"]["command"]
+    assert "--operator-runs-dir" in plan["gateway"]["command"]
     assert "scripts/streamlit_operator_panel.py" in plan["streamlit"]["command"]
+    assert "--operator-runs-dir" in plan["streamlit"]["command"]
 
 
 def test_parse_args_derives_child_run_dirs_from_base_runs_dir(tmp_path: Path) -> None:
@@ -167,7 +170,11 @@ def test_start_operator_product_smoke_managed_runtime_path(
     assert run_dirs
     run_payload = json.loads((run_dirs[0] / "run.json").read_text(encoding="utf-8"))
     assert run_payload["status"] == "stopped"
+    assert Path(run_payload["paths"]["startup_plan_json"]).is_file()
     assert run_payload["managed_processes"]["voice_runtime_service"]["managed"] is True
+    assert run_payload["session_state"]["gateway"]["status"] == "stopped"
+    assert run_payload["session_state"]["voice_runtime_service"]["last_probe"]["status"] == "ok"
+    assert run_payload["startup_checkpoints"]
 
 
 def test_start_operator_product_print_plan_json(capsys) -> None:

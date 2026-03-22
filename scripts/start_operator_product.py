@@ -117,6 +117,8 @@ def build_startup_plan(args: argparse.Namespace) -> dict[str, Any]:
         str(args.gateway_port),
         "--runs-dir",
         str(args.gateway_runs_dir),
+        "--operator-runs-dir",
+        str(args.runs_dir),
         "--operator-health-timeout-sec",
         str(args.gateway_timeout_sec),
     ]
@@ -138,6 +140,8 @@ def build_startup_plan(args: argparse.Namespace) -> dict[str, Any]:
         "--",
         "--runs-dir",
         str(args.panel_runs_dir),
+        "--operator-runs-dir",
+        str(args.runs_dir),
         "--gateway-url",
         gateway_url,
         "--gateway-timeout-sec",
@@ -147,6 +151,13 @@ def build_startup_plan(args: argparse.Namespace) -> dict[str, Any]:
         "schema_version": SCHEMA_VERSION,
         "profile": "operator_product_core",
         "generated_at_utc": _utc_now(),
+        "artifact_roots": {
+            "operator_runs_dir": str(args.runs_dir),
+            "panel_runs_dir": str(args.panel_runs_dir),
+            "gateway_runs_dir": str(args.gateway_runs_dir),
+            "voice_runtime_runs_dir": str(args.voice_runtime_runs_dir),
+            "tts_runtime_runs_dir": str(args.tts_runtime_runs_dir),
+        },
         "managed_processes": managed_processes,
         "gateway": {
             "url": gateway_url,
@@ -161,6 +172,136 @@ def build_startup_plan(args: argparse.Namespace) -> dict[str, Any]:
             "command": streamlit_command,
         },
     }
+
+
+def _build_initial_session_state(plan: dict[str, Any], run_dir: Path) -> dict[str, dict[str, Any]]:
+    session_state: dict[str, dict[str, Any]] = {}
+    for service_name, service_plan in plan["managed_processes"].items():
+        session_state[service_name] = {
+            "service_name": service_name,
+            "managed": bool(service_plan.get("managed")),
+            "configured": bool(service_plan.get("url")),
+            "effective_url": service_plan.get("url"),
+            "runs_dir": service_plan.get("runs_dir"),
+            "log_path": str(run_dir / f"{service_name}.log"),
+            "status": "pending" if service_plan.get("managed") else (
+                "external" if service_plan.get("url") else "not_configured"
+            ),
+            "pid": None,
+            "last_probe": None,
+            "error": None,
+            "started_at_utc": None,
+            "finished_at_utc": None,
+            "last_event": "plan_resolved",
+        }
+
+    session_state["gateway"] = {
+        "service_name": "gateway",
+        "managed": True,
+        "configured": True,
+        "effective_url": plan["gateway"]["url"],
+        "runs_dir": plan["gateway"]["runs_dir"],
+        "log_path": str(run_dir / "gateway.log"),
+        "status": "pending",
+        "pid": None,
+        "last_probe": None,
+        "error": None,
+        "started_at_utc": None,
+        "finished_at_utc": None,
+        "last_event": "plan_resolved",
+    }
+    session_state["streamlit"] = {
+        "service_name": "streamlit",
+        "managed": True,
+        "configured": True,
+        "effective_url": plan["streamlit"]["url"],
+        "runs_dir": plan["streamlit"]["runs_dir"],
+        "log_path": str(run_dir / "streamlit.log"),
+        "status": "pending",
+        "pid": None,
+        "last_probe": None,
+        "error": None,
+        "started_at_utc": None,
+        "finished_at_utc": None,
+        "last_event": "plan_resolved",
+    }
+    return session_state
+
+
+def _update_session_entry(
+    run_payload: dict[str, Any],
+    service_name: str,
+    **updates: Any,
+) -> None:
+    session_state = run_payload.setdefault("session_state", {})
+    entry = session_state.setdefault(service_name, {"service_name": service_name})
+    for key, value in updates.items():
+        if value is not None:
+            entry[key] = value
+
+
+def _append_startup_checkpoint(
+    run_payload: dict[str, Any],
+    *,
+    stage: str,
+    status: str,
+    service_name: str | None = None,
+    message: str | None = None,
+    details: dict[str, Any] | None = None,
+) -> None:
+    checkpoint = {
+        "timestamp_utc": _utc_now(),
+        "stage": stage,
+        "status": status,
+        "service_name": service_name,
+        "message": message,
+        "details": details or {},
+    }
+    run_payload.setdefault("startup_checkpoints", []).append(checkpoint)
+    run_payload["last_checkpoint"] = checkpoint
+
+
+def _update_child_process_state(
+    run_payload: dict[str, Any],
+    service_name: str,
+    process: subprocess.Popen[str] | None,
+) -> None:
+    child_processes = run_payload.setdefault("child_processes", {})
+    if process is None:
+        child_processes.setdefault(service_name, {"pid": None, "return_code": None})
+        return
+    child_processes[service_name] = {
+        "pid": process.pid,
+        "return_code": process.returncode if process.poll() is not None else None,
+    }
+
+
+def _mark_probe_result(
+    run_payload: dict[str, Any],
+    service_name: str,
+    *,
+    payload: dict[str, Any] | None,
+    error: str | None,
+) -> None:
+    probe_status = "ok" if payload is not None else "error"
+    probe_payload = {
+        "checked_at_utc": _utc_now(),
+        "status": probe_status,
+        "error": error,
+        "payload": payload,
+    }
+    updates: dict[str, Any] = {
+        "last_probe": probe_payload,
+        "last_event": "probe_ok" if payload is not None else "probe_error",
+    }
+    if payload is not None:
+        updates["status"] = "running"
+        updates["error"] = None
+    else:
+        updates["status"] = "error"
+        updates["error"] = error
+        updates["finished_at_utc"] = _utc_now()
+    _update_session_entry(run_payload, service_name, **updates)
 
 
 def _wait_for_gateway_operator_snapshot(
@@ -349,6 +490,8 @@ def main(argv: list[str] | None = None) -> int:
     now = datetime.now(timezone.utc)
     run_dir = _create_run_dir(args.runs_dir, now)
     run_json_path = run_dir / "run.json"
+    startup_plan_json_path = run_dir / "startup_plan.json"
+    _write_json(startup_plan_json_path, plan)
     run_payload: dict[str, Any] = {
         "schema_version": SCHEMA_VERSION,
         "timestamp_utc": now.astimezone(timezone.utc).isoformat(),
@@ -357,10 +500,18 @@ def main(argv: list[str] | None = None) -> int:
         "profile": plan["profile"],
         "gateway_url": plan["gateway"]["url"],
         "streamlit_url": plan["streamlit"]["url"],
+        "effective_urls": {
+            "gateway": plan["gateway"]["url"],
+            "streamlit": plan["streamlit"]["url"],
+            "voice_runtime_service": plan["gateway"].get("voice_runtime_url"),
+            "tts_runtime_service": plan["gateway"].get("tts_runtime_url"),
+        },
+        "artifact_roots": dict(plan.get("artifact_roots") or {}),
         "managed_processes": plan["managed_processes"],
         "paths": {
             "run_dir": str(run_dir),
             "run_json": str(run_json_path),
+            "startup_plan_json": str(startup_plan_json_path),
             "gateway_log": str(run_dir / "gateway.log"),
             "streamlit_log": str(run_dir / "streamlit.log"),
         },
@@ -368,17 +519,31 @@ def main(argv: list[str] | None = None) -> int:
             "gateway": list(plan["gateway"]["command"]),
             "streamlit": list(plan["streamlit"]["command"]),
         },
+        "session_state": _build_initial_session_state(plan, run_dir),
+        "startup_checkpoints": [],
+        "last_checkpoint": None,
         "child_processes": {},
     }
     for service_name, service_plan in plan["managed_processes"].items():
         if service_plan.get("managed"):
             run_payload["paths"][f"{service_name}_log"] = str(run_dir / f"{service_name}.log")
             run_payload["commands"][service_name] = list(service_plan["command"])
+    _append_startup_checkpoint(
+        run_payload,
+        stage="plan",
+        status="ok",
+        message="startup plan resolved",
+        details={"profile": plan["profile"]},
+    )
     _write_json(run_json_path, run_payload)
 
     gateway_process = None
     streamlit_process = None
     managed_processes: list[tuple[str, subprocess.Popen[str]]] = []
+    process_map: dict[str, subprocess.Popen[str]] = {}
+    exit_code = 0
+    final_status = "stopped"
+    final_error: str | None = None
     try:
         for service_name in ("voice_runtime_service", "tts_runtime_service"):
             service_plan = plan["managed_processes"].get(service_name, {})
@@ -386,36 +551,151 @@ def main(argv: list[str] | None = None) -> int:
                 continue
             process = _launch_process(service_plan["command"], run_dir / f"{service_name}.log")
             managed_processes.append((service_name, process))
+            process_map[service_name] = process
+            _update_session_entry(
+                run_payload,
+                service_name,
+                status="starting",
+                pid=process.pid,
+                started_at_utc=_utc_now(),
+                last_event="process_started",
+            )
+            _update_child_process_state(run_payload, service_name, process)
+            _append_startup_checkpoint(
+                run_payload,
+                stage="launch",
+                status="ok",
+                service_name=service_name,
+                message="managed runtime process started",
+                details={"pid": process.pid, "url": service_plan.get("url")},
+            )
+            _write_json(run_json_path, run_payload)
             health_payload, health_error = _wait_for_runtime_health(
                 str(service_plan["url"]),
                 timeout_sec=args.startup_timeout_sec,
             )
             if health_payload is None:
+                _mark_probe_result(
+                    run_payload,
+                    service_name,
+                    payload=None,
+                    error=health_error,
+                )
+                _append_startup_checkpoint(
+                    run_payload,
+                    stage="probe",
+                    status="error",
+                    service_name=service_name,
+                    message="managed runtime health probe failed",
+                    details={"error": health_error},
+                )
                 raise RuntimeError(
                     f"{service_name} did not become ready within startup timeout: {health_error}"
                 )
+            _mark_probe_result(
+                run_payload,
+                service_name,
+                payload={
+                    "status": health_payload.get("status"),
+                    "service": health_payload.get("service"),
+                },
+                error=None,
+            )
+            _append_startup_checkpoint(
+                run_payload,
+                stage="probe",
+                status="ok",
+                service_name=service_name,
+                message="managed runtime health probe succeeded",
+                details={"status": health_payload.get("status")},
+            )
+            _write_json(run_json_path, run_payload)
 
         gateway_process = _launch_process(plan["gateway"]["command"], run_dir / "gateway.log")
+        process_map["gateway"] = gateway_process
+        _update_session_entry(
+            run_payload,
+            "gateway",
+            status="starting",
+            pid=gateway_process.pid,
+            started_at_utc=_utc_now(),
+            last_event="process_started",
+        )
+        _update_child_process_state(run_payload, "gateway", gateway_process)
+        _append_startup_checkpoint(
+            run_payload,
+            stage="launch",
+            status="ok",
+            service_name="gateway",
+            message="gateway process started",
+            details={"pid": gateway_process.pid, "url": plan["gateway"]["url"]},
+        )
+        _write_json(run_json_path, run_payload)
         operator_snapshot, gateway_error = _wait_for_gateway_operator_snapshot(
             plan["gateway"]["url"],
             timeout_sec=args.startup_timeout_sec,
         )
         if operator_snapshot is None:
+            _mark_probe_result(
+                run_payload,
+                "gateway",
+                payload=None,
+                error=gateway_error,
+            )
+            _append_startup_checkpoint(
+                run_payload,
+                stage="probe",
+                status="error",
+                service_name="gateway",
+                message="gateway operator snapshot probe failed",
+                details={"error": gateway_error},
+            )
             raise RuntimeError(
                 "Gateway operator snapshot did not become ready within startup timeout: "
                 f"{gateway_error}"
             )
+        _mark_probe_result(
+            run_payload,
+            "gateway",
+            payload={
+                "status": operator_snapshot.get("status"),
+                "checked_at_utc": operator_snapshot.get("checked_at_utc"),
+            },
+            error=None,
+        )
+        _append_startup_checkpoint(
+            run_payload,
+            stage="probe",
+            status="ok",
+            service_name="gateway",
+            message="gateway operator snapshot probe succeeded",
+            details={"checked_at_utc": operator_snapshot.get("checked_at_utc")},
+        )
 
         streamlit_process = _launch_process(plan["streamlit"]["command"], run_dir / "streamlit.log")
+        process_map["streamlit"] = streamlit_process
+        _update_session_entry(
+            run_payload,
+            "streamlit",
+            status="running",
+            pid=streamlit_process.pid,
+            started_at_utc=_utc_now(),
+            last_event="process_started",
+        )
+        _update_child_process_state(run_payload, "streamlit", streamlit_process)
+        _append_startup_checkpoint(
+            run_payload,
+            stage="launch",
+            status="ok",
+            service_name="streamlit",
+            message="streamlit process started",
+            details={"pid": streamlit_process.pid, "url": plan["streamlit"]["url"]},
+        )
         run_payload["status"] = "running"
         run_payload["started_at_utc"] = _utc_now()
         run_payload["operator_snapshot_checked_at_utc"] = operator_snapshot.get("checked_at_utc")
-        run_payload["child_processes"] = {
-            service_name: {"pid": process.pid}
-            for service_name, process in managed_processes
-        }
-        run_payload["child_processes"]["gateway"] = {"pid": gateway_process.pid}
-        run_payload["child_processes"]["streamlit"] = {"pid": streamlit_process.pid}
+        for service_name, process in process_map.items():
+            _update_child_process_state(run_payload, service_name, process)
         _write_json(run_json_path, run_payload)
 
         print(f"[start_operator_product] gateway_url: {plan['gateway']['url']}")
@@ -424,21 +704,60 @@ def main(argv: list[str] | None = None) -> int:
 
         while True:
             if gateway_process.poll() is not None:
+                _update_session_entry(
+                    run_payload,
+                    "gateway",
+                    status="error",
+                    error="gateway process exited unexpectedly",
+                    finished_at_utc=_utc_now(),
+                    last_event="unexpected_exit",
+                )
+                _append_startup_checkpoint(
+                    run_payload,
+                    stage="watchdog",
+                    status="error",
+                    service_name="gateway",
+                    message="gateway process exited unexpectedly",
+                )
                 raise RuntimeError("gateway process exited unexpectedly")
             if streamlit_process.poll() is not None:
+                _update_session_entry(
+                    run_payload,
+                    "streamlit",
+                    status="error",
+                    error="streamlit process exited unexpectedly",
+                    finished_at_utc=_utc_now(),
+                    last_event="unexpected_exit",
+                )
+                _append_startup_checkpoint(
+                    run_payload,
+                    stage="watchdog",
+                    status="error",
+                    service_name="streamlit",
+                    message="streamlit process exited unexpectedly",
+                )
                 raise RuntimeError("streamlit process exited unexpectedly")
             time.sleep(1.0)
     except KeyboardInterrupt:
-        run_payload["status"] = "stopped"
-        run_payload["stopped_at_utc"] = _utc_now()
-        _write_json(run_json_path, run_payload)
-        return 0
+        final_status = "stopped"
+        exit_code = 0
+        _append_startup_checkpoint(
+            run_payload,
+            stage="shutdown",
+            status="ok",
+            message="keyboard interrupt received; shutting down operator product",
+        )
     except Exception as exc:
-        run_payload["status"] = "error"
-        run_payload["error"] = str(exc)
-        run_payload["finished_at_utc"] = _utc_now()
-        _write_json(run_json_path, run_payload)
-        return 2
+        final_status = "error"
+        final_error = str(exc)
+        exit_code = 2
+        _append_startup_checkpoint(
+            run_payload,
+            stage="shutdown",
+            status="error",
+            message="operator product startup/runtime failed",
+            details={"error": str(exc)},
+        )
     finally:
         if streamlit_process is not None:
             _terminate_process(streamlit_process)
@@ -446,6 +765,37 @@ def main(argv: list[str] | None = None) -> int:
             _terminate_process(gateway_process)
         for _service_name, process in reversed(managed_processes):
             _terminate_process(process)
+        finished_at_utc = _utc_now()
+        for service_name, process in process_map.items():
+            _update_child_process_state(run_payload, service_name, process)
+            entry = run_payload.get("session_state", {}).get(service_name, {})
+            current_status = str(entry.get("status", "")).strip()
+            if current_status == "error":
+                continue
+            if entry.get("pid") is None and current_status == "pending":
+                _update_session_entry(
+                    run_payload,
+                    service_name,
+                    status="not_started",
+                    finished_at_utc=finished_at_utc,
+                    last_event="not_started",
+                )
+                continue
+            _update_session_entry(
+                run_payload,
+                service_name,
+                status="stopped",
+                finished_at_utc=finished_at_utc,
+                last_event="shutdown",
+            )
+        run_payload["status"] = final_status
+        if final_status == "stopped":
+            run_payload["stopped_at_utc"] = finished_at_utc
+        if final_status == "error":
+            run_payload["finished_at_utc"] = finished_at_utc
+            run_payload["error"] = final_error
+        _write_json(run_json_path, run_payload)
+    return exit_code
 
 
 if __name__ == "__main__":
