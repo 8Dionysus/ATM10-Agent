@@ -89,6 +89,7 @@ def test_gateway_v1_smoke_hybrid_ok(tmp_path: Path) -> None:
 
 def test_gateway_v1_smoke_combo_a_ok(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     summary_path = tmp_path / "runs" / "ci-smoke-gateway-combo-a" / "gateway_smoke_summary.json"
+    request_payloads: list[dict[str, object]] = []
 
     def _fake_seed(**kwargs):
         run_dir = kwargs["runs_dir"] / "seed-run"
@@ -106,6 +107,7 @@ def test_gateway_v1_smoke_combo_a_ok(tmp_path: Path, monkeypatch: pytest.MonkeyP
 
     def _fake_run_gateway_request(*, request_payload, runs_dir, now):
         _ = runs_dir, now
+        request_payloads.append(request_payload)
         operation = request_payload["operation"]
         return {
             "run_dir": tmp_path / "gateway-runs" / operation,
@@ -149,6 +151,10 @@ def test_gateway_v1_smoke_combo_a_ok(tmp_path: Path, monkeypatch: pytest.MonkeyP
         "kag_query",
         "hybrid_query",
     ]
+    kag_payload = next(item["payload"] for item in request_payloads if item["operation"] == "kag_query")
+    hybrid_payload = next(item["payload"] for item in request_payloads if item["operation"] == "hybrid_query")
+    assert kag_payload["neo4j_password"] == "secret"
+    assert hybrid_payload["neo4j_password"] == "secret"
 
 
 def test_gateway_v1_smoke_invalid_scenario_raises_value_error(tmp_path: Path) -> None:

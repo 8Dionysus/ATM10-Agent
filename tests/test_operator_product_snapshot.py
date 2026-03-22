@@ -176,3 +176,47 @@ def test_build_operator_history_payload_includes_policy_context(tmp_path: Path) 
     assert payload["operator_warnings"]["policy_surface"]["combo_a_operating_cycle"] == []
     assert combo_a["effective_policy"] == "observe_only"
     assert combo_a["promotion_state"] == "hold"
+
+
+def test_parse_history_row_prefers_run_local_cross_service_history_summary(tmp_path: Path) -> None:
+    run_dir = tmp_path / "runs" / "ci-smoke-cross-service-suite" / "20260322_181500-cross-service-benchmark-suite"
+    run_dir.mkdir(parents=True, exist_ok=True)
+    shared_summary_path = tmp_path / "runs" / "ci-smoke-cross-service-suite" / "cross_service_benchmark_suite.json"
+    history_summary_path = run_dir / "cross_service_benchmark_suite.json"
+    _write_json(
+        shared_summary_path,
+        {
+            "overall_sla_status": "shared-latest",
+            "services": {"gateway": {}, "voice": {}, "tts": {}},
+            "degraded_services": ["gateway", "voice"],
+        },
+    )
+    _write_json(
+        history_summary_path,
+        {
+            "overall_sla_status": "run-local",
+            "services": {"gateway": {}, "voice": {}},
+            "degraded_services": ["voice"],
+        },
+    )
+    _write_json(
+        run_dir / "run.json",
+        {
+            "timestamp_utc": "2026-03-22T18:15:00+00:00",
+            "mode": "cross_service_benchmark_suite",
+            "status": "ok",
+            "paths": {
+                "summary_json": str(shared_summary_path),
+                "history_summary_json": str(history_summary_path),
+            },
+        },
+    )
+
+    row, warning = operator_snapshot._parse_history_row("cross_service_suite", run_dir)
+
+    assert warning is None
+    assert row is not None
+    assert row["details"] == "run-local"
+    assert row["request_count"] == 2
+    assert row["failed_requests_count"] == 1
+    assert row["summary_json"] == str(history_summary_path)

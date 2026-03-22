@@ -95,6 +95,7 @@ def test_gateway_v1_http_smoke_hybrid_ok(tmp_path: Path) -> None:
 
 def test_gateway_v1_http_smoke_combo_a_ok(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     summary_path = tmp_path / "runs" / "ci-smoke-gateway-http-combo-a" / "gateway_http_smoke_summary.json"
+    request_payloads: list[dict[str, object]] = []
 
     def _fake_seed(**kwargs):
         run_dir = kwargs["runs_dir"] / "seed-run"
@@ -140,6 +141,7 @@ def test_gateway_v1_http_smoke_combo_a_ok(tmp_path: Path, monkeypatch: pytest.Mo
 
         def post(self, path: str, json: dict[str, object]):
             assert path == "/v1/gateway"
+            request_payloads.append(json)
             return _FakeResponse(str(json["operation"]))
 
     monkeypatch.setattr(gateway_http_smoke, "seed_combo_a_fixture_data", _fake_seed)
@@ -171,6 +173,10 @@ def test_gateway_v1_http_smoke_combo_a_ok(tmp_path: Path, monkeypatch: pytest.Mo
         "kag_query",
         "hybrid_query",
     ]
+    kag_payload = next(item["payload"] for item in request_payloads if item["operation"] == "kag_query")
+    hybrid_payload = next(item["payload"] for item in request_payloads if item["operation"] == "hybrid_query")
+    assert kag_payload["neo4j_password"] == "secret"
+    assert hybrid_payload["neo4j_password"] == "secret"
 
 
 def test_gateway_v1_http_smoke_invalid_scenario_raises_value_error(tmp_path: Path) -> None:

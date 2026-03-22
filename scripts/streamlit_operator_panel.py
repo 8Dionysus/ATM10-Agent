@@ -1465,6 +1465,14 @@ def run_safe_action(action_key: str, runs_dir: Path, *, timeout_sec: float = 300
     return shared_run_safe_action(action_key, runs_dir, timeout_sec=timeout_sec)
 
 
+def sync_runs_dir_state(session_state: dict[str, Any], runs_dir_raw: str) -> None:
+    previous_runs_dir = str(session_state.get("runs_dir", ""))
+    previous_operator_runs_dir = str(session_state.get("operator_runs_dir", ""))
+    session_state["runs_dir"] = runs_dir_raw
+    if not previous_operator_runs_dir or previous_operator_runs_dir == previous_runs_dir:
+        session_state["operator_runs_dir"] = runs_dir_raw
+
+
 def parse_panel_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Streamlit operator panel v0.")
     parser.add_argument("--runs-dir", type=Path, default=Path("runs"), help="Base runs directory.")
@@ -1907,7 +1915,7 @@ def render_panel(args: argparse.Namespace) -> None:
         if st.button("Refresh"):
             st.session_state["last_refreshed_utc"] = _utc_now()
 
-    st.session_state["runs_dir"] = runs_dir_raw
+    sync_runs_dir_state(st.session_state, runs_dir_raw)
     st.session_state["gateway_url"] = gateway_url
     st.caption(f"last_refreshed_utc: {st.session_state['last_refreshed_utc']}")
 

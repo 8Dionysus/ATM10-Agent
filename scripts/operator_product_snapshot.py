@@ -1074,6 +1074,7 @@ def _parse_history_row(source: str, run_dir: Path) -> tuple[dict[str, Any] | Non
     paths_payload = run_payload.get("paths")
     paths_payload = paths_payload if isinstance(paths_payload, dict) else {}
     summary_json = paths_payload.get("summary_json")
+    history_summary_json = paths_payload.get("history_summary_json")
     row: dict[str, Any] = {
         "schema_version": "metrics_history_row_v1",
         "source": source,
@@ -1081,7 +1082,12 @@ def _parse_history_row(source: str, run_dir: Path) -> tuple[dict[str, Any] | Non
         "status": str(run_payload.get("status", "unknown")),
         "run_dir": str(run_dir),
         "run_json": str(run_json_path),
-        "summary_json": str(summary_json) if isinstance(summary_json, str) else None,
+        "summary_json": (
+            str(history_summary_json)
+            if isinstance(history_summary_json, str)
+            else (str(summary_json) if isinstance(summary_json, str) else None)
+        ),
+        "history_summary_json": str(history_summary_json) if isinstance(history_summary_json, str) else None,
         "request_count": run_payload.get("request_count"),
         "failed_requests_count": None,
         "results_count": None,
@@ -1129,7 +1135,11 @@ def _parse_history_row(source: str, run_dir: Path) -> tuple[dict[str, Any] | Non
         return row, None
 
     if source in {"cross_service_suite", "cross_service_suite_combo_a"}:
-        summary_path = Path(str(summary_json)) if isinstance(summary_json, str) else (run_dir / "cross_service_benchmark_suite.json")
+        summary_path = (
+            Path(str(history_summary_json))
+            if isinstance(history_summary_json, str)
+            else (run_dir / "cross_service_benchmark_suite.json")
+        )
         summary_payload, summary_error = load_json_object(summary_path)
         if summary_error is not None or summary_payload is None:
             return None, f"{source}: missing or invalid cross_service_benchmark_suite.json in {run_dir}"

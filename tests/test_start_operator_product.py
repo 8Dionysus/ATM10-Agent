@@ -206,6 +206,61 @@ def test_start_operator_product_smoke_managed_runtime_path(
     assert run_payload["startup_checkpoints"]
 
 
+def test_start_operator_product_marks_never_launched_streamlit_not_started(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    class _FakeProcess:
+        _next_pid = 6000
+
+        def __init__(self) -> None:
+            type(self)._next_pid += 1
+            self.pid = type(self)._next_pid
+
+        def poll(self):
+            return None
+
+        def terminate(self):
+            return None
+
+        def wait(self, timeout: float | None = None):
+            return 0
+
+        def kill(self):
+            return None
+
+    def _fake_launch_process(command: list[str], log_path: Path):
+        _ = command
+        log_path.parent.mkdir(parents=True, exist_ok=True)
+        log_path.write_text("", encoding="utf-8")
+        return _FakeProcess()
+
+    monkeypatch.setattr(start_operator_product, "_launch_process", _fake_launch_process)
+    monkeypatch.setattr(
+        start_operator_product,
+        "_wait_for_gateway_operator_snapshot",
+        lambda gateway_url, timeout_sec: (None, "gateway snapshot unavailable"),
+    )
+
+    exit_code = start_operator_product.main(
+        [
+            "--runs-dir",
+            str(tmp_path / "runs"),
+            "--gateway-runs-dir",
+            str(tmp_path / "gateway"),
+            "--panel-runs-dir",
+            str(tmp_path / "panel"),
+        ]
+    )
+
+    assert exit_code == 2
+    run_dirs = sorted((tmp_path / "runs").glob("*-start-operator-product*"))
+    assert run_dirs
+    run_payload = json.loads((run_dirs[0] / "run.json").read_text(encoding="utf-8"))
+    assert run_payload["status"] == "error"
+    assert run_payload["session_state"]["gateway"]["status"] == "error"
+    assert run_payload["session_state"]["streamlit"]["status"] == "not_started"
+
+
 def test_start_operator_product_print_plan_json(capsys) -> None:
     exit_code = start_operator_product.main(["--print-plan-json"])
     captured = capsys.readouterr()

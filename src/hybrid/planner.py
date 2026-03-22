@@ -90,8 +90,10 @@ def merge_hybrid_results(
                 "matched_entities": [],
             },
         )
-        row["retrieval_rank"] = rank
-        row["retrieval_score"] = item.get("score")
+        previous_rank = row.get("retrieval_rank")
+        if not isinstance(previous_rank, int) or rank < previous_rank:
+            row["retrieval_rank"] = rank
+            row["retrieval_score"] = item.get("score")
         if not str(row.get("title", "")).strip():
             row["title"] = str(item.get("title", ""))
         if row.get("text") in (None, ""):
@@ -127,8 +129,10 @@ def merge_hybrid_results(
                 "matched_entities": [],
             },
         )
-        row["kag_rank"] = rank
-        row["kag_score"] = item.get("score")
+        previous_rank = row.get("kag_rank")
+        if not isinstance(previous_rank, int) or rank < previous_rank:
+            row["kag_rank"] = rank
+            row["kag_score"] = item.get("score")
         if not str(row.get("title", "")).strip():
             row["title"] = str(item.get("title", ""))
         citation = row.get("citation")

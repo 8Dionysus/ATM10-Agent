@@ -79,6 +79,7 @@ def _build_scenario_requests(
     combo_a_neo4j_url: str = DEFAULT_COMBO_A_NEO4J_URL,
     combo_a_neo4j_database: str = DEFAULT_COMBO_A_NEO4J_DATABASE,
     combo_a_neo4j_user: str = DEFAULT_COMBO_A_NEO4J_USER,
+    combo_a_neo4j_password: str | None = None,
 ) -> list[dict[str, Any]]:
     if scenario == "core":
         return [
@@ -173,6 +174,7 @@ def _build_scenario_requests(
                     "neo4j_url": combo_a_neo4j_url,
                     "neo4j_database": combo_a_neo4j_database,
                     "neo4j_user": combo_a_neo4j_user,
+                    "neo4j_password": combo_a_neo4j_password,
                     "neo4j_dataset_tag": neo4j.get("dataset_tag"),
                 },
             },
@@ -191,6 +193,7 @@ def _build_scenario_requests(
                     "neo4j_url": combo_a_neo4j_url,
                     "neo4j_database": combo_a_neo4j_database,
                     "neo4j_user": combo_a_neo4j_user,
+                    "neo4j_password": combo_a_neo4j_password,
                     "neo4j_dataset_tag": neo4j.get("dataset_tag"),
                     "topk": 5,
                     "candidate_k": 10,
@@ -259,6 +262,7 @@ def run_gateway_v1_smoke(
         combo_a_neo4j_url=combo_a_neo4j_url,
         combo_a_neo4j_database=combo_a_neo4j_database,
         combo_a_neo4j_user=combo_a_neo4j_user,
+        combo_a_neo4j_password=combo_a_neo4j_password,
     )
     started_at_utc = _utc_now()
     started_at_perf = time.perf_counter()

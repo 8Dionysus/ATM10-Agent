@@ -104,6 +104,69 @@ def test_dependency_audit_accepts_object_shaped_pip_audit_payload(tmp_path: Path
     assert security_payload["vulnerabilities"] == [{"name": "numpy", "vulns": []}]
 
 
+def test_dependency_audit_warns_on_object_payload_missing_dependencies_key(tmp_path: Path) -> None:
+    repo_root = tmp_path / "repo"
+    runs_dir = tmp_path / "runs"
+    requirements_path = repo_root / "requirements.txt"
+    _write_text(repo_root / "scripts" / "app.py", "import numpy\n")
+    _write_text(requirements_path, "numpy>=2.0.0,<3.0.0\n")
+
+    def _runner(command: list[str], _cwd: Path) -> _FakeCompletedProcess:
+        if command[:4] == [command[0], "-m", "pip", "check"]:
+            return _FakeCompletedProcess(returncode=0, stdout="No broken requirements found.\n")
+        if command[:3] == [command[0], "-m", "pip_audit"]:
+            return _FakeCompletedProcess(returncode=0, stdout=json.dumps({"schema_version": "unknown"}))
+        raise AssertionError(f"Unexpected command: {command}")
+
+    result = run_dependency_audit(
+        runs_dir=runs_dir,
+        policy="report_only",
+        with_security_scan=True,
+        requirements_files=[requirements_path],
+        now=datetime(2026, 3, 2, 15, 0, 45, tzinfo=timezone.utc),
+        command_runner=_runner,
+        repo_root=repo_root,
+        scan_roots=[repo_root / "scripts", repo_root / "src", repo_root / "tests"],
+        installed_packages={"numpy"},
+    )
+
+    assert result["ok"] is True
+    assert result["security_payload"]["status"] == "warn"
+    assert "dependencies" in str(result["security_payload"]["error"])
+    assert any(item["code"] == "security_scan_warn" for item in result["findings_payload"]["findings"])
+
+
+def test_dependency_audit_fail_on_critical_treats_missing_dependencies_key_as_error(tmp_path: Path) -> None:
+    repo_root = tmp_path / "repo"
+    runs_dir = tmp_path / "runs"
+    requirements_path = repo_root / "requirements.txt"
+    _write_text(repo_root / "scripts" / "app.py", "import numpy\n")
+    _write_text(requirements_path, "numpy>=2.0.0,<3.0.0\n")
+
+    def _runner(command: list[str], _cwd: Path) -> _FakeCompletedProcess:
+        if command[:4] == [command[0], "-m", "pip", "check"]:
+            return _FakeCompletedProcess(returncode=0, stdout="No broken requirements found.\n")
+        if command[:3] == [command[0], "-m", "pip_audit"]:
+            return _FakeCompletedProcess(returncode=0, stdout=json.dumps({"schema_version": "unknown"}))
+        raise AssertionError(f"Unexpected command: {command}")
+
+    result = run_dependency_audit(
+        runs_dir=runs_dir,
+        policy="fail_on_critical",
+        with_security_scan=True,
+        requirements_files=[requirements_path],
+        now=datetime(2026, 3, 2, 15, 0, 50, tzinfo=timezone.utc),
+        command_runner=_runner,
+        repo_root=repo_root,
+        scan_roots=[repo_root / "scripts", repo_root / "src", repo_root / "tests"],
+        installed_packages={"numpy"},
+    )
+
+    assert result["security_payload"]["status"] == "warn"
+    assert result["run_payload"]["exit_code"] == 2
+    assert result["ok"] is False
+
+
 def test_dependency_audit_warns_when_pip_audit_is_missing(tmp_path: Path) -> None:
     repo_root = tmp_path / "repo"
     runs_dir = tmp_path / "runs"

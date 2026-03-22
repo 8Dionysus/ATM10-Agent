@@ -18,7 +18,14 @@ from scripts.tts_runtime_service import (  # noqa: E402
     _build_xtts_engine,
 )
 from src.agent_core.service_sla import build_common_metrics, build_service_sla_summary
-from src.agent_core.tts_runtime import CallbackTTSEngine, TTSRequest, TTSRuntimeError, TTSRuntimeService, make_silence_wav_bytes
+from src.agent_core.tts_runtime import (
+    CallbackTTSEngine,
+    PhraseCache,
+    TTSRequest,
+    TTSRuntimeError,
+    TTSRuntimeService,
+    make_silence_wav_bytes,
+)
 
 
 SUMMARY_SCHEMA_VERSION = "tts_runtime_benchmark_summary_v1"
@@ -156,7 +163,7 @@ def _build_benchmark_service(*, cache_items: int, chunk_chars: int, queue_size: 
         silero_engine=silero_engine,
         max_chunk_chars=chunk_chars,
         queue_size=queue_size,
-        cache=None,
+        cache=PhraseCache(max_items=cache_items),
     )
 
 
