@@ -31,6 +31,14 @@ from scripts.streamlit_operator_panel import (
     mobile_layout_policy,
 )
 
+OPTIONAL_SUMMARY_SOURCE_KEYS = frozenset(
+    {
+        "gateway_combo_a",
+        "gateway_http_combo_a",
+        "cross_service_suite_combo_a",
+    }
+)
+
 
 def _utc_now() -> str:
     return datetime.now(timezone.utc).isoformat()
@@ -172,6 +180,19 @@ def _streamlit_dependency_error() -> str | None:
     return None
 
 
+def _classify_summary_source_paths(panel_runs_dir: Path) -> tuple[list[str], list[str]]:
+    required_missing: list[str] = []
+    optional_missing: list[str] = []
+    for source_name, path in canonical_summary_sources(panel_runs_dir).items():
+        if path.is_file():
+            continue
+        if source_name in OPTIONAL_SUMMARY_SOURCE_KEYS:
+            optional_missing.append(str(path))
+        else:
+            required_missing.append(str(path))
+    return required_missing, optional_missing
+
+
 def run_streamlit_operator_panel_smoke(
     *,
     panel_runs_dir: Path,
@@ -248,16 +269,14 @@ def run_streamlit_operator_panel_smoke(
     required_missing_sources: list[str] = []
     optional_missing_sources: list[str] = []
     if dependency_error is None:
-        required_missing_sources = [
-            str(path)
-            for path in canonical_summary_sources(panel_runs_dir).values()
-            if not path.is_file()
-        ]
-        optional_missing_sources = [
-            str(path)
-            for path in canonical_fail_nightly_progress_sources(panel_runs_dir).values()
-            if not path.is_file()
-        ]
+        required_missing_sources, optional_missing_sources = _classify_summary_source_paths(panel_runs_dir)
+        optional_missing_sources.extend(
+            [
+                str(path)
+                for path in canonical_fail_nightly_progress_sources(panel_runs_dir).values()
+                if not path.is_file()
+            ]
+        )
         remediation_path = canonical_fail_nightly_remediation_source(panel_runs_dir)
         if not remediation_path.is_file():
             optional_missing_sources.append(str(remediation_path))
