@@ -9,8 +9,10 @@ from urllib import request
 
 from src.agent_core.combo_a_profile import (
     COMBO_A_PROFILE,
+    DEFAULT_PROFILE,
     DEFAULT_COMBO_A_NEO4J_DATABASE,
     DEFAULT_COMBO_A_NEO4J_USER,
+    SUPPORTED_PROFILES,
     probe_neo4j_service,
     probe_qdrant_service,
 )
@@ -54,6 +56,11 @@ FAIL_NIGHTLY_INTEGRITY_SOURCE_SPEC: dict[str, tuple[str, ...] | str] = {
 OPERATING_CYCLE_SOURCE_SPEC: dict[str, tuple[str, ...] | str] = {
     "path_parts": ("nightly-gateway-sla-operating-cycle", "operating_cycle_summary.json"),
     "schema_version": "gateway_sla_operating_cycle_v1",
+}
+
+COMBO_A_OPERATING_CYCLE_SOURCE_SPEC: dict[str, tuple[str, ...] | str] = {
+    "path_parts": ("nightly-combo-a-operating-cycle", "operating_cycle_summary.json"),
+    "schema_version": "combo_a_operating_cycle_v1",
 }
 
 HISTORY_SOURCE_SPECS: dict[str, dict[str, str | None]] = {
@@ -122,6 +129,11 @@ HISTORY_SOURCE_SPECS: dict[str, dict[str, str | None]] = {
         "expected_mode": "cross_service_benchmark_suite",
         "expected_scenario": None,
     },
+    "combo_a_operating_cycle": {
+        "root_subdir": "nightly-combo-a-operating-cycle",
+        "expected_mode": "combo_a_operating_cycle",
+        "expected_scenario": "combo_a_policy",
+    },
 }
 
 
@@ -147,6 +159,9 @@ def canonical_summary_sources(runs_dir: Path) -> dict[str, Path]:
         "cross_service_suite_combo_a": base
         / "nightly-combo-a-cross-service-suite"
         / "cross_service_benchmark_suite.json",
+        "combo_a_operating_cycle": base
+        / "nightly-combo-a-operating-cycle"
+        / "operating_cycle_summary.json",
     }
 
 
@@ -176,6 +191,11 @@ def canonical_fail_nightly_integrity_source(runs_dir: Path) -> Path:
 def canonical_operating_cycle_source(runs_dir: Path) -> Path:
     base = Path(runs_dir)
     return base.joinpath(*tuple(OPERATING_CYCLE_SOURCE_SPEC["path_parts"]))
+
+
+def canonical_combo_a_operating_cycle_source(runs_dir: Path) -> Path:
+    base = Path(runs_dir)
+    return base.joinpath(*tuple(COMBO_A_OPERATING_CYCLE_SOURCE_SPEC["path_parts"]))
 
 
 def canonical_history_roots(runs_dir: Path) -> dict[str, Path]:
@@ -445,6 +465,105 @@ def load_operating_cycle_snapshot(
         "source_path": str(path),
     }
     return snapshot, []
+
+
+def load_combo_a_operating_cycle_snapshot(
+    runs_dir: Path,
+) -> tuple[dict[str, Any] | None, list[str]]:
+    path = canonical_combo_a_operating_cycle_source(runs_dir)
+    payload, load_error = _load_optional_contract_payload(
+        "combo_a_operating_cycle",
+        path,
+        expected_schema_version=str(COMBO_A_OPERATING_CYCLE_SOURCE_SPEC["schema_version"]),
+    )
+    if payload is None:
+        if load_error is not None and load_error.startswith("missing file:"):
+            return None, []
+        return None, [] if load_error is None else [load_error]
+
+    live_readiness = payload.get("live_readiness")
+    live_readiness = live_readiness if isinstance(live_readiness, dict) else {}
+    paths_payload = payload.get("paths")
+    paths_payload = paths_payload if isinstance(paths_payload, dict) else {}
+    snapshot = {
+        "schema_version": str(payload.get("schema_version")),
+        "status": payload.get("status"),
+        "checked_at_utc": payload.get("checked_at_utc"),
+        "scenario": payload.get("scenario"),
+        "policy": payload.get("policy"),
+        "effective_policy": payload.get("effective_policy"),
+        "promotion_state": payload.get("promotion_state"),
+        "enforcement_surface": payload.get("enforcement_surface"),
+        "blocking_reason_codes": _normalize_reason_codes(payload.get("blocking_reason_codes")),
+        "recommended_actions": payload.get("recommended_actions")
+        if isinstance(payload.get("recommended_actions"), list)
+        else [],
+        "next_review_at_utc": payload.get("next_review_at_utc"),
+        "profile_scope": payload.get("profile_scope"),
+        "availability_status": payload.get("availability_status"),
+        "actionable_message": payload.get("actionable_message"),
+        "live_readiness": live_readiness,
+        "sources": payload.get("sources") if isinstance(payload.get("sources"), dict) else {},
+        "paths": {
+            "summary_json": _coalesce(paths_payload.get("summary_json"), str(path)),
+            "history_summary_json": paths_payload.get("history_summary_json"),
+            "summary_md": paths_payload.get("summary_md"),
+            "history_summary_md": paths_payload.get("history_summary_md"),
+        },
+        "source_path": str(path),
+    }
+    return snapshot, []
+
+
+def build_operator_combo_a_profile_summary(
+    *,
+    combo_a_readiness: dict[str, Any] | None,
+    combo_a_operating_cycle_snapshot: dict[str, Any] | None,
+) -> dict[str, Any]:
+    readiness = combo_a_readiness if isinstance(combo_a_readiness, dict) else {}
+    operating_cycle = (
+        combo_a_operating_cycle_snapshot if isinstance(combo_a_operating_cycle_snapshot, dict) else {}
+    )
+    live_readiness = operating_cycle.get("live_readiness")
+    live_readiness = live_readiness if isinstance(live_readiness, dict) else {}
+    services = readiness.get("services")
+    services = services if isinstance(services, dict) else {}
+    if not services:
+        services = live_readiness.get("services")
+        services = services if isinstance(services, dict) else {}
+
+    warnings = _unique_strings(
+        readiness.get("warnings"),
+        [str(item) for item in operating_cycle.get("warnings", [])]
+        if isinstance(operating_cycle.get("warnings"), list)
+        else [],
+    )
+    return {
+        "profile": COMBO_A_PROFILE,
+        "availability_status": _coalesce(
+            readiness.get("availability_status"),
+            operating_cycle.get("availability_status"),
+            live_readiness.get("availability_status"),
+            "unknown",
+        ),
+        "available": _coalesce(
+            readiness.get("available"),
+            live_readiness.get("available"),
+            False,
+        ),
+        "missing_config": readiness.get("missing_config", []),
+        "warnings": warnings,
+        "services": services,
+        "effective_policy": operating_cycle.get("effective_policy"),
+        "promotion_state": operating_cycle.get("promotion_state"),
+        "blocking_reason_codes": _normalize_reason_codes(operating_cycle.get("blocking_reason_codes")),
+        "recommended_actions": operating_cycle.get("recommended_actions")
+        if isinstance(operating_cycle.get("recommended_actions"), list)
+        else [],
+        "next_review_at_utc": operating_cycle.get("next_review_at_utc"),
+        "operating_cycle_path": _nested_get(operating_cycle, "paths", "summary_json"),
+        "actionable_message": operating_cycle.get("actionable_message"),
+    }
 
 
 def _iter_operator_startup_run_dirs(operator_runs_dir: Path) -> list[Path]:
@@ -808,6 +927,10 @@ def build_metrics_rows(sources: dict[str, Path]) -> list[dict[str, Any]]:
             "query_count": None,
             "mean_mrr_at_k": None,
             "results_count": None,
+            "profile": None,
+            "surface": None,
+            "effective_policy": None,
+            "promotion_state": None,
         }
         if payload is not None:
             observed = payload.get("observed")
@@ -817,6 +940,10 @@ def build_metrics_rows(sources: dict[str, Path]) -> list[dict[str, Any]]:
                 row["mean_mrr_at_k"] = observed.get("mean_mrr_at_k")
             row["request_count"] = payload.get("request_count")
             row["failed_requests_count"] = payload.get("failed_requests_count")
+            row["profile"] = _coalesce(payload.get("profile"), payload.get("profile_scope"))
+            row["surface"] = payload.get("surface")
+            row["effective_policy"] = payload.get("effective_policy")
+            row["promotion_state"] = payload.get("promotion_state")
         rows.append(row)
     return rows
 
@@ -884,6 +1011,10 @@ def build_run_explorer_rows(sources: dict[str, Path]) -> list[dict[str, Any]]:
             "run_json": None,
             "request_count": None,
             "failed_requests_count": None,
+            "profile": None,
+            "surface": None,
+            "effective_policy": None,
+            "promotion_state": None,
             "error": load_error,
         }
         if payload is not None:
@@ -894,6 +1025,10 @@ def build_run_explorer_rows(sources: dict[str, Path]) -> list[dict[str, Any]]:
             row["scenario"] = payload.get("scenario")
             row["request_count"] = payload.get("request_count")
             row["failed_requests_count"] = payload.get("failed_requests_count")
+            row["profile"] = _coalesce(payload.get("profile"), payload.get("profile_scope"))
+            row["surface"] = payload.get("surface")
+            row["effective_policy"] = payload.get("effective_policy")
+            row["promotion_state"] = payload.get("promotion_state")
         rows.append(row)
     return rows
 
@@ -1003,6 +1138,22 @@ def _parse_history_row(source: str, run_dir: Path) -> tuple[dict[str, Any] | Non
         row["failed_requests_count"] = len(summary_payload.get("degraded_services", [])) if isinstance(summary_payload.get("degraded_services"), list) else None
         return row, None
 
+    if source == "combo_a_operating_cycle":
+        summary_path = (
+            Path(str(summary_json))
+            if isinstance(summary_json, str)
+            else (run_dir / "operating_cycle_summary.json")
+        )
+        summary_payload, summary_error = load_json_object(summary_path)
+        if summary_error is not None or summary_payload is None:
+            return None, f"{source}: missing or invalid operating_cycle_summary.json in {run_dir}"
+        row["details"] = "{effective_policy}/{promotion_state}".format(
+            effective_policy=summary_payload.get("effective_policy", "-"),
+            promotion_state=summary_payload.get("promotion_state", "-"),
+        )
+        row["failed_requests_count"] = len(_normalize_reason_codes(summary_payload.get("blocking_reason_codes")))
+        return row, None
+
     return row, None
 
 
@@ -1057,6 +1208,7 @@ def build_operator_runs_payload(
     effective_operator_runs_dir = Path(operator_runs_dir) if operator_runs_dir is not None else Path(runs_dir)
     startup_status, startup_warnings = load_latest_operator_startup_status(effective_operator_runs_dir)
     policy_context, policy_warnings = load_operator_policy_surface_context(runs_dir)
+    combo_a_operating_cycle, combo_a_operating_cycle_warnings = load_combo_a_operating_cycle_snapshot(runs_dir)
     rows = build_run_explorer_rows(canonical_summary_sources(runs_dir))
     return {
         "schema_version": GATEWAY_OPERATOR_RUNS_SCHEMA,
@@ -1072,10 +1224,21 @@ def build_operator_runs_payload(
             "startup": startup_status,
             "governance": policy_context["governance"],
             "operating_cycle": policy_context["operating_cycle"],
+            "profiles": {
+                "default_profile": DEFAULT_PROFILE,
+                "supported_profiles": list(SUPPORTED_PROFILES),
+                "combo_a": build_operator_combo_a_profile_summary(
+                    combo_a_readiness=None,
+                    combo_a_operating_cycle_snapshot=combo_a_operating_cycle,
+                ),
+            },
         },
         "warnings": {
             "startup": startup_warnings,
-            "policy_surface": policy_warnings,
+            "policy_surface": {
+                **policy_warnings,
+                "combo_a_operating_cycle": combo_a_operating_cycle_warnings,
+            },
         },
     }
 
@@ -1089,6 +1252,7 @@ def build_operator_history_payload(
     max_candidates_per_source: int = 200,
 ) -> dict[str, Any]:
     policy_context, policy_warnings = load_operator_policy_surface_context(runs_dir)
+    combo_a_operating_cycle, combo_a_operating_cycle_warnings = load_combo_a_operating_cycle_snapshot(runs_dir)
     rows, warnings = build_metrics_history_rows(
         runs_dir,
         selected_sources=selected_sources,
@@ -1109,9 +1273,20 @@ def build_operator_history_payload(
         "operator_context": {
             "governance": policy_context["governance"],
             "operating_cycle": policy_context["operating_cycle"],
+            "profiles": {
+                "default_profile": DEFAULT_PROFILE,
+                "supported_profiles": list(SUPPORTED_PROFILES),
+                "combo_a": build_operator_combo_a_profile_summary(
+                    combo_a_readiness=None,
+                    combo_a_operating_cycle_snapshot=combo_a_operating_cycle,
+                ),
+            },
         },
         "operator_warnings": {
-            "policy_surface": policy_warnings,
+            "policy_surface": {
+                **policy_warnings,
+                "combo_a_operating_cycle": combo_a_operating_cycle_warnings,
+            },
         },
     }
 
@@ -1222,6 +1397,7 @@ def build_operator_product_snapshot(
     remediation_snapshot = policy_context["remediation"]
     integrity_snapshot = policy_context["integrity"]
     operating_cycle_snapshot = policy_context["operating_cycle"]
+    combo_a_operating_cycle_snapshot, combo_a_operating_cycle_warnings = load_combo_a_operating_cycle_snapshot(runs_dir)
     startup_snapshot, startup_warnings = load_latest_operator_startup_status(effective_operator_runs_dir)
     governance_summary = policy_context["governance"]
 
@@ -1285,6 +1461,10 @@ def build_operator_product_snapshot(
             "neo4j": neo4j_health,
         },
     }
+    combo_a_profile_summary = build_operator_combo_a_profile_summary(
+        combo_a_readiness=combo_a_readiness,
+        combo_a_operating_cycle_snapshot=combo_a_operating_cycle_snapshot,
+    )
 
     return {
         "schema_version": GATEWAY_OPERATOR_STATUS_SCHEMA,
@@ -1318,12 +1498,13 @@ def build_operator_product_snapshot(
                 if isinstance(gateway_health.get("supported_profiles"), list) and gateway_health.get("supported_profiles")
                 else "baseline_first",
                 "supported_profiles": gateway_health.get("supported_profiles", ["baseline_first"]),
-                "combo_a": combo_a_readiness,
+                "combo_a": combo_a_profile_summary,
             },
         },
         "latest_metrics": {
             "summary_matrix": build_metrics_rows(canonical_summary_sources(runs_dir)),
             "operating_cycle": operating_cycle_snapshot,
+            "combo_a_operating_cycle": combo_a_operating_cycle_snapshot,
             "fail_nightly_progress": progress_snapshot,
             "fail_nightly_transition": transition_snapshot,
             "fail_nightly_remediation": remediation_snapshot,
@@ -1340,6 +1521,10 @@ def build_operator_product_snapshot(
             "service_probes": service_warnings,
             "startup": startup_warnings,
             "profile_readiness": combo_a_readiness["warnings"],
-            "policy_surface": policy_warnings,
+            "policy_surface": {
+                **policy_warnings,
+                "combo_a_operating_cycle": combo_a_operating_cycle_warnings,
+            },
+            "combo_a_policy_surface": combo_a_operating_cycle_warnings,
         },
     }

@@ -327,6 +327,8 @@ def run_gateway_v1_http_smoke(
     latency_values = [float(item["latency_ms"]) for item in request_summaries]
     failed_requests_count = sum(1 for item in request_summaries if not bool(item["ok"]))
     summary_payload = {
+        "profile": "combo_a" if scenario == "combo_a" else "baseline_first",
+        "surface": "http",
         "scenario": scenario,
         "ok": all_ok,
         "status": "ok" if all_ok else "error",

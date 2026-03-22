@@ -54,6 +54,7 @@ def test_canonical_summary_sources_returns_expected_paths(tmp_path: Path) -> Non
         "gateway_http_combo_a",
         "cross_service_suite",
         "cross_service_suite_combo_a",
+        "combo_a_operating_cycle",
     ]
     assert sources["phase_a"] == tmp_path / "ci-smoke-phase-a" / "smoke_summary.json"
     assert sources["gateway_hybrid"] == tmp_path / "ci-smoke-gateway-hybrid" / "gateway_smoke_summary.json"
@@ -77,6 +78,11 @@ def test_canonical_summary_sources_returns_expected_paths(tmp_path: Path) -> Non
         tmp_path
         / "nightly-combo-a-cross-service-suite"
         / "cross_service_benchmark_suite.json"
+    )
+    assert sources["combo_a_operating_cycle"] == (
+        tmp_path
+        / "nightly-combo-a-operating-cycle"
+        / "operating_cycle_summary.json"
     )
 
 
@@ -116,6 +122,12 @@ def test_canonical_fail_nightly_integrity_source_returns_expected_path(tmp_path:
 def test_canonical_operating_cycle_source_returns_expected_path(tmp_path: Path) -> None:
     assert panel.canonical_operating_cycle_source(tmp_path) == (
         tmp_path / "nightly-gateway-sla-operating-cycle" / "operating_cycle_summary.json"
+    )
+
+
+def test_canonical_combo_a_operating_cycle_source_returns_expected_path(tmp_path: Path) -> None:
+    assert panel.canonical_combo_a_operating_cycle_source(tmp_path) == (
+        tmp_path / "nightly-combo-a-operating-cycle" / "operating_cycle_summary.json"
     )
 
 
@@ -274,6 +286,7 @@ def test_safe_action_catalog_includes_cross_service_suite_smoke() -> None:
     action_keys = {item["action_key"] for item in catalog}
     assert "cross_service_suite_smoke" in action_keys
     assert "cross_service_suite_combo_a_smoke" in action_keys
+    assert "combo_a_operating_cycle_smoke" in action_keys
     assert "gateway_local_combo_a" in action_keys
     assert "gateway_http_combo_a" in action_keys
     assert "gateway_sla_operating_cycle_smoke" in action_keys
@@ -376,6 +389,13 @@ def test_resolve_safe_action_supports_combo_a_smokes(tmp_path: Path) -> None:
     assert str(suite_summary).endswith("cross_service_benchmark_suite.json")
 
 
+def test_resolve_safe_action_supports_combo_a_operating_cycle(tmp_path: Path) -> None:
+    command, summary_path = panel.resolve_safe_action("combo_a_operating_cycle_smoke", tmp_path)
+    assert "scripts/run_combo_a_operating_cycle.py" in command
+    assert "--scenario" not in command
+    assert str(summary_path).endswith("operating_cycle_summary.json")
+
+
 def test_resolve_safe_action_supports_gateway_sla_operating_cycle(tmp_path: Path) -> None:
     command, summary_path = panel.resolve_safe_action("gateway_sla_operating_cycle_smoke", tmp_path)
     assert "scripts/run_gateway_sla_operating_cycle.py" in command
@@ -403,9 +423,11 @@ def test_safe_actions_tab_source_uses_gateway_and_not_local_subprocess() -> None
     source_text = panel.REPO_ROOT.joinpath("scripts", "streamlit_operator_panel.py").read_text(encoding="utf-8")
     assert "run_gateway_safe_action(" in source_text
     assert "Safe Actions require a reachable gateway operator API." in source_text
+    assert "Combo A Promotion" in source_text
     assert "Current Policy" in source_text
     assert "Why Hold" in source_text
     assert "Next Action" in source_text
+    assert "Live Readiness" in source_text
     assert "Manual Fallback Status" in source_text
 
 
@@ -1238,3 +1260,54 @@ def test_load_operating_cycle_snapshot_schema_mismatch_is_warning(tmp_path: Path
     assert snapshot is None
     assert warnings
     assert any("schema_version mismatch" in item for item in warnings)
+
+
+def test_load_combo_a_operating_cycle_snapshot_happy_path(tmp_path: Path) -> None:
+    summary_path = panel.canonical_combo_a_operating_cycle_source(tmp_path)
+    _write_json(
+        summary_path,
+        {
+            "schema_version": "combo_a_operating_cycle_v1",
+            "status": "ok",
+            "checked_at_utc": "2026-03-22T18:10:00+00:00",
+            "scenario": "combo_a_policy",
+            "policy": "report_only",
+            "effective_policy": "observe_only",
+            "promotion_state": "hold",
+            "enforcement_surface": "nightly_only",
+            "blocking_reason_codes": ["cross_service_suite_combo_a_breach"],
+            "recommended_actions": [
+                {
+                    "action_key": "cross_service_suite_combo_a_smoke",
+                    "reason": "Refresh the Combo A cross-service suite artifact before the next nightly review.",
+                }
+            ],
+            "next_review_at_utc": "2026-03-23T18:10:00+00:00",
+            "profile_scope": "combo_a",
+            "availability_status": "partial",
+            "actionable_message": "Combo A promotion is held until the live cross-service suite is green again.",
+            "live_readiness": {
+                "profile": "combo_a",
+                "available": False,
+                "availability_status": "partial",
+                "services": {
+                    "qdrant": {"status": "ok", "configured": True},
+                    "neo4j": {"status": "ok", "configured": True},
+                },
+            },
+            "sources": {},
+            "paths": {
+                "summary_json": str(summary_path),
+                "summary_md": str(summary_path.parent / "summary.md"),
+            },
+        },
+    )
+
+    snapshot, warnings = panel.load_combo_a_operating_cycle_snapshot(tmp_path)
+    assert warnings == []
+    assert snapshot is not None
+    assert snapshot["effective_policy"] == "observe_only"
+    assert snapshot["promotion_state"] == "hold"
+    assert snapshot["availability_status"] == "partial"
+    assert snapshot["recommended_actions"][0]["action_key"] == "cross_service_suite_combo_a_smoke"
+    assert snapshot["paths"]["summary_json"] == str(summary_path)

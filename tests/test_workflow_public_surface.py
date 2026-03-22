@@ -158,6 +158,7 @@ def test_combo_a_workflow_public_artifacts_are_allowlisted() -> None:
 
     gateway_block = _extract_step_block(text, "Summary - Combo A gateway smoke")
     suite_block = _extract_step_block(text, "Summary - Combo A cross-service suite")
+    operating_cycle_block = _extract_step_block(text, "Summary - Combo A operating cycle")
     operator_block = _extract_step_block(text, "Summary - Combo A operator probes")
     upload_block = _extract_step_block(text, "Upload artifact - Combo A profile runs")
 
@@ -165,6 +166,8 @@ def test_combo_a_workflow_public_artifacts_are_allowlisted() -> None:
         assert token not in gateway_block
     for token in ("combo_a_seed_run_dir", "child_runs_root", "history_summary_json"):
         assert token not in suite_block
+    for token in ("blocking_reason_codes", "recommended_actions", "sources", "warnings", "next_review_at_utc"):
+        assert token not in operating_cycle_block
     for token in ("missing_config", "warnings", "password"):
         assert token not in operator_block
 
@@ -172,6 +175,7 @@ def test_combo_a_workflow_public_artifacts_are_allowlisted() -> None:
         "gateway_smoke_summary.json",
         "gateway_http_smoke_summary.json",
         "cross_service_benchmark_suite.json",
+        "operating_cycle_summary.json",
         "service_sla_summary.json",
         "summary.md",
         "operator_snapshot.json",
@@ -183,6 +187,12 @@ def test_combo_a_workflow_public_artifacts_are_allowlisted() -> None:
         "path: runs/ci-smoke-gateway-combo-a",
         "path: runs/ci-smoke-gateway-http-combo-a",
         "path: runs/nightly-combo-a-cross-service-suite",
+        "path: runs/nightly-combo-a-operating-cycle",
         "path: runs/nightly-combo-a-operator-probes",
     ):
         assert line not in upload_block
+
+    assert "Operating cycle - Combo A policy decision surface (report_only)" in text
+    assert "Resolve - Combo A effective policy" in text
+    assert "Strict gate - Combo A policy decision surface (promoted fail_on_hold)" in text
+    assert "if: env.COMBO_A_EFFECTIVE_POLICY == 'promoted_nightly'" in text
