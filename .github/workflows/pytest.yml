@@ -29,7 +29,7 @@ jobs:
 
       - name: Report - Dependency audit (report_only)
         run: |
-          python scripts/dependency_audit.py --runs-dir runs/ci-dependency-audit --policy report_only --with-security-scan true
+          python scripts/dependency_audit.py --runs-dir runs/ci-dependency-audit --policy report_only --with-security-scan true --security-requirements-files requirements.txt requirements-voice.txt requirements-llm.txt requirements-dev.txt
 
       - name: Run pytest
         run: python -m pytest
@@ -53,7 +53,7 @@ jobs:
 
       - name: Report - Dependency audit (report_only)
         run: |
-          python scripts/dependency_audit.py --runs-dir runs/ci-dependency-audit --policy report_only --with-security-scan true
+          python scripts/dependency_audit.py --runs-dir runs/ci-dependency-audit --policy report_only --with-security-scan true --security-requirements-files requirements.txt requirements-voice.txt requirements-llm.txt requirements-dev.txt
 
       - name: Smoke - Phase A (stub)
         run: |

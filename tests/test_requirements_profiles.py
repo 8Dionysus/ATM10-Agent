@@ -39,7 +39,8 @@ def test_requirements_profile_include_chain() -> None:
 
     assert voice_lines[0] == "-r requirements.txt"
     assert llm_lines[0] == "-r requirements.txt"
-    assert export_lines[0] == "-r requirements-llm.txt"
+    assert export_lines[0] == "-r requirements.txt"
+    assert "-r requirements-llm.txt" not in export_lines
 
 
 def test_requirements_profile_expected_packages_present() -> None:
@@ -54,6 +55,8 @@ def test_requirements_profile_expected_packages_present() -> None:
     assert any(line.startswith("torch") for line in voice_lines)
     assert any(line.startswith("TTS") for line in voice_lines)
     assert any(line.startswith("transformers") for line in llm_lines)
+    assert any(line.startswith("torch") for line in export_lines)
+    assert any(line.startswith("transformers") for line in export_lines)
     assert any(line.startswith("optimum") for line in export_lines)
     assert any(line.startswith("optimum-intel") for line in export_lines)
     assert any(line.startswith("nncf") for line in export_lines)

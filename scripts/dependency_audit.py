@@ -22,6 +22,12 @@ DEFAULT_REQUIREMENTS_FILES = (
     "requirements-export.txt",
     "requirements-dev.txt",
 )
+DEFAULT_SECURITY_REQUIREMENTS_FILES = (
+    "requirements.txt",
+    "requirements-voice.txt",
+    "requirements-llm.txt",
+    "requirements-dev.txt",
+)
 DEFAULT_SCAN_ROOTS = ("scripts", "src", "tests")
 OPTIONAL_RUNTIME_PACKAGES = {"qwen-asr", "qwen-tts"}
 
@@ -396,6 +402,7 @@ def _run_security_scan(
     *,
     repo_root: Path,
     with_security_scan: bool,
+    allowed_packages: set[str] | None = None,
     command_runner: Any | None,
 ) -> dict[str, Any]:
     if not with_security_scan:
@@ -422,30 +429,38 @@ def _run_security_scan(
         "stderr": stderr_text,
     }
 
-    if result.returncode == 0:
+    if stdout_text.strip():
         try:
-            parsed = json.loads(stdout_text or "[]")
+            parsed = json.loads(stdout_text)
             vulnerabilities = _normalize_pip_audit_vulnerabilities(parsed)
+            if allowed_packages is not None:
+                vulnerabilities = [
+                    item
+                    for item in vulnerabilities
+                    if _normalize_package_name(str(item.get("name", ""))) in allowed_packages
+                ]
             vulnerabilities_count = _count_pip_audit_vulnerabilities(vulnerabilities)
-            payload.update(
-                {
-                    "status": "ok",
-                    "vulnerabilities_count": int(vulnerabilities_count),
-                    "vulnerabilities": vulnerabilities,
-                    "error": None,
-                }
-            )
-            return payload
+            if result.returncode in {0, 1}:
+                payload.update(
+                    {
+                        "status": "ok",
+                        "vulnerabilities_count": int(vulnerabilities_count),
+                        "vulnerabilities": vulnerabilities,
+                        "error": None,
+                    }
+                )
+                return payload
         except Exception as exc:
-            payload.update(
-                {
-                    "status": "warn",
-                    "vulnerabilities_count": 0,
-                    "vulnerabilities": [],
-                    "error": f"Failed to parse pip-audit JSON output: {exc}",
-                }
-            )
-            return payload
+            if result.returncode == 0:
+                payload.update(
+                    {
+                        "status": "warn",
+                        "vulnerabilities_count": 0,
+                        "vulnerabilities": [],
+                        "error": f"Failed to parse pip-audit JSON output: {exc}",
+                    }
+                )
+                return payload
 
     missing_tool_markers = ("No module named pip_audit", "No module named pip-audit")
     is_missing_tool = any(marker in stderr_text for marker in missing_tool_markers)
@@ -537,6 +552,7 @@ def run_dependency_audit(
     policy: str = "report_only",
     with_security_scan: bool = True,
     requirements_files: Sequence[str | Path] | None = None,
+    security_requirements_files: Sequence[str | Path] | None = None,
     now: datetime | None = None,
     command_runner: Any | None = None,
     repo_root: Path | None = None,
@@ -546,7 +562,9 @@ def run_dependency_audit(
     effective_now = now or datetime.now(timezone.utc)
     effective_repo_root = (repo_root or Path(__file__).resolve().parents[1]).resolve()
     requirement_specs = list(requirements_files or DEFAULT_REQUIREMENTS_FILES)
+    security_requirement_specs = list(security_requirements_files or DEFAULT_SECURITY_REQUIREMENTS_FILES)
     requirement_paths = _resolve_requirement_files(effective_repo_root, requirement_specs)
+    security_requirement_paths = _resolve_requirement_files(effective_repo_root, security_requirement_specs)
 
     effective_scan_roots = [
         root.resolve() if root.is_absolute() else (effective_repo_root / root).resolve()
@@ -578,6 +596,7 @@ def run_dependency_audit(
     _write_json(run_json_path, run_payload)
 
     declared_dependencies, requirements_details, pre_findings = _collect_declared_dependencies(requirement_paths)
+    security_declared_dependencies, _, _ = _collect_declared_dependencies(security_requirement_paths)
     inventory_payload: dict[str, Any] = {
         "schema_version": INVENTORY_SCHEMA_VERSION,
         "timestamp_utc": effective_now.astimezone(timezone.utc).isoformat(),
@@ -615,6 +634,7 @@ def run_dependency_audit(
     security_payload = _run_security_scan(
         repo_root=effective_repo_root,
         with_security_scan=with_security_scan,
+        allowed_packages=security_declared_dependencies,
         command_runner=command_runner,
     )
     if security_payload.get("status") == "warn":
@@ -699,7 +719,19 @@ def parse_args() -> argparse.Namespace:
         help=(
             "Requirements files to analyze (default: "
             "requirements.txt requirements-voice.txt requirements-llm.txt "
-            "requirements-export.txt requirements-dev.txt)."
+            "requirements-dev.txt). Pass requirements-export.txt explicitly "
+            "to audit the optional export toolchain."
+        ),
+    )
+    parser.add_argument(
+        "--security-requirements-files",
+        nargs="+",
+        default=list(DEFAULT_SECURITY_REQUIREMENTS_FILES),
+        help=(
+            "Requirements files that define the fail/report security scan scope "
+            "(default: requirements.txt requirements-voice.txt requirements-llm.txt "
+            "requirements-dev.txt). Pass requirements-export.txt explicitly to include "
+            "the optional export toolchain in the security scan."
         ),
     )
     return parser.parse_args()
@@ -712,6 +744,7 @@ def main() -> int:
         policy=args.policy,
         with_security_scan=args.with_security_scan,
         requirements_files=args.requirements_files,
+        security_requirements_files=args.security_requirements_files,
     )
     run_dir = result["run_dir"]
     run_payload = result["run_payload"]

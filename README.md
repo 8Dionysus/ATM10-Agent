@@ -123,13 +123,17 @@ pip install -r requirements-voice.txt
 # LLM profile
 pip install -r requirements-llm.txt
 
-# Export profile
+# Export profile (isolated from the active LLM stack)
 pip install -r requirements-export.txt
 
 # Dependency audit
 pip install -r requirements-audit.txt
-python scripts/dependency_audit.py --runs-dir runs --policy report_only --with-security-scan true
+python scripts/dependency_audit.py --runs-dir runs --policy report_only --with-security-scan true --security-requirements-files requirements.txt requirements-voice.txt requirements-llm.txt requirements-dev.txt
 ```
+
+`requirements-export.txt` intentionally carries its own `torch`/`transformers`/`optimum*` window so the optional export toolchain can live in a separate environment without inheriting the active runtime LLM profile.
+
+Default dependency audit still inspects all declared requirement profiles for inventory/findings, but the fail/report security scan itself is scoped to the active runtime/dev profiles. Audit the optional export toolchain explicitly with `--security-requirements-files requirements-export.txt` when you need that surface.
 
 ## Repo map
 

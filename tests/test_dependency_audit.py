@@ -303,3 +303,98 @@ def test_dependency_audit_fail_on_critical_handles_object_payload_vulnerabilitie
     assert result["security_payload"]["vulnerabilities_count"] == 1
     assert result["run_payload"]["exit_code"] == 2
     assert result["ok"] is False
+
+
+def test_dependency_audit_parses_vulnerabilities_when_pip_audit_returns_one(tmp_path: Path) -> None:
+    repo_root = tmp_path / "repo"
+    runs_dir = tmp_path / "runs"
+    requirements_path = repo_root / "requirements.txt"
+    _write_text(repo_root / "scripts" / "app.py", "import numpy\n")
+    _write_text(requirements_path, "numpy>=2.0.0,<3.0.0\n")
+
+    def _runner(command: list[str], _cwd: Path) -> _FakeCompletedProcess:
+        if command[:4] == [command[0], "-m", "pip", "check"]:
+            return _FakeCompletedProcess(returncode=0, stdout="No broken requirements found.\n")
+        if command[:3] == [command[0], "-m", "pip_audit"]:
+            return _FakeCompletedProcess(
+                returncode=1,
+                stdout=json.dumps(
+                    {
+                        "dependencies": [
+                            {
+                                "name": "numpy",
+                                "version": "2.0.0",
+                                "vulns": [{"id": "PYSEC-TEST-2", "fix_versions": []}],
+                            }
+                        ]
+                    }
+                ),
+                stderr="Found 1 known vulnerability in 1 package",
+            )
+        raise AssertionError(f"Unexpected command: {command}")
+
+    result = run_dependency_audit(
+        runs_dir=runs_dir,
+        policy="fail_on_critical",
+        with_security_scan=True,
+        requirements_files=[requirements_path],
+        now=datetime(2026, 3, 2, 15, 5, 0, tzinfo=timezone.utc),
+        command_runner=_runner,
+        repo_root=repo_root,
+        scan_roots=[repo_root / "scripts", repo_root / "src", repo_root / "tests"],
+        installed_packages={"numpy"},
+    )
+
+    assert result["security_payload"]["returncode"] == 1
+    assert result["security_payload"]["status"] == "ok"
+    assert result["security_payload"]["vulnerabilities_count"] == 1
+    assert result["security_payload"]["error"] is None
+    assert result["run_payload"]["exit_code"] == 2
+    assert result["ok"] is False
+
+
+def test_dependency_audit_filters_security_vulnerabilities_outside_scope(tmp_path: Path) -> None:
+    repo_root = tmp_path / "repo"
+    runs_dir = tmp_path / "runs"
+    requirements_path = repo_root / "requirements.txt"
+    _write_text(repo_root / "scripts" / "app.py", "import fastapi\nimport numpy\n")
+    _write_text(requirements_path, "numpy>=2.0.0,<3.0.0\nfastapi>=0.116.0,<1.0.0\n")
+
+    def _runner(command: list[str], _cwd: Path) -> _FakeCompletedProcess:
+        if command[:4] == [command[0], "-m", "pip", "check"]:
+            return _FakeCompletedProcess(returncode=0, stdout="No broken requirements found.\n")
+        if command[:3] == [command[0], "-m", "pip_audit"]:
+            return _FakeCompletedProcess(
+                returncode=1,
+                stdout=json.dumps(
+                    {
+                        "dependencies": [
+                            {
+                                "name": "gradio",
+                                "version": "6.6.0",
+                                "vulns": [{"id": "PYSEC-OUT-OF-SCOPE", "fix_versions": ["6.7.0"]}],
+                            }
+                        ]
+                    }
+                ),
+                stderr="Found 1 known vulnerability in 1 package",
+            )
+        raise AssertionError(f"Unexpected command: {command}")
+
+    result = run_dependency_audit(
+        runs_dir=runs_dir,
+        policy="fail_on_critical",
+        with_security_scan=True,
+        requirements_files=[requirements_path],
+        security_requirements_files=[requirements_path],
+        now=datetime(2026, 3, 2, 15, 10, 0, tzinfo=timezone.utc),
+        command_runner=_runner,
+        repo_root=repo_root,
+        scan_roots=[repo_root / "scripts", repo_root / "src", repo_root / "tests"],
+        installed_packages={"fastapi", "numpy", "gradio"},
+    )
+
+    assert result["security_payload"]["status"] == "ok"
+    assert result["security_payload"]["vulnerabilities_count"] == 0
+    assert result["run_payload"]["exit_code"] == 0
+    assert result["ok"] is True

@@ -1,4 +1,6 @@
--r requirements-llm.txt
-optimum>=1.24.0,<2.0.0
-optimum-intel>=1.20.0,<2.0.0
-nncf>=2.8.0,<3.0.0
+-r requirements.txt
+torch>=2.2.0,<3.0.0
+transformers>=4.57.1,<4.58.0
+optimum>=2.1.0,<2.2.0
+optimum-intel>=1.27.0,<1.28.0
+nncf>=2.19.0,<3.0.0
