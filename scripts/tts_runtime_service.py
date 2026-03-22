@@ -70,6 +70,11 @@ def _append_jsonl(path: Path, payload: Mapping[str, Any]) -> None:
         handle.write(json.dumps(payload, ensure_ascii=False) + "\n")
 
 
+def _write_json(path: Path, payload: Mapping[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8")
+
+
 def _create_run_dir(runs_dir: Path, now: datetime) -> Path:
     base_name = now.strftime("%Y%m%d_%H%M%S-tts-service")
     run_dir = runs_dir / base_name
@@ -232,10 +237,15 @@ def _internal_error_response(
 
 
 def _disabled_engine(name: str, reason: str) -> CallbackTTSEngine:
-    def _synthesize(_text: str, _language: str, _speaker: str | None) -> tuple[bytes, int]:
-        raise TTSRuntimeError(f"{name} is unavailable: {reason}")
+    error_message = f"{name} is unavailable: {reason}"
 
-    return CallbackTTSEngine(name=name, synthesize_fn=_synthesize)
+    def _prewarm() -> None:
+        raise TTSRuntimeError(error_message)
+
+    def _synthesize(_text: str, _language: str, _speaker: str | None) -> tuple[bytes, int]:
+        raise TTSRuntimeError(error_message)
+
+    return CallbackTTSEngine(name=name, synthesize_fn=_synthesize, prewarm_fn=_prewarm)
 
 
 def _env_flag(value: str | None) -> bool:
@@ -450,7 +460,10 @@ def _build_silero_engine() -> CallbackTTSEngine:
 def _build_default_service(*, cache_items: int, chunk_chars: int, queue_size: int) -> TTSRuntimeService:
     xtts = _build_xtts_engine()
     piper = _build_piper_engine()
-    silero = _build_silero_engine()
+    try:
+        silero = _build_silero_engine()
+    except TTSRuntimeError as exc:
+        silero = _disabled_engine("silero_ru_service", str(exc))
     return TTSRuntimeService(
         xtts_engine=xtts,
         piper_engine=piper,
@@ -724,7 +737,7 @@ def create_app(
     return app
 
 
-def parse_args() -> argparse.Namespace:
+def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="FastAPI TTS runtime: XTTSv2 + fallback Piper/Silero.")
     parser.add_argument("--host", default="127.0.0.1", help="Bind host (default: 127.0.0.1).")
     parser.add_argument("--port", type=int, default=8780, help="Bind port (default: 8780).")
@@ -788,11 +801,11 @@ def parse_args() -> argparse.Namespace:
         help="Expose /docs and /openapi.json for local debugging (default: disabled).",
     )
     parser.add_argument("--no-prewarm", action="store_true", help="Disable prewarm on startup.")
-    return parser.parse_args()
+    return parser.parse_args(argv)
 
 
-def main() -> int:
-    args = parse_args()
+def main(argv: list[str] | None = None) -> int:
+    args = parse_args(argv)
     try:
         import uvicorn
     except Exception as exc:  # pragma: no cover - dependency presence

@@ -1825,6 +1825,7 @@ Security policy for Silero source:
 
 * Default mode expects local source (`SILERO_REPO_OR_DIR` as local path) and keeps remote hub disabled.
 * Remote hub source requires explicit opt-in (`SILERO_ALLOW_REMOTE_HUB=true`) and pinned revision (`SILERO_REPO_REF` or `owner/repo:ref` in `SILERO_REPO_OR_DIR`).
+* If secure Silero configuration is missing, `tts_runtime_service` still starts, but the `ru` service-voice fallback stays disabled until Silero is configured correctly.
 
 Example TTS request:
 
