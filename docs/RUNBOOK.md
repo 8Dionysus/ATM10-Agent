@@ -296,12 +296,14 @@ python scripts/start_operator_product.py --runs-dir runs --start-voice-runtime -
 Expected result:
 
 * A launcher run dir `runs/<timestamp>-start-operator-product/` is created.
-* `run.json` captures the canonical startup profile, effective runtime URLs, and `managed_processes` plan.
+* `startup_plan.json` stores the resolved canonical startup profile.
+* `run.json` captures the canonical startup profile, effective runtime URLs, `managed_processes`, `session_state`, startup checkpoints, and artifact pointers.
 * Gateway is considered ready only after `GET /v1/operator/snapshot` returns `status=ok`.
 * Streamlit is started against that gateway URL as the primary operator cockpit.
 * If managed runtimes are enabled, launcher waits for `GET /health` on those loopback services before starting the gateway.
 * `gateway.log` and `streamlit.log` are written into the launcher run dir.
 * If managed runtimes are enabled, `voice_runtime_service.log` / `tts_runtime_service.log` are also written into the launcher run dir.
+* The operator surface can read the latest launcher artifact back through the gateway/panel as startup-session context.
 
 Notes:
 
@@ -1196,7 +1198,7 @@ Exit policy:
   * mobile layout contract fail,
   * missing `required_missing_sources`.
 * `optional_missing_sources` do not translate smoke to `error`; used as observability signal.
-* The optional surface includes operator-facing G2 summaries (`progress`, `remediation`, `integrity`, `operating_cycle`), if they are not already published in the selected `runs_dir`.
+* The optional surface includes operator-facing G2 summaries (`progress`, `transition`, `remediation`, `integrity`, `operating_cycle`), if they are not already published in the selected `runs_dir`.
 
 Manual operator-check:
 

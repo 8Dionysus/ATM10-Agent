@@ -24,20 +24,25 @@ from scripts.operator_product_snapshot import (
     FAIL_NIGHTLY_INTEGRITY_SOURCE_SPEC,
     FAIL_NIGHTLY_PROGRESS_SOURCE_SPECS,
     FAIL_NIGHTLY_REMEDIATION_SOURCE_SPEC,
+    FAIL_NIGHTLY_TRANSITION_SOURCE_SPEC,
     OPERATING_CYCLE_SOURCE_SPEC,
+    build_operator_governance_summary as shared_build_operator_governance_summary,
     build_metrics_history_rows as shared_build_metrics_history_rows,
     build_metrics_rows as shared_build_metrics_rows,
     build_run_explorer_rows as shared_build_run_explorer_rows,
     canonical_fail_nightly_integrity_source as shared_canonical_fail_nightly_integrity_source,
     canonical_fail_nightly_progress_sources as shared_canonical_fail_nightly_progress_sources,
     canonical_fail_nightly_remediation_source as shared_canonical_fail_nightly_remediation_source,
+    canonical_fail_nightly_transition_source as shared_canonical_fail_nightly_transition_source,
     canonical_history_roots as shared_canonical_history_roots,
     canonical_operating_cycle_source as shared_canonical_operating_cycle_source,
     canonical_summary_sources as shared_canonical_summary_sources,
     load_fail_nightly_integrity_snapshot as shared_load_fail_nightly_integrity_snapshot,
     load_fail_nightly_progress_snapshot as shared_load_fail_nightly_progress_snapshot,
     load_fail_nightly_remediation_snapshot as shared_load_fail_nightly_remediation_snapshot,
+    load_fail_nightly_transition_snapshot as shared_load_fail_nightly_transition_snapshot,
     load_json_object as shared_load_json_object,
+    load_latest_operator_startup_status as shared_load_latest_operator_startup_status,
     load_operating_cycle_snapshot as shared_load_operating_cycle_snapshot,
 )
 from scripts.operator_product_safe_actions import (
@@ -146,6 +151,11 @@ FAIL_NIGHTLY_REMEDIATION_SOURCE_SPEC: dict[str, tuple[str, ...] | str] = {
     "schema_version": "gateway_sla_fail_nightly_remediation_v1",
 }
 
+FAIL_NIGHTLY_TRANSITION_SOURCE_SPEC: dict[str, tuple[str, ...] | str] = {
+    "path_parts": ("nightly-gateway-sla-transition", "transition_summary.json"),
+    "schema_version": "gateway_sla_fail_nightly_transition_v1",
+}
+
 FAIL_NIGHTLY_INTEGRITY_SOURCE_SPEC: dict[str, tuple[str, ...] | str] = {
     "path_parts": ("nightly-gateway-sla-integrity", "integrity_summary.json"),
     "schema_version": "gateway_sla_fail_nightly_integrity_v1",
@@ -251,6 +261,11 @@ def canonical_fail_nightly_progress_sources(runs_dir: Path) -> dict[str, Path]:
 def canonical_fail_nightly_remediation_source(runs_dir: Path) -> Path:
     base = Path(runs_dir)
     return base.joinpath(*tuple(FAIL_NIGHTLY_REMEDIATION_SOURCE_SPEC["path_parts"]))
+
+
+def canonical_fail_nightly_transition_source(runs_dir: Path) -> Path:
+    base = Path(runs_dir)
+    return base.joinpath(*tuple(FAIL_NIGHTLY_TRANSITION_SOURCE_SPEC["path_parts"]))
 
 
 def canonical_fail_nightly_integrity_source(runs_dir: Path) -> Path:
@@ -513,6 +528,22 @@ def load_fail_nightly_remediation_snapshot(
     return payload, []
 
 
+def load_fail_nightly_transition_snapshot(
+    runs_dir: Path,
+) -> tuple[dict[str, Any] | None, list[str]]:
+    path = canonical_fail_nightly_transition_source(runs_dir)
+    payload, load_error = _load_optional_contract_payload(
+        "transition",
+        path,
+        expected_schema_version=str(FAIL_NIGHTLY_TRANSITION_SOURCE_SPEC["schema_version"]),
+    )
+    if payload is None:
+        if load_error is not None and load_error.startswith("missing file:"):
+            return None, []
+        return None, [] if load_error is None else [load_error]
+    return payload, []
+
+
 def load_fail_nightly_integrity_snapshot(
     runs_dir: Path,
 ) -> tuple[dict[str, Any] | None, list[str]]:
@@ -572,13 +603,17 @@ def load_operating_cycle_snapshot(
 canonical_summary_sources = shared_canonical_summary_sources
 canonical_fail_nightly_progress_sources = shared_canonical_fail_nightly_progress_sources
 canonical_fail_nightly_remediation_source = shared_canonical_fail_nightly_remediation_source
+canonical_fail_nightly_transition_source = shared_canonical_fail_nightly_transition_source
 canonical_fail_nightly_integrity_source = shared_canonical_fail_nightly_integrity_source
 canonical_operating_cycle_source = shared_canonical_operating_cycle_source
 load_json_object = shared_load_json_object
 load_fail_nightly_progress_snapshot = shared_load_fail_nightly_progress_snapshot
 load_fail_nightly_remediation_snapshot = shared_load_fail_nightly_remediation_snapshot
+load_fail_nightly_transition_snapshot = shared_load_fail_nightly_transition_snapshot
 load_fail_nightly_integrity_snapshot = shared_load_fail_nightly_integrity_snapshot
 load_operating_cycle_snapshot = shared_load_operating_cycle_snapshot
+load_latest_operator_startup_status = shared_load_latest_operator_startup_status
+build_operator_governance_summary = shared_build_operator_governance_summary
 build_metrics_rows = shared_build_metrics_rows
 build_run_explorer_rows = shared_build_run_explorer_rows
 canonical_history_roots = shared_canonical_history_roots
@@ -773,6 +808,112 @@ def _render_snapshot_warnings(title: str, warnings: list[str]) -> None:
     st.warning(f"{title} ({len(warnings)}):\n{sample}{suffix}")
 
 
+def _render_operator_startup_section(snapshot: dict[str, Any] | None, warnings: list[str]) -> None:
+    _render_snapshot_warnings(
+        "Some operator startup artifacts were skipped due to parse/contract issues",
+        warnings,
+    )
+    if snapshot is None:
+        st.info(
+            "Operator startup artifacts are not available yet. "
+            "Launch the canonical stack with `python scripts/start_operator_product.py --runs-dir runs`."
+        )
+        return
+
+    if str(snapshot.get("status")) == "error":
+        st.error(
+            "Latest operator startup run ended with status=error.\n"
+            f"{_coalesce(snapshot.get('error'), 'See launcher artifacts for details.')}"
+        )
+    elif str(snapshot.get("status")) == "stopped":
+        st.info("Latest operator startup run is stopped; the session artifact is still available for review.")
+    else:
+        st.success("Latest operator startup artifact loaded.")
+
+    last_checkpoint = snapshot.get("last_checkpoint")
+    last_checkpoint = last_checkpoint if isinstance(last_checkpoint, dict) else {}
+    startup_row = {
+        "status": snapshot.get("status"),
+        "profile": snapshot.get("profile"),
+        "gateway_url": snapshot.get("gateway_url"),
+        "streamlit_url": snapshot.get("streamlit_url"),
+        "checkpoint_count": snapshot.get("checkpoint_count"),
+        "last_stage": last_checkpoint.get("stage"),
+        "last_stage_status": last_checkpoint.get("status"),
+        "last_stage_message": last_checkpoint.get("message"),
+    }
+    st.dataframe([startup_row], width="stretch")
+
+    session_state = snapshot.get("session_state")
+    session_state = session_state if isinstance(session_state, dict) else {}
+    if session_state:
+        service_order = ("gateway", "streamlit", "voice_runtime_service", "tts_runtime_service")
+        service_rows: list[dict[str, Any]] = []
+        for service_name in service_order:
+            entry = session_state.get(service_name)
+            if not isinstance(entry, dict):
+                continue
+            last_probe = entry.get("last_probe")
+            last_probe = last_probe if isinstance(last_probe, dict) else {}
+            service_rows.append(
+                {
+                    "service_name": service_name,
+                    "managed": entry.get("managed"),
+                    "status": entry.get("status"),
+                    "effective_url": entry.get("effective_url"),
+                    "pid": entry.get("pid"),
+                    "last_probe_status": last_probe.get("status"),
+                    "error": _coalesce(entry.get("error"), last_probe.get("error")),
+                    "log_path": entry.get("log_path"),
+                }
+            )
+        if service_rows:
+            st.caption("Operator session state")
+            st.dataframe(service_rows, width="stretch")
+
+    st.caption("Startup artifacts")
+    st.json(snapshot.get("paths"))
+
+
+def _render_operator_governance_section(summary: dict[str, Any] | None) -> None:
+    if summary is None:
+        st.info(
+            "Governance decision surface is not available yet. "
+            "Run `python scripts/run_gateway_sla_operating_cycle.py --runs-dir runs` to populate it."
+        )
+        return
+
+    decision_status = str(summary.get("decision_status", "")).strip()
+    actionable_message = _coalesce(summary.get("actionable_message"), "No operator guidance available yet.")
+    if decision_status == "allow":
+        st.success(actionable_message)
+    elif decision_status in {"repair", "remediate"}:
+        st.warning(actionable_message)
+    else:
+        st.info(actionable_message)
+
+    governance_row = {
+        "status": summary.get("status"),
+        "decision_status": summary.get("decision_status"),
+        "recommended_policy": summary.get("recommended_policy"),
+        "next_action_hint": summary.get("next_action_hint"),
+        "transition_allow_switch": summary.get("transition_allow_switch"),
+        "remaining_for_window": summary.get("remaining_for_window"),
+        "remaining_for_streak": summary.get("remaining_for_streak"),
+        "candidate_item_count": summary.get("candidate_item_count"),
+        "integrity_status": summary.get("integrity_status"),
+        "attention_state": summary.get("attention_state"),
+        "degraded_sources": ", ".join(_normalize_reason_codes(summary.get("degraded_sources"))),
+    }
+    st.dataframe([governance_row], width="stretch")
+    reason_codes = _normalize_reason_codes(summary.get("reason_codes"))
+    if reason_codes:
+        st.caption("Governance reason codes")
+        st.dataframe([{"reason_codes": ", ".join(reason_codes)}], width="stretch")
+    st.caption("Governance source paths")
+    st.json(summary.get("source_paths"))
+
+
 def _render_operating_cycle_section(snapshot: dict[str, Any] | None, warnings: list[str]) -> None:
     _render_snapshot_warnings(
         "Some G2 operating cycle artifacts were skipped due to parse/contract issues",
@@ -856,6 +997,30 @@ def _render_fail_nightly_progress_section(snapshot: dict[str, Any] | None, warni
     st.dataframe([progress_row], width="stretch")
     st.caption("Progress source paths")
     st.json(snapshot.get("source_paths"))
+
+
+def _render_fail_nightly_transition_section(snapshot: dict[str, Any] | None, warnings: list[str]) -> None:
+    _render_snapshot_warnings(
+        "Some fail_nightly transition artifacts were skipped due to parse/contract issues",
+        warnings,
+    )
+    if snapshot is None:
+        st.info("not available yet")
+        return
+
+    transition_row = {
+        "status": snapshot.get("status"),
+        "decision_status": snapshot.get("decision_status"),
+        "allow_switch": snapshot.get("allow_switch"),
+        "recommended_policy": _nested_get(snapshot, "recommendation", "target_critical_policy"),
+        "switch_surface": _nested_get(snapshot, "recommendation", "switch_surface"),
+        "reason_codes": ", ".join(_normalize_reason_codes(_nested_get(snapshot, "recommendation", "reason_codes"))),
+        "remaining_for_window": _nested_get(snapshot, "observed", "progress", "remaining_for_window"),
+        "remaining_for_streak": _nested_get(snapshot, "observed", "progress", "remaining_for_streak"),
+    }
+    st.dataframe([transition_row], width="stretch")
+    st.caption("Transition artifact")
+    st.json(snapshot.get("paths"))
 
 
 def _render_fail_nightly_remediation_section(snapshot: dict[str, Any] | None, warnings: list[str]) -> None:
@@ -987,6 +1152,12 @@ def parse_panel_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Streamlit operator panel v0.")
     parser.add_argument("--runs-dir", type=Path, default=Path("runs"), help="Base runs directory.")
     parser.add_argument(
+        "--operator-runs-dir",
+        type=Path,
+        default=None,
+        help="Operator artifact base directory used to resolve launcher/session artifacts (default: --runs-dir).",
+    )
+    parser.add_argument(
         "--gateway-url",
         default="http://127.0.0.1:8770",
         help="Gateway HTTP base URL (default: http://127.0.0.1:8770).",
@@ -1004,6 +1175,7 @@ def parse_panel_args(argv: list[str] | None = None) -> argparse.Namespace:
         help=f"Compact mobile breakpoint in px (default: {MOBILE_LAYOUT_BREAKPOINT_PX_DEFAULT}).",
     )
     args, _unknown = parser.parse_known_args(argv)
+    args.operator_runs_dir = Path(args.operator_runs_dir) if args.operator_runs_dir is not None else Path(args.runs_dir)
     return args
 
 
@@ -1013,6 +1185,8 @@ def _render_stack_health_tab(
     health_error: str | None,
     operator_snapshot_payload: dict[str, Any] | None,
     operator_snapshot_error: str | None,
+    operator_startup_payload: dict[str, Any] | None,
+    operator_startup_warnings: list[str],
 ) -> None:
     if health_error is not None:
         st.error(health_error)
@@ -1063,6 +1237,9 @@ def _render_stack_health_tab(
     if isinstance(policy, dict):
         st.subheader("Gateway policy snapshot")
         st.json(policy)
+
+    st.subheader("Operator startup session")
+    _render_operator_startup_section(operator_startup_payload, operator_startup_warnings)
 
 
 def _render_run_explorer_tab(
@@ -1125,6 +1302,12 @@ def _render_latest_metrics_tab(
         else None
     )
     warning_payload = warning_payload if isinstance(warning_payload, dict) else {}
+    governance_summary = (
+        _nested_get(operator_snapshot_payload, "operator_context", "governance")
+        if isinstance(operator_snapshot_payload, dict)
+        else None
+    )
+    governance_summary = governance_summary if isinstance(governance_summary, dict) else None
     if latest_metrics_payload is not None:
         rows = latest_metrics_payload.get("summary_matrix")
         rows = rows if isinstance(rows, list) else []
@@ -1136,6 +1319,21 @@ def _render_latest_metrics_tab(
             if operator_snapshot_error is not None
             else "Data source: local contract files"
         )
+    if governance_summary is None:
+        local_progress_snapshot, _ = load_fail_nightly_progress_snapshot(runs_dir)
+        local_transition_snapshot, _ = load_fail_nightly_transition_snapshot(runs_dir)
+        local_remediation_snapshot, _ = load_fail_nightly_remediation_snapshot(runs_dir)
+        local_integrity_snapshot, _ = load_fail_nightly_integrity_snapshot(runs_dir)
+        local_operating_cycle_snapshot, _ = load_operating_cycle_snapshot(runs_dir)
+        governance_summary = build_operator_governance_summary(
+            progress_snapshot=local_progress_snapshot,
+            transition_snapshot=local_transition_snapshot,
+            remediation_snapshot=local_remediation_snapshot,
+            integrity_snapshot=local_integrity_snapshot,
+            operating_cycle_snapshot=local_operating_cycle_snapshot,
+        )
+    st.subheader("Operator governance")
+    _render_operator_governance_section(governance_summary)
     st.subheader("Latest summary matrix")
     st.dataframe(rows, width="stretch")
 
@@ -1158,6 +1356,16 @@ def _render_latest_metrics_tab(
     if progress_snapshot is None and latest_metrics_payload is None:
         progress_snapshot, progress_warnings = load_fail_nightly_progress_snapshot(runs_dir)
     _render_fail_nightly_progress_section(progress_snapshot, progress_warnings)
+
+    st.subheader("Gateway fail_nightly transition")
+    transition_snapshot = (
+        latest_metrics_payload.get("fail_nightly_transition") if latest_metrics_payload is not None else None
+    )
+    transition_snapshot = transition_snapshot if isinstance(transition_snapshot, dict) else None
+    transition_warnings = [str(item) for item in warning_payload.get("metrics", []) if "transition" in str(item)]
+    if transition_snapshot is None and latest_metrics_payload is None:
+        transition_snapshot, transition_warnings = load_fail_nightly_transition_snapshot(runs_dir)
+    _render_fail_nightly_transition_section(transition_snapshot, transition_warnings)
 
     st.subheader("Gateway fail_nightly remediation")
     remediation_snapshot = (
@@ -1324,6 +1532,8 @@ def render_panel(args: argparse.Namespace) -> None:
         st.session_state["runs_dir"] = str(args.runs_dir)
     if "gateway_url" not in st.session_state:
         st.session_state["gateway_url"] = args.gateway_url
+    if "operator_runs_dir" not in st.session_state:
+        st.session_state["operator_runs_dir"] = str(args.operator_runs_dir)
     if "last_refreshed_utc" not in st.session_state:
         st.session_state["last_refreshed_utc"] = _utc_now()
 
@@ -1341,10 +1551,23 @@ def render_panel(args: argparse.Namespace) -> None:
     st.caption(f"last_refreshed_utc: {st.session_state['last_refreshed_utc']}")
 
     runs_dir = Path(st.session_state["runs_dir"])
+    operator_runs_dir = Path(st.session_state["operator_runs_dir"])
     sources = canonical_summary_sources(runs_dir)
     operator_snapshot_payload, operator_snapshot_error = fetch_gateway_operator_snapshot(
         gateway_url, args.gateway_timeout_sec
     )
+    operator_startup_payload = (
+        _nested_get(operator_snapshot_payload, "operator_context", "startup")
+        if isinstance(operator_snapshot_payload, dict)
+        else None
+    )
+    operator_startup_payload = operator_startup_payload if isinstance(operator_startup_payload, dict) else None
+    operator_startup_warnings = [
+        str(item)
+        for item in _normalize_reason_codes(_nested_get(operator_snapshot_payload, "warnings", "startup"))
+    ]
+    if operator_startup_payload is None:
+        operator_startup_payload, operator_startup_warnings = load_latest_operator_startup_status(operator_runs_dir)
     if operator_snapshot_payload is not None and isinstance(operator_snapshot_payload.get("gateway"), dict):
         health_payload = operator_snapshot_payload.get("gateway")
         health_error = None
@@ -1358,6 +1581,8 @@ def render_panel(args: argparse.Namespace) -> None:
             health_error=health_error,
             operator_snapshot_payload=operator_snapshot_payload,
             operator_snapshot_error=operator_snapshot_error,
+            operator_startup_payload=operator_startup_payload,
+            operator_startup_warnings=operator_startup_warnings,
         )
     with tabs[1]:
         _render_run_explorer_tab(

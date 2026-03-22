@@ -46,6 +46,7 @@ def test_gateway_v1_http_service_healthz_ok(tmp_path: Path) -> None:
     payload = response.json()
     assert payload["status"] == "ok"
     assert payload["service"] == "gateway_v1_http_service"
+    assert payload["operator_runs_dir"] == str(tmp_path / "runs")
     assert payload["policy"] == {
         "max_request_body_bytes": 10_000,
         "max_json_depth": 4,
@@ -73,6 +74,7 @@ def test_gateway_v1_http_service_operator_snapshot_returns_gateway_centered_payl
     assert payload["stack_services"]["gateway_v1_http_service"]["status"] == "ok"
     assert payload["stack_services"]["voice_runtime_service"]["status"] == "not_configured"
     assert payload["stack_services"]["tts_runtime_service"]["status"] == "not_configured"
+    assert payload["operator_context"]["artifact_roots"]["operator_runs_dir"] == str(tmp_path / "runs")
     assert isinstance(payload["latest_metrics"]["summary_matrix"], list)
 
 
@@ -95,6 +97,7 @@ def test_gateway_v1_http_service_operator_snapshot_passes_optional_service_urls(
     monkeypatch.setattr(gateway_http, "build_operator_product_snapshot", _fake_build_operator_product_snapshot)
     app = gateway_http.create_app(
         runs_dir=tmp_path / "runs",
+        operator_runs_dir=tmp_path / "operator-runs",
         voice_service_url="http://127.0.0.1:8765",
         tts_service_url="http://127.0.0.1:8780",
         operator_health_timeout_sec=9.5,
@@ -103,9 +106,66 @@ def test_gateway_v1_http_service_operator_snapshot_passes_optional_service_urls(
         response = client.get("/v1/operator/snapshot")
 
     assert response.status_code == 200
+    assert captured["operator_runs_dir"] == tmp_path / "operator-runs"
     assert captured["voice_service_url"] == "http://127.0.0.1:8765"
     assert captured["tts_service_url"] == "http://127.0.0.1:8780"
     assert captured["health_timeout_sec"] == 9.5
+
+
+def test_gateway_v1_http_service_operator_snapshot_reads_latest_startup_artifact(tmp_path: Path) -> None:
+    operator_runs_dir = tmp_path / "operator-runs"
+    startup_run_dir = operator_runs_dir / "20260322_120000-start-operator-product"
+    startup_run_dir.mkdir(parents=True, exist_ok=True)
+    startup_plan_json = startup_run_dir / "startup_plan.json"
+    startup_plan_json.write_text("{}", encoding="utf-8")
+    run_json_path = startup_run_dir / "run.json"
+    run_json_path.write_text(
+        json.dumps(
+            {
+                "schema_version": "operator_product_startup_v1",
+                "mode": "start_operator_product",
+                "status": "running",
+                "profile": "operator_product_core",
+                "timestamp_utc": "2026-03-22T12:00:00+00:00",
+                "gateway_url": "http://127.0.0.1:8770",
+                "streamlit_url": "http://127.0.0.1:8501",
+                "paths": {
+                    "run_json": str(run_json_path),
+                    "startup_plan_json": str(startup_plan_json),
+                    "gateway_log": str(startup_run_dir / "gateway.log"),
+                    "streamlit_log": str(startup_run_dir / "streamlit.log"),
+                },
+                "session_state": {
+                    "gateway": {
+                        "service_name": "gateway",
+                        "managed": True,
+                        "configured": True,
+                        "effective_url": "http://127.0.0.1:8770",
+                        "status": "running",
+                        "pid": 4321,
+                        "last_probe": {"status": "ok"},
+                    }
+                },
+                "child_processes": {"gateway": {"pid": 4321, "return_code": None}},
+                "startup_checkpoints": [{"stage": "probe", "status": "ok"}],
+                "last_checkpoint": {"stage": "probe", "status": "ok"},
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+
+    app = gateway_http.create_app(
+        runs_dir=tmp_path / "gateway-runs",
+        operator_runs_dir=operator_runs_dir,
+    )
+    with TestClient(app) as client:
+        response = client.get("/v1/operator/snapshot")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["operator_context"]["startup"]["status"] == "running"
+    assert payload["operator_context"]["startup"]["paths"]["run_json"] == str(run_json_path)
 
 
 def test_gateway_v1_http_service_operator_runs_returns_schema(tmp_path: Path) -> None:
