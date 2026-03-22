@@ -38,6 +38,19 @@ def _write_json(path: Path, payload: dict[str, Any]) -> None:
     path.write_text(json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8")
 
 
+def _resolve_effective_runs_dirs(args: argparse.Namespace) -> argparse.Namespace:
+    args.runs_dir = Path(args.runs_dir)
+    args.gateway_runs_dir = Path(args.gateway_runs_dir) if args.gateway_runs_dir is not None else args.runs_dir / "gateway-http"
+    args.panel_runs_dir = Path(args.panel_runs_dir) if args.panel_runs_dir is not None else args.runs_dir
+    args.voice_runtime_runs_dir = (
+        Path(args.voice_runtime_runs_dir) if args.voice_runtime_runs_dir is not None else args.runs_dir / "voice-runtime"
+    )
+    args.tts_runtime_runs_dir = (
+        Path(args.tts_runtime_runs_dir) if args.tts_runtime_runs_dir is not None else args.runs_dir / "tts-runtime"
+    )
+    return args
+
+
 def build_startup_plan(args: argparse.Namespace) -> dict[str, Any]:
     gateway_url = f"http://{args.gateway_host}:{args.gateway_port}"
     streamlit_url = f"http://127.0.0.1:{args.streamlit_port}"
@@ -243,14 +256,14 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument(
         "--gateway-runs-dir",
         type=Path,
-        default=Path("runs") / "gateway-http",
-        help="Gateway runs directory (default: runs/gateway-http).",
+        default=None,
+        help="Gateway runs directory (default: <runs-dir>/gateway-http).",
     )
     parser.add_argument(
         "--panel-runs-dir",
         type=Path,
-        default=Path("runs"),
-        help="Streamlit panel runs directory (default: runs).",
+        default=None,
+        help="Streamlit panel runs directory (default: <runs-dir>).",
     )
     parser.add_argument("--gateway-host", default="127.0.0.1", help="Gateway bind host.")
     parser.add_argument("--gateway-port", type=int, default=8770, help="Gateway port.")
@@ -287,8 +300,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument(
         "--voice-runtime-runs-dir",
         type=Path,
-        default=Path("runs") / "voice-runtime",
-        help="Managed voice runtime runs directory (default: runs/voice-runtime).",
+        default=None,
+        help="Managed voice runtime runs directory (default: <runs-dir>/voice-runtime).",
     )
     parser.add_argument(
         "--tts-runtime-url",
@@ -310,8 +323,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument(
         "--tts-runtime-runs-dir",
         type=Path,
-        default=Path("runs") / "tts-runtime",
-        help="Managed TTS runtime runs directory (default: runs/tts-runtime).",
+        default=None,
+        help="Managed TTS runtime runs directory (default: <runs-dir>/tts-runtime).",
     )
     parser.add_argument(
         "--print-plan-json",
@@ -323,7 +336,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         parser.error("--start-voice-runtime cannot be combined with --voice-runtime-url.")
     if args.start_tts_runtime and args.tts_runtime_url:
         parser.error("--start-tts-runtime cannot be combined with --tts-runtime-url.")
-    return args
+    return _resolve_effective_runs_dirs(args)
 
 
 def main(argv: list[str] | None = None) -> int:

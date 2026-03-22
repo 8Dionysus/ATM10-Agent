@@ -364,6 +364,34 @@ def _run_pip_check(*, repo_root: Path, command_runner: Any | None) -> dict[str, 
     }
 
 
+def _normalize_pip_audit_vulnerabilities(parsed_payload: Any) -> list[dict[str, Any]]:
+    if isinstance(parsed_payload, list):
+        if not all(isinstance(item, Mapping) for item in parsed_payload):
+            raise ValueError("pip-audit list payload must contain mapping items.")
+        return [dict(item) for item in parsed_payload]
+
+    if isinstance(parsed_payload, Mapping):
+        dependencies = parsed_payload.get("dependencies", [])
+        if dependencies in (None, ""):
+            return []
+        if not isinstance(dependencies, list):
+            raise ValueError("pip-audit object payload must provide 'dependencies' as a list.")
+        if not all(isinstance(item, Mapping) for item in dependencies):
+            raise ValueError("pip-audit dependencies payload must contain mapping items.")
+        return [dict(item) for item in dependencies]
+
+    raise ValueError("Unsupported pip-audit JSON payload shape.")
+
+
+def _count_pip_audit_vulnerabilities(vulnerabilities: Sequence[Mapping[str, Any]]) -> int:
+    total = 0
+    for item in vulnerabilities:
+        vulns = item.get("vulns", [])
+        if isinstance(vulns, list):
+            total += len(vulns)
+    return total
+
+
 def _run_security_scan(
     *,
     repo_root: Path,
@@ -397,12 +425,13 @@ def _run_security_scan(
     if result.returncode == 0:
         try:
             parsed = json.loads(stdout_text or "[]")
-            vulnerabilities_count = sum(len(item.get("vulns", [])) for item in parsed)
+            vulnerabilities = _normalize_pip_audit_vulnerabilities(parsed)
+            vulnerabilities_count = _count_pip_audit_vulnerabilities(vulnerabilities)
             payload.update(
                 {
                     "status": "ok",
                     "vulnerabilities_count": int(vulnerabilities_count),
-                    "vulnerabilities": parsed,
+                    "vulnerabilities": vulnerabilities,
                     "error": None,
                 }
             )

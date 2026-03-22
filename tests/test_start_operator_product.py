@@ -16,8 +16,42 @@ def test_build_startup_plan_uses_primary_operator_profile_defaults() -> None:
     assert plan["profile"] == "operator_product_core"
     assert plan["gateway"]["url"] == "http://127.0.0.1:8770"
     assert plan["streamlit"]["url"] == "http://127.0.0.1:8501"
+    assert plan["gateway"]["runs_dir"] == str(Path("runs") / "gateway-http")
+    assert plan["streamlit"]["runs_dir"] == str(Path("runs"))
     assert "scripts/gateway_v1_http_service.py" in plan["gateway"]["command"]
     assert "scripts/streamlit_operator_panel.py" in plan["streamlit"]["command"]
+
+
+def test_parse_args_derives_child_run_dirs_from_base_runs_dir(tmp_path: Path) -> None:
+    args = start_operator_product.parse_args(["--runs-dir", str(tmp_path / "audit-root")])
+
+    assert args.runs_dir == tmp_path / "audit-root"
+    assert args.gateway_runs_dir == tmp_path / "audit-root" / "gateway-http"
+    assert args.panel_runs_dir == tmp_path / "audit-root"
+    assert args.voice_runtime_runs_dir == tmp_path / "audit-root" / "voice-runtime"
+    assert args.tts_runtime_runs_dir == tmp_path / "audit-root" / "tts-runtime"
+
+
+def test_parse_args_keeps_explicit_child_run_dir_overrides(tmp_path: Path) -> None:
+    args = start_operator_product.parse_args(
+        [
+            "--runs-dir",
+            str(tmp_path / "audit-root"),
+            "--gateway-runs-dir",
+            str(tmp_path / "explicit-gateway"),
+            "--panel-runs-dir",
+            str(tmp_path / "explicit-panel"),
+            "--voice-runtime-runs-dir",
+            str(tmp_path / "explicit-voice"),
+            "--tts-runtime-runs-dir",
+            str(tmp_path / "explicit-tts"),
+        ]
+    )
+
+    assert args.gateway_runs_dir == tmp_path / "explicit-gateway"
+    assert args.panel_runs_dir == tmp_path / "explicit-panel"
+    assert args.voice_runtime_runs_dir == tmp_path / "explicit-voice"
+    assert args.tts_runtime_runs_dir == tmp_path / "explicit-tts"
 
 
 def test_build_startup_plan_passes_optional_runtime_urls() -> None:
