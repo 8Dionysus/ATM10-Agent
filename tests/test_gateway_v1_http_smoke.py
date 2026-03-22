@@ -9,6 +9,7 @@ import pytest
 
 pytest.importorskip("fastapi")
 pytest.importorskip("httpx")
+from fastapi import testclient as fastapi_testclient
 
 import scripts.gateway_v1_http_smoke as gateway_http_smoke
 
@@ -84,6 +85,84 @@ def test_gateway_v1_http_smoke_hybrid_ok(tmp_path: Path) -> None:
     assert summary_payload["error_buckets"]["none"] == 1
     assert summary_payload["requests"][0]["operation"] == "hybrid_query"
     assert summary_payload["requests"][0]["http_status"] == summary_payload["requests"][0]["expected_http_status"]
+
+
+def test_gateway_v1_http_smoke_combo_a_ok(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    summary_path = tmp_path / "runs" / "ci-smoke-gateway-http-combo-a" / "gateway_http_smoke_summary.json"
+
+    def _fake_seed(**kwargs):
+        run_dir = kwargs["runs_dir"] / "seed-run"
+        run_dir.mkdir(parents=True, exist_ok=True)
+        return {
+            "ok": True,
+            "run_dir": run_dir,
+            "run_payload": {"status": "ok"},
+            "summary_payload": {
+                "qdrant": {"collection": "atm10_combo_a_fixture_gateway_http_smoke", "vector_size": 64},
+                "neo4j": {"dataset_tag": "atm10_combo_a_fixture_gateway_http_smoke"},
+                "paths": {"run_dir": str(run_dir)},
+            },
+        }
+
+    class _FakeResponse:
+        def __init__(self, operation: str) -> None:
+            self.status_code = 200
+            self._operation = operation
+
+        def json(self) -> dict[str, object]:
+            return {
+                "schema_version": "gateway_response_v1",
+                "operation": self._operation,
+                "status": "ok",
+                "error_code": None,
+                "result": {},
+                "artifacts": {
+                    "run_dir": str(tmp_path / "gateway-http-runs" / self._operation),
+                    "run_json": str(tmp_path / "gateway-http-runs" / self._operation / "run.json"),
+                },
+            }
+
+    class _FakeTestClient:
+        def __init__(self, app) -> None:
+            self.app = app
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def post(self, path: str, json: dict[str, object]):
+            assert path == "/v1/gateway"
+            return _FakeResponse(str(json["operation"]))
+
+    monkeypatch.setattr(gateway_http_smoke, "seed_combo_a_fixture_data", _fake_seed)
+    monkeypatch.setattr(gateway_http_smoke, "create_app", lambda **kwargs: {"app": "ok", **kwargs})
+    monkeypatch.setattr(gateway_http_smoke, "map_gateway_http_status", lambda payload: 200)
+    monkeypatch.setattr(fastapi_testclient, "TestClient", _FakeTestClient)
+
+    result = gateway_http_smoke.run_gateway_v1_http_smoke(
+        scenario="combo_a",
+        runs_dir=tmp_path / "runs" / "ci-smoke-gateway-http-combo-a",
+        summary_json=summary_path,
+        combo_a_neo4j_password="secret",
+        now=datetime(2026, 2, 27, 23, 1, 45, tzinfo=timezone.utc),
+    )
+
+    assert result["ok"] is True
+    summary_payload = json.loads(summary_path.read_text(encoding="utf-8"))
+    assert summary_payload["status"] == "ok"
+    assert summary_payload["scenario"] == "combo_a"
+    assert summary_payload["request_count"] == 4
+    assert summary_payload["failed_requests_count"] == 0
+    assert summary_payload["combo_a_seed"]["qdrant"]["collection"] == "atm10_combo_a_fixture_gateway_http_smoke"
+    assert summary_payload["combo_a_seed"]["neo4j"]["dataset_tag"] == "atm10_combo_a_fixture_gateway_http_smoke"
+    assert [item["operation"] for item in summary_payload["requests"]] == [
+        "health",
+        "retrieval_query",
+        "kag_query",
+        "hybrid_query",
+    ]
 
 
 def test_gateway_v1_http_smoke_invalid_scenario_raises_value_error(tmp_path: Path) -> None:

@@ -26,6 +26,20 @@ def _doc_key_from_doc_id(doc_id: str) -> str:
     return normalized.split(":", 1)[1]
 
 
+def _scoped_node_id(raw_id: str, dataset_tag: str | None) -> str:
+    normalized_id = str(raw_id).strip()
+    normalized_dataset_tag = str(dataset_tag or "").strip()
+    if not normalized_dataset_tag:
+        return normalized_id
+    return f"{normalized_dataset_tag}::{normalized_id}"
+
+
+def _dataset_where_clause(alias: str, dataset_tag: str | None) -> str:
+    if not str(dataset_tag or "").strip():
+        return ""
+    return f"WHERE {alias}.dataset_tag = $dataset_tag"
+
+
 def _neo4j_cypher_json(
     *,
     url: str,
@@ -144,6 +158,7 @@ def sync_kag_graph_neo4j(
     timeout_sec: float = 30.0,
     batch_size: int = 500,
     reset_graph: bool = False,
+    dataset_tag: str | None = None,
 ) -> dict[str, Any]:
     doc_nodes = graph_payload.get("nodes", {}).get("docs", [])
     entity_nodes = graph_payload.get("nodes", {}).get("entities", [])
@@ -171,20 +186,29 @@ def sync_kag_graph_neo4j(
             timeout_sec=timeout_sec,
         )
 
+    normalized_dataset_tag = str(dataset_tag or "").strip() or None
+
     run("CREATE CONSTRAINT kag_doc_id IF NOT EXISTS FOR (d:Doc) REQUIRE d.id IS UNIQUE")
     run("CREATE CONSTRAINT kag_entity_id IF NOT EXISTS FOR (e:Entity) REQUIRE e.id IS UNIQUE")
     run("CREATE FULLTEXT INDEX kag_doc_fulltext IF NOT EXISTS FOR (d:Doc) ON EACH [d.title, d.doc_id]")
 
     if reset_graph:
-        run("MATCH (n) WHERE n:Doc OR n:Entity DETACH DELETE n")
+        if normalized_dataset_tag:
+            run(
+                "MATCH (n) WHERE (n:Doc OR n:Entity) AND n.dataset_tag = $dataset_tag DETACH DELETE n",
+                {"dataset_tag": normalized_dataset_tag},
+            )
+        else:
+            run("MATCH (n) WHERE n:Doc OR n:Entity DETACH DELETE n")
 
     doc_rows = [
         {
-            "id": str(item.get("id", "")),
+            "id": _scoped_node_id(str(item.get("id", "")), normalized_dataset_tag),
             "doc_id": str(item.get("doc_id", "")),
             "source": str(item.get("source", "")),
             "title": str(item.get("title", "")),
             "path": str(item.get("path", "")),
+            "dataset_tag": normalized_dataset_tag,
         }
         for item in doc_nodes
         if isinstance(item, Mapping) and str(item.get("id", "")).strip()
@@ -197,16 +221,18 @@ MERGE (d:Doc {id: row.id})
 SET d.doc_id = row.doc_id,
     d.source = row.source,
     d.title = row.title,
-    d.path = row.path
+    d.path = row.path,
+    d.dataset_tag = row.dataset_tag
 """.strip(),
             {"rows": chunk},
         )
 
     entity_rows = [
         {
-            "id": str(item.get("id", "")),
+            "id": _scoped_node_id(str(item.get("id", "")), normalized_dataset_tag),
             "entity": str(item.get("entity", "")),
             "label": str(item.get("label", "")),
+            "dataset_tag": normalized_dataset_tag,
         }
         for item in entity_nodes
         if isinstance(item, Mapping) and str(item.get("id", "")).strip()
@@ -217,15 +243,16 @@ SET d.doc_id = row.doc_id,
 UNWIND $rows AS row
 MERGE (e:Entity {id: row.id})
 SET e.entity = row.entity,
-    e.label = row.label
+    e.label = row.label,
+    e.dataset_tag = row.dataset_tag
 """.strip(),
             {"rows": chunk},
         )
 
     mention_rows = [
         {
-            "src": str(item.get("src", "")),
-            "dst": str(item.get("dst", "")),
+            "src": _scoped_node_id(str(item.get("src", "")), normalized_dataset_tag),
+            "dst": _scoped_node_id(str(item.get("dst", "")), normalized_dataset_tag),
             "weight": int(item.get("weight", 1)),
         }
         for item in mention_edges
@@ -247,8 +274,8 @@ SET r.weight = row.weight
 
     cooccurs_rows = [
         {
-            "src": str(item.get("src", "")),
-            "dst": str(item.get("dst", "")),
+            "src": _scoped_node_id(str(item.get("src", "")), normalized_dataset_tag),
+            "dst": _scoped_node_id(str(item.get("dst", "")), normalized_dataset_tag),
             "weight": int(item.get("weight", 1)),
         }
         for item in cooccurs_edges
@@ -272,6 +299,7 @@ SET r.weight = row.weight
         "url": url,
         "database": database,
         "reset_graph": reset_graph,
+        "dataset_tag": normalized_dataset_tag,
         "doc_nodes": len(doc_rows),
         "entity_nodes": len(entity_rows),
         "mention_edges": len(mention_rows),
@@ -289,6 +317,7 @@ def query_kag_neo4j(
     query: str,
     topk: int = 5,
     timeout_sec: float = 10.0,
+    dataset_tag: str | None = None,
 ) -> list[dict[str, Any]]:
     if topk <= 0:
         return []
@@ -296,15 +325,14 @@ def query_kag_neo4j(
     if not query_entities:
         return []
 
-    direct_rows = _run_cypher(
-        url=url,
-        database=database,
-        user=user,
-        password=password,
-        timeout_sec=timeout_sec,
-        statement="""
+    normalized_dataset_tag = str(dataset_tag or "").strip() or None
+
+    direct_statement = """
 UNWIND $entities AS token
 MATCH (d:Doc)-[:MENTIONS]->(e:Entity {entity: token})
+{dataset_where}
+WITH d, e
+WHERE $dataset_tag IS NULL OR e.dataset_tag = $dataset_tag
 WITH d, collect(DISTINCT e.entity) AS matched_entities, toFloat(count(DISTINCT e)) AS direct_score
 RETURN d.doc_id AS doc_id,
        d.source AS source,
@@ -312,8 +340,16 @@ RETURN d.doc_id AS doc_id,
        d.path AS path,
        matched_entities,
        direct_score
-""".strip(),
-        parameters={"entities": query_entities},
+""".strip().replace("{dataset_where}", _dataset_where_clause("d", normalized_dataset_tag))
+
+    direct_rows = _run_cypher(
+        url=url,
+        database=database,
+        user=user,
+        password=password,
+        timeout_sec=timeout_sec,
+        statement=direct_statement,
+        parameters={"entities": query_entities, "dataset_tag": normalized_dataset_tag},
     )
     expansion_rows: list[dict[str, Any]] = []
     if len(query_entities) > 1:
@@ -326,6 +362,11 @@ RETURN d.doc_id AS doc_id,
             statement="""
 UNWIND $entities AS token
 MATCH (q:Entity {entity: token})-[c:COOCCURS]-(n:Entity)<-[:MENTIONS]-(d:Doc)
+WHERE $dataset_tag IS NULL OR (
+    q.dataset_tag = $dataset_tag
+    AND n.dataset_tag = $dataset_tag
+    AND d.dataset_tag = $dataset_tag
+)
 WITH d,
      d.source AS source,
      d.title AS title,
@@ -337,7 +378,7 @@ RETURN d.doc_id AS doc_id,
        path,
        expansion_score
 """.strip(),
-            parameters={"entities": query_entities},
+            parameters={"entities": query_entities, "dataset_tag": normalized_dataset_tag},
         )
     lexical_rows: list[dict[str, Any]] = []
     if len(direct_rows) < topk:
@@ -350,6 +391,7 @@ RETURN d.doc_id AS doc_id,
             statement="""
 CALL db.index.fulltext.queryNodes('kag_doc_fulltext', $query_text) YIELD node, score
 WITH node AS d, toFloat(score) AS fulltext_score
+WHERE $dataset_tag IS NULL OR d.dataset_tag = $dataset_tag
 WITH d,
      fulltext_score,
      toLower(coalesce(d.title, '')) AS title_lc,
@@ -369,7 +411,11 @@ RETURN d.doc_id AS doc_id,
        toFloat(size(matched_lexical)) AS lexical_score,
        fulltext_score
 """.strip(),
-            parameters={"entities": query_entities, "query_text": query},
+            parameters={
+                "entities": query_entities,
+                "query_text": query,
+                "dataset_tag": normalized_dataset_tag,
+            },
         )
         if len(query_entities) == 1:
             query_token = query_entities[0]
@@ -392,6 +438,7 @@ RETURN d.doc_id AS doc_id,
                 timeout_sec=timeout_sec,
                 statement="""
 MATCH (d:Doc)
+WHERE $dataset_tag IS NULL OR d.dataset_tag = $dataset_tag
 WITH d,
      toLower(coalesce(d.title, '')) AS title_lc,
      CASE
@@ -414,6 +461,7 @@ LIMIT $limit
                 parameters={
                     "entities": query_entities,
                     "limit": max(topk * 5, 20),
+                    "dataset_tag": normalized_dataset_tag,
                 },
             )
 

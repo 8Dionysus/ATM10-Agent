@@ -103,3 +103,151 @@ def test_run_cross_service_benchmark_suite_errors_when_summary_artifact_missing(
     assert result["ok"] is False
     assert result["summary_payload"]["status"] == "error"
     assert "suite_orchestration" in result["summary_payload"]["degraded_services"]
+
+
+def test_run_cross_service_benchmark_suite_combo_a_uses_live_profile_paths(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    seed_calls: dict[str, object] = {}
+    retrieval_calls: dict[str, object] = {}
+    kag_calls: dict[str, object] = {}
+    live_calls: list[tuple[str, str]] = []
+
+    def _fake_seed(**kwargs):
+        seed_calls.update(kwargs)
+        run_dir = kwargs["runs_dir"] / "seed-run"
+        run_dir.mkdir(parents=True, exist_ok=True)
+        return {
+            "ok": True,
+            "run_dir": run_dir,
+            "run_payload": {"status": "ok"},
+            "summary_payload": {
+                "qdrant": {
+                    "collection": "atm10_combo_a_fixture_cross_service_suite",
+                    "vector_size": 64,
+                },
+                "neo4j": {
+                    "dataset_tag": "atm10_combo_a_fixture_cross_service_suite",
+                },
+            },
+        }
+
+    def _fake_live_service(service_name: str, backend: str):
+        def _runner(**kwargs):
+            live_calls.append((service_name, str(kwargs["service_url"])))
+            run_dir = kwargs["runs_dir"] / f"{service_name}-run"
+            run_dir.mkdir(parents=True, exist_ok=True)
+            summary_path = run_dir / "service_sla_summary.json"
+            _write_json(
+                summary_path,
+                build_service_sla_summary(
+                    service_name=service_name,
+                    surface="benchmark",
+                    backend=backend,
+                    profile="combo_a",
+                    policy="signal_only",
+                    status="ok",
+                    metrics=build_common_metrics(sample_count=2, success_count=2, latency_values_ms=[10.0, 12.0]),
+                    quality={"text_similarity_avg" if service_name == "voice_asr" else "non_empty_audio_rate": 1.0},
+                    paths={"service_sla_summary_json": summary_path},
+                ),
+            )
+            return {
+                "ok": True,
+                "run_dir": run_dir,
+                "run_payload": {"paths": {"service_sla_summary_json": str(summary_path)}},
+            }
+
+        return _runner
+
+    def _fake_retrieval(**kwargs):
+        retrieval_calls.update(kwargs)
+        run_dir = kwargs["runs_dir"] / "retrieval-run"
+        run_dir.mkdir(parents=True, exist_ok=True)
+        summary_path = run_dir / "service_sla_summary.json"
+        _write_json(
+            summary_path,
+            build_service_sla_summary(
+                service_name="retrieval",
+                surface="eval",
+                backend="qdrant",
+                profile="combo_a",
+                policy="signal_only",
+                status="ok",
+                metrics=build_common_metrics(sample_count=2, success_count=2, latency_values_ms=[5.0, 6.0]),
+                quality={"mean_mrr_at_k": 1.0},
+                paths={"service_sla_summary_json": summary_path},
+            ),
+        )
+        return {
+            "ok": True,
+            "run_dir": run_dir,
+            "run_payload": {"paths": {"service_sla_summary_json": str(summary_path)}},
+        }
+
+    def _fake_kag(**kwargs):
+        kag_calls.update(kwargs)
+        run_dir = kwargs["runs_dir"] / "kag-run"
+        run_dir.mkdir(parents=True, exist_ok=True)
+        summary_path = run_dir / "service_sla_summary.json"
+        _write_json(
+            summary_path,
+            build_service_sla_summary(
+                service_name="kag_neo4j",
+                surface="eval",
+                backend="neo4j",
+                profile="combo_a",
+                policy="signal_only",
+                status="ok",
+                metrics=build_common_metrics(sample_count=2, success_count=2, latency_values_ms=[7.0, 8.0]),
+                quality={"mean_mrr_at_k": 1.0},
+                paths={"service_sla_summary_json": summary_path},
+            ),
+        )
+        return {
+            "ok": True,
+            "run_dir": run_dir,
+            "run_payload": {"paths": {"service_sla_summary_json": str(summary_path)}},
+        }
+
+    monkeypatch.setattr(suite, "seed_combo_a_fixture_data", _fake_seed)
+    monkeypatch.setattr(
+        suite,
+        "run_live_voice_asr_service_benchmark",
+        _fake_live_service("voice_asr", "voice_runtime_service"),
+    )
+    monkeypatch.setattr(
+        suite,
+        "run_live_tts_service_benchmark",
+        _fake_live_service("voice_tts", "tts_runtime_service"),
+    )
+    monkeypatch.setattr(suite, "run_eval_retrieval", _fake_retrieval)
+    monkeypatch.setattr(suite, "run_eval_kag_neo4j", _fake_kag)
+
+    result = suite.run_cross_service_benchmark_suite(
+        profile="combo_a",
+        runs_dir=tmp_path / "runs",
+        summary_json=tmp_path / "runs" / "nightly-combo-a-cross-service-suite" / "cross_service_benchmark_suite.json",
+        voice_service_url="http://127.0.0.1:8765",
+        tts_service_url="http://127.0.0.1:8780",
+        qdrant_url="http://127.0.0.1:6333",
+        neo4j_url="http://127.0.0.1:7474",
+        neo4j_database="neo4j",
+        neo4j_user="neo4j",
+        neo4j_password="secret",
+        now=datetime(2026, 3, 22, 19, 45, 0, tzinfo=timezone.utc),
+    )
+
+    summary_payload = result["summary_payload"]
+    assert result["ok"] is True
+    assert summary_payload["profile"] == "combo_a"
+    assert sorted(summary_payload["services"].keys()) == ["kag_neo4j", "retrieval", "voice_asr", "voice_tts"]
+    assert summary_payload["overall_sla_status"] == "pass"
+    assert summary_payload["paths"]["combo_a_seed_run_dir"].endswith("seed-run")
+    assert seed_calls["scope"] == "cross_service_suite"
+    assert retrieval_calls["backend"] == "qdrant"
+    assert retrieval_calls["collection"] == "atm10_combo_a_fixture_cross_service_suite"
+    assert kag_calls["neo4j_dataset_tag"] == "atm10_combo_a_fixture_cross_service_suite"
+    assert ("voice_asr", "http://127.0.0.1:8765") in live_calls
+    assert ("voice_tts", "http://127.0.0.1:8780") in live_calls

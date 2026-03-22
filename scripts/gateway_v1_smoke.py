@@ -13,6 +13,14 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
+from src.agent_core.combo_a_profile import (
+    DEFAULT_COMBO_A_NEO4J_DATABASE,
+    DEFAULT_COMBO_A_NEO4J_URL,
+    DEFAULT_COMBO_A_NEO4J_USER,
+    DEFAULT_COMBO_A_QDRANT_URL,
+    qdrant_host_port_from_url,
+    seed_combo_a_fixture_data,
+)
 from scripts.gateway_v1_local import run_gateway_request
 
 
@@ -63,7 +71,15 @@ def _build_error_buckets(request_rows: list[Mapping[str, Any]]) -> dict[str, int
     return buckets
 
 
-def _build_scenario_requests(scenario: str) -> list[dict[str, Any]]:
+def _build_scenario_requests(
+    scenario: str,
+    *,
+    combo_a_seed: Mapping[str, Any] | None = None,
+    combo_a_qdrant_url: str = DEFAULT_COMBO_A_QDRANT_URL,
+    combo_a_neo4j_url: str = DEFAULT_COMBO_A_NEO4J_URL,
+    combo_a_neo4j_database: str = DEFAULT_COMBO_A_NEO4J_DATABASE,
+    combo_a_neo4j_user: str = DEFAULT_COMBO_A_NEO4J_USER,
+) -> list[dict[str, Any]]:
     if scenario == "core":
         return [
             {
@@ -118,6 +134,71 @@ def _build_scenario_requests(scenario: str) -> list[dict[str, Any]]:
                 },
             }
         ]
+    if scenario == "combo_a":
+        if combo_a_seed is None:
+            raise ValueError("combo_a_seed is required for scenario='combo_a'.")
+        qdrant = combo_a_seed.get("qdrant")
+        neo4j = combo_a_seed.get("neo4j")
+        qdrant = qdrant if isinstance(qdrant, Mapping) else {}
+        neo4j = neo4j if isinstance(neo4j, Mapping) else {}
+        qdrant_host, qdrant_port = qdrant_host_port_from_url(combo_a_qdrant_url)
+        return [
+            {
+                "schema_version": "gateway_request_v1",
+                "operation": "health",
+                "payload": {},
+            },
+            {
+                "schema_version": "gateway_request_v1",
+                "operation": "retrieval_query",
+                "payload": {
+                    "backend": "qdrant",
+                    "query": "steel tools",
+                    "collection": qdrant.get("collection"),
+                    "host": qdrant_host,
+                    "port": qdrant_port,
+                    "vector_size": qdrant.get("vector_size", 64),
+                    "topk": 3,
+                    "candidate_k": 10,
+                    "reranker": "none",
+                },
+            },
+            {
+                "schema_version": "gateway_request_v1",
+                "operation": "kag_query",
+                "payload": {
+                    "backend": "neo4j",
+                    "query": "steel tools",
+                    "topk": 5,
+                    "neo4j_url": combo_a_neo4j_url,
+                    "neo4j_database": combo_a_neo4j_database,
+                    "neo4j_user": combo_a_neo4j_user,
+                    "neo4j_dataset_tag": neo4j.get("dataset_tag"),
+                },
+            },
+            {
+                "schema_version": "gateway_request_v1",
+                "operation": "hybrid_query",
+                "payload": {
+                    "profile": "combo_a",
+                    "query": "steel tools",
+                    "retrieval_backend": "qdrant",
+                    "kag_backend": "neo4j",
+                    "collection": qdrant.get("collection"),
+                    "host": qdrant_host,
+                    "port": qdrant_port,
+                    "vector_size": qdrant.get("vector_size", 64),
+                    "neo4j_url": combo_a_neo4j_url,
+                    "neo4j_database": combo_a_neo4j_database,
+                    "neo4j_user": combo_a_neo4j_user,
+                    "neo4j_dataset_tag": neo4j.get("dataset_tag"),
+                    "topk": 5,
+                    "candidate_k": 10,
+                    "reranker": "none",
+                    "max_entities_per_doc": 128,
+                },
+            },
+        ]
     raise ValueError(f"Unsupported scenario: {scenario!r}")
 
 
@@ -126,10 +207,16 @@ def run_gateway_v1_smoke(
     scenario: str,
     runs_dir: Path = Path("runs"),
     summary_json: Path | None = None,
+    combo_a_docs_path: Path = Path("tests") / "fixtures" / "kag_neo4j_docs_sample.jsonl",
+    combo_a_qdrant_url: str = DEFAULT_COMBO_A_QDRANT_URL,
+    combo_a_neo4j_url: str = DEFAULT_COMBO_A_NEO4J_URL,
+    combo_a_neo4j_database: str = DEFAULT_COMBO_A_NEO4J_DATABASE,
+    combo_a_neo4j_user: str = DEFAULT_COMBO_A_NEO4J_USER,
+    combo_a_neo4j_password: str | None = None,
     now: datetime | None = None,
 ) -> dict[str, Any]:
-    if scenario not in {"core", "hybrid", "automation"}:
-        raise ValueError("scenario must be one of ['core', 'hybrid', 'automation'].")
+    if scenario not in {"core", "hybrid", "automation", "combo_a"}:
+        raise ValueError("scenario must be one of ['core', 'hybrid', 'automation', 'combo_a'].")
     if now is None:
         now = datetime.now(timezone.utc)
 
@@ -137,7 +224,42 @@ def run_gateway_v1_smoke(
     run_json_path = run_dir / "run.json"
     summary_path = summary_json if summary_json is not None else (runs_dir / "gateway_smoke_summary.json")
     gateway_runs_dir = run_dir / "gateway_runs"
-    requests = _build_scenario_requests(scenario)
+    combo_a_seed_result = None
+    combo_a_seed_summary = None
+    if scenario == "combo_a":
+        qdrant_host, qdrant_port = qdrant_host_port_from_url(combo_a_qdrant_url)
+        combo_a_seed_result = seed_combo_a_fixture_data(
+            scope="gateway_smoke",
+            docs_path=combo_a_docs_path,
+            runs_dir=run_dir / "combo_a_seed",
+            qdrant_host=qdrant_host,
+            qdrant_port=qdrant_port,
+            neo4j_url=combo_a_neo4j_url,
+            neo4j_database=combo_a_neo4j_database,
+            neo4j_user=combo_a_neo4j_user,
+            neo4j_password=combo_a_neo4j_password,
+            now=now,
+        )
+        if not combo_a_seed_result["ok"]:
+            raise RuntimeError(str(combo_a_seed_result["run_payload"].get("error", "combo_a seed failed")))
+        combo_a_seed_summary = {
+            "qdrant": {
+                "collection": combo_a_seed_result["summary_payload"]["qdrant"]["collection"],
+                "vector_size": combo_a_seed_result["summary_payload"]["qdrant"]["vector_size"],
+            },
+            "neo4j": {
+                "dataset_tag": combo_a_seed_result["summary_payload"]["neo4j"]["dataset_tag"],
+            },
+            "paths": combo_a_seed_result["summary_payload"]["paths"],
+        }
+    requests = _build_scenario_requests(
+        scenario,
+        combo_a_seed=combo_a_seed_summary,
+        combo_a_qdrant_url=combo_a_qdrant_url,
+        combo_a_neo4j_url=combo_a_neo4j_url,
+        combo_a_neo4j_database=combo_a_neo4j_database,
+        combo_a_neo4j_user=combo_a_neo4j_user,
+    )
     started_at_utc = _utc_now()
     started_at_perf = time.perf_counter()
 
@@ -153,6 +275,9 @@ def run_gateway_v1_smoke(
             "run_json": str(run_json_path),
             "summary_json": str(summary_path),
             "gateway_runs_dir": str(gateway_runs_dir),
+            "combo_a_seed_run_dir": (
+                None if combo_a_seed_result is None else str(combo_a_seed_result["run_dir"])
+            ),
         },
     }
     _write_json(run_json_path, run_payload)
@@ -206,6 +331,7 @@ def run_gateway_v1_smoke(
             "summary_json": str(summary_path),
             "gateway_runs_dir": str(gateway_runs_dir),
         },
+        "combo_a_seed": combo_a_seed_summary,
     }
     _write_json(summary_path, summary_payload)
 
@@ -225,10 +351,10 @@ def run_gateway_v1_smoke(
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Gateway v1 smoke scenarios (core|hybrid|automation).")
+    parser = argparse.ArgumentParser(description="Gateway v1 smoke scenarios (core|hybrid|automation|combo_a).")
     parser.add_argument(
         "--scenario",
-        choices=("core", "hybrid", "automation"),
+        choices=("core", "hybrid", "automation", "combo_a"),
         required=True,
         help="Smoke scenario name.",
     )
@@ -239,6 +365,29 @@ def parse_args() -> argparse.Namespace:
         default=None,
         help="Optional output path for machine-readable smoke summary.",
     )
+    parser.add_argument(
+        "--combo-a-docs",
+        type=Path,
+        default=Path("tests") / "fixtures" / "kag_neo4j_docs_sample.jsonl",
+        help="Docs fixture used to seed Combo A smoke backends.",
+    )
+    parser.add_argument("--qdrant-url", default=DEFAULT_COMBO_A_QDRANT_URL, help="Combo A Qdrant URL.")
+    parser.add_argument("--neo4j-url", default=DEFAULT_COMBO_A_NEO4J_URL, help="Combo A Neo4j URL.")
+    parser.add_argument(
+        "--neo4j-database",
+        default=DEFAULT_COMBO_A_NEO4J_DATABASE,
+        help="Combo A Neo4j database name.",
+    )
+    parser.add_argument(
+        "--neo4j-user",
+        default=DEFAULT_COMBO_A_NEO4J_USER,
+        help="Combo A Neo4j user.",
+    )
+    parser.add_argument(
+        "--neo4j-password",
+        default=None,
+        help="Combo A Neo4j password (or use NEO4J_PASSWORD env var).",
+    )
     return parser.parse_args()
 
 
@@ -248,6 +397,12 @@ def main() -> int:
         scenario=args.scenario,
         runs_dir=args.runs_dir,
         summary_json=args.summary_json,
+        combo_a_docs_path=args.combo_a_docs,
+        combo_a_qdrant_url=args.qdrant_url,
+        combo_a_neo4j_url=args.neo4j_url,
+        combo_a_neo4j_database=args.neo4j_database,
+        combo_a_neo4j_user=args.neo4j_user,
+        combo_a_neo4j_password=args.neo4j_password,
     )
     run_dir = result["run_dir"]
     summary_payload = result["summary_payload"]

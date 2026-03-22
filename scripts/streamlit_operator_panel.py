@@ -85,6 +85,12 @@ SAFE_ACTIONS: dict[str, dict[str, Any]] = {
         "runs_subdir": "ui-safe-gateway-automation",
         "summary_name": "gateway_smoke_summary.json",
     },
+    "gateway_local_combo_a": {
+        "script": "scripts/gateway_v1_smoke.py",
+        "scenario": "combo_a",
+        "runs_subdir": "ui-safe-gateway-combo-a",
+        "summary_name": "gateway_smoke_summary.json",
+    },
     "gateway_http_core": {
         "script": "scripts/gateway_v1_http_smoke.py",
         "scenario": "core",
@@ -103,12 +109,25 @@ SAFE_ACTIONS: dict[str, dict[str, Any]] = {
         "runs_subdir": "ui-safe-gateway-http-automation",
         "summary_name": "gateway_http_smoke_summary.json",
     },
+    "gateway_http_combo_a": {
+        "script": "scripts/gateway_v1_http_smoke.py",
+        "scenario": "combo_a",
+        "runs_subdir": "ui-safe-gateway-http-combo-a",
+        "summary_name": "gateway_http_smoke_summary.json",
+    },
     "cross_service_suite_smoke": {
         "script": "scripts/cross_service_benchmark_suite.py",
         "scenario": "suite",
         "runs_subdir": "ui-safe-cross-service-suite",
         "summary_name": "cross_service_benchmark_suite.json",
         "extra_args": ["--smoke-stub-voice-asr"],
+    },
+    "cross_service_suite_combo_a_smoke": {
+        "script": "scripts/cross_service_benchmark_suite.py",
+        "scenario": "suite",
+        "runs_subdir": "ui-safe-cross-service-suite-combo-a",
+        "summary_name": "cross_service_benchmark_suite.json",
+        "extra_args": ["--profile", "combo_a"],
     },
 }
 
@@ -143,6 +162,11 @@ HISTORY_SOURCE_SPECS: dict[str, dict[str, str | None]] = {
         "expected_mode": "gateway_v1_smoke",
         "expected_scenario": "automation",
     },
+    "gateway_combo_a": {
+        "root_subdir": "ci-smoke-gateway-combo-a",
+        "expected_mode": "gateway_v1_smoke",
+        "expected_scenario": "combo_a",
+    },
     "gateway_http_core": {
         "root_subdir": "ci-smoke-gateway-http-core",
         "expected_mode": "gateway_v1_http_smoke",
@@ -158,8 +182,18 @@ HISTORY_SOURCE_SPECS: dict[str, dict[str, str | None]] = {
         "expected_mode": "gateway_v1_http_smoke",
         "expected_scenario": "automation",
     },
+    "gateway_http_combo_a": {
+        "root_subdir": "ci-smoke-gateway-http-combo-a",
+        "expected_mode": "gateway_v1_http_smoke",
+        "expected_scenario": "combo_a",
+    },
     "cross_service_suite": {
         "root_subdir": "ci-smoke-cross-service-suite",
+        "expected_mode": "cross_service_benchmark_suite",
+        "expected_scenario": None,
+    },
+    "cross_service_suite_combo_a": {
+        "root_subdir": "nightly-combo-a-cross-service-suite",
         "expected_mode": "cross_service_benchmark_suite",
         "expected_scenario": None,
     },
@@ -276,6 +310,7 @@ def canonical_summary_sources(runs_dir: Path) -> dict[str, Path]:
         "gateway_core": base / "ci-smoke-gateway-core" / "gateway_smoke_summary.json",
         "gateway_hybrid": base / "ci-smoke-gateway-hybrid" / "gateway_smoke_summary.json",
         "gateway_automation": base / "ci-smoke-gateway-automation" / "gateway_smoke_summary.json",
+        "gateway_combo_a": base / "ci-smoke-gateway-combo-a" / "gateway_smoke_summary.json",
         "gateway_http_core": base
         / "ci-smoke-gateway-http-core"
         / "gateway_http_smoke_summary.json",
@@ -285,8 +320,14 @@ def canonical_summary_sources(runs_dir: Path) -> dict[str, Path]:
         "gateway_http_automation": base
         / "ci-smoke-gateway-http-automation"
         / "gateway_http_smoke_summary.json",
+        "gateway_http_combo_a": base
+        / "ci-smoke-gateway-http-combo-a"
+        / "gateway_http_smoke_summary.json",
         "cross_service_suite": base
         / "ci-smoke-cross-service-suite"
+        / "cross_service_benchmark_suite.json",
+        "cross_service_suite_combo_a": base
+        / "nightly-combo-a-cross-service-suite"
         / "cross_service_benchmark_suite.json",
     }
 
@@ -384,9 +425,11 @@ def _parse_history_row(source: str, run_dir: Path) -> tuple[dict[str, Any] | Non
         "gateway_core",
         "gateway_hybrid",
         "gateway_automation",
+        "gateway_combo_a",
         "gateway_http_core",
         "gateway_http_hybrid",
         "gateway_http_automation",
+        "gateway_http_combo_a",
     }:
         result_payload = run_payload.get("result")
         if isinstance(result_payload, dict):

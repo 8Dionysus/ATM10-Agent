@@ -6,6 +6,7 @@ from pathlib import Path
 
 WORKFLOW_PATHS = (
     ".github/workflows/pytest.yml",
+    ".github/workflows/combo-a-profile-smoke.yml",
     ".github/workflows/gateway-sla-readiness-nightly.yml",
     ".github/workflows/kag-neo4j-guardrail-nightly.yml",
     ".github/workflows/security-nightly.yml",
@@ -144,3 +145,38 @@ def test_kag_and_security_workflow_public_artifacts_are_allowlisted() -> None:
     ):
         assert token in security_upload_block
     assert "path: runs/nightly-security-audit" not in security_upload_block
+
+
+def test_combo_a_workflow_public_artifacts_are_allowlisted() -> None:
+    text = _read_text(".github/workflows/combo-a-profile-smoke.yml")
+
+    gateway_block = _extract_step_block(text, "Summary - Combo A gateway smoke")
+    suite_block = _extract_step_block(text, "Summary - Combo A cross-service suite")
+    operator_block = _extract_step_block(text, "Summary - Combo A operator probes")
+    upload_block = _extract_step_block(text, "Upload artifact - Combo A profile runs")
+
+    for token in ("NEO4J_PASSWORD", "service.log", "collection", "dataset_tag"):
+        assert token not in gateway_block
+    for token in ("combo_a_seed_run_dir", "child_runs_root", "history_summary_json"):
+        assert token not in suite_block
+    for token in ("missing_config", "warnings", "password"):
+        assert token not in operator_block
+
+    for token in (
+        "gateway_smoke_summary.json",
+        "gateway_http_smoke_summary.json",
+        "cross_service_benchmark_suite.json",
+        "service_sla_summary.json",
+        "summary.md",
+        "operator_snapshot.json",
+        "healthz.json",
+        "run.json",
+    ):
+        assert token in upload_block
+    for line in (
+        "path: runs/ci-smoke-gateway-combo-a",
+        "path: runs/ci-smoke-gateway-http-combo-a",
+        "path: runs/nightly-combo-a-cross-service-suite",
+        "path: runs/nightly-combo-a-operator-probes",
+    ):
+        assert line not in upload_block

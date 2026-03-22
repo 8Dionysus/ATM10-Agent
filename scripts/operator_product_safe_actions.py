@@ -34,6 +34,13 @@ SAFE_ACTIONS: dict[str, dict[str, Any]] = {
         "runs_subdir": "ui-safe-gateway-automation",
         "summary_name": "gateway_smoke_summary.json",
     },
+    "gateway_local_combo_a": {
+        "label": "Gateway local smoke Combo A",
+        "script": "scripts/gateway_v1_smoke.py",
+        "scenario": "combo_a",
+        "runs_subdir": "ui-safe-gateway-combo-a",
+        "summary_name": "gateway_smoke_summary.json",
+    },
     "gateway_http_core": {
         "label": "Gateway HTTP smoke core",
         "script": "scripts/gateway_v1_http_smoke.py",
@@ -55,6 +62,13 @@ SAFE_ACTIONS: dict[str, dict[str, Any]] = {
         "runs_subdir": "ui-safe-gateway-http-automation",
         "summary_name": "gateway_http_smoke_summary.json",
     },
+    "gateway_http_combo_a": {
+        "label": "Gateway HTTP smoke Combo A",
+        "script": "scripts/gateway_v1_http_smoke.py",
+        "scenario": "combo_a",
+        "runs_subdir": "ui-safe-gateway-http-combo-a",
+        "summary_name": "gateway_http_smoke_summary.json",
+    },
     "cross_service_suite_smoke": {
         "label": "Cross-service suite smoke",
         "script": "scripts/cross_service_benchmark_suite.py",
@@ -62,6 +76,14 @@ SAFE_ACTIONS: dict[str, dict[str, Any]] = {
         "runs_subdir": "ui-safe-cross-service-suite",
         "summary_name": "cross_service_benchmark_suite.json",
         "extra_args": ["--smoke-stub-voice-asr"],
+    },
+    "cross_service_suite_combo_a_smoke": {
+        "label": "Cross-service suite Combo A smoke",
+        "script": "scripts/cross_service_benchmark_suite.py",
+        "scenario": "suite",
+        "runs_subdir": "ui-safe-cross-service-suite-combo-a",
+        "summary_name": "cross_service_benchmark_suite.json",
+        "extra_args": ["--profile", "combo_a"],
     },
 }
 

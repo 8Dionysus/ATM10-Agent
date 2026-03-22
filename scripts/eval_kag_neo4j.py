@@ -171,6 +171,31 @@ def _percentile(values: list[float], percentile: float) -> float:
     return low_value + ((high_value - low_value) * fraction)
 
 
+def _query_kag_case(
+    *,
+    neo4j_url: str,
+    neo4j_database: str,
+    neo4j_user: str,
+    password: str,
+    query: str,
+    topk: int,
+    timeout_sec: float,
+    neo4j_dataset_tag: str | None,
+) -> list[dict[str, Any]]:
+    kwargs = {
+        "url": neo4j_url,
+        "database": neo4j_database,
+        "user": neo4j_user,
+        "password": password,
+        "query": query,
+        "topk": topk,
+        "timeout_sec": timeout_sec,
+    }
+    if neo4j_dataset_tag is not None:
+        kwargs["dataset_tag"] = neo4j_dataset_tag
+    return query_kag_neo4j(**kwargs)
+
+
 def run_eval_kag_neo4j(
     *,
     eval_path: Path = Path("tests") / "fixtures" / "kag_neo4j_eval_sample.jsonl",
@@ -179,6 +204,7 @@ def run_eval_kag_neo4j(
     neo4j_database: str = "neo4j",
     neo4j_user: str = "neo4j",
     neo4j_password: str | None = None,
+    neo4j_dataset_tag: str | None = None,
     timeout_sec: float = 10.0,
     warmup_runs: int = 0,
     runs_dir: Path = Path("runs"),
@@ -210,6 +236,7 @@ def run_eval_kag_neo4j(
             "neo4j_url": neo4j_url,
             "neo4j_database": neo4j_database,
             "neo4j_user": neo4j_user,
+            "neo4j_dataset_tag": neo4j_dataset_tag,
             "timeout_sec": timeout_sec,
             "warmup_runs": warmup_runs,
         },
@@ -232,14 +259,15 @@ def run_eval_kag_neo4j(
         if warmup_runs > 0:
             for _ in range(warmup_runs):
                 for case in cases:
-                    query_kag_neo4j(
-                        url=neo4j_url,
-                        database=neo4j_database,
-                        user=neo4j_user,
+                    _query_kag_case(
+                        neo4j_url=neo4j_url,
+                        neo4j_database=neo4j_database,
+                        neo4j_user=neo4j_user,
                         password=password,
                         query=case["query"],
                         topk=topk,
                         timeout_sec=timeout_sec,
+                        neo4j_dataset_tag=neo4j_dataset_tag,
                     )
                     warmup_calls += 1
 
@@ -247,14 +275,15 @@ def run_eval_kag_neo4j(
         latencies_ms: list[float] = []
         for case in cases:
             started = perf_counter()
-            results = query_kag_neo4j(
-                url=neo4j_url,
-                database=neo4j_database,
-                user=neo4j_user,
+            results = _query_kag_case(
+                neo4j_url=neo4j_url,
+                neo4j_database=neo4j_database,
+                neo4j_user=neo4j_user,
                 password=password,
                 query=case["query"],
                 topk=topk,
                 timeout_sec=timeout_sec,
+                neo4j_dataset_tag=neo4j_dataset_tag,
             )
             latency_ms = (perf_counter() - started) * 1000.0
             latencies_ms.append(latency_ms)
@@ -403,6 +432,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--neo4j-database", default="neo4j", help="Neo4j database name.")
     parser.add_argument("--neo4j-user", default="neo4j", help="Neo4j username.")
     parser.add_argument("--password", default=None, help="Neo4j password (or use NEO4J_PASSWORD env var).")
+    parser.add_argument(
+        "--neo4j-dataset-tag",
+        default=None,
+        help="Optional dataset tag for isolated fixture queries.",
+    )
     parser.add_argument("--timeout-sec", type=float, default=10.0, help="HTTP timeout for Neo4j requests.")
     parser.add_argument(
         "--warmup-runs",
@@ -435,6 +469,7 @@ def main() -> int:
         neo4j_database=args.neo4j_database,
         neo4j_user=args.neo4j_user,
         neo4j_password=args.password,
+        neo4j_dataset_tag=args.neo4j_dataset_tag,
         timeout_sec=args.timeout_sec,
         warmup_runs=args.warmup_runs,
         runs_dir=args.runs_dir,

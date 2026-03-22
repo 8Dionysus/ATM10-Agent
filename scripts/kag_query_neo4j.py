@@ -45,6 +45,42 @@ def _resolve_password(password: str | None) -> str:
     raise ValueError("Neo4j password is required: pass --password or set NEO4J_PASSWORD.")
 
 
+def _query_kag_neo4j_compat(
+    *,
+    url: str,
+    database: str,
+    user: str,
+    password: str,
+    query: str,
+    topk: int,
+    timeout_sec: float,
+    neo4j_dataset_tag: str | None,
+) -> list[dict[str, Any]]:
+    try:
+        return query_kag_neo4j(
+            url=url,
+            database=database,
+            user=user,
+            password=password,
+            query=query,
+            topk=topk,
+            timeout_sec=timeout_sec,
+            dataset_tag=neo4j_dataset_tag,
+        )
+    except TypeError as exc:
+        if "dataset_tag" not in str(exc):
+            raise
+        return query_kag_neo4j(
+            url=url,
+            database=database,
+            user=user,
+            password=password,
+            query=query,
+            topk=topk,
+            timeout_sec=timeout_sec,
+        )
+
+
 def run_kag_query_neo4j(
     *,
     query: str,
@@ -53,6 +89,7 @@ def run_kag_query_neo4j(
     neo4j_database: str,
     neo4j_user: str,
     neo4j_password: str | None,
+    neo4j_dataset_tag: str | None = None,
     timeout_sec: float = 10.0,
     runs_dir: Path = Path("runs"),
     now: datetime | None = None,
@@ -74,6 +111,7 @@ def run_kag_query_neo4j(
             "neo4j_url": neo4j_url,
             "neo4j_database": neo4j_database,
             "neo4j_user": neo4j_user,
+            "neo4j_dataset_tag": neo4j_dataset_tag,
             "timeout_sec": timeout_sec,
         },
         "paths": {
@@ -86,7 +124,7 @@ def run_kag_query_neo4j(
 
     try:
         password = _resolve_password(neo4j_password)
-        results = query_kag_neo4j(
+        results = _query_kag_neo4j_compat(
             url=neo4j_url,
             database=neo4j_database,
             user=neo4j_user,
@@ -94,6 +132,7 @@ def run_kag_query_neo4j(
             query=query,
             topk=topk,
             timeout_sec=timeout_sec,
+            neo4j_dataset_tag=neo4j_dataset_tag,
         )
         results_payload = {
             "query": query,
@@ -130,6 +169,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--neo4j-database", default="neo4j", help="Neo4j database name.")
     parser.add_argument("--neo4j-user", default="neo4j", help="Neo4j username.")
     parser.add_argument("--password", default=None, help="Neo4j password (or use NEO4J_PASSWORD env var).")
+    parser.add_argument(
+        "--neo4j-dataset-tag",
+        default=None,
+        help="Optional dataset tag for isolated fixture queries.",
+    )
     parser.add_argument("--timeout-sec", type=float, default=10.0, help="HTTP timeout for Neo4j requests.")
     parser.add_argument("--runs-dir", type=Path, default=Path("runs"), help="Run artifact base directory.")
     return parser.parse_args()
@@ -144,6 +188,7 @@ def main() -> int:
         neo4j_database=args.neo4j_database,
         neo4j_user=args.neo4j_user,
         neo4j_password=args.password,
+        neo4j_dataset_tag=args.neo4j_dataset_tag,
         timeout_sec=args.timeout_sec,
         runs_dir=args.runs_dir,
     )

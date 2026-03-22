@@ -19,7 +19,21 @@ from scripts.kag_build_baseline import run_kag_build_baseline
 from scripts.kag_query_demo import run_kag_query_demo
 from scripts.kag_query_neo4j import run_kag_query_neo4j
 from scripts.operator_product_safe_actions import append_safe_action_audit, run_safe_action
-from src.rag.retrieval import load_docs, retrieve_top_k
+from src.agent_core.combo_a_profile import (
+    COMBO_A_PROFILE,
+    DEFAULT_COMBO_A_NEO4J_DATABASE,
+    DEFAULT_COMBO_A_NEO4J_URL,
+    DEFAULT_COMBO_A_NEO4J_USER,
+    DEFAULT_COMBO_A_QDRANT_COLLECTION,
+    DEFAULT_COMBO_A_QDRANT_HOST,
+    DEFAULT_COMBO_A_QDRANT_PORT,
+    DEFAULT_COMBO_A_QDRANT_VECTOR_SIZE,
+    DEFAULT_PROFILE,
+    SUPPORTED_PROFILES,
+    docs_path_required,
+    profile_backends,
+)
+from src.rag.retrieval import load_docs, retrieve_top_k, retrieve_top_k_qdrant
 
 REQUEST_SCHEMA_VERSION = "gateway_request_v1"
 RESPONSE_SCHEMA_VERSION = "gateway_response_v1"
@@ -169,6 +183,7 @@ def _run_health(payload: Mapping[str, Any], *, now: datetime) -> tuple[dict[str,
     result = {
         "timestamp_utc": now.astimezone(timezone.utc).isoformat(),
         "supported_operations": list(SUPPORTED_OPERATIONS),
+        "supported_profiles": list(SUPPORTED_PROFILES),
     }
     return result, {}
 
@@ -182,6 +197,10 @@ def _run_retrieval_query(
     query = str(payload.get("query", "")).strip()
     if not query:
         raise ValueError("payload.query must be non-empty string for retrieval_query.")
+
+    backend = str(payload.get("backend", "in_memory")).strip().lower()
+    if backend not in {"in_memory", "qdrant"}:
+        raise ValueError("payload.backend must be one of ['in_memory', 'qdrant'].")
 
     docs_path = Path(str(payload.get("docs_path", Path("tests") / "fixtures" / "retrieval_docs_sample.jsonl")))
     topk = _coerce_int(payload, "topk", 3, min_value=1)
@@ -197,6 +216,16 @@ def _run_retrieval_query(
     reranker_max_length = _coerce_int(payload, "reranker_max_length", 1024, min_value=1)
     if reranker == "qwen3":
         _validate_reranker_model(reranker_model)
+    qdrant_collection = str(payload.get("collection", DEFAULT_COMBO_A_QDRANT_COLLECTION)).strip()
+    qdrant_host = str(payload.get("host", DEFAULT_COMBO_A_QDRANT_HOST)).strip()
+    qdrant_port = _coerce_int(payload, "port", DEFAULT_COMBO_A_QDRANT_PORT, min_value=1)
+    qdrant_vector_size = _coerce_int(
+        payload,
+        "vector_size",
+        DEFAULT_COMBO_A_QDRANT_VECTOR_SIZE,
+        min_value=1,
+    )
+    qdrant_timeout_sec = float(payload.get("timeout_sec", 10.0))
 
     child_run_dir = _create_named_dir(child_runs_dir, "retrieval_query")
     child_run_json = child_run_dir / "run.json"
@@ -207,7 +236,8 @@ def _run_retrieval_query(
         "status": "started",
         "request": {
             "query": query,
-            "docs_path": str(docs_path),
+            "backend": backend,
+            "docs_path": str(docs_path) if backend == "in_memory" else None,
             "topk": topk,
             "candidate_k": candidate_k,
             "reranker": reranker,
@@ -215,6 +245,11 @@ def _run_retrieval_query(
             "reranker_runtime": reranker_runtime if reranker == "qwen3" else None,
             "reranker_device": reranker_device if reranker == "qwen3" else None,
             "reranker_max_length": reranker_max_length if reranker == "qwen3" else None,
+            "collection": qdrant_collection if backend == "qdrant" else None,
+            "host": qdrant_host if backend == "qdrant" else None,
+            "port": qdrant_port if backend == "qdrant" else None,
+            "vector_size": qdrant_vector_size if backend == "qdrant" else None,
+            "timeout_sec": qdrant_timeout_sec if backend == "qdrant" else None,
         },
         "paths": {
             "run_dir": str(child_run_dir),
@@ -225,22 +260,42 @@ def _run_retrieval_query(
     _write_json(child_run_json, child_payload)
 
     try:
-        docs = load_docs(docs_path)
-        results = retrieve_top_k(
-            query,
-            docs,
-            topk=topk,
-            candidate_k=candidate_k,
-            reranker=reranker,
-            reranker_model=reranker_model,
-            reranker_max_length=reranker_max_length,
-            reranker_runtime=reranker_runtime,
-            reranker_device=reranker_device,
-        )
+        if backend == "in_memory":
+            docs = load_docs(docs_path)
+            results = retrieve_top_k(
+                query,
+                docs,
+                topk=topk,
+                candidate_k=candidate_k,
+                reranker=reranker,
+                reranker_model=reranker_model,
+                reranker_max_length=reranker_max_length,
+                reranker_runtime=reranker_runtime,
+                reranker_device=reranker_device,
+            )
+        else:
+            if not qdrant_collection:
+                raise ValueError("payload.collection must be non-empty for retrieval_query backend='qdrant'.")
+            results = retrieve_top_k_qdrant(
+                query,
+                collection=qdrant_collection,
+                topk=topk,
+                candidate_k=candidate_k,
+                reranker=reranker,
+                reranker_model=reranker_model,
+                reranker_max_length=reranker_max_length,
+                reranker_runtime=reranker_runtime,
+                reranker_device=reranker_device,
+                host=qdrant_host,
+                port=qdrant_port,
+                vector_size=qdrant_vector_size,
+                timeout_sec=qdrant_timeout_sec,
+            )
         _write_json(
             child_results_json,
             {
                 "query": query,
+                "backend": backend,
                 "count": len(results),
                 "results": results,
             },
@@ -250,7 +305,7 @@ def _run_retrieval_query(
         _write_json(child_run_json, child_payload)
         return {
             "query": query,
-            "backend": "in_memory",
+            "backend": backend,
             "results_count": len(results),
             "topk": topk,
             "candidate_k": candidate_k,
@@ -329,6 +384,7 @@ def _run_kag_query(
     neo4j_user = str(payload.get("neo4j_user", "neo4j")).strip()
     neo4j_password_value = payload.get("neo4j_password")
     neo4j_password = None if neo4j_password_value is None else str(neo4j_password_value)
+    neo4j_dataset_tag = str(payload.get("neo4j_dataset_tag", "")).strip() or None
     timeout_sec = float(payload.get("timeout_sec", 10.0))
 
     neo4j_result = run_kag_query_neo4j(
@@ -338,6 +394,7 @@ def _run_kag_query(
         neo4j_database=neo4j_database,
         neo4j_user=neo4j_user,
         neo4j_password=neo4j_password,
+        neo4j_dataset_tag=neo4j_dataset_tag,
         timeout_sec=timeout_sec,
         runs_dir=child_runs_dir,
         now=now,
@@ -354,6 +411,7 @@ def _run_kag_query(
         "query": query,
         "topk": topk,
         "results_count": int(neo4j_result["results_payload"]["count"]),
+        "neo4j_dataset_tag": neo4j_dataset_tag,
     }, child_runs
 
 
@@ -367,10 +425,22 @@ def _run_hybrid_query(
     if not query:
         raise ValueError("payload.query must be non-empty string for hybrid_query.")
 
+    profile = str(payload.get("profile", DEFAULT_PROFILE)).strip().lower() or DEFAULT_PROFILE
+    if profile not in SUPPORTED_PROFILES:
+        raise ValueError(f"payload.profile must be one of {list(SUPPORTED_PROFILES)!r}.")
+    retrieval_backend = (
+        str(payload.get("retrieval_backend", "")).strip().lower() or profile_backends(profile)[0]
+    )
+    kag_backend = str(payload.get("kag_backend", "")).strip().lower() or profile_backends(profile)[1]
+    if retrieval_backend not in {"in_memory", "qdrant"}:
+        raise ValueError("payload.retrieval_backend must be one of ['in_memory', 'qdrant'].")
+    if kag_backend not in {"file", "neo4j"}:
+        raise ValueError("payload.kag_backend must be one of ['file', 'neo4j'].")
+
     docs_path_raw = str(payload.get("docs_path", "")).strip()
-    if not docs_path_raw:
-        raise ValueError("payload.docs_path must be non-empty string for hybrid_query.")
-    docs_path = Path(docs_path_raw)
+    docs_path = Path(docs_path_raw) if docs_path_raw else None
+    if docs_path_required(retrieval_backend=retrieval_backend, kag_backend=kag_backend) and docs_path is None:
+        raise ValueError("payload.docs_path is required for the selected hybrid backend combination.")
 
     topk = _coerce_int(payload, "topk", 5, min_value=1)
     candidate_k = _coerce_int(payload, "candidate_k", 10, min_value=1)
@@ -386,10 +456,25 @@ def _run_hybrid_query(
     max_entities_per_doc = _coerce_int(payload, "max_entities_per_doc", 128, min_value=1)
     if reranker == "qwen3":
         _validate_reranker_model(reranker_model)
+    qdrant_collection = str(payload.get("collection", DEFAULT_COMBO_A_QDRANT_COLLECTION)).strip()
+    qdrant_host = str(payload.get("host", DEFAULT_COMBO_A_QDRANT_HOST)).strip()
+    qdrant_port = _coerce_int(payload, "port", DEFAULT_COMBO_A_QDRANT_PORT, min_value=1)
+    qdrant_vector_size = _coerce_int(payload, "vector_size", DEFAULT_COMBO_A_QDRANT_VECTOR_SIZE, min_value=1)
+    qdrant_timeout_sec = float(payload.get("timeout_sec", 10.0))
+    neo4j_url = str(payload.get("neo4j_url", DEFAULT_COMBO_A_NEO4J_URL)).strip()
+    neo4j_database = str(payload.get("neo4j_database", DEFAULT_COMBO_A_NEO4J_DATABASE)).strip()
+    neo4j_user = str(payload.get("neo4j_user", DEFAULT_COMBO_A_NEO4J_USER)).strip()
+    neo4j_password_value = payload.get("neo4j_password")
+    neo4j_password = None if neo4j_password_value is None else str(neo4j_password_value)
+    neo4j_dataset_tag = str(payload.get("neo4j_dataset_tag", "")).strip() or None
+    neo4j_timeout_sec = float(payload.get("neo4j_timeout_sec", payload.get("timeout_sec", 10.0)))
 
     hybrid_result = run_hybrid_query(
         query=query,
         docs_path=docs_path,
+        profile=profile,
+        retrieval_backend=retrieval_backend,
+        kag_backend=kag_backend,
         topk=topk,
         candidate_k=candidate_k,
         reranker=reranker,
@@ -398,6 +483,17 @@ def _run_hybrid_query(
         reranker_device=reranker_device,
         reranker_max_length=reranker_max_length,
         max_entities_per_doc=max_entities_per_doc,
+        qdrant_collection=qdrant_collection,
+        qdrant_host=qdrant_host,
+        qdrant_port=qdrant_port,
+        qdrant_vector_size=qdrant_vector_size,
+        qdrant_timeout_sec=qdrant_timeout_sec,
+        neo4j_url=neo4j_url,
+        neo4j_database=neo4j_database,
+        neo4j_user=neo4j_user,
+        neo4j_password=neo4j_password,
+        neo4j_timeout_sec=neo4j_timeout_sec,
+        neo4j_dataset_tag=neo4j_dataset_tag,
         runs_dir=child_runs_dir,
         now=now,
     )
@@ -411,7 +507,8 @@ def _run_hybrid_query(
 
     results_payload = hybrid_result["results_payload"]
     return {
-        "backend": "hybrid_baseline",
+        "backend": "hybrid_combo_a" if profile == COMBO_A_PROFILE else "hybrid_baseline",
+        "profile": profile,
         "query": query,
         "topk": topk,
         "results_count": int(results_payload["results_count"]),
@@ -420,6 +517,8 @@ def _run_hybrid_query(
         "planner_mode": str(results_payload["planner_mode"]),
         "planner_status": str(results_payload["planner_status"]),
         "degraded": bool(results_payload["degraded"]),
+        "retrieval_backend": str(results_payload.get("retrieval_backend", retrieval_backend)),
+        "kag_backend": str(results_payload.get("kag_backend", kag_backend)),
     }, child_runs
 
 
