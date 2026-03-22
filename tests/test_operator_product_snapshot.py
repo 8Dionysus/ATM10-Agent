@@ -68,6 +68,135 @@ def _write_operating_cycle_summary(runs_dir: Path) -> Path:
     return summary_path
 
 
+def _write_clean_operating_cycle_summary(runs_dir: Path) -> Path:
+    summary_path = operator_snapshot.canonical_operating_cycle_source(runs_dir)
+    _write_json(
+        summary_path,
+        {
+            "schema_version": "gateway_sla_operating_cycle_v1",
+            "status": "ok",
+            "checked_at_utc": "2026-03-22T18:00:00+00:00",
+            "policy": "report_only",
+            "effective_policy": "fail_nightly",
+            "promotion_state": "eligible",
+            "enforcement_surface": "nightly_only",
+            "blocking_reason_codes": [],
+            "recommended_actions": [],
+            "next_review_at_utc": "2026-03-23T03:35:00+00:00",
+            "profile_scope": "baseline_first",
+            "actionable_message": "Operator surfaces are green.",
+            "cycle": {
+                "source": "manual",
+                "operating_mode": "reuse_fresh_latest",
+                "used_manual_fallback": False,
+                "manual_execution_mode": "accounted",
+                "manual_decision_status": "allow_accounted_dispatch",
+                "next_accounted_dispatch_at_utc": "2026-03-23T03:35:00+00:00",
+            },
+            "triage": {
+                "remaining_for_window": 0,
+                "remaining_for_streak": 0,
+                "transition_allow_switch": True,
+                "candidate_item_count": 0,
+                "integrity_status": "clean",
+                "attention_state": "ready_for_accounted_run",
+            },
+            "interpretation": {
+                "telemetry_repair_required": False,
+                "remediation_backlog_primary": False,
+                "blocked_manual_gate": False,
+                "next_action_hint": "continue",
+            },
+            "paths": {"summary_json": str(summary_path)},
+        },
+    )
+    return summary_path
+
+
+def _clean_policy_surface_context() -> tuple[dict[str, object], dict[str, list[str]]]:
+    return (
+        {
+            "progress": {
+                "status": "ok",
+                "decision_status": "allow",
+                "missing_sources": [],
+                "reason_codes": [],
+                "source_paths": {},
+            },
+            "transition": {
+                "status": "ok",
+                "allow_switch": True,
+                "recommendation": {
+                    "target_critical_policy": "fail_nightly",
+                    "reason_codes": [],
+                },
+            },
+            "remediation": {
+                "status": "ok",
+                "candidate_items": [],
+                "reason_codes": [],
+            },
+            "integrity": {
+                "status": "ok",
+                "decision": {
+                    "integrity_status": "clean",
+                    "reason_codes": [],
+                },
+            },
+            "operating_cycle": {
+                "status": "ok",
+                "effective_policy": "fail_nightly",
+                "promotion_state": "eligible",
+                "profile_scope": "baseline_first",
+                "blocking_reason_codes": [],
+                "recommended_actions": [],
+                "actionable_message": "Operator surfaces are green.",
+            },
+            "governance": {
+                "schema_version": "gateway_operator_governance_summary_v1",
+                "status": "ok",
+                "decision_status": "allow",
+                "recommended_policy": "fail_nightly",
+                "effective_gateway_sla_policy": "fail_nightly",
+                "promotion_state": "eligible",
+                "enforcement_surface": "nightly_only",
+                "blocking_reason_codes": [],
+                "recommended_actions": [],
+                "next_review_at_utc": "2026-03-23T03:35:00+00:00",
+                "profile_scope": "baseline_first",
+                "actionable_message": "Operator surfaces are green.",
+                "reason_codes": [],
+                "next_action_hint": "continue",
+                "transition_allow_switch": True,
+                "remaining_for_window": 0,
+                "remaining_for_streak": 0,
+                "candidate_item_count": 0,
+                "attention_state": "ready_for_accounted_run",
+                "integrity_status": "clean",
+                "operating_mode": "reuse_fresh_latest",
+                "manual_execution_mode": "accounted",
+                "degraded_sources": [],
+                "available_sources": [
+                    "progress",
+                    "transition",
+                    "remediation",
+                    "integrity",
+                    "operating_cycle",
+                ],
+                "missing_sources": [],
+                "source_paths": {},
+            },
+        },
+        {
+            "progress": [],
+            "transition": [],
+            "remediation": [],
+            "integrity": [],
+            "operating_cycle": [],
+        },
+    )
+
+
 def _write_combo_a_operating_cycle_summary(runs_dir: Path) -> Path:
     summary_path = operator_snapshot.canonical_combo_a_operating_cycle_source(runs_dir)
     _write_json(
@@ -205,6 +334,9 @@ def test_build_operator_product_snapshot_includes_policy_promotion_surface(tmp_p
     assert combo_a["effective_policy"] == "observe_only"
     assert combo_a["promotion_state"] == "hold"
     assert combo_a["operating_cycle_path"] == str(operator_snapshot.canonical_combo_a_operating_cycle_source(runs_dir))
+    assert payload["operator_context"]["triage"]["primary_surface"] == "startup"
+    assert payload["operator_context"]["triage"]["primary_code"] == "launch_operator_product"
+    assert payload["operator_context"]["triage"]["next_safe_action"] == "gateway_sla_operating_cycle_smoke"
     assert payload["latest_metrics"]["operating_cycle"]["effective_policy"] == "signal_only"
     assert payload["latest_metrics"]["combo_a_operating_cycle"]["effective_policy"] == "observe_only"
 
@@ -293,10 +425,16 @@ def test_parse_history_row_prefers_run_local_cross_service_history_summary(tmp_p
     assert row["summary_json"] == str(history_summary_path)
 
 
-def test_build_operator_product_snapshot_includes_startup_diagnostics_healthy(tmp_path: Path) -> None:
+def test_build_operator_product_snapshot_includes_startup_diagnostics_healthy(
+    tmp_path: Path, monkeypatch
+) -> None:
     runs_dir = tmp_path / "runs"
-    _write_operating_cycle_summary(runs_dir)
-    _write_combo_a_operating_cycle_summary(runs_dir)
+    _write_clean_operating_cycle_summary(runs_dir)
+    monkeypatch.setattr(
+        operator_snapshot,
+        "load_operator_policy_surface_context",
+        lambda _runs_dir: _clean_policy_surface_context(),
+    )
     operator_runs_dir = tmp_path / "operator-runs"
     _write_operator_startup_run(
         operator_runs_dir,
@@ -316,15 +454,29 @@ def test_build_operator_product_snapshot_includes_startup_diagnostics_healthy(tm
     )
 
     startup = payload["operator_context"]["startup"]
+    triage = payload["operator_context"]["triage"]
     assert startup["status"] == "running"
     assert startup["diagnostics"]["overall_state"] == "healthy"
     assert startup["diagnostics"]["primary_issue"] is None
+    assert triage["overall_state"] == "healthy"
+    assert triage["primary_surface"] == "none"
+    assert triage["primary_code"] == "none"
+    assert triage["next_safe_action"] is None
+    assert triage["stack_rollup"]["total_services"] == 5
+    assert triage["stack_rollup"]["healthy_services"] == 1
+    assert triage["stack_rollup"]["not_configured_services"] == 4
 
 
-def test_build_operator_product_snapshot_startup_diagnostics_prioritize_snapshot_error(tmp_path: Path) -> None:
+def test_build_operator_product_snapshot_startup_diagnostics_prioritize_snapshot_error(
+    tmp_path: Path, monkeypatch
+) -> None:
     runs_dir = tmp_path / "runs"
-    _write_operating_cycle_summary(runs_dir)
-    _write_combo_a_operating_cycle_summary(runs_dir)
+    _write_clean_operating_cycle_summary(runs_dir)
+    monkeypatch.setattr(
+        operator_snapshot,
+        "load_operator_policy_surface_context",
+        lambda _runs_dir: _clean_policy_surface_context(),
+    )
     operator_runs_dir = tmp_path / "operator-runs"
     _write_operator_startup_run(
         operator_runs_dir,
@@ -347,8 +499,136 @@ def test_build_operator_product_snapshot_startup_diagnostics_prioritize_snapshot
     )
 
     startup = payload["operator_context"]["startup"]
+    triage = payload["operator_context"]["triage"]
     assert startup["diagnostics"]["overall_state"] == "degraded"
     assert startup["diagnostics"]["primary_issue"] == "gateway boot failed"
+    assert triage["overall_state"] == "attention"
+    assert triage["primary_surface"] == "startup"
+    assert triage["primary_message"] == "gateway boot failed"
+    assert triage["primary_code"] == "inspect_managed_service"
+
+
+def test_build_operator_product_snapshot_triage_prioritizes_governance_after_healthy_startup(
+    tmp_path: Path,
+) -> None:
+    runs_dir = tmp_path / "runs"
+    _write_operating_cycle_summary(runs_dir)
+    operator_runs_dir = tmp_path / "operator-runs"
+    _write_operator_startup_run(
+        operator_runs_dir,
+        status="running",
+        checkpoint_status="ok",
+        gateway_probe_status="ok",
+    )
+
+    payload = operator_snapshot.build_operator_product_snapshot(
+        runs_dir=runs_dir,
+        operator_runs_dir=operator_runs_dir,
+        gateway_health={
+            "status": "ok",
+            "supported_operations": ["health"],
+            "supported_profiles": ["baseline_first", "combo_a"],
+        },
+    )
+
+    triage = payload["operator_context"]["triage"]
+    assert triage["overall_state"] == "attention"
+    assert triage["primary_surface"] == "governance"
+    assert triage["primary_code"] == "remediation_backlog_pending"
+    assert triage["next_safe_action"] == "gateway_sla_operating_cycle_smoke"
+    assert (
+        triage["primary_message"]
+        == "Resolve the remediation backlog before promoting nightly policy."
+    )
+
+
+def test_build_operator_product_snapshot_triage_prioritizes_service_probe_errors(
+    tmp_path: Path, monkeypatch
+) -> None:
+    runs_dir = tmp_path / "runs"
+    _write_clean_operating_cycle_summary(runs_dir)
+    monkeypatch.setattr(
+        operator_snapshot,
+        "load_operator_policy_surface_context",
+        lambda _runs_dir: _clean_policy_surface_context(),
+    )
+    operator_runs_dir = tmp_path / "operator-runs"
+    _write_operator_startup_run(
+        operator_runs_dir,
+        status="running",
+        checkpoint_status="ok",
+        gateway_probe_status="ok",
+    )
+
+    def _fake_fetch_service_health(*, service_name: str, service_url: str | None, **_kwargs):
+        if service_name == "voice_runtime_service":
+            return {
+                "service_name": service_name,
+                "configured": True,
+                "status": "error",
+                "url": str(service_url),
+                "health_path": "/health",
+                "payload": None,
+                "error": "connection refused",
+            }
+        return {
+            "service_name": service_name,
+            "configured": False,
+            "status": "not_configured",
+            "url": None,
+            "health_path": "/health",
+            "payload": None,
+            "error": None,
+        }
+
+    monkeypatch.setattr(operator_snapshot, "fetch_service_health", _fake_fetch_service_health)
+    monkeypatch.setattr(
+        operator_snapshot,
+        "probe_qdrant_service",
+        lambda **_kwargs: {
+            "service_name": "qdrant",
+            "configured": False,
+            "status": "not_configured",
+            "url": None,
+            "health_path": "/collections",
+            "payload": None,
+            "error": None,
+        },
+    )
+    monkeypatch.setattr(
+        operator_snapshot,
+        "probe_neo4j_service",
+        lambda **_kwargs: {
+            "service_name": "neo4j",
+            "configured": False,
+            "status": "not_configured",
+            "url": None,
+            "health_path": "/",
+            "payload": None,
+            "error": None,
+        },
+    )
+
+    payload = operator_snapshot.build_operator_product_snapshot(
+        runs_dir=runs_dir,
+        operator_runs_dir=operator_runs_dir,
+        gateway_health={
+            "status": "ok",
+            "supported_operations": ["health"],
+            "supported_profiles": ["baseline_first", "combo_a"],
+        },
+        voice_service_url="http://127.0.0.1:8765",
+    )
+
+    triage = payload["operator_context"]["triage"]
+    assert triage["overall_state"] == "attention"
+    assert triage["primary_surface"] == "services"
+    assert triage["primary_code"] == "service_attention"
+    assert triage["primary_message"] == "voice_runtime_service: connection refused"
+    assert triage["next_step_code"] == "inspect_stack_service"
+    assert triage["attention_services"] == ["voice_runtime_service"]
+    assert triage["stack_rollup"]["configured_services"] == 2
+    assert triage["stack_rollup"]["attention_services"] == 1
 
 
 def test_build_operator_runs_payload_governance_diagnostics_missing_source_fallback(tmp_path: Path) -> None:

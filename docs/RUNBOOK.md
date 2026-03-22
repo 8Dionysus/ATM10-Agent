@@ -300,7 +300,7 @@ Optional downstream health aggregation for the operator product:
 python scripts/gateway_v1_http_service.py --host 127.0.0.1 --port 8770 --runs-dir runs\gateway-http --voice-service-url http://127.0.0.1:8765 --tts-service-url http://127.0.0.1:8780 --qdrant-url http://127.0.0.1:6333 --neo4j-url http://127.0.0.1:7474 --neo4j-database neo4j --neo4j-user neo4j --operator-health-timeout-sec 3.0
 ```
 
-With external services configured, `/v1/operator/snapshot` additively returns `operator_context.profiles.supported_profiles`, `operator_context.profiles.combo_a`, and probe rows for `qdrant` / `neo4j`.
+With external services configured, `/v1/operator/snapshot` additively returns `operator_context.profiles.supported_profiles`, `operator_context.profiles.combo_a`, compact `operator_context.triage`, and probe rows for `qdrant` / `neo4j`.
 
 Operator diagnostics surface (additive, schema-compatible):
 
@@ -311,6 +311,8 @@ Operator diagnostics surface (additive, schema-compatible):
   * failing service probe from `session_state`
 * `operator_context.governance.diagnostics.top_blocker` is the first `blocking_reason_codes` item (or `none`)
 * `operator_context.governance.diagnostics.next_safe_action` is the first recommended `action_key` (or `null`)
+* `operator_context.triage.primary_surface` uses deterministic precedence: `startup > services > governance > combo_a > none`
+* `operator_context.triage.primary_message` is the first short-form issue from the winning surface, while `next_step_code` / `next_step` stay additive UI-safe hints
 
 ### Gateway request over HTTP
 

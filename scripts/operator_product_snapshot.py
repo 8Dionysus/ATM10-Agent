@@ -610,6 +610,77 @@ def _normalize_startup_session_state(
     return normalized
 
 
+def _ordered_startup_service_names(session_state: Mapping[str, Any] | None) -> list[str]:
+    if not isinstance(session_state, Mapping):
+        return []
+    preferred_order = (
+        "gateway",
+        "streamlit",
+        "voice_runtime_service",
+        "tts_runtime_service",
+        "qdrant",
+        "neo4j",
+    )
+    ordered_services: list[str] = [name for name in preferred_order if name in session_state]
+    ordered_services.extend(
+        sorted(str(name) for name in session_state.keys() if str(name) not in preferred_order)
+    )
+    return ordered_services
+
+
+def _summarize_startup_service(service_name: str, entry: Mapping[str, Any]) -> dict[str, Any]:
+    probe = entry.get("last_probe")
+    probe = probe if isinstance(probe, Mapping) else {}
+    status = str(entry.get("status", "")).strip().lower()
+    probe_status = str(probe.get("status", "")).strip().lower()
+    managed = bool(entry.get("managed", False))
+    configured = bool(entry.get("configured"))
+    issue = _coalesce(entry.get("error"), probe.get("error"))
+    state_class = "unknown"
+    attention_kind: str | None = None
+
+    if not configured or status == "not_configured":
+        state_class = "not_configured"
+    elif status in {"error", "failed", "fail", "degraded"}:
+        state_class = "attention"
+        attention_kind = "service_error"
+        issue = issue or f"status={status}"
+    elif probe_status in {"error", "failed", "fail", "degraded"}:
+        state_class = "attention"
+        attention_kind = "probe_error"
+        issue = issue or f"last_probe.status={probe_status}"
+    elif status in {"pending", "starting", "not_started"}:
+        state_class = "attention"
+        attention_kind = "pending"
+        issue = issue or f"status={status}"
+    elif status == "stopped" and managed:
+        state_class = "attention"
+        attention_kind = "stopped"
+        issue = issue or "status=stopped"
+    elif status == "external":
+        state_class = "attention"
+        attention_kind = "external_unverified"
+        issue = issue or "configured external service has not been probed yet"
+    elif status in {"running", "ok"} or probe_status == "ok":
+        state_class = "healthy"
+    elif issue:
+        state_class = "attention"
+        attention_kind = "unknown"
+
+    return {
+        "service_name": service_name,
+        "managed": managed,
+        "configured": configured,
+        "status": entry.get("status"),
+        "last_probe_status": probe.get("status"),
+        "effective_url": entry.get("effective_url"),
+        "log_path": entry.get("log_path"),
+        "state_class": state_class,
+        "attention_kind": attention_kind,
+        "issue": issue,
+    }
+
+
 def load_latest_operator_startup_status(
     operator_runs_dir: Path,
 ) -> tuple[dict[str, Any] | None, list[str]]:
@@ -682,26 +753,91 @@ def _find_startup_service_probe_issue(
     if not isinstance(session_state, Mapping):
         return None
 
-    preferred_order = ("gateway", "streamlit", "voice_runtime_service", "tts_runtime_service")
-    ordered_services: list[str] = [name for name in preferred_order if name in session_state]
-    ordered_services.extend(
-        sorted(str(name) for name in session_state.keys() if str(name) not in preferred_order)
-    )
-    for service_name in ordered_services:
+    for service_name in _ordered_startup_service_names(session_state):
         entry = session_state.get(service_name)
         if not isinstance(entry, Mapping):
             continue
-        entry_status = str(entry.get("status", "")).strip().lower()
-        probe = entry.get("last_probe")
-        probe = probe if isinstance(probe, Mapping) else {}
-        probe_status = str(probe.get("status", "")).strip().lower()
-        if entry_status in {"error", "failed", "fail", "degraded"}:
-            issue = _coalesce(entry.get("error"), probe.get("error"), f"status={entry_status}")
-            return f"{service_name}: {issue}"
-        if probe_status in {"error", "failed", "fail", "degraded"}:
-            issue = _coalesce(probe.get("error"), f"last_probe.status={probe_status}")
+        summary = _summarize_startup_service(service_name, entry)
+        if summary.get("attention_kind") in {"service_error", "probe_error", "stopped", "unknown"}:
+            issue = summary.get("issue") or f"status={summary.get('status')}"
             return f"{service_name}: {issue}"
     return None
+
+
+def _build_startup_service_rollup(
+    session_state: Mapping[str, Any] | None,
+) -> tuple[dict[str, int], list[dict[str, Any]]]:
+    rollup = {
+        "total_services": 0,
+        "configured_services": 0,
+        "managed_services": 0,
+        "healthy_services": 0,
+        "attention_services": 0,
+        "not_configured_services": 0,
+        "unknown_services": 0,
+    }
+    attention_services: list[dict[str, Any]] = []
+    if not isinstance(session_state, Mapping):
+        return rollup, attention_services
+
+    for service_name in _ordered_startup_service_names(session_state):
+        entry = session_state.get(service_name)
+        if not isinstance(entry, Mapping):
+            continue
+        summary = _summarize_startup_service(service_name, entry)
+        rollup["total_services"] += 1
+        if summary["configured"]:
+            rollup["configured_services"] += 1
+        if summary["managed"]:
+            rollup["managed_services"] += 1
+
+        state_class = str(summary["state_class"])
+        if state_class == "healthy":
+            rollup["healthy_services"] += 1
+        elif state_class == "attention":
+            rollup["attention_services"] += 1
+            attention_services.append(summary)
+        elif state_class == "not_configured":
+            rollup["not_configured_services"] += 1
+        else:
+            rollup["unknown_services"] += 1
+    return rollup, attention_services
+
+
+def _build_startup_next_step(
+    attention_services: list[dict[str, Any]],
+) -> tuple[str, str | None]:
+    if not attention_services:
+        return "none", None
+
+    priority_order = {
+        "service_error": 0,
+        "probe_error": 0,
+        "stopped": 1,
+        "unknown": 1,
+        "external_unverified": 2,
+        "pending": 3,
+        None: 4,
+    }
+    next_item = min(
+        attention_services,
+        key=lambda item: (
+            priority_order.get(item.get("attention_kind"), 4),
+            str(item.get("service_name", "")),
+        ),
+    )
+    service_name = str(next_item.get("service_name", "service")).strip() or "service"
+    attention_kind = next_item.get("attention_kind")
+    log_path = next_item.get("log_path")
+    if attention_kind == "pending":
+        return "wait_for_startup", f"Wait for {service_name} startup to finish and refresh the operator snapshot."
+    if next_item.get("managed"):
+        if isinstance(log_path, str) and log_path.strip():
+            return "inspect_managed_log", f"Inspect {service_name} log at {log_path}."
+        return "inspect_managed_service", f"Inspect managed service {service_name} startup state."
+    if attention_kind in {"service_error", "probe_error", "external_unverified", "unknown"}:
+        return "check_service_connectivity", f"Check connectivity and credentials for {service_name}."
+    return "refresh_operator_snapshot", "Refresh the operator snapshot after the stack settles."
 
 
 def _build_startup_diagnostics(
@@ -711,6 +847,18 @@ def _build_startup_diagnostics(
         return {
             "overall_state": "not_available",
             "primary_issue": "startup_artifact_not_found",
+            "service_rollup": {
+                "total_services": 0,
+                "configured_services": 0,
+                "managed_services": 0,
+                "healthy_services": 0,
+                "attention_services": 0,
+                "not_configured_services": 0,
+                "unknown_services": 0,
+            },
+            "attention_services": [],
+            "next_step_code": "launch_operator_product",
+            "next_step": "Launch the canonical stack with `python scripts/start_operator_product.py --runs-dir runs`.",
         }
 
     status = str(startup_snapshot.get("status", "")).strip().lower()
@@ -720,7 +868,10 @@ def _build_startup_diagnostics(
     last_checkpoint = last_checkpoint if isinstance(last_checkpoint, Mapping) else {}
     checkpoint_status = str(last_checkpoint.get("status", "")).strip().lower()
     failing_checkpoint = checkpoint_status in {"error", "failed", "fail", "degraded"}
-    service_issue = _find_startup_service_probe_issue(startup_snapshot.get("session_state"))
+    session_state = startup_snapshot.get("session_state")
+    service_issue = _find_startup_service_probe_issue(session_state)
+    service_rollup, attention_services = _build_startup_service_rollup(session_state)
+    next_step_code, next_step = _build_startup_next_step(attention_services)
 
     primary_issue: str | None = None
     if snapshot_error:
@@ -749,6 +900,10 @@ def _build_startup_diagnostics(
     return {
         "overall_state": overall_state,
         "primary_issue": primary_issue,
+        "service_rollup": service_rollup,
+        "attention_services": attention_services,
+        "next_step_code": next_step_code,
+        "next_step": next_step,
     }
 
 
@@ -989,6 +1144,209 @@ def build_operator_governance_summary(
     return summary
 
 
+def _is_healthy_stack_service_status(status: str) -> bool:
+    return status in {"ok", "running", "ready"}
+
+
+def _build_stack_service_rollup(
+    stack_services: Mapping[str, Any] | None,
+) -> tuple[dict[str, int], list[str], str | None]:
+    rollup = {
+        "total_services": 0,
+        "configured_services": 0,
+        "healthy_services": 0,
+        "attention_services": 0,
+        "not_configured_services": 0,
+    }
+    attention_services: list[str] = []
+    primary_message: str | None = None
+    if not isinstance(stack_services, Mapping):
+        return rollup, attention_services, primary_message
+
+    for raw_service_name, raw_entry in stack_services.items():
+        service_name = str(raw_service_name).strip() or "service"
+        entry = raw_entry if isinstance(raw_entry, Mapping) else {}
+        configured = bool(entry.get("configured"))
+        status = str(entry.get("status", "")).strip().lower()
+        error = str(entry.get("error", "")).strip()
+
+        rollup["total_services"] += 1
+        if configured:
+            rollup["configured_services"] += 1
+        if not configured or status == "not_configured":
+            rollup["not_configured_services"] += 1
+            continue
+        if _is_healthy_stack_service_status(status):
+            rollup["healthy_services"] += 1
+            continue
+
+        rollup["attention_services"] += 1
+        attention_services.append(service_name)
+        if primary_message is None:
+            issue = error or f"status={status or 'unknown'}"
+            primary_message = f"{service_name}: {issue}"
+
+    return rollup, attention_services, primary_message
+
+
+def _combo_a_needs_attention(combo_a_summary: Mapping[str, Any] | None) -> bool:
+    if not isinstance(combo_a_summary, Mapping):
+        return False
+    availability_status = str(combo_a_summary.get("availability_status", "")).strip().lower()
+    promotion_state = str(combo_a_summary.get("promotion_state", "")).strip().lower()
+    if availability_status == "partial":
+        return True
+    if promotion_state in {"hold", "blocked"} and availability_status != "not_configured":
+        return True
+    return False
+
+
+def _build_operator_compact_triage(
+    *,
+    startup_snapshot: Mapping[str, Any] | None,
+    governance_summary: Mapping[str, Any] | None,
+    combo_a_summary: Mapping[str, Any] | None,
+    stack_services: Mapping[str, Any] | None,
+) -> dict[str, Any]:
+    if isinstance(startup_snapshot, Mapping):
+        startup_diagnostics = _nested_get(startup_snapshot, "diagnostics")
+        startup_diagnostics = startup_diagnostics if isinstance(startup_diagnostics, Mapping) else {}
+    else:
+        startup_diagnostics = _build_startup_diagnostics(None)
+    startup_overall_state = str(startup_diagnostics.get("overall_state", "")).strip().lower() or "unknown"
+    startup_primary_issue = _coalesce(startup_diagnostics.get("primary_issue"), None)
+    startup_next_step_code = str(startup_diagnostics.get("next_step_code", "")).strip() or "none"
+    startup_next_step = startup_diagnostics.get("next_step")
+
+    governance_diagnostics = _nested_get(governance_summary, "diagnostics")
+    governance_diagnostics = governance_diagnostics if isinstance(governance_diagnostics, Mapping) else {}
+    governance_decision_status = str(
+        _coalesce(_nested_get(governance_summary, "decision_status"), "unknown")
+    ).strip().lower()
+    governance_top_blocker = str(
+        _coalesce(governance_diagnostics.get("top_blocker"), "none")
+    ).strip().lower() or "none"
+    next_safe_action = governance_diagnostics.get("next_safe_action")
+
+    combo_a_availability_status = str(
+        _coalesce(_nested_get(combo_a_summary, "availability_status"), "unknown")
+    ).strip().lower()
+    combo_a_promotion_state_raw = _coalesce(_nested_get(combo_a_summary, "promotion_state"), None)
+    combo_a_promotion_state = (
+        str(combo_a_promotion_state_raw).strip().lower()
+        if combo_a_promotion_state_raw is not None
+        else None
+    )
+
+    stack_rollup, attention_services, first_service_message = _build_stack_service_rollup(stack_services)
+
+    startup_attention = bool(startup_primary_issue) or startup_overall_state in {
+        "degraded",
+        "unknown",
+        "not_available",
+    }
+    if startup_overall_state == "stopped" and not startup_primary_issue:
+        startup_attention = False
+
+    services_attention = bool(attention_services)
+    governance_attention = governance_top_blocker != "none" or governance_decision_status in {
+        "repair",
+        "remediate",
+        "hold",
+    }
+    combo_a_attention = _combo_a_needs_attention(combo_a_summary)
+
+    primary_surface = "none"
+    primary_code = "none"
+    primary_message: str | None = None
+    next_step_code = "none"
+    next_step: str | None = None
+
+    if startup_attention:
+        primary_surface = "startup"
+        primary_code = (
+            startup_next_step_code
+            if startup_next_step_code and startup_next_step_code != "none"
+            else "startup_attention"
+        )
+        primary_message = (
+            str(startup_primary_issue).strip()
+            if startup_primary_issue is not None and str(startup_primary_issue).strip()
+            else "Operator startup requires attention."
+        )
+        next_step_code = startup_next_step_code
+        next_step = (
+            str(startup_next_step).strip()
+            if startup_next_step is not None and str(startup_next_step).strip()
+            else None
+        )
+    elif services_attention:
+        primary_surface = "services"
+        primary_code = "service_attention"
+        primary_message = first_service_message or "One or more configured services require attention."
+        first_service_name = attention_services[0]
+        next_step_code = "inspect_stack_service"
+        next_step = f"Inspect {first_service_name} readiness probe and service configuration."
+    elif governance_attention:
+        primary_surface = "governance"
+        primary_code = governance_top_blocker if governance_top_blocker != "none" else governance_decision_status
+        governance_message = _coalesce(_nested_get(governance_summary, "actionable_message"), None)
+        primary_message = (
+            str(governance_message).strip()
+            if governance_message is not None and str(governance_message).strip()
+            else "Review the operator governance surface."
+        )
+        if next_safe_action is not None and str(next_safe_action).strip():
+            next_step_code = "run_safe_action"
+            next_step = f"Run safe action {str(next_safe_action).strip()} from the gateway operator surface."
+        else:
+            next_step_code = "review_governance_surface"
+            next_step = "Review the operator governance surface and recommended actions."
+    elif combo_a_attention:
+        primary_surface = "combo_a"
+        primary_code = (
+            combo_a_promotion_state
+            if combo_a_promotion_state is not None and combo_a_promotion_state
+            else combo_a_availability_status
+        )
+        combo_a_message = _coalesce(_nested_get(combo_a_summary, "actionable_message"), None)
+        primary_message = (
+            str(combo_a_message).strip()
+            if combo_a_message is not None and str(combo_a_message).strip()
+            else "Review the Combo A promotion surface."
+        )
+        next_step_code = "review_combo_a"
+        next_step = "Review the Combo A promotion surface and live readiness."
+
+    if primary_surface != "none":
+        overall_state = "attention"
+    elif startup_overall_state == "unknown" and stack_rollup["total_services"] == 0:
+        overall_state = "unknown"
+    else:
+        overall_state = "healthy"
+
+    return {
+        "overall_state": overall_state,
+        "primary_surface": primary_surface,
+        "primary_code": primary_code,
+        "primary_message": primary_message,
+        "next_step_code": next_step_code,
+        "next_step": next_step,
+        "next_safe_action": (
+            str(next_safe_action).strip()
+            if next_safe_action is not None and str(next_safe_action).strip()
+            else None
+        ),
+        "attention_services": attention_services,
+        "stack_rollup": stack_rollup,
+        "startup_overall_state": startup_overall_state,
+        "governance_decision_status": governance_decision_status,
+        "governance_top_blocker": governance_top_blocker,
+        "combo_a_availability_status": combo_a_availability_status,
+        "combo_a_promotion_state": combo_a_promotion_state,
+    }
+
+
 def load_operator_policy_surface_context(
     runs_dir: Path,
 ) -> tuple[dict[str, Any], dict[str, list[str]]]:
@@ -1157,6 +1515,98 @@ def build_run_explorer_rows(sources: dict[str, Path]) -> list[dict[str, Any]]:
     return rows
 
 
+def _history_surface(source: str) -> str:
+    if source.startswith("gateway_http_"):
+        return "gateway_http"
+    if source.startswith("gateway_"):
+        return "gateway_local"
+    if source.startswith("cross_service_suite"):
+        return "cross_service_suite"
+    if source == "combo_a_operating_cycle":
+        return "combo_a_policy"
+    if source in {"retrieve", "eval"}:
+        return "retrieval"
+    if source == "phase_a":
+        return "phase_a"
+    return "other"
+
+
+def _history_scenario(
+    source: str,
+    run_payload: Mapping[str, Any],
+    spec: Mapping[str, str | None],
+) -> str | None:
+    observed = str(run_payload.get("scenario", "")).strip()
+    if observed:
+        return observed
+    expected = str(spec.get("expected_scenario") or "").strip()
+    if expected:
+        return expected
+    if source.endswith("_combo_a"):
+        return "combo_a"
+    return None
+
+
+def _build_history_result_summary(source: str, row: Mapping[str, Any]) -> str:
+    status = str(row.get("status", "unknown")).strip() or "unknown"
+    request_count = row.get("request_count")
+    failed_count = row.get("failed_requests_count")
+    results_count = row.get("results_count")
+    query_count = row.get("query_count")
+    mean_mrr_at_k = row.get("mean_mrr_at_k")
+    details = str(row.get("details", "")).strip()
+
+    if source in {
+        "gateway_core",
+        "gateway_hybrid",
+        "gateway_automation",
+        "gateway_combo_a",
+        "gateway_http_core",
+        "gateway_http_hybrid",
+        "gateway_http_automation",
+        "gateway_http_combo_a",
+    }:
+        parts: list[str] = []
+        if request_count is not None:
+            parts.append(f"requests={request_count}")
+        if failed_count is not None:
+            parts.append(f"failed={failed_count}")
+        return ", ".join(parts) if parts else f"status={status}"
+
+    if source == "retrieve":
+        return f"results={results_count}" if results_count is not None else f"status={status}"
+
+    if source == "eval":
+        parts = []
+        if query_count is not None:
+            parts.append(f"queries={query_count}")
+        if mean_mrr_at_k is not None:
+            parts.append(f"mrr@k={mean_mrr_at_k}")
+        return ", ".join(parts) if parts else f"status={status}"
+
+    if source in {"cross_service_suite", "cross_service_suite_combo_a"}:
+        parts = []
+        if details and details != "-":
+            parts.append(f"sla={details}")
+        if request_count is not None:
+            parts.append(f"services={request_count}")
+        if failed_count is not None:
+            parts.append(f"degraded={failed_count}")
+        return ", ".join(parts) if parts else f"status={status}"
+
+    if source == "combo_a_operating_cycle":
+        parts = []
+        if details and details != "-":
+            parts.append(f"policy={details}")
+        if failed_count is not None:
+            parts.append(f"blockers={failed_count}")
+        return ", ".join(parts) if parts else f"status={status}"
+
+    if details and details != "-":
+        return details
+    return f"status={status}"
+
+
 def _iter_candidate_run_dirs(root: Path) -> list[Path]:
     if not root.is_dir():
         return []
@@ -1202,6 +1652,9 @@ def _parse_history_row(source: str, run_dir: Path) -> tuple[dict[str, Any] | Non
     row: dict[str, Any] = {
         "schema_version": "metrics_history_row_v1",
         "source": source,
+        "surface": _history_surface(source),
+        "mode": observed_mode,
+        "scenario": _history_scenario(source, run_payload, spec),
         "timestamp_utc": run_payload.get("timestamp_utc"),
         "status": str(run_payload.get("status", "unknown")),
         "run_dir": str(run_dir),
@@ -1218,6 +1671,7 @@ def _parse_history_row(source: str, run_dir: Path) -> tuple[dict[str, Any] | Non
         "query_count": None,
         "mean_mrr_at_k": None,
         "details": "-",
+        "result_summary": None,
     }
 
     if source in {
@@ -1234,9 +1688,11 @@ def _parse_history_row(source: str, run_dir: Path) -> tuple[dict[str, Any] | Non
         if isinstance(result_payload, dict):
             row["request_count"] = result_payload.get("request_count", row["request_count"])
             row["failed_requests_count"] = result_payload.get("failed_requests_count")
+        row["result_summary"] = _build_history_result_summary(source, row)
         return row, None
 
     if source == "phase_a":
+        row["result_summary"] = _build_history_result_summary(source, row)
         return row, None
 
     if source == "retrieve":
@@ -1245,6 +1701,7 @@ def _parse_history_row(source: str, run_dir: Path) -> tuple[dict[str, Any] | Non
             return None, f"{source}: missing or invalid retrieval_results.json in {run_dir}"
         results = results_payload.get("results")
         row["results_count"] = len(results) if isinstance(results, list) else results_payload.get("count")
+        row["result_summary"] = _build_history_result_summary(source, row)
         return row, None
 
     if source == "eval":
@@ -1256,6 +1713,7 @@ def _parse_history_row(source: str, run_dir: Path) -> tuple[dict[str, Any] | Non
             return None, f"{source}: missing metrics object in eval_results.json for {run_dir}"
         row["query_count"] = metrics_payload.get("query_count")
         row["mean_mrr_at_k"] = metrics_payload.get("mean_mrr_at_k")
+        row["result_summary"] = _build_history_result_summary(source, row)
         return row, None
 
     if source in {"cross_service_suite", "cross_service_suite_combo_a"}:
@@ -1270,6 +1728,7 @@ def _parse_history_row(source: str, run_dir: Path) -> tuple[dict[str, Any] | Non
         row["details"] = str(summary_payload.get("overall_sla_status", "-"))
         row["request_count"] = len(summary_payload.get("services", {})) if isinstance(summary_payload.get("services"), dict) else None
         row["failed_requests_count"] = len(summary_payload.get("degraded_services", [])) if isinstance(summary_payload.get("degraded_services"), list) else None
+        row["result_summary"] = _build_history_result_summary(source, row)
         return row, None
 
     if source == "combo_a_operating_cycle":
@@ -1286,8 +1745,10 @@ def _parse_history_row(source: str, run_dir: Path) -> tuple[dict[str, Any] | Non
             promotion_state=summary_payload.get("promotion_state", "-"),
         )
         row["failed_requests_count"] = len(_normalize_reason_codes(summary_payload.get("blocking_reason_codes")))
+        row["result_summary"] = _build_history_result_summary(source, row)
         return row, None
 
+    row["result_summary"] = _build_history_result_summary(source, row)
     return row, None
 
 
@@ -1603,27 +2064,34 @@ def build_operator_product_snapshot(
         combo_a_readiness=combo_a_readiness,
         combo_a_operating_cycle_snapshot=combo_a_operating_cycle_snapshot,
     )
+    stack_services = {
+        "gateway_v1_http_service": {
+            "service_name": "gateway_v1_http_service",
+            "configured": True,
+            "status": str(gateway_health.get("status", "unknown")),
+            "url": None,
+            "health_path": "/healthz",
+            "payload": gateway_health,
+            "error": None,
+        },
+        "voice_runtime_service": voice_health,
+        "tts_runtime_service": tts_health,
+        "qdrant": qdrant_health,
+        "neo4j": neo4j_health,
+    }
+    triage = _build_operator_compact_triage(
+        startup_snapshot=startup_snapshot,
+        governance_summary=governance_summary,
+        combo_a_summary=combo_a_profile_summary,
+        stack_services=stack_services,
+    )
 
     return {
         "schema_version": GATEWAY_OPERATOR_STATUS_SCHEMA,
         "checked_at_utc": _utc_now(),
         "status": "ok",
         "gateway": gateway_health,
-        "stack_services": {
-            "gateway_v1_http_service": {
-                "service_name": "gateway_v1_http_service",
-                "configured": True,
-                "status": str(gateway_health.get("status", "unknown")),
-                "url": None,
-                "health_path": "/healthz",
-                "payload": gateway_health,
-                "error": None,
-            },
-            "voice_runtime_service": voice_health,
-            "tts_runtime_service": tts_health,
-            "qdrant": qdrant_health,
-            "neo4j": neo4j_health,
-        },
+        "stack_services": stack_services,
         "operator_context": {
             "artifact_roots": {
                 "gateway_runs_dir": str(runs_dir),
@@ -1631,6 +2099,7 @@ def build_operator_product_snapshot(
             },
             "startup": startup_snapshot,
             "governance": governance_summary,
+            "triage": triage,
             "profiles": {
                 "default_profile": gateway_health.get("supported_profiles", ["baseline_first"])[0]
                 if isinstance(gateway_health.get("supported_profiles"), list) and gateway_health.get("supported_profiles")
