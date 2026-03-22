@@ -119,6 +119,34 @@ def test_gateway_v1_local_kag_query_file_ok(tmp_path: Path) -> None:
     assert "kag_query_demo" in response_payload["artifacts"]["child_runs"]
 
 
+def test_gateway_v1_local_hybrid_query_ok(tmp_path: Path) -> None:
+    result = gateway.run_gateway_request(
+        request_payload={
+            "schema_version": "gateway_request_v1",
+            "operation": "hybrid_query",
+            "payload": {
+                "query": "steel tools",
+                "docs_path": str(_fixture_path("retrieval_docs_sample.jsonl")),
+                "topk": 5,
+                "candidate_k": 10,
+                "reranker": "none",
+            },
+        },
+        runs_dir=tmp_path / "runs",
+        now=datetime(2026, 2, 27, 10, 3, 30, tzinfo=timezone.utc),
+    )
+
+    response_payload = result["response_payload"]
+    assert result["ok"] is True
+    assert response_payload["status"] == "ok"
+    assert response_payload["result"]["backend"] == "hybrid_baseline"
+    assert response_payload["result"]["planner_mode"] == "retrieval_first_kag_expansion"
+    assert response_payload["result"]["results_count"] >= 1
+    child_run_dir = Path(response_payload["artifacts"]["child_runs"]["hybrid_query"])
+    assert (child_run_dir / "run.json").exists()
+    assert (child_run_dir / "hybrid_query_results.json").exists()
+
+
 def test_gateway_v1_local_automation_dry_run_ok(tmp_path: Path) -> None:
     result = gateway.run_gateway_request(
         request_payload={
@@ -221,6 +249,22 @@ def test_gateway_v1_local_kag_query_missing_query_fails(tmp_path: Path) -> None:
     assert result["ok"] is False
     assert result["response_payload"]["status"] == "error"
     assert result["response_payload"]["error_code"] == "invalid_request"
+
+
+def test_gateway_v1_local_hybrid_query_requires_docs_path(tmp_path: Path) -> None:
+    result = gateway.run_gateway_request(
+        request_payload={
+            "schema_version": "gateway_request_v1",
+            "operation": "hybrid_query",
+            "payload": {"query": "steel tools"},
+        },
+        runs_dir=tmp_path / "runs",
+        now=datetime(2026, 2, 27, 10, 5, 15, tzinfo=timezone.utc),
+    )
+    assert result["ok"] is False
+    assert result["response_payload"]["status"] == "error"
+    assert result["response_payload"]["error_code"] == "invalid_request"
+    assert "payload.docs_path" in str(result["response_payload"]["error"])
 
 
 def test_gateway_v1_local_redacts_sensitive_fields_in_request_artifact(tmp_path: Path) -> None:

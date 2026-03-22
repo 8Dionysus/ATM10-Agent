@@ -46,6 +46,17 @@ def _build_requests() -> list[dict[str, object]]:
         },
         {
             "schema_version": "gateway_request_v1",
+            "operation": "hybrid_query",
+            "payload": {
+                "query": "steel tools",
+                "docs_path": str(_fixture_path("retrieval_docs_sample.jsonl")),
+                "topk": 5,
+                "candidate_k": 10,
+                "reranker": "none",
+            },
+        },
+        {
+            "schema_version": "gateway_request_v1",
             "operation": "automation_dry_run",
             "payload": {
                 "plan_json": str(_fixture_path("automation_plan_quest_book.json")),
@@ -64,6 +75,20 @@ def _assert_semantic_result_parity(operation: str, cli_result: dict[str, object]
         return
     if operation == "kag_query":
         for field in ("backend", "query", "topk", "results_count"):
+            assert http_result[field] == cli_result[field]
+        return
+    if operation == "hybrid_query":
+        for field in (
+            "backend",
+            "query",
+            "topk",
+            "results_count",
+            "retrieval_results_count",
+            "kag_results_count",
+            "planner_mode",
+            "planner_status",
+            "degraded",
+        ):
             assert http_result[field] == cli_result[field]
         return
     if operation == "automation_dry_run":

@@ -14,6 +14,7 @@ Local-first game companion for ATM10 on Windows 11 + PowerShell 7.
 - Phase A vision smoke path with artifacted runs via `scripts/phase_a_smoke.py`
 - Retrieval and evaluation loops for local docs and fixtures
 - KAG file baseline plus Neo4j path, with nightly guardrail and trend snapshots
+- Hybrid planner baseline (`retrieval first + KAG expansion/citations`) via CLI runner and additive gateway flow
 - Gateway v1 local + HTTP paths, Streamlit operator panel, and the primary launcher `scripts/start_operator_product.py`
 - Safe automation intent -> plan -> dry-run chain with public rollout records under `M6.19` for `open_quest_book`, `check_inventory_tool`, and `open_world_map`
 
@@ -102,6 +103,7 @@ python scripts/dependency_audit.py --runs-dir runs --policy report_only --with-s
 - `src/agent_core/` - shared core runtime pieces
 - `src/rag/` - retrieval stack
 - `src/kag/` - graph and KAG stack
+- `src/hybrid/` - hybrid planner merge/orchestration layer
 - `tests/` - regression, smoke, workflow, and contract coverage
 - `docs/` - runbook, roadmap, source-of-truth, archived tracks, release notes
 

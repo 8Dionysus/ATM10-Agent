@@ -45,11 +45,14 @@ def test_canonical_summary_sources_returns_expected_paths(tmp_path: Path) -> Non
         "retrieve",
         "eval",
         "gateway_core",
+        "gateway_hybrid",
         "gateway_automation",
         "gateway_http_core",
+        "gateway_http_hybrid",
         "gateway_http_automation",
     ]
     assert sources["phase_a"] == tmp_path / "ci-smoke-phase-a" / "smoke_summary.json"
+    assert sources["gateway_hybrid"] == tmp_path / "ci-smoke-gateway-hybrid" / "gateway_smoke_summary.json"
     assert sources["gateway_http_automation"] == (
         tmp_path
         / "ci-smoke-gateway-http-automation"
@@ -312,6 +315,18 @@ def test_resolve_safe_action_builds_expected_command(tmp_path: Path) -> None:
     assert str(summary_path).endswith("gateway_http_smoke_summary.json")
 
 
+def test_resolve_safe_action_supports_hybrid_smokes(tmp_path: Path) -> None:
+    local_command, local_summary = panel.resolve_safe_action("gateway_local_hybrid", tmp_path)
+    http_command, http_summary = panel.resolve_safe_action("gateway_http_hybrid", tmp_path)
+
+    assert "scripts/gateway_v1_smoke.py" in local_command
+    assert "hybrid" in local_command
+    assert str(local_summary).endswith("gateway_smoke_summary.json")
+    assert "scripts/gateway_v1_http_smoke.py" in http_command
+    assert "hybrid" in http_command
+    assert str(http_summary).endswith("gateway_http_smoke_summary.json")
+
+
 def test_run_safe_action_fails_when_summary_missing(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -433,6 +448,43 @@ def test_build_metrics_history_rows_collects_valid_rows(tmp_path: Path) -> None:
     assert rows[0]["run_dir"] == str(run_2)
     assert rows[1]["run_dir"] == str(run_1)
     assert rows[0]["results_count"] == 3
+
+
+def test_build_metrics_history_rows_supports_hybrid_gateway_sources(tmp_path: Path) -> None:
+    roots = panel.canonical_history_roots(tmp_path)
+    run_dir = _create_history_run(
+        root=roots["gateway_hybrid"],
+        run_name="20260228_100700-gateway-v1-smoke-hybrid",
+        mode="gateway_v1_smoke",
+        scenario="hybrid",
+        timestamp_utc="2026-02-28T10:07:00+00:00",
+    )
+    _write_json(
+        run_dir / "run.json",
+        {
+            "mode": "gateway_v1_smoke",
+            "status": "ok",
+            "scenario": "hybrid",
+            "timestamp_utc": "2026-02-28T10:07:00+00:00",
+            "result": {"request_count": 1, "failed_requests_count": 0},
+            "paths": {
+                "run_json": str(run_dir / "run.json"),
+                "summary_json": str(tmp_path / "ci-smoke-gateway-hybrid" / "gateway_smoke_summary.json"),
+            },
+        },
+    )
+
+    rows, warnings = panel.build_metrics_history_rows(
+        tmp_path,
+        selected_sources=["gateway_hybrid"],
+        selected_statuses=["ok", "error"],
+        limit_per_source=10,
+    )
+    assert warnings == []
+    assert len(rows) == 1
+    assert rows[0]["source"] == "gateway_hybrid"
+    assert rows[0]["request_count"] == 1
+    assert rows[0]["failed_requests_count"] == 0
 
 
 def test_build_metrics_history_rows_applies_source_filter(tmp_path: Path) -> None:

@@ -47,6 +47,7 @@ def test_gateway_v1_http_service_healthz_ok(tmp_path: Path) -> None:
     assert payload["status"] == "ok"
     assert payload["service"] == "gateway_v1_http_service"
     assert payload["operator_runs_dir"] == str(tmp_path / "runs")
+    assert "hybrid_query" in payload["supported_operations"]
     assert payload["policy"] == {
         "max_request_body_bytes": 10_000,
         "max_json_depth": 4,
@@ -303,6 +304,20 @@ def test_gateway_v1_http_service_openapi_is_disabled_by_default_and_opt_in_enabl
                 },
             },
             "retrieval_query",
+        ),
+        (
+            {
+                "schema_version": "gateway_request_v1",
+                "operation": "hybrid_query",
+                "payload": {
+                    "query": "steel tools",
+                    "docs_path": str(_fixture_path("retrieval_docs_sample.jsonl")),
+                    "topk": 5,
+                    "candidate_k": 10,
+                    "reranker": "none",
+                },
+            },
+            "hybrid_query",
         ),
         (
             {
@@ -607,6 +622,25 @@ def test_gateway_v1_http_service_rejects_untrusted_reranker_model(tmp_path: Path
     assert payload["status"] == "error"
     assert payload["error_code"] == "invalid_request"
     assert "reranker_model is not allowed" in str(payload["error"])
+
+
+def test_gateway_v1_http_service_hybrid_query_requires_docs_path(tmp_path: Path) -> None:
+    app = gateway_http.create_app(runs_dir=tmp_path / "runs")
+    with TestClient(app) as client:
+        response = client.post(
+            "/v1/gateway",
+            json={
+                "schema_version": "gateway_request_v1",
+                "operation": "hybrid_query",
+                "payload": {"query": "steel tools"},
+            },
+        )
+
+    payload = response.json()
+    assert response.status_code == 400
+    assert payload["status"] == "error"
+    assert payload["error_code"] == "invalid_request"
+    assert "payload.docs_path" in str(payload["error"])
 
 
 def test_gateway_v1_http_service_auth_token_is_optional_and_enforced_when_configured(tmp_path: Path) -> None:

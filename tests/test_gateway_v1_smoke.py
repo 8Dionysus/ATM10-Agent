@@ -62,6 +62,25 @@ def test_gateway_v1_smoke_automation_ok(tmp_path: Path) -> None:
     assert summary_payload["requests"][0]["operation"] == "automation_dry_run"
 
 
+def test_gateway_v1_smoke_hybrid_ok(tmp_path: Path) -> None:
+    summary_path = tmp_path / "runs" / "ci-smoke-gateway-hybrid" / "gateway_smoke_summary.json"
+    result = gateway_smoke.run_gateway_v1_smoke(
+        scenario="hybrid",
+        runs_dir=tmp_path / "runs" / "ci-smoke-gateway-hybrid",
+        summary_json=summary_path,
+        now=datetime(2026, 2, 27, 11, 1, 30, tzinfo=timezone.utc),
+    )
+    assert result["ok"] is True
+    summary_payload = json.loads(summary_path.read_text(encoding="utf-8"))
+    assert summary_payload["status"] == "ok"
+    assert summary_payload["scenario"] == "hybrid"
+    assert summary_payload["request_count"] == 1
+    assert summary_payload["failed_requests_count"] == 0
+    assert summary_payload["error_buckets"]["none"] == 1
+    assert summary_payload["requests"][0]["operation"] == "hybrid_query"
+    assert summary_payload["requests"][0]["ok"] is True
+
+
 def test_gateway_v1_smoke_invalid_scenario_raises_value_error(tmp_path: Path) -> None:
     with pytest.raises(ValueError):
         gateway_smoke.run_gateway_v1_smoke(
