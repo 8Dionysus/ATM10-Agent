@@ -28,7 +28,7 @@ jobs:
 
       - name: Security gate - Dependency audit (fail_on_critical)
         run: |
-          python scripts/dependency_audit.py --runs-dir runs/nightly-security-audit --policy fail_on_critical --with-security-scan true
+          python scripts/dependency_audit.py --runs-dir runs/nightly-security-audit --policy fail_on_critical --with-security-scan true --security-requirements-files requirements.txt requirements-voice.txt requirements-llm.txt requirements-dev.txt
 
       - name: Upload artifact - Security nightly report
         if: always()

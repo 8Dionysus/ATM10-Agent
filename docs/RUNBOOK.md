@@ -40,16 +40,19 @@ python -m pip install -r requirements-export.txt
 
 # Dependency audit
 python -m pip install -r requirements-audit.txt
-python scripts/dependency_audit.py --runs-dir runs --policy report_only --with-security-scan true
+python scripts/dependency_audit.py --runs-dir runs --policy report_only --with-security-scan true --security-requirements-files requirements.txt requirements-voice.txt requirements-llm.txt requirements-dev.txt
 
 # Nightly/security gate profile
-python scripts/dependency_audit.py --runs-dir runs/nightly-security-audit --policy fail_on_critical --with-security-scan true
+python scripts/dependency_audit.py --runs-dir runs/nightly-security-audit --policy fail_on_critical --with-security-scan true --security-requirements-files requirements.txt requirements-voice.txt requirements-llm.txt requirements-dev.txt
 ```
 
 CI note:
 
 * PR pipeline keeps `report_only` dependency audit signal.
 * Nightly security workflow (`.github/workflows/security-nightly.yml`) runs `fail_on_critical` policy.
+* Inventory/findings still inspect all declared requirement profiles.
+* `requirements-export.txt` is intentionally isolated from `requirements-llm.txt`; it carries its own `torch`/`transformers`/`optimum*` constraints for a separate export-only environment.
+* The fail/report security scan scope covers active runtime/dev profiles by default; audit `requirements-export.txt` explicitly when you need the optional export toolchain surface.
 
 ## CI smoke (runnable scripts)
 
