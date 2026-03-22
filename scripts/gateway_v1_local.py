@@ -14,6 +14,7 @@ if str(REPO_ROOT) not in sys.path:
 
 from scripts.automation_dry_run import run_automation_dry_run
 from scripts.gateway_artifact_policy import REDACTION_CHECKLIST_VERSION, redact_payload
+from scripts.hybrid_query_demo import run_hybrid_query
 from scripts.kag_build_baseline import run_kag_build_baseline
 from scripts.kag_query_demo import run_kag_query_demo
 from scripts.kag_query_neo4j import run_kag_query_neo4j
@@ -22,7 +23,14 @@ from src.rag.retrieval import load_docs, retrieve_top_k
 
 REQUEST_SCHEMA_VERSION = "gateway_request_v1"
 RESPONSE_SCHEMA_VERSION = "gateway_response_v1"
-SUPPORTED_OPERATIONS = ("health", "retrieval_query", "kag_query", "automation_dry_run", "safe_action_smoke")
+SUPPORTED_OPERATIONS = (
+    "health",
+    "retrieval_query",
+    "kag_query",
+    "hybrid_query",
+    "automation_dry_run",
+    "safe_action_smoke",
+)
 DEFAULT_RERANKER_MODEL = "Qwen/Qwen3-Reranker-0.6B"
 ALLOWED_RERANKER_MODELS = (
     DEFAULT_RERANKER_MODEL,
@@ -349,6 +357,72 @@ def _run_kag_query(
     }, child_runs
 
 
+def _run_hybrid_query(
+    payload: Mapping[str, Any],
+    *,
+    child_runs_dir: Path,
+    now: datetime,
+) -> tuple[dict[str, Any], dict[str, str]]:
+    query = str(payload.get("query", "")).strip()
+    if not query:
+        raise ValueError("payload.query must be non-empty string for hybrid_query.")
+
+    docs_path_raw = str(payload.get("docs_path", "")).strip()
+    if not docs_path_raw:
+        raise ValueError("payload.docs_path must be non-empty string for hybrid_query.")
+    docs_path = Path(docs_path_raw)
+
+    topk = _coerce_int(payload, "topk", 5, min_value=1)
+    candidate_k = _coerce_int(payload, "candidate_k", 10, min_value=1)
+    reranker = str(payload.get("reranker", "none")).strip().lower()
+    if reranker not in {"none", "qwen3"}:
+        raise ValueError("payload.reranker must be one of ['none', 'qwen3'].")
+    reranker_model = str(payload.get("reranker_model", DEFAULT_RERANKER_MODEL)).strip()
+    reranker_runtime = str(payload.get("reranker_runtime", "torch")).strip().lower()
+    if reranker_runtime not in {"torch", "openvino"}:
+        raise ValueError("payload.reranker_runtime must be one of ['torch', 'openvino'].")
+    reranker_device = str(payload.get("reranker_device", "AUTO")).strip()
+    reranker_max_length = _coerce_int(payload, "reranker_max_length", 1024, min_value=1)
+    max_entities_per_doc = _coerce_int(payload, "max_entities_per_doc", 128, min_value=1)
+    if reranker == "qwen3":
+        _validate_reranker_model(reranker_model)
+
+    hybrid_result = run_hybrid_query(
+        query=query,
+        docs_path=docs_path,
+        topk=topk,
+        candidate_k=candidate_k,
+        reranker=reranker,
+        reranker_model=reranker_model,
+        reranker_runtime=reranker_runtime,
+        reranker_device=reranker_device,
+        reranker_max_length=reranker_max_length,
+        max_entities_per_doc=max_entities_per_doc,
+        runs_dir=child_runs_dir,
+        now=now,
+    )
+    child_runs = {"hybrid_query": str(hybrid_result["run_dir"])}
+    if not hybrid_result["ok"]:
+        raise GatewayOperationError(
+            str(hybrid_result["run_payload"].get("error", "hybrid_query failed")),
+            error_code="operation_failed",
+            child_runs=child_runs,
+        )
+
+    results_payload = hybrid_result["results_payload"]
+    return {
+        "backend": "hybrid_baseline",
+        "query": query,
+        "topk": topk,
+        "results_count": int(results_payload["results_count"]),
+        "retrieval_results_count": int(results_payload["retrieval_results_count"]),
+        "kag_results_count": int(results_payload["kag_results_count"]),
+        "planner_mode": str(results_payload["planner_mode"]),
+        "planner_status": str(results_payload["planner_status"]),
+        "degraded": bool(results_payload["degraded"]),
+    }, child_runs
+
+
 def _run_automation_dry_run(
     payload: Mapping[str, Any],
     *,
@@ -448,6 +522,8 @@ def _dispatch_operation(
         return _run_retrieval_query(payload, child_runs_dir=child_runs_dir, now=now)
     if operation == "kag_query":
         return _run_kag_query(payload, child_runs_dir=child_runs_dir, now=now)
+    if operation == "hybrid_query":
+        return _run_hybrid_query(payload, child_runs_dir=child_runs_dir, now=now)
     if operation == "automation_dry_run":
         return _run_automation_dry_run(payload, child_runs_dir=child_runs_dir, now=now)
     if operation == "safe_action_smoke":

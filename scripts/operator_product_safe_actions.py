@@ -20,6 +20,13 @@ SAFE_ACTIONS: dict[str, dict[str, str]] = {
         "runs_subdir": "ui-safe-gateway-core",
         "summary_name": "gateway_smoke_summary.json",
     },
+    "gateway_local_hybrid": {
+        "label": "Gateway local smoke hybrid",
+        "script": "scripts/gateway_v1_smoke.py",
+        "scenario": "hybrid",
+        "runs_subdir": "ui-safe-gateway-hybrid",
+        "summary_name": "gateway_smoke_summary.json",
+    },
     "gateway_local_automation": {
         "label": "Gateway local smoke automation",
         "script": "scripts/gateway_v1_smoke.py",
@@ -32,6 +39,13 @@ SAFE_ACTIONS: dict[str, dict[str, str]] = {
         "script": "scripts/gateway_v1_http_smoke.py",
         "scenario": "core",
         "runs_subdir": "ui-safe-gateway-http-core",
+        "summary_name": "gateway_http_smoke_summary.json",
+    },
+    "gateway_http_hybrid": {
+        "label": "Gateway HTTP smoke hybrid",
+        "script": "scripts/gateway_v1_http_smoke.py",
+        "scenario": "hybrid",
+        "runs_subdir": "ui-safe-gateway-http-hybrid",
         "summary_name": "gateway_http_smoke_summary.json",
     },
     "gateway_http_automation": {

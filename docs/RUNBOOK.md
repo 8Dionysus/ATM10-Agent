@@ -69,8 +69,10 @@ python scripts/check_automation_smoke_contract.py --mode intent_chain --runs-dir
 python scripts/automation_intent_chain_smoke.py --intent-json tests/fixtures/intent_open_world_map.json --runs-dir runs/ci-smoke-automation-chain-open-world-map
 python scripts/check_automation_smoke_contract.py --mode intent_chain --runs-dir runs/ci-smoke-automation-chain-open-world-map --min-action-count 3 --min-step-count 4 --expected-intent-type open_world_map --require-trace-id --require-intent-id --summary-json runs/ci-smoke-automation-chain-open-world-map/contract_summary.json
 python scripts/gateway_v1_smoke.py --scenario core --runs-dir runs/ci-smoke-gateway-core --summary-json runs/ci-smoke-gateway-core/gateway_smoke_summary.json
+python scripts/gateway_v1_smoke.py --scenario hybrid --runs-dir runs/ci-smoke-gateway-hybrid --summary-json runs/ci-smoke-gateway-hybrid/gateway_smoke_summary.json
 python scripts/gateway_v1_smoke.py --scenario automation --runs-dir runs/ci-smoke-gateway-automation --summary-json runs/ci-smoke-gateway-automation/gateway_smoke_summary.json
 python scripts/gateway_v1_http_smoke.py --scenario core --runs-dir runs/ci-smoke-gateway-http-core --summary-json runs/ci-smoke-gateway-http-core/gateway_http_smoke_summary.json
+python scripts/gateway_v1_http_smoke.py --scenario hybrid --runs-dir runs/ci-smoke-gateway-http-hybrid --summary-json runs/ci-smoke-gateway-http-hybrid/gateway_http_smoke_summary.json
 python scripts/gateway_v1_http_smoke.py --scenario automation --runs-dir runs/ci-smoke-gateway-http-automation --summary-json runs/ci-smoke-gateway-http-automation/gateway_http_smoke_summary.json
 python scripts/check_gateway_sla.py --http-summary-json runs/ci-smoke-gateway-http-core/gateway_http_smoke_summary.json --summary-json runs/ci-smoke-gateway-sla/gateway_sla_summary.json --profile conservative --policy signal_only --runs-dir runs/ci-smoke-gateway-sla
 python scripts/gateway_sla_trend_snapshot.py --sla-runs-dir runs/ci-smoke-gateway-sla --history-limit 10 --baseline-window 5 --critical-policy signal_only --runs-dir runs/ci-smoke-gateway-sla-trend
@@ -90,9 +92,11 @@ Expected result:
   * `runs/ci-smoke-automation-chain-open-world-map/contract_summary.json`
 * Machine-readable summaries are created for gateway smoke steps:
   * `runs/ci-smoke-gateway-core/gateway_smoke_summary.json`
+  * `runs/ci-smoke-gateway-hybrid/gateway_smoke_summary.json`
   * `runs/ci-smoke-gateway-automation/gateway_smoke_summary.json`
 * For gateway HTTP smoke steps, machine-readable summaries are created:
   * `runs/ci-smoke-gateway-http-core/gateway_http_smoke_summary.json`
+  * `runs/ci-smoke-gateway-http-hybrid/gateway_http_smoke_summary.json`
   * `runs/ci-smoke-gateway-http-automation/gateway_http_smoke_summary.json`
 * For gateway SLA check, a machine-readable summary is created:
   * `runs/ci-smoke-gateway-sla/gateway_sla_summary.json`
@@ -137,10 +141,26 @@ Expected result:
 * `request.json` is saved in redacted form (without plaintext secrets).
 * `request_redaction` (`applied`, `fields_redacted`, checklist version) is published in `run.json`.
 * `response.json.schema_version = gateway_response_v1`.
+* `health.result.supported_operations` includes additive `hybrid_query`.
 * For `retrieval_query` + `reranker=qwen3` `payload.reranker_model` is limited by allowlist:
   * `Qwen/Qwen3-Reranker-0.6B`
   * `OpenVINO/Qwen3-Reranker-0.6B-fp16-ov`
   * override only via `ATM10_ALLOW_UNTRUSTED_RERANKER_MODEL=true` (trusted-only).
+
+### Hybrid planner runner
+
+```powershell
+cd <repo-root>
+.\.venv\Scripts\Activate.ps1
+python scripts/hybrid_query_demo.py --docs tests/fixtures/retrieval_docs_sample.jsonl --query "steel tools" --topk 5 --candidate-k 10 --reranker none --runs-dir runs\hybrid-query
+```
+
+Expected result:
+
+* `runs/<timestamp>-hybrid-query/` is created.
+* Inside there are `run.json`, `hybrid_query_results.json`, and `kag_graph.json` when the KAG stage completes.
+* `hybrid_query_results.json` contains `planner_mode`, `planner_status`, `degraded`, `retrieval_results`, `kag_results`, `merged_results`, `warnings`, and `paths`.
+* If retrieval succeeds but the KAG stage fails or returns no expansion rows, the run still ends with `status=ok` and `planner_status=retrieval_only_fallback`.
 
 ### Gateway smoke scenarios
 
@@ -148,12 +168,14 @@ Expected result:
 cd <repo-root>
 .\.venv\Scripts\Activate.ps1
 python scripts/gateway_v1_smoke.py --scenario core --runs-dir runs\ci-smoke-gateway-core --summary-json runs\ci-smoke-gateway-core\gateway_smoke_summary.json
+python scripts/gateway_v1_smoke.py --scenario hybrid --runs-dir runs\ci-smoke-gateway-hybrid --summary-json runs\ci-smoke-gateway-hybrid\gateway_smoke_summary.json
 python scripts/gateway_v1_smoke.py --scenario automation --runs-dir runs\ci-smoke-gateway-automation --summary-json runs\ci-smoke-gateway-automation\gateway_smoke_summary.json
 ```
 
 Expected result:
 
 * The `core` script checks `health`, `retrieval_query`, `kag_query` (`backend=file`).
+* The `hybrid` script checks additive `hybrid_query` (`retrieval first + file KAG expansion + RRF merge`).
 * The `automation` script checks `automation_dry_run` through fixture.
 * In each `--summary-json`, a `status=ok|error` is fixed; any `error` returns a non-zero exit code.
 
@@ -214,6 +236,12 @@ Transport health check:
 python -c "import requests; print(requests.get('http://127.0.0.1:8770/healthz', timeout=10).json())"
 ```
 
+Expected transport health fields:
+
+* `status = ok`
+* `supported_operations` includes `health`, `retrieval_query`, `kag_query`, `hybrid_query`, `automation_dry_run`, `safe_action_smoke`
+* `policy` reflects the effective HTTP hardening profile
+
 Operator snapshot check:
 
 ```powershell
@@ -262,12 +290,14 @@ Sanitize policy:
 cd <repo-root>
 .\.venv\Scripts\Activate.ps1
 python scripts/gateway_v1_http_smoke.py --scenario core --runs-dir runs\ci-smoke-gateway-http-core --summary-json runs\ci-smoke-gateway-http-core\gateway_http_smoke_summary.json
+python scripts/gateway_v1_http_smoke.py --scenario hybrid --runs-dir runs\ci-smoke-gateway-http-hybrid --summary-json runs\ci-smoke-gateway-http-hybrid\gateway_http_smoke_summary.json
 python scripts/gateway_v1_http_smoke.py --scenario automation --runs-dir runs\ci-smoke-gateway-http-automation --summary-json runs\ci-smoke-gateway-http-automation\gateway_http_smoke_summary.json
 ```
 
 Expected result:
 
 * `core` contains operations `health`, `retrieval_query`, `kag_query(file)`.
+* `hybrid` contains additive `hybrid_query`.
 * `automation_dry_run` passes through `automation`.
 * Any error in the gateway body/HTTP status causes smoke `status=error` and non-zero exit code.
 

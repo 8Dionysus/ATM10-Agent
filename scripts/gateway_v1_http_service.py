@@ -28,7 +28,7 @@ from scripts.operator_product_snapshot import (
     build_operator_product_snapshot,
     build_operator_runs_payload,
 )
-from scripts.gateway_v1_local import run_gateway_request
+from scripts.gateway_v1_local import SUPPORTED_OPERATIONS, run_gateway_request
 
 RESPONSE_SCHEMA_VERSION = "gateway_response_v1"
 FastAPIRequest = Any
@@ -215,6 +215,7 @@ def _build_health_payload(
         "service": "gateway_v1_http_service",
         "runs_dir": str(runs_dir),
         "operator_runs_dir": str(operator_runs_dir),
+        "supported_operations": list(SUPPORTED_OPERATIONS),
         "auth_enabled": bool(service_token),
         "api_docs_exposed": bool(expose_openapi),
         "policy": asdict(policy),

@@ -69,6 +69,11 @@ HISTORY_SOURCE_SPECS: dict[str, dict[str, str | None]] = {
         "expected_mode": "gateway_v1_smoke",
         "expected_scenario": "core",
     },
+    "gateway_hybrid": {
+        "root_subdir": "ci-smoke-gateway-hybrid",
+        "expected_mode": "gateway_v1_smoke",
+        "expected_scenario": "hybrid",
+    },
     "gateway_automation": {
         "root_subdir": "ci-smoke-gateway-automation",
         "expected_mode": "gateway_v1_smoke",
@@ -78,6 +83,11 @@ HISTORY_SOURCE_SPECS: dict[str, dict[str, str | None]] = {
         "root_subdir": "ci-smoke-gateway-http-core",
         "expected_mode": "gateway_v1_http_smoke",
         "expected_scenario": "core",
+    },
+    "gateway_http_hybrid": {
+        "root_subdir": "ci-smoke-gateway-http-hybrid",
+        "expected_mode": "gateway_v1_http_smoke",
+        "expected_scenario": "hybrid",
     },
     "gateway_http_automation": {
         "root_subdir": "ci-smoke-gateway-http-automation",
@@ -98,8 +108,10 @@ def canonical_summary_sources(runs_dir: Path) -> dict[str, Path]:
         "retrieve": base / "ci-smoke-retrieve" / "smoke_summary.json",
         "eval": base / "ci-smoke-eval" / "smoke_summary.json",
         "gateway_core": base / "ci-smoke-gateway-core" / "gateway_smoke_summary.json",
+        "gateway_hybrid": base / "ci-smoke-gateway-hybrid" / "gateway_smoke_summary.json",
         "gateway_automation": base / "ci-smoke-gateway-automation" / "gateway_smoke_summary.json",
         "gateway_http_core": base / "ci-smoke-gateway-http-core" / "gateway_http_smoke_summary.json",
+        "gateway_http_hybrid": base / "ci-smoke-gateway-http-hybrid" / "gateway_http_smoke_summary.json",
         "gateway_http_automation": base / "ci-smoke-gateway-http-automation" / "gateway_http_smoke_summary.json",
     }
 
@@ -733,7 +745,14 @@ def _parse_history_row(source: str, run_dir: Path) -> tuple[dict[str, Any] | Non
         "details": "-",
     }
 
-    if source in {"gateway_core", "gateway_automation", "gateway_http_core", "gateway_http_automation"}:
+    if source in {
+        "gateway_core",
+        "gateway_hybrid",
+        "gateway_automation",
+        "gateway_http_core",
+        "gateway_http_hybrid",
+        "gateway_http_automation",
+    }:
         result_payload = run_payload.get("result")
         if isinstance(result_payload, dict):
             row["request_count"] = result_payload.get("request_count", row["request_count"])

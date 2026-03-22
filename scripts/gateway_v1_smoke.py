@@ -93,6 +93,21 @@ def _build_scenario_requests(scenario: str) -> list[dict[str, Any]]:
                 },
             },
         ]
+    if scenario == "hybrid":
+        return [
+            {
+                "schema_version": "gateway_request_v1",
+                "operation": "hybrid_query",
+                "payload": {
+                    "query": "steel tools",
+                    "docs_path": str(Path("tests") / "fixtures" / "retrieval_docs_sample.jsonl"),
+                    "topk": 5,
+                    "candidate_k": 10,
+                    "reranker": "none",
+                    "max_entities_per_doc": 128,
+                },
+            }
+        ]
     if scenario == "automation":
         return [
             {
@@ -113,8 +128,8 @@ def run_gateway_v1_smoke(
     summary_json: Path | None = None,
     now: datetime | None = None,
 ) -> dict[str, Any]:
-    if scenario not in {"core", "automation"}:
-        raise ValueError("scenario must be one of ['core', 'automation'].")
+    if scenario not in {"core", "hybrid", "automation"}:
+        raise ValueError("scenario must be one of ['core', 'hybrid', 'automation'].")
     if now is None:
         now = datetime.now(timezone.utc)
 
@@ -210,8 +225,13 @@ def run_gateway_v1_smoke(
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Gateway v1 smoke scenarios (core|automation).")
-    parser.add_argument("--scenario", choices=("core", "automation"), required=True, help="Smoke scenario name.")
+    parser = argparse.ArgumentParser(description="Gateway v1 smoke scenarios (core|hybrid|automation).")
+    parser.add_argument(
+        "--scenario",
+        choices=("core", "hybrid", "automation"),
+        required=True,
+        help="Smoke scenario name.",
+    )
     parser.add_argument("--runs-dir", type=Path, default=Path("runs"), help="Run artifact base directory.")
     parser.add_argument(
         "--summary-json",
