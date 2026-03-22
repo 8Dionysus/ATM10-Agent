@@ -57,11 +57,18 @@ def test_asr_backend_benchmark_writes_summary_and_records(tmp_path: Path) -> Non
     assert (run_dir / "summary.json").exists()
     assert (run_dir / "summary.md").exists()
     assert (run_dir / "per_sample_results.jsonl").exists()
+    assert (run_dir / "service_sla_summary.json").exists()
 
     summary = json.loads((run_dir / "summary.json").read_text(encoding="utf-8"))
+    service_sla = json.loads((run_dir / "service_sla_summary.json").read_text(encoding="utf-8"))
+    assert summary["schema_version"] == "asr_backend_benchmark_summary_v1"
     assert summary["num_samples"] == 2
+    assert summary["primary_backend"] == "whisper_genai"
     assert summary["per_backend"]["qwen_asr"]["num_ok"] == 2
     assert summary["per_backend"]["whisper_genai"]["num_ok"] == 2
+    assert service_sla["schema_version"] == "service_sla_summary_v1"
+    assert service_sla["service_name"] == "voice_asr"
+    assert service_sla["backend"] == "whisper_genai"
 
     rows = [
         json.loads(line)

@@ -61,13 +61,17 @@ def test_run_eval_kag_neo4j_writes_artifacts_and_metrics(tmp_path: Path, monkeyp
     assert (run_dir / "run.json").exists()
     assert (run_dir / "eval_results.json").exists()
     assert (run_dir / "summary.md").exists()
+    assert (run_dir / "service_sla_summary.json").exists()
 
     run_payload = json.loads((run_dir / "run.json").read_text(encoding="utf-8"))
     eval_payload = json.loads((run_dir / "eval_results.json").read_text(encoding="utf-8"))
+    service_sla_payload = json.loads((run_dir / "service_sla_summary.json").read_text(encoding="utf-8"))
     assert run_payload["status"] == "ok"
     assert run_payload["mode"] == "eval_kag_neo4j"
     assert run_payload["params"]["warmup_runs"] == 0
     assert run_payload["warmup"]["executed_calls"] == 0
+    assert eval_payload["schema_version"] == "kag_eval_results_v1"
+    assert eval_payload["backend"] == "neo4j"
     assert eval_payload["metrics"]["query_count"] == 3
     assert eval_payload["metrics"]["topk"] == 3
     assert eval_payload["metrics"]["mean_recall_at_k"] == pytest.approx(2.0 / 3.0)
@@ -76,6 +80,8 @@ def test_run_eval_kag_neo4j_writes_artifacts_and_metrics(tmp_path: Path, monkeyp
     assert eval_payload["metrics"]["latency_mean_ms"] >= 0.0
     assert eval_payload["metrics"]["latency_p95_ms"] >= 0.0
     assert eval_payload["metrics"]["latency_max_ms"] >= 0.0
+    assert service_sla_payload["service_name"] == "kag_neo4j"
+    assert service_sla_payload["status"] == "ok"
 
     summary_md = (run_dir / "summary.md").read_text(encoding="utf-8")
     assert "# KAG Neo4j Eval Summary" in summary_md

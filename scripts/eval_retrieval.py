@@ -5,6 +5,7 @@ import json
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
+from time import perf_counter
 from typing import Any, Mapping
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -13,6 +14,10 @@ if str(REPO_ROOT) not in sys.path:
 
 from src.rag.retrieval import load_docs, retrieve_top_k, retrieve_top_k_qdrant
 from src.rag.retrieval_profiles import list_profile_names, resolve_profile
+from src.agent_core.service_sla import build_common_metrics, build_service_sla_summary
+
+
+EVAL_RESULTS_SCHEMA_VERSION = "retrieval_eval_results_v1"
 
 
 def _create_run_dir(runs_dir: Path, now: datetime) -> Path:
@@ -112,19 +117,24 @@ def run_eval_retrieval(
     timeout_sec: float = 10.0,
     runs_dir: Path = Path("runs"),
     profile: str = "baseline",
+    policy: str = "signal_only",
     now: datetime | None = None,
 ) -> dict[str, Any]:
+    if policy not in {"signal_only", "fail_on_breach"}:
+        raise ValueError("policy must be signal_only or fail_on_breach.")
     if now is None:
         now = datetime.now(timezone.utc)
 
     run_dir = _create_run_dir(runs_dir, now=now)
     run_json_path = run_dir / "run.json"
     eval_json_path = run_dir / "eval_results.json"
+    service_sla_summary_path = run_dir / "service_sla_summary.json"
 
     run_payload: dict[str, Any] = {
         "timestamp_utc": now.isoformat(),
         "mode": "eval_retrieval",
         "profile": profile,
+        "policy": policy,
         "status": "started",
         "backend": backend,
         "params": {
@@ -147,6 +157,7 @@ def run_eval_retrieval(
             "run_dir": str(run_dir),
             "run_json": str(run_json_path),
             "eval_results_json": str(eval_json_path),
+            "service_sla_summary_json": str(service_sla_summary_path),
         },
     }
     _write_json(run_json_path, run_payload)
@@ -156,7 +167,9 @@ def run_eval_retrieval(
         docs = load_docs(docs_path) if backend == "in_memory" else []
 
         per_case: list[dict[str, Any]] = []
+        latencies_ms: list[float] = []
         for case in cases:
+            started = perf_counter()
             if backend == "in_memory":
                 results = retrieve_top_k(
                     case["query"],
@@ -185,6 +198,8 @@ def run_eval_retrieval(
                     vector_size=vector_size,
                     timeout_sec=timeout_sec,
                 )
+            latency_ms = (perf_counter() - started) * 1000.0
+            latencies_ms.append(latency_ms)
 
             retrieved_ids = [str(item["id"]) for item in results]
             metrics = _case_metrics(relevant_ids=case["relevant_ids"], retrieved_ids=retrieved_ids)
@@ -195,6 +210,7 @@ def run_eval_retrieval(
                     "relevant_ids": case["relevant_ids"],
                     "retrieved_ids": retrieved_ids,
                     "retrieved_count": len(retrieved_ids),
+                    "latency_ms": latency_ms,
                     "metrics": metrics,
                 }
             )
@@ -203,8 +219,17 @@ def run_eval_retrieval(
         mean_recall = sum(item["metrics"]["recall"] for item in per_case) / query_count
         mean_mrr = sum(item["metrics"]["mrr"] for item in per_case) / query_count
         hit_rate = sum(1 for item in per_case if item["metrics"]["first_hit_rank"] is not None) / query_count
+        common_metrics = build_common_metrics(
+            sample_count=query_count,
+            success_count=query_count,
+            latency_values_ms=latencies_ms,
+        )
 
         eval_payload = {
+            "schema_version": EVAL_RESULTS_SCHEMA_VERSION,
+            "backend": backend,
+            "profile": profile,
+            "policy": policy,
             "metrics": {
                 "query_count": query_count,
                 "topk": topk,
@@ -212,10 +237,38 @@ def run_eval_retrieval(
                 "mean_recall_at_k": mean_recall,
                 "mean_mrr_at_k": mean_mrr,
                 "hit_rate_at_k": hit_rate,
+                "latency_mean_ms": common_metrics["latency_mean_ms"],
+                "latency_p50_ms": common_metrics["latency_p50_ms"],
+                "latency_p95_ms": common_metrics["latency_p95_ms"],
+                "latency_max_ms": common_metrics["latency_max_ms"],
             },
             "cases": per_case,
         }
         _write_json(eval_json_path, eval_payload)
+        service_sla_summary = build_service_sla_summary(
+            service_name="retrieval",
+            surface="eval",
+            backend=backend,
+            profile=profile,
+            policy=policy,
+            status="ok",
+            metrics=common_metrics,
+            quality={
+                "mean_recall_at_k": mean_recall,
+                "mean_mrr_at_k": mean_mrr,
+                "hit_rate_at_k": hit_rate,
+            },
+            thresholds={},
+            warnings=[],
+            breaches=[],
+            paths={
+                "run_dir": run_dir,
+                "run_json": run_json_path,
+                "eval_results_json": eval_json_path,
+                "service_sla_summary_json": service_sla_summary_path,
+            },
+        )
+        _write_json(service_sla_summary_path, service_sla_summary)
         run_payload["status"] = "ok"
         _write_json(run_json_path, run_payload)
         return {
@@ -223,10 +276,39 @@ def run_eval_retrieval(
             "run_dir": run_dir,
             "run_payload": run_payload,
             "eval_payload": eval_payload,
+            "service_sla_summary": service_sla_summary,
         }
     except (FileNotFoundError, ValueError, RuntimeError) as exc:
-        eval_payload = {"error": str(exc), "metrics": None, "cases": []}
+        eval_payload = {
+            "schema_version": EVAL_RESULTS_SCHEMA_VERSION,
+            "backend": backend,
+            "profile": profile,
+            "policy": policy,
+            "error": str(exc),
+            "metrics": None,
+            "cases": [],
+        }
         _write_json(eval_json_path, eval_payload)
+        service_sla_summary = build_service_sla_summary(
+            service_name="retrieval",
+            surface="eval",
+            backend=backend,
+            profile=profile,
+            policy=policy,
+            status="error",
+            metrics=build_common_metrics(sample_count=0, success_count=0, error_count=1, latency_values_ms=[]),
+            quality={},
+            thresholds={},
+            warnings=[],
+            breaches=[f"eval_error: {exc}"],
+            paths={
+                "run_dir": run_dir,
+                "run_json": run_json_path,
+                "eval_results_json": eval_json_path,
+                "service_sla_summary_json": service_sla_summary_path,
+            },
+        )
+        _write_json(service_sla_summary_path, service_sla_summary)
         run_payload["status"] = "error"
         run_payload["error"] = str(exc)
         _write_json(run_json_path, run_payload)
@@ -235,6 +317,7 @@ def run_eval_retrieval(
             "run_dir": run_dir,
             "run_payload": run_payload,
             "eval_payload": eval_payload,
+            "service_sla_summary": service_sla_summary,
         }
 
 
@@ -311,6 +394,12 @@ def parse_args() -> argparse.Namespace:
         default=Path("runs"),
         help="Base directory for run artifacts (default: runs).",
     )
+    parser.add_argument(
+        "--policy",
+        choices=("signal_only", "fail_on_breach"),
+        default="signal_only",
+        help="Normalized SLA policy label for service_sla_summary.json (default: signal_only).",
+    )
     return parser.parse_args()
 
 
@@ -353,6 +442,7 @@ def main() -> int:
         timeout_sec=args.timeout_sec,
         runs_dir=args.runs_dir,
         profile=profile.name,
+        policy=args.policy,
     )
 
     run_dir = result["run_dir"]

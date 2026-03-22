@@ -1,0 +1,2 @@
+{"id":"tts_en_hello","text":"Hello from the ATM10 operator loop.","language":"en","service_voice":false}
+{"id":"tts_ru_hint","text":"Voice runtime smoke path for local operator checks.","language":"ru","service_voice":true}

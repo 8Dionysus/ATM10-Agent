@@ -20,10 +20,12 @@ from src.agent_core.io_voice import (  # noqa: E402
     QwenASRClient,
     WhisperGenAIASRClient,
 )
+from src.agent_core.service_sla import build_common_metrics, build_service_sla_summary
 
 
 SUPPORTED_BACKENDS = ("qwen_asr", "whisper_genai")
 ARCHIVED_BACKENDS = ("qwen_asr",)
+SUMMARY_SCHEMA_VERSION = "asr_backend_benchmark_summary_v1"
 
 
 def _create_run_dir(runs_dir: Path, now: datetime) -> Path:
@@ -170,6 +172,66 @@ def _summarize_backend(records: list[dict[str, Any]], load_time_sec: float | Non
     }
 
 
+def _build_service_sla_summary(
+    *,
+    backend: str,
+    profile: str,
+    policy: str,
+    records: list[dict[str, Any]],
+    summary_item: Mapping[str, Any],
+    run_dir: Path,
+    run_json_path: Path,
+    plan_json_path: Path,
+    per_sample_jsonl_path: Path,
+    summary_json_path: Path,
+    service_sla_summary_path: Path,
+) -> dict[str, Any]:
+    latency_values_ms = [
+        float(record["latency_sec"]) * 1000.0
+        for record in records
+        if record.get("status") == "ok" and record.get("latency_sec") is not None
+    ]
+    sample_count = len(records)
+    success_count = sum(1 for record in records if record.get("status") == "ok")
+    status = "ok"
+    breaches: list[str] = []
+    warnings: list[str] = []
+    if summary_item.get("init_error") not in (None, ""):
+        status = "error"
+        breaches.append("backend_init_error_present")
+    if success_count != sample_count:
+        status = "error"
+        breaches.append("sample_errors_present")
+    if backend in ARCHIVED_BACKENDS:
+        warnings.append("archived_backend_selected")
+
+    return build_service_sla_summary(
+        service_name="voice_asr",
+        surface="benchmark",
+        backend=backend,
+        profile=profile,
+        policy=policy,
+        status=status,
+        metrics=build_common_metrics(
+            sample_count=sample_count,
+            success_count=success_count,
+            latency_values_ms=latency_values_ms,
+        ),
+        quality={"text_similarity_avg": summary_item.get("text_similarity_avg")},
+        thresholds={},
+        warnings=warnings,
+        breaches=breaches,
+        paths={
+            "run_dir": run_dir,
+            "run_json": run_json_path,
+            "benchmark_plan_json": plan_json_path,
+            "per_sample_results_jsonl": per_sample_jsonl_path,
+            "summary_json": summary_json_path,
+            "service_sla_summary_json": service_sla_summary_path,
+        },
+    )
+
+
 def _render_summary_markdown(summary_payload: Mapping[str, Any]) -> str:
     lines = [
         "# ASR Backend Benchmark Summary",
@@ -217,6 +279,9 @@ def run_asr_backend_benchmark(
     whisper_task: str = "transcribe",
     whisper_language: str | None = None,
     whisper_max_new_tokens: int = 128,
+    primary_backend: str = "whisper_genai",
+    profile: str = "baseline_first",
+    policy: str = "signal_only",
     runs_dir: Path = Path("runs"),
     now: datetime | None = None,
     backend_factories: Mapping[str, Callable[[], Any]] | None = None,
@@ -226,6 +291,8 @@ def run_asr_backend_benchmark(
     selected_backends = [b for b in backends if b in SUPPORTED_BACKENDS]
     if not selected_backends:
         raise ValueError(f"No valid backends selected. Choose from: {', '.join(SUPPORTED_BACKENDS)}")
+    if primary_backend not in selected_backends:
+        raise ValueError("primary_backend must be included in selected backends.")
 
     samples = _build_samples(inputs, manifest)
     run_dir = _create_run_dir(runs_dir, now)
@@ -234,6 +301,7 @@ def run_asr_backend_benchmark(
     per_sample_jsonl_path = run_dir / "per_sample_results.jsonl"
     summary_json_path = run_dir / "summary.json"
     summary_md_path = run_dir / "summary.md"
+    service_sla_summary_path = run_dir / "service_sla_summary.json"
 
     run_payload: dict[str, Any] = {
         "timestamp_utc": now.astimezone(timezone.utc).isoformat(),
@@ -246,6 +314,7 @@ def run_asr_backend_benchmark(
             "per_sample_results_jsonl": str(per_sample_jsonl_path),
             "summary_json": str(summary_json_path),
             "summary_md": str(summary_md_path),
+            "service_sla_summary_json": str(service_sla_summary_path),
         },
     }
     _write_json(run_json_path, run_payload)
@@ -253,6 +322,9 @@ def run_asr_backend_benchmark(
     plan_payload = {
         "samples": samples,
         "backends": selected_backends,
+        "primary_backend": primary_backend,
+        "profile": profile,
+        "policy": policy,
         "qwen": {
             "model_id": qwen_model_id,
             "device_map": qwen_device_map,
@@ -350,13 +422,34 @@ def run_asr_backend_benchmark(
             handle.write(json.dumps(row, ensure_ascii=False) + "\n")
 
     summary_payload = {
+        "schema_version": SUMMARY_SCHEMA_VERSION,
         "timestamp_utc": _utc_now(),
         "num_samples": len(samples),
         "backends": selected_backends,
+        "primary_backend": primary_backend,
+        "profile": profile,
+        "policy": policy,
         "per_backend": summary_per_backend,
     }
     _write_json(summary_json_path, summary_payload)
     summary_md_path.write_text(_render_summary_markdown(summary_payload), encoding="utf-8")
+
+    primary_records = [row for row in all_records if str(row.get("backend")) == primary_backend]
+    primary_summary = summary_per_backend.get(primary_backend, {})
+    service_sla_summary = _build_service_sla_summary(
+        backend=primary_backend,
+        profile=profile,
+        policy=policy,
+        records=primary_records,
+        summary_item=primary_summary,
+        run_dir=run_dir,
+        run_json_path=run_json_path,
+        plan_json_path=plan_json_path,
+        per_sample_jsonl_path=per_sample_jsonl_path,
+        summary_json_path=summary_json_path,
+        service_sla_summary_path=service_sla_summary_path,
+    )
+    _write_json(service_sla_summary_path, service_sla_summary)
 
     run_payload["status"] = "ok"
     _write_json(run_json_path, run_payload)
@@ -364,6 +457,7 @@ def run_asr_backend_benchmark(
         "run_dir": run_dir,
         "run_payload": run_payload,
         "summary_payload": summary_payload,
+        "service_sla_summary": service_sla_summary,
         "records": all_records,
         "ok": True,
     }
@@ -408,6 +502,24 @@ def parse_args() -> argparse.Namespace:
             + ", ".join(ARCHIVED_BACKENDS)
             + "."
         ),
+    )
+    parser.add_argument(
+        "--primary-backend",
+        choices=SUPPORTED_BACKENDS,
+        default="whisper_genai",
+        help="Primary backend used for normalized SLA summary output (default: whisper_genai).",
+    )
+    parser.add_argument(
+        "--profile",
+        type=str,
+        default="baseline_first",
+        help="Profile label for normalized SLA summary (default: baseline_first).",
+    )
+    parser.add_argument(
+        "--policy",
+        choices=("signal_only", "fail_on_breach"),
+        default="signal_only",
+        help="Normalized SLA policy label (default: signal_only).",
     )
     parser.add_argument("--runs-dir", type=Path, default=Path("runs"), help="Run artifact base directory.")
 
@@ -456,6 +568,9 @@ def main() -> int:
         inputs=args.inputs,
         manifest=args.manifest,
         backends=selected_backends,
+        primary_backend=args.primary_backend,
+        profile=args.profile,
+        policy=args.policy,
         qwen_model_id=args.qwen_model,
         qwen_device_map=args.qwen_device_map,
         qwen_dtype=args.qwen_dtype,
@@ -472,6 +587,7 @@ def main() -> int:
     print(f"[asr_backend_bench] run_json: {run_dir / 'run.json'}")
     print(f"[asr_backend_bench] summary_json: {run_dir / 'summary.json'}")
     print(f"[asr_backend_bench] summary_md: {run_dir / 'summary.md'}")
+    print(f"[asr_backend_bench] service_sla_summary_json: {run_dir / 'service_sla_summary.json'}")
     return 0 if result["ok"] else 2
 
 
