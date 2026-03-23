@@ -380,6 +380,44 @@ def _write_pilot_runtime_status(pilot_runs_dir: Path) -> None:
     )
 
 
+def _write_pilot_runtime_readiness_summary(
+    runs_dir: Path,
+    *,
+    readiness_status: str = "attention",
+    schema_version: str = "pilot_runtime_readiness_v1",
+) -> Path:
+    summary_path = operator_snapshot.canonical_pilot_runtime_readiness_source(runs_dir)
+    _write_json(
+        summary_path,
+        {
+            "schema_version": schema_version,
+            "status": "ok",
+            "checked_at_utc": "2026-03-22T12:06:00+00:00",
+            "readiness_status": readiness_status,
+            "actionable_message": "Pilot readiness summary for tests.",
+            "blocking_reason_codes": ["pilot_turn_degraded"] if readiness_status != "ready" else [],
+            "next_step_code": "repeat_live_pilot_turn" if readiness_status != "ready" else "none",
+            "next_step": "Complete one live push-to-talk turn.",
+            "sources": {
+                "startup": {"status": "present", "fresh_within_window": True},
+                "pilot_runtime_status": {"status": "present", "fresh_within_window": True},
+                "pilot_turn": {"status": "present", "fresh_within_window": readiness_status == "ready"},
+            },
+            "evidence": {
+                "last_turn_fresh_within_window": readiness_status == "ready",
+                "live_turn_evidence": readiness_status == "ready",
+            },
+            "paths": {
+                "summary_json": str(summary_path),
+                "history_summary_json": str(summary_path.parent / "20260322_120600-pilot-runtime-readiness" / "readiness_summary.json"),
+                "summary_md": str(summary_path.parent / "summary.md"),
+                "history_summary_md": str(summary_path.parent / "20260322_120600-pilot-runtime-readiness" / "summary.md"),
+            },
+        },
+    )
+    return summary_path
+
+
 def test_build_operator_product_snapshot_includes_policy_promotion_surface(tmp_path: Path) -> None:
     runs_dir = tmp_path / "runs"
     _write_operating_cycle_summary(runs_dir)
@@ -584,6 +622,7 @@ def test_build_operator_product_snapshot_includes_pilot_runtime_context(
 ) -> None:
     runs_dir = tmp_path / "runs"
     _write_clean_operating_cycle_summary(runs_dir)
+    _write_pilot_runtime_readiness_summary(runs_dir, readiness_status="attention")
     monkeypatch.setattr(
         operator_snapshot,
         "load_operator_policy_surface_context",
@@ -611,15 +650,45 @@ def test_build_operator_product_snapshot_includes_pilot_runtime_context(
     )
 
     pilot_runtime = payload["operator_context"]["pilot_runtime"]
+    pilot_readiness = payload["operator_context"]["pilot_readiness"]
     last_turn_summary = payload["operator_context"]["last_turn_summary"]
     assert pilot_runtime["status"] == "running"
     assert pilot_runtime["state"] == "idle"
     assert pilot_runtime["hotkey"] == "F8"
     assert pilot_runtime["last_turn_id"] == "20260322_120501-pilot-turn"
     assert pilot_runtime["paths"]["pilot_runs_dir"] == str(pilot_runs_dir)
+    assert pilot_readiness["readiness_status"] == "attention"
+    assert pilot_readiness["next_step_code"] == "repeat_live_pilot_turn"
     assert last_turn_summary["turn_id"] == "20260322_120501-pilot-turn"
     assert "Quest book is the next step" in last_turn_summary["answer_preview"]
     assert payload["warnings"]["pilot_runtime"] == []
+    assert payload["warnings"]["pilot_readiness"] == []
+
+
+def test_build_operator_product_snapshot_tolerates_invalid_pilot_readiness_summary(
+    tmp_path: Path, monkeypatch
+) -> None:
+    runs_dir = tmp_path / "runs"
+    _write_clean_operating_cycle_summary(runs_dir)
+    _write_pilot_runtime_readiness_summary(runs_dir, schema_version="wrong_pilot_runtime_readiness_v1")
+    monkeypatch.setattr(
+        operator_snapshot,
+        "load_operator_policy_surface_context",
+        lambda _runs_dir: _clean_policy_surface_context(),
+    )
+
+    payload = operator_snapshot.build_operator_product_snapshot(
+        runs_dir=runs_dir,
+        gateway_health={
+            "status": "ok",
+            "supported_operations": ["health"],
+            "supported_profiles": ["baseline_first", "combo_a"],
+        },
+    )
+
+    assert payload["operator_context"]["pilot_readiness"] is None
+    assert payload["warnings"]["pilot_readiness"]
+    assert any("schema_version mismatch" in item for item in payload["warnings"]["pilot_readiness"])
 
 
 def test_build_operator_product_snapshot_triage_prioritizes_governance_after_healthy_startup(

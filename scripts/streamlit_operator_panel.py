@@ -1140,6 +1140,53 @@ def _render_pilot_runtime_section(
     st.json(pilot_runtime.get("paths"))
 
 
+def _render_pilot_readiness_section(
+    pilot_readiness: dict[str, Any] | None,
+    warnings: list[str],
+) -> None:
+    _render_snapshot_warnings(
+        "Some pilot readiness artifacts were skipped due to parse/contract issues",
+        warnings,
+    )
+    st.subheader("Pilot readiness")
+    if not isinstance(pilot_readiness, dict):
+        st.info("Pilot readiness summary is not available yet.")
+        return
+
+    readiness_status = str(pilot_readiness.get("readiness_status", "")).strip().lower()
+    actionable_message = str(
+        _coalesce(pilot_readiness.get("actionable_message"), "Pilot readiness summary is available.")
+    ).strip()
+    if readiness_status == "ready":
+        st.success(actionable_message)
+    elif readiness_status == "blocked":
+        st.error(actionable_message)
+    elif readiness_status == "attention":
+        st.warning(actionable_message)
+    else:
+        st.info(actionable_message)
+
+    evidence = pilot_readiness.get("evidence")
+    evidence = evidence if isinstance(evidence, dict) else {}
+    st.dataframe(
+        [
+            {
+                "readiness_status": pilot_readiness.get("readiness_status"),
+                "blocking_reason_codes": ", ".join(
+                    _normalize_reason_codes(pilot_readiness.get("blocking_reason_codes"))
+                ),
+                "last_turn_fresh": evidence.get("last_turn_fresh_within_window"),
+                "live_turn_evidence": evidence.get("live_turn_evidence"),
+                "next_step_code": pilot_readiness.get("next_step_code"),
+                "next_step": pilot_readiness.get("next_step"),
+            }
+        ],
+        width="stretch",
+    )
+    st.caption("Pilot readiness artifacts")
+    st.json(pilot_readiness.get("paths"))
+
+
 def _render_operator_governance_section(summary: dict[str, Any] | None) -> None:
     if summary is None:
         st.info(
@@ -1747,6 +1794,17 @@ def _render_stack_health_tab(
         for item in _normalize_reason_codes(_nested_get(operator_snapshot_payload, "warnings", "pilot_runtime"))
     ]
     _render_pilot_runtime_section(pilot_runtime, last_turn_summary, pilot_warnings)
+    pilot_readiness = (
+        _nested_get(operator_snapshot_payload, "operator_context", "pilot_readiness")
+        if isinstance(operator_snapshot_payload, dict)
+        else None
+    )
+    pilot_readiness = pilot_readiness if isinstance(pilot_readiness, dict) else None
+    pilot_readiness_warnings = [
+        str(item)
+        for item in _normalize_reason_codes(_nested_get(operator_snapshot_payload, "warnings", "pilot_readiness"))
+    ]
+    _render_pilot_readiness_section(pilot_readiness, pilot_readiness_warnings)
 
 
 def _render_run_explorer_tab(

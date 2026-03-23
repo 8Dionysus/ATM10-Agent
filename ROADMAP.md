@@ -40,6 +40,7 @@ Build a local-first game companion for ATM10 with a production-ready operator lo
 * M6.0-M6.19: Automation safe scaffold + intent-chain contract hardening.
 * M8.0-M8.1: Streamlit IA spec and operator panel baseline with smoke coverage.
 * M8.2: Observer pilot runtime slice (`F8` hotkey, local screen grounding/reply stack, additive operator snapshot and Streamlit surfaces).
+* M8.3: Observer pilot acceptance/readiness layer (`pilot_runtime_readiness_v1`, additive operator snapshot + Streamlit surfaces, manual live-acceptance contract).
 
 ## Active Public Themes
 
@@ -110,15 +111,15 @@ Definition of Done:
 
 ### 30-60 days
 
-* Introduce a default hybrid query planner (`retrieval first + KAG expansion/citations`).
-* Formalize SLA at the API/summary-contract level across voice, retrieval, and KAG.
-* Add a cross-service benchmark suite for Combo A.
+* Use `pilot_runtime_readiness_v1` to harden real manual acceptance cycles for the observer pilot runtime.
+* Evaluate when `combo_a` can move from additive parity profile to the operational default without weakening governance.
+* Extend operator UX around pilot-specific troubleshooting and optional overlay/hotkey ergonomics.
 
 ### 60-90 days
 
-* Complete live-readiness/manual acceptance for the observer pilot runtime and tighten optional overlay/hotkey UX on top of the stabilized local API.
 * Evaluate moving some automation from dry-run to supervised mode after security gates are in place.
 * Revisit archived R&D paths using the re-open criteria from `docs/ARCHIVED_TRACKS.md`.
+* Continue tightening operator guidance and release criteria around the live observer loop.
 
 ## Constraints and High-Level Risks
 

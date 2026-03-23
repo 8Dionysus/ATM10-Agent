@@ -300,7 +300,7 @@ Optional downstream health aggregation for the operator product:
 python scripts/gateway_v1_http_service.py --host 127.0.0.1 --port 8770 --runs-dir runs\gateway-http --voice-service-url http://127.0.0.1:8765 --tts-service-url http://127.0.0.1:8780 --qdrant-url http://127.0.0.1:6333 --neo4j-url http://127.0.0.1:7474 --neo4j-database neo4j --neo4j-user neo4j --operator-health-timeout-sec 3.0
 ```
 
-With external services configured, `/v1/operator/snapshot` additively returns `operator_context.profiles.supported_profiles`, `operator_context.profiles.combo_a`, compact `operator_context.triage`, and probe rows for `qdrant` / `neo4j`.
+With external services configured, `/v1/operator/snapshot` additively returns `operator_context.profiles.supported_profiles`, `operator_context.profiles.combo_a`, compact `operator_context.triage`, probe rows for `qdrant` / `neo4j`, and pilot-facing `operator_context.pilot_runtime` / `operator_context.last_turn_summary` / `operator_context.pilot_readiness` when those artifacts exist.
 
 Operator diagnostics surface (additive, schema-compatible):
 
@@ -400,7 +400,7 @@ Expected result:
 * `gateway.log` and `streamlit.log` are written into the launcher run dir.
 * If managed runtimes are enabled, `voice_runtime_service.log` / `tts_runtime_service.log` / `pilot_runtime.log` are also written into the launcher run dir.
 * If `pilot_runtime` is enabled, the launcher also writes `artifact_roots.pilot_runtime_runs_dir` and the pilot process publishes `pilot_runtime_status_latest.json` under that root.
-* The operator surface can read the latest launcher artifact back through the gateway/panel as startup-session context, including additive `combo_a` readiness/probe state for `qdrant` and `neo4j`, plus additive `pilot_runtime` / `last_turn_summary` blocks when pilot artifacts exist.
+* The operator surface can read the latest launcher artifact back through the gateway/panel as startup-session context, including additive `combo_a` readiness/probe state for `qdrant` and `neo4j`, plus additive `pilot_runtime` / `last_turn_summary` / `pilot_readiness` blocks when pilot artifacts exist.
 
 Notes:
 
@@ -435,6 +435,49 @@ Expected result:
 * Each completed turn writes `turns/<timestamp>-pilot-turn/pilot_turn.json` with schema `pilot_turn_v1`.
 * Live turns follow `push-to-talk -> ASR -> vision -> hybrid_query(profile=combo_a) -> grounded reply -> TTS`.
 * Degraded services and turn errors are carried into both status and turn artifacts; the runtime does not silently fall back to uncited guesses.
+
+## M8.post: Observer pilot readiness summary
+
+Pilot readiness helper:
+
+```powershell
+cd <repo-root>
+.\.venv\Scripts\Activate.ps1
+python scripts/check_pilot_runtime_readiness.py --runs-dir runs --summary-json runs\pilot-runtime-readiness\readiness_summary.json --summary-md runs\pilot-runtime-readiness\summary.md
+```
+
+Manual live-acceptance flow:
+
+```powershell
+cd <repo-root>
+.\.venv\Scripts\Activate.ps1
+python scripts/start_operator_product.py --runs-dir runs --start-voice-runtime --start-tts-runtime --start-pilot-runtime --capture-monitor 0
+# complete one live F8 push-to-talk turn
+python scripts/check_pilot_runtime_readiness.py --runs-dir runs --summary-json runs\pilot-runtime-readiness\readiness_summary.json --summary-md runs\pilot-runtime-readiness\summary.md
+```
+
+Readiness contract (`pilot_runtime_readiness_v1`):
+
+* `schema_version = pilot_runtime_readiness_v1`
+* `status = ok|error`
+* `readiness_status = ready|attention|blocked`
+* `actionable_message`
+* `blocking_reason_codes`
+* `next_step_code`, `next_step`
+* `sources.startup|pilot_runtime_status|pilot_turn`
+* `evidence.startup_fresh_within_window|pilot_runtime_configured|capture_configured|last_turn_fresh_within_window|live_turn_evidence|hybrid_profile|hybrid_planner_status|hybrid_degraded`
+* `paths.summary_json`, `paths.history_summary_json`, `paths.summary_md`, `paths.history_summary_md`
+
+Readiness policy:
+
+* `ready` requires a fresh startup artifact, configured capture, a fresh live push-to-talk turn, and `hybrid_query(profile=combo_a)` without degraded fallback.
+* `attention` means the artifacts are valid but the latest evidence is stale, degraded, fixture-only, or the pilot session stopped after a recent good turn.
+* `blocked` means a required artifact or contract is missing/invalid, capture is not configured, the latest turn failed, or the turn does not prove `combo_a` grounding.
+
+Notes:
+
+* `pilot_turn_smoke.py` remains diagnostic only and does not produce `readiness_status=ready`.
+* The operator snapshot and Streamlit `Stack Health` surface `pilot_readiness` additively when the summary artifact exists.
 
 ## M8.combo_a: Combo A live profile workflow
 

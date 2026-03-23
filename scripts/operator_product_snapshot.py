@@ -66,6 +66,11 @@ COMBO_A_OPERATING_CYCLE_SOURCE_SPEC: dict[str, tuple[str, ...] | str] = {
     "schema_version": "combo_a_operating_cycle_v1",
 }
 
+PILOT_RUNTIME_READINESS_SOURCE_SPEC: dict[str, tuple[str, ...] | str] = {
+    "path_parts": ("pilot-runtime-readiness", "readiness_summary.json"),
+    "schema_version": "pilot_runtime_readiness_v1",
+}
+
 HISTORY_SOURCE_SPECS: dict[str, dict[str, str | None]] = {
     "phase_a": {
         "root_subdir": "ci-smoke-phase-a",
@@ -199,6 +204,11 @@ def canonical_operating_cycle_source(runs_dir: Path) -> Path:
 def canonical_combo_a_operating_cycle_source(runs_dir: Path) -> Path:
     base = Path(runs_dir)
     return base.joinpath(*tuple(COMBO_A_OPERATING_CYCLE_SOURCE_SPEC["path_parts"]))
+
+
+def canonical_pilot_runtime_readiness_source(runs_dir: Path) -> Path:
+    base = Path(runs_dir)
+    return base.joinpath(*tuple(PILOT_RUNTIME_READINESS_SOURCE_SPEC["path_parts"]))
 
 
 def canonical_pilot_runtime_latest_status_source(runs_dir: Path) -> Path:
@@ -530,6 +540,44 @@ def load_combo_a_operating_cycle_snapshot(
         "actionable_message": payload.get("actionable_message"),
         "live_readiness": live_readiness,
         "sources": payload.get("sources") if isinstance(payload.get("sources"), dict) else {},
+        "paths": {
+            "summary_json": _coalesce(paths_payload.get("summary_json"), str(path)),
+            "history_summary_json": paths_payload.get("history_summary_json"),
+            "summary_md": paths_payload.get("summary_md"),
+            "history_summary_md": paths_payload.get("history_summary_md"),
+        },
+        "source_path": str(path),
+    }
+    return snapshot, []
+
+
+def load_pilot_runtime_readiness_snapshot(
+    runs_dir: Path,
+) -> tuple[dict[str, Any] | None, list[str]]:
+    path = canonical_pilot_runtime_readiness_source(runs_dir)
+    payload, load_error = _load_optional_contract_payload(
+        "pilot_runtime_readiness",
+        path,
+        expected_schema_version=str(PILOT_RUNTIME_READINESS_SOURCE_SPEC["schema_version"]),
+    )
+    if payload is None:
+        if load_error is not None and load_error.startswith("missing file:"):
+            return None, []
+        return None, [] if load_error is None else [load_error]
+
+    paths_payload = payload.get("paths")
+    paths_payload = paths_payload if isinstance(paths_payload, dict) else {}
+    snapshot = {
+        "schema_version": str(payload.get("schema_version")),
+        "status": payload.get("status"),
+        "checked_at_utc": payload.get("checked_at_utc"),
+        "readiness_status": payload.get("readiness_status"),
+        "actionable_message": payload.get("actionable_message"),
+        "blocking_reason_codes": _normalize_reason_codes(payload.get("blocking_reason_codes")),
+        "next_step_code": payload.get("next_step_code"),
+        "next_step": payload.get("next_step"),
+        "sources": payload.get("sources") if isinstance(payload.get("sources"), dict) else {},
+        "evidence": payload.get("evidence") if isinstance(payload.get("evidence"), dict) else {},
         "paths": {
             "summary_json": _coalesce(paths_payload.get("summary_json"), str(path)),
             "history_summary_json": paths_payload.get("history_summary_json"),
@@ -2091,6 +2139,7 @@ def build_operator_product_snapshot(
     integrity_snapshot = policy_context["integrity"]
     operating_cycle_snapshot = policy_context["operating_cycle"]
     combo_a_operating_cycle_snapshot, combo_a_operating_cycle_warnings = load_combo_a_operating_cycle_snapshot(runs_dir)
+    pilot_readiness_snapshot, pilot_readiness_warnings = load_pilot_runtime_readiness_snapshot(runs_dir)
     startup_snapshot, startup_warnings = load_latest_operator_startup_status(effective_operator_runs_dir)
     startup_snapshot = _attach_startup_diagnostics(startup_snapshot)
     governance_summary = _attach_governance_diagnostics(policy_context["governance"])
@@ -2206,6 +2255,7 @@ def build_operator_product_snapshot(
             },
             "startup": startup_snapshot,
             "pilot_runtime": pilot_runtime_summary,
+            "pilot_readiness": pilot_readiness_snapshot,
             "last_turn_summary": last_turn_summary,
             "governance": governance_summary,
             "triage": triage,
@@ -2236,6 +2286,7 @@ def build_operator_product_snapshot(
             ],
             "service_probes": service_warnings,
             "pilot_runtime": pilot_warnings,
+            "pilot_readiness": pilot_readiness_warnings,
             "startup": startup_warnings,
             "profile_readiness": combo_a_readiness["warnings"],
             "policy_surface": {

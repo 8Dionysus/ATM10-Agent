@@ -632,9 +632,26 @@ def test_render_stack_health_tab_renders_pilot_runtime_section(
                     "degraded_flags": ["retrieval_only_fallback"],
                     "answer_preview": "Pilot degraded mode. Quest book is still the next step.",
                 },
+                "pilot_readiness": {
+                    "readiness_status": "attention",
+                    "actionable_message": "Pilot evidence is valid, but it comes from fixture artifacts.",
+                    "blocking_reason_codes": ["pilot_turn_not_live_evidence"],
+                    "next_step_code": "complete_live_pilot_turn",
+                    "next_step": "Complete one live push-to-talk turn.",
+                    "evidence": {
+                        "last_turn_fresh_within_window": True,
+                        "live_turn_evidence": False,
+                    },
+                    "paths": {"summary_json": "runs/pilot-runtime-readiness/readiness_summary.json"},
+                },
                 "profiles": {"combo_a": {}},
             },
-            "warnings": {"service_probes": [], "combo_a_policy_surface": [], "pilot_runtime": []},
+            "warnings": {
+                "service_probes": [],
+                "combo_a_policy_surface": [],
+                "pilot_runtime": [],
+                "pilot_readiness": [],
+            },
         },
         operator_snapshot_error=None,
         operator_startup_payload=None,
@@ -642,12 +659,22 @@ def test_render_stack_health_tab_renders_pilot_runtime_section(
     )
 
     assert "Pilot runtime" in fake_st.subheaders
+    assert "Pilot readiness" in fake_st.subheaders
     pilot_table = next(
         item
         for item in fake_st.dataframes
         if isinstance(item, list) and item and isinstance(item[0], dict) and item[0].get("last_turn_id") == "turn-1"
     )
     assert pilot_table[0]["status"] == "running"
+    readiness_table = next(
+        item
+        for item in fake_st.dataframes
+        if isinstance(item, list)
+        and item
+        and isinstance(item[0], dict)
+        and item[0].get("readiness_status") == "attention"
+    )
+    assert readiness_table[0]["next_step_code"] == "complete_live_pilot_turn"
     assert any(
         isinstance(item, list)
         and item
@@ -655,6 +682,51 @@ def test_render_stack_health_tab_renders_pilot_runtime_section(
         and item[0].get("turn_id") == "turn-1"
         for item in fake_st.dataframes
     )
+
+
+def test_render_pilot_readiness_section_ready(monkeypatch: pytest.MonkeyPatch) -> None:
+    fake_st = _FakeStreamlit()
+    monkeypatch.setattr(panel, "st", fake_st)
+    monkeypatch.setattr(panel, "_render_snapshot_warnings", lambda *args, **kwargs: None)
+
+    panel._render_pilot_readiness_section(
+        {
+            "readiness_status": "ready",
+            "actionable_message": "Pilot live acceptance is green.",
+            "blocking_reason_codes": [],
+            "next_step_code": "none",
+            "next_step": "No action required.",
+            "evidence": {
+                "last_turn_fresh_within_window": True,
+                "live_turn_evidence": True,
+            },
+            "paths": {"summary_json": "runs/pilot-runtime-readiness/readiness_summary.json"},
+        },
+        [],
+    )
+
+    assert "Pilot readiness" in fake_st.subheaders
+    assert fake_st.successes == ["Pilot live acceptance is green."]
+    readiness_table = next(
+        item
+        for item in fake_st.dataframes
+        if isinstance(item, list)
+        and item
+        and isinstance(item[0], dict)
+        and item[0].get("readiness_status") == "ready"
+    )
+    assert readiness_table[0]["last_turn_fresh"] is True
+
+
+def test_render_pilot_readiness_section_not_available(monkeypatch: pytest.MonkeyPatch) -> None:
+    fake_st = _FakeStreamlit()
+    monkeypatch.setattr(panel, "st", fake_st)
+    monkeypatch.setattr(panel, "_render_snapshot_warnings", lambda *args, **kwargs: None)
+
+    panel._render_pilot_readiness_section(None, [])
+
+    assert "Pilot readiness" in fake_st.subheaders
+    assert fake_st.infos == ["Pilot readiness summary is not available yet."]
 
 
 def test_safe_actions_audit_append_and_load_newest_first(tmp_path: Path) -> None:
