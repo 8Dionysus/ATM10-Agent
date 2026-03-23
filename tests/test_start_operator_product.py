@@ -3,11 +3,64 @@ from __future__ import annotations
 import json
 import subprocess
 import sys
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import pytest
 
 import scripts.start_operator_product as start_operator_product
+
+
+def test_wait_for_pilot_runtime_ready_rejects_stale_status_payload(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    pilot_runs_dir = tmp_path / "pilot-runtime"
+    runtime_run_dir = pilot_runs_dir / "20260323_120000-pilot-runtime"
+    runtime_run_dir.mkdir(parents=True, exist_ok=True)
+    status_path = pilot_runs_dir / "pilot_runtime_status_latest.json"
+    status_path.write_text(
+        json.dumps(
+            {
+                "schema_version": "pilot_runtime_status_v1",
+                "timestamp_utc": "2026-03-23T12:00:00+00:00",
+                "status": "running",
+                "state": "idle",
+                "paths": {"run_dir": str(runtime_run_dir)},
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    clock_values = iter([0.0, 0.0, 1.0])
+    monkeypatch.setattr(start_operator_product.time, "time", lambda: next(clock_values))
+    monkeypatch.setattr(start_operator_product.time, "sleep", lambda _seconds: None)
+
+    payload, error = start_operator_product._wait_for_pilot_runtime_ready(
+        pilot_runs_dir,
+        timeout_sec=0.5,
+        min_timestamp_utc=datetime(2026, 3, 23, 12, 5, 0, tzinfo=timezone.utc),
+    )
+
+    assert payload is None
+    assert error == "stale pilot runtime status payload is older than the current launch attempt"
+
+
+def test_wait_for_pilot_runtime_ready_returns_early_when_process_exits(tmp_path: Path) -> None:
+    class _ExitedProcess:
+        returncode = 17
+
+        def poll(self):
+            return self.returncode
+
+    payload, error = start_operator_product._wait_for_pilot_runtime_ready(
+        tmp_path / "pilot-runtime",
+        timeout_sec=0.5,
+        process=_ExitedProcess(),
+        min_timestamp_utc=datetime.now(timezone.utc) - timedelta(seconds=1),
+    )
+
+    assert payload is None
+    assert error == "pilot runtime process exited early with code 17"
 
 
 def test_build_startup_plan_uses_primary_operator_profile_defaults() -> None:
@@ -300,7 +353,10 @@ def test_start_operator_product_smoke_managed_pilot_runtime_path(
     monkeypatch.setattr(
         start_operator_product,
         "_wait_for_pilot_runtime_ready",
-        lambda pilot_runs_dir, timeout_sec: ({"schema_version": "pilot_runtime_status_v1", "status": "running", "state": "idle"}, None),
+        lambda pilot_runs_dir, timeout_sec, process=None, min_timestamp_utc=None: (
+            {"schema_version": "pilot_runtime_status_v1", "status": "running", "state": "idle"},
+            None,
+        ),
     )
     monkeypatch.setattr(
         start_operator_product,

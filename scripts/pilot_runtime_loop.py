@@ -1343,15 +1343,15 @@ def run_pilot_runtime_loop(
         text_model_dir=pilot_text_model_dir,
         degraded_services=sorted(dict.fromkeys(degraded_services)),
     )
-    status_handle.publish()
-    _write_json(run_json_path, run_payload)
-
-    hotkey_watcher = PollingHotkey(hotkey)
-    recorder = PushToTalkRecorder(sample_rate=sample_rate)
-    temp_audio_path = runtime_run_dir / "live_recording.wav"
+    recorder: PushToTalkRecorder | None = None
     active_recording = False
 
     try:
+        hotkey_watcher = PollingHotkey(hotkey)
+        recorder = PushToTalkRecorder(sample_rate=sample_rate)
+        temp_audio_path = runtime_run_dir / "live_recording.wav"
+        status_handle.publish()
+        _write_json(run_json_path, run_payload)
         while True:
             transition = hotkey_watcher.poll_transition()
             if transition == "down" and not active_recording:
@@ -1425,14 +1425,14 @@ def run_pilot_runtime_loop(
                     )
             time.sleep(poll_interval_sec)
     except KeyboardInterrupt:
-        if active_recording:
+        if active_recording and recorder is not None:
             recorder.discard()
         run_payload["status"] = "stopped"
         _write_json(run_json_path, run_payload)
         status_handle.transition(state="idle", status="stopped")
         return {"run_dir": runtime_run_dir, "run_payload": run_payload, "ok": True}
     except Exception as exc:
-        if active_recording:
+        if active_recording and recorder is not None:
             recorder.discard()
         run_payload["status"] = "error"
         run_payload["error"] = str(exc)

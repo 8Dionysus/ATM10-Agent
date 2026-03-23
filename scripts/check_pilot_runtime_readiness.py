@@ -187,6 +187,10 @@ def _reason_to_next_step(reason_code: str) -> tuple[str, str]:
             "inspect_last_pilot_turn",
             "Open the latest `pilot_turn.json`, fix the failing stage, and rerun one live turn.",
         ),
+        "pilot_turn_not_completed": (
+            "complete_live_pilot_turn",
+            "Wait for the current pilot turn to complete successfully, or rerun one clean live push-to-talk turn.",
+        ),
         "pilot_turn_stale": (
             "repeat_live_pilot_turn",
             "Complete another live push-to-talk turn so the acceptance evidence is fresh.",
@@ -233,6 +237,8 @@ def _build_actionable_message(readiness_status: str, reason_codes: list[str]) ->
         return "Pilot acceptance evidence exists, but the latest turn is stale."
     if primary == "pilot_turn_degraded":
         return "Pilot acceptance evidence exists, but the latest turn is degraded."
+    if primary == "pilot_turn_not_completed":
+        return "Pilot acceptance evidence is present, but the latest turn has not completed with status=ok yet."
     if primary == "pilot_session_stopped":
         return "Pilot acceptance evidence is recent, but the pilot session is currently stopped."
     next_step_code, next_step = _reason_to_next_step(primary)
@@ -451,6 +457,8 @@ def run_check_pilot_runtime_readiness(
             reason_codes.append("pilot_turn_error")
         elif turn_status == "degraded":
             reason_codes.append("pilot_turn_degraded")
+        elif pilot_turn_payload is not None and turn_status != "ok":
+            reason_codes.append("pilot_turn_not_completed")
         elif pilot_turn_payload is not None and not turn_fresh:
             reason_codes.append("pilot_turn_stale")
 
@@ -506,6 +514,7 @@ def run_check_pilot_runtime_readiness(
             "pilot_turn_missing",
             "pilot_turn_invalid",
             "pilot_turn_error",
+            "pilot_turn_not_completed",
             "hybrid_profile_not_combo_a",
         }
         readiness_status = "ready"

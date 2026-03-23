@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any
 
 import numpy as np
+import pytest
 from PIL import Image
 
 import scripts.pilot_runtime_loop as pilot_runtime
@@ -241,3 +242,48 @@ def test_pilot_turn_smoke_writes_turn_and_status_artifacts(tmp_path: Path) -> No
     assert summary_payload["schema_version"] == pilot_turn_smoke.SMOKE_SUMMARY_SCHEMA
     assert Path(summary_payload["paths"]["turn_json"]).is_file()
     assert Path(summary_payload["paths"]["latest_status_json"]).is_file()
+
+
+def test_run_pilot_runtime_loop_marks_error_when_hotkey_init_fails(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def _fake_build_provider(**kwargs: Any) -> Any:
+        if kwargs.get("provider_kind") == "vlm":
+            return DeterministicStubVLM()
+        return DeterministicGroundedReplyStub()
+
+    class _FailingHotkey:
+        def __init__(self, hotkey: str) -> None:
+            _ = hotkey
+            raise RuntimeError("hotkey polling unavailable")
+
+    monkeypatch.setattr(pilot_runtime, "_build_provider", _fake_build_provider)
+    monkeypatch.setattr(pilot_runtime, "PollingHotkey", _FailingHotkey)
+
+    runs_dir = tmp_path / "pilot-runtime"
+    result = pilot_runtime.run_pilot_runtime_loop(
+        runs_dir=runs_dir,
+        gateway_url="http://127.0.0.1:8770",
+        voice_runtime_url="http://127.0.0.1:8765",
+        tts_runtime_url="http://127.0.0.1:8780",
+        hotkey="F8",
+        capture_monitor=None,
+        capture_region=None,
+        pilot_vlm_model_dir=tmp_path / "models" / "vlm",
+        pilot_text_model_dir=tmp_path / "models" / "text",
+        pilot_vlm_device="CPU",
+        pilot_text_device="CPU",
+        playback_enabled=False,
+        now=datetime(2026, 3, 23, 21, 0, 0, tzinfo=timezone.utc),
+    )
+
+    assert result["ok"] is False
+    assert result["run_payload"]["status"] == "error"
+    assert result["run_payload"]["error"] == "hotkey polling unavailable"
+
+    latest_status_path = runs_dir / "pilot_runtime_status_latest.json"
+    latest_status_payload = json.loads(latest_status_path.read_text(encoding="utf-8"))
+    assert latest_status_payload["schema_version"] == pilot_runtime.PILOT_RUNTIME_STATUS_SCHEMA
+    assert latest_status_payload["status"] == "error"
+    assert latest_status_payload["last_error"] == "hotkey polling unavailable"
+    assert latest_status_payload["paths"]["run_dir"] == str(result["run_dir"])

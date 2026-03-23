@@ -5,7 +5,7 @@ import json
 import subprocess
 import sys
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 from urllib import error as url_error
@@ -27,6 +27,18 @@ SCHEMA_VERSION = "operator_product_startup_v1"
 
 def _utc_now() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+def _parse_utc_timestamp(raw_value: Any) -> datetime | None:
+    if not isinstance(raw_value, str) or not raw_value.strip():
+        return None
+    try:
+        parsed = datetime.fromisoformat(raw_value)
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
 
 
 def _create_run_dir(root: Path, now: datetime) -> Path:
@@ -491,16 +503,43 @@ def _wait_for_pilot_runtime_ready(
     pilot_runs_dir: Path,
     *,
     timeout_sec: float,
+    process: subprocess.Popen[str] | None = None,
+    min_timestamp_utc: datetime | None = None,
 ) -> tuple[dict[str, Any] | None, str | None]:
     deadline = time.time() + max(timeout_sec, 0.1)
     last_error = "pilot runtime status did not become ready"
     status_path = Path(pilot_runs_dir) / "pilot_runtime_status_latest.json"
+    expected_root = Path(pilot_runs_dir).resolve()
     while time.time() < deadline:
+        if process is not None and process.poll() is not None:
+            return None, f"pilot runtime process exited early with code {process.returncode}"
         try:
             payload = json.loads(status_path.read_text(encoding="utf-8"))
             if isinstance(payload, dict) and str(payload.get("schema_version", "")).strip() == "pilot_runtime_status_v1":
                 status = str(payload.get("status", "")).strip().lower()
                 if status in {"running", "degraded", "ok"}:
+                    payload_timestamp = _parse_utc_timestamp(payload.get("timestamp_utc"))
+                    if min_timestamp_utc is not None:
+                        if payload_timestamp is None:
+                            last_error = "pilot runtime status is missing a valid timestamp_utc"
+                            time.sleep(0.5)
+                            continue
+                        if payload_timestamp < (min_timestamp_utc - timedelta(seconds=1)):
+                            last_error = "stale pilot runtime status payload is older than the current launch attempt"
+                            time.sleep(0.5)
+                            continue
+                    paths_payload = payload.get("paths")
+                    paths_payload = paths_payload if isinstance(paths_payload, dict) else {}
+                    run_dir_value = str(paths_payload.get("run_dir", "")).strip()
+                    if not run_dir_value:
+                        last_error = "pilot runtime status is missing paths.run_dir"
+                        time.sleep(0.5)
+                        continue
+                    run_dir = Path(run_dir_value).resolve()
+                    if run_dir.parent != expected_root:
+                        last_error = f"pilot runtime status points to unexpected run_dir: {run_dir_value}"
+                        time.sleep(0.5)
+                        continue
                     return payload, None
                 last_error = f"unexpected pilot runtime status payload: {payload!r}"
             else:
@@ -961,6 +1000,7 @@ def main(argv: list[str] | None = None) -> int:
 
         pilot_plan = plan["managed_processes"].get("pilot_runtime", {})
         if pilot_plan.get("managed"):
+            pilot_launch_started_at = datetime.now(timezone.utc)
             process = _launch_process(pilot_plan["command"], run_dir / "pilot_runtime.log")
             managed_processes.append(("pilot_runtime", process))
             process_map["pilot_runtime"] = process
@@ -985,6 +1025,8 @@ def main(argv: list[str] | None = None) -> int:
             pilot_status_payload, pilot_status_error = _wait_for_pilot_runtime_ready(
                 Path(str(pilot_plan.get("runs_dir"))),
                 timeout_sec=args.startup_timeout_sec,
+                process=process,
+                min_timestamp_utc=pilot_launch_started_at,
             )
             if pilot_status_payload is None:
                 _mark_probe_result(
