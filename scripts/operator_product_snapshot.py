@@ -1018,7 +1018,22 @@ def _load_pilot_last_turn_summary(
         "answer_preview": answer_text[:240] if answer_text else "",
         "turn_json": turn_json,
         "screenshot_png": _nested_get(payload, "paths", "screenshot_png"),
+        "session_probe_json": _nested_get(payload, "paths", "session_probe_json"),
+        "live_hud_state_json": _nested_get(payload, "paths", "live_hud_state_json"),
         "tts_audio_wav": _nested_get(payload, "paths", "tts_audio_wav"),
+        "session_status": _nested_get(payload, "session", "status"),
+        "session_window_found": _nested_get(payload, "session", "window_found"),
+        "session_atm10_probable": _nested_get(payload, "session", "atm10_probable"),
+        "session_foreground": _nested_get(payload, "session", "foreground"),
+        "session_process_name": _nested_get(payload, "session", "process_name"),
+        "session_window_title": _nested_get(payload, "session", "window_title"),
+        "session_reason_codes": _normalize_reason_codes(_nested_get(payload, "session", "reason_codes")),
+        "hud_state_status": _nested_get(payload, "hud_state", "status"),
+        "hud_line_count": _nested_get(payload, "hud_state", "hud_line_count"),
+        "quest_update_count": _nested_get(payload, "hud_state", "quest_update_count"),
+        "has_player_state": _nested_get(payload, "hud_state", "has_player_state"),
+        "hud_text_preview": _nested_get(payload, "hud_state", "text_preview"),
+        "hud_reason_codes": _normalize_reason_codes(_nested_get(payload, "hud_state", "reason_codes")),
     }
 
 

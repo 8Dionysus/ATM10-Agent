@@ -339,6 +339,53 @@ def _write_pilot_runtime_status(pilot_runs_dir: Path) -> None:
     turn_dir = pilot_runs_dir / "20260322_120500-pilot-runtime" / "turns" / "20260322_120501-pilot-turn"
     turn_dir.mkdir(parents=True, exist_ok=True)
     turn_json = turn_dir / "pilot_turn.json"
+    session_probe_json = turn_dir / "session_probe.json"
+    live_hud_state_json = turn_dir / "live_hud_state.json"
+    _write_json(
+        session_probe_json,
+        {
+            "schema_version": "atm10_session_probe_v1",
+            "checked_at_utc": "2026-03-22T12:05:02+00:00",
+            "status": "ok",
+            "window_found": True,
+            "process_name": "javaw.exe",
+            "window_title": "Minecraft 1.21.1 - ATM10",
+            "foreground": True,
+            "window_bounds": {
+                "left": 0,
+                "top": 0,
+                "right": 320,
+                "bottom": 180,
+                "width": 320,
+                "height": 180,
+            },
+            "capture_target_kind": "monitor",
+            "atm10_probable": True,
+            "reason_codes": [],
+        },
+    )
+    _write_json(
+        live_hud_state_json,
+        {
+            "schema_version": "live_hud_state_v1",
+            "checked_at_utc": "2026-03-22T12:05:02+00:00",
+            "status": "partial",
+            "sources": {
+                "screenshot": {"status": "ok", "path": str(turn_dir / "screenshot.png")},
+                "mod_hook": {"status": "not_configured", "path": None},
+                "ocr": {"status": "unavailable", "path": None},
+            },
+            "hud_lines": ["Quest book", "Collect 16 wood"],
+            "quest_updates": [{"id": "quest:start", "text": "Collect 16 wood"}],
+            "player_state": {"dimension": "minecraft:overworld"},
+            "context_tags": ["hud", "quest"],
+            "text_preview": "Quest book Collect 16 wood",
+            "hud_line_count": 2,
+            "quest_update_count": 1,
+            "has_player_state": True,
+            "reason_codes": ["ocr_unavailable", "mod_hook_not_configured"],
+        },
+    )
     _write_json(
         turn_json,
         {
@@ -349,11 +396,30 @@ def _write_pilot_runtime_status(pilot_runs_dir: Path) -> None:
             "completed_at_utc": "2026-03-22T12:05:03+00:00",
             "degraded_flags": ["retrieval_only_fallback"],
             "degraded_services": ["gateway"],
+            "session": {
+                "status": "ok",
+                "window_found": True,
+                "atm10_probable": True,
+                "foreground": True,
+                "process_name": "javaw.exe",
+                "window_title": "Minecraft 1.21.1 - ATM10",
+                "reason_codes": [],
+            },
+            "hud_state": {
+                "status": "partial",
+                "hud_line_count": 2,
+                "quest_update_count": 1,
+                "has_player_state": True,
+                "text_preview": "Quest book Collect 16 wood",
+                "reason_codes": ["ocr_unavailable", "mod_hook_not_configured"],
+            },
             "answer_text": "Pilot degraded mode (retrieval_only_fallback). Quest book is the next step.",
             "paths": {
                 "turn_json": str(turn_json),
                 "screenshot_png": str(turn_dir / "screenshot.png"),
                 "tts_audio_wav": str(turn_dir / "tts_audio_out.wav"),
+                "session_probe_json": str(session_probe_json),
+                "live_hud_state_json": str(live_hud_state_json),
             },
         },
     )
@@ -406,6 +472,10 @@ def _write_pilot_runtime_readiness_summary(
             "evidence": {
                 "last_turn_fresh_within_window": readiness_status == "ready",
                 "live_turn_evidence": readiness_status == "ready",
+                "session_window_found": True,
+                "session_atm10_probable": True,
+                "session_foreground": True,
+                "hud_state_status": "partial" if readiness_status != "blocked" else "error",
             },
             "paths": {
                 "summary_json": str(summary_path),
@@ -660,6 +730,10 @@ def test_build_operator_product_snapshot_includes_pilot_runtime_context(
     assert pilot_readiness["readiness_status"] == "attention"
     assert pilot_readiness["next_step_code"] == "repeat_live_pilot_turn"
     assert last_turn_summary["turn_id"] == "20260322_120501-pilot-turn"
+    assert last_turn_summary["session_atm10_probable"] is True
+    assert last_turn_summary["session_foreground"] is True
+    assert last_turn_summary["hud_state_status"] == "partial"
+    assert last_turn_summary["quest_update_count"] == 1
     assert "Quest book is the next step" in last_turn_summary["answer_preview"]
     assert payload["warnings"]["pilot_runtime"] == []
     assert payload["warnings"]["pilot_readiness"] == []

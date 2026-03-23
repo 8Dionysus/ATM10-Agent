@@ -28,10 +28,18 @@ from src.agent_core.grounded_reply_openvino import (  # noqa: E402
     DeterministicGroundedReplyStub,
     OpenVINOGroundedReplyClient,
 )
+from src.agent_core.atm10_session_probe import (  # noqa: E402
+    ATM10_SESSION_PROBE_SCHEMA,
+    probe_atm10_session,
+)
 from src.agent_core.io_voice import (  # noqa: E402
     VoiceRuntimeUnavailableError,
     play_audio,
     write_wav_pcm16,
+)
+from src.agent_core.live_hud_state import (  # noqa: E402
+    LIVE_HUD_STATE_SCHEMA,
+    build_live_hud_state,
 )
 from src.agent_core.vlm_openvino import DEFAULT_OPENVINO_VLM_MODEL_DIR, OpenVINOVLMClient  # noqa: E402
 from src.agent_core.vlm_stub import DeterministicStubVLM  # noqa: E402
@@ -54,6 +62,7 @@ DEFAULT_PILOT_VLM_PROMPT = (
 DEFAULT_PILOT_GATEWAY_TOPK = 5
 DEFAULT_PILOT_GATEWAY_CANDIDATE_K = 10
 DEFAULT_PILOT_MAX_ENTITIES_PER_DOC = 128
+DEFAULT_PILOT_TESSERACT_BIN = "tesseract"
 
 
 def _utc_now() -> str:
@@ -136,6 +145,23 @@ def format_capture_region(region: tuple[int, int, int, int] | None) -> list[int]
     if region is None:
         return None
     return [int(value) for value in region]
+
+
+def capture_target_kind(
+    *,
+    capture_monitor: int | None,
+    capture_region: tuple[int, int, int, int] | None,
+    capture_payload: Mapping[str, Any] | None = None,
+) -> str:
+    if isinstance(capture_payload, Mapping):
+        capture_mode = str(capture_payload.get("capture_mode", "")).strip().lower()
+        if capture_mode in {"monitor", "region", "desktop"}:
+            return capture_mode
+    if capture_region is not None:
+        return "region"
+    if capture_monitor is not None:
+        return "monitor"
+    return "desktop"
 
 
 def normalize_pilot_hotkey(raw_value: str) -> str:
@@ -310,7 +336,12 @@ def _service_names_from_flags(degraded_flags: list[str], stage_errors: Mapping[s
         normalized = str(flag).strip().lower()
         if not normalized:
             continue
-        if normalized.startswith("capture") or normalized.startswith("vision"):
+        if (
+            normalized.startswith("capture")
+            or normalized.startswith("vision")
+            or normalized.startswith("session")
+            or normalized.startswith("hud")
+        ):
             services.append("capture")
         elif normalized.startswith("vlm"):
             services.append("vlm")
@@ -322,6 +353,10 @@ def _service_names_from_flags(degraded_flags: list[str], stage_errors: Mapping[s
             services.append("voice_runtime_service")
     for stage_name in stage_errors:
         if stage_name == "capture":
+            services.append("capture")
+        elif stage_name == "session":
+            services.append("capture")
+        elif stage_name == "hud_state":
             services.append("capture")
         elif stage_name == "vision":
             services.append("vlm")
@@ -939,9 +974,13 @@ def run_pilot_turn(
     tts_runtime_url: str | None,
     vlm_client: Any,
     grounded_reply_client: Any,
+    hud_hook_json: Path | None = None,
+    tesseract_bin: str = DEFAULT_PILOT_TESSERACT_BIN,
     service_token: str | None = None,
     playback_enabled: bool = True,
     capture_func: Callable[..., dict[str, Any]] = capture_screen_image,
+    session_probe_func: Callable[..., dict[str, Any]] = probe_atm10_session,
+    live_hud_state_func: Callable[..., dict[str, Any]] = build_live_hud_state,
     asr_func: Callable[..., dict[str, Any]] = call_voice_asr,
     hybrid_query_func: Callable[..., dict[str, Any]] = call_gateway_hybrid_query,
     tts_func: Callable[..., dict[str, Any]] = synthesize_with_tts_runtime,
@@ -960,13 +999,47 @@ def run_pilot_turn(
         "timestamp_utc": effective_now.astimezone(timezone.utc).isoformat(),
         "status": "started",
         "hotkey": hotkey,
-        "request": {"hotkey": hotkey},
+        "request": {
+            "hotkey": hotkey,
+            "hud_hook_json": None if hud_hook_json is None else str(hud_hook_json),
+        },
         "audio": dict(audio_input_meta or {}),
         "capture": {
             "monitor_index": capture_monitor,
             "region": format_capture_region(capture_region),
             "screenshot_path": None,
             "error": None,
+        },
+        "session": {
+            "schema_version": ATM10_SESSION_PROBE_SCHEMA,
+            "status": "not_started",
+            "window_found": False,
+            "process_name": None,
+            "window_title": None,
+            "foreground": False,
+            "window_bounds": None,
+            "capture_target_kind": capture_target_kind(
+                capture_monitor=capture_monitor,
+                capture_region=capture_region,
+            ),
+            "capture_bbox": None,
+            "capture_intersects_window": None,
+            "atm10_probable": False,
+            "reason_codes": [],
+        },
+        "hud_state": {
+            "schema_version": LIVE_HUD_STATE_SCHEMA,
+            "status": "not_started",
+            "sources": {},
+            "hud_lines": [],
+            "quest_updates": [],
+            "player_state": {},
+            "context_tags": [],
+            "text_preview": "",
+            "hud_line_count": 0,
+            "quest_update_count": 0,
+            "has_player_state": False,
+            "reason_codes": [],
         },
         "vision": {"summary": None, "next_steps": [], "error": None},
         "hybrid": {"planner_status": None, "degraded": None, "warnings": [], "citations": [], "error": None},
@@ -980,6 +1053,8 @@ def run_pilot_turn(
             "turn_json": str(turn_json_path),
             "audio_input_wav": str(copied_audio_path),
             "screenshot_png": str(turn_dir / "screenshot.png"),
+            "session_probe_json": str(turn_dir / "session_probe.json"),
+            "live_hud_state_json": str(turn_dir / "live_hud_state.json"),
             "tts_audio_wav": str(turn_dir / "tts_audio_out.wav"),
             "tts_stream_events_jsonl": str(turn_dir / "tts_stream_events.jsonl"),
         },
@@ -1015,6 +1090,88 @@ def run_pilot_turn(
             base_payload["capture"]["error"] = str(exc)
 
         base_payload["latency"]["capture_sec"] = round(perf_counter() - stage_started, 6)
+
+        stage_started = perf_counter()
+        session_probe_path = Path(base_payload["paths"]["session_probe_json"])
+        session_capture_kind = capture_target_kind(
+            capture_monitor=capture_monitor,
+            capture_region=capture_region,
+            capture_payload=capture_payload,
+        )
+        session_capture_bbox = (
+            capture_payload.get("bbox")
+            if isinstance(capture_payload, Mapping)
+            else None
+        )
+        try:
+            session_payload = session_probe_func(
+                capture_target_kind=session_capture_kind,
+                capture_bbox=session_capture_bbox,
+                now=effective_now,
+            )
+            base_payload["session"] = dict(session_payload)
+            _write_json(session_probe_path, session_payload)
+            if not bool(session_payload.get("atm10_probable")):
+                degraded_flags.append("session_target_not_confirmed")
+        except Exception as exc:
+            stage_errors["session"] = str(exc)
+            degraded_flags.append("session_probe_failed")
+            error_payload = {
+                "schema_version": ATM10_SESSION_PROBE_SCHEMA,
+                "checked_at_utc": _utc_now(),
+                "status": "error",
+                "window_found": False,
+                "process_name": None,
+                "window_title": None,
+                "foreground": False,
+                "window_bounds": None,
+                "capture_target_kind": session_capture_kind,
+                "capture_bbox": session_capture_bbox,
+                "capture_intersects_window": None,
+                "atm10_probable": False,
+                "reason_codes": ["session_probe_failed"],
+                "error": str(exc),
+            }
+            base_payload["session"] = error_payload
+            _write_json(session_probe_path, error_payload)
+        base_payload["latency"]["session_sec"] = round(perf_counter() - stage_started, 6)
+
+        stage_started = perf_counter()
+        live_hud_state_path = Path(base_payload["paths"]["live_hud_state_json"])
+        try:
+            hud_payload = live_hud_state_func(
+                screenshot_path=screenshot_path,
+                hook_json=hud_hook_json,
+                tesseract_bin=tesseract_bin,
+                now=effective_now,
+            )
+            base_payload["hud_state"] = dict(hud_payload)
+            _write_json(live_hud_state_path, hud_payload)
+            if str(hud_payload.get("status", "")).strip().lower() == "error":
+                degraded_flags.append("hud_state_error")
+        except Exception as exc:
+            stage_errors["hud_state"] = str(exc)
+            degraded_flags.append("hud_state_unavailable")
+            error_payload = {
+                "schema_version": LIVE_HUD_STATE_SCHEMA,
+                "checked_at_utc": _utc_now(),
+                "status": "error",
+                "screenshot_path": str(screenshot_path),
+                "sources": {},
+                "hud_lines": [],
+                "quest_updates": [],
+                "player_state": {},
+                "context_tags": [],
+                "text_preview": "",
+                "hud_line_count": 0,
+                "quest_update_count": 0,
+                "has_player_state": False,
+                "reason_codes": ["hud_state_unavailable"],
+                "error": str(exc),
+            }
+            base_payload["hud_state"] = error_payload
+            _write_json(live_hud_state_path, error_payload)
+        base_payload["latency"]["hud_state_sec"] = round(perf_counter() - stage_started, 6)
 
         stage_started = perf_counter()
         transcript = ""
@@ -1240,6 +1397,8 @@ def run_pilot_runtime_loop(
     hotkey: str,
     capture_monitor: int | None,
     capture_region: tuple[int, int, int, int] | None,
+    hud_hook_json: Path | None,
+    tesseract_bin: str,
     pilot_vlm_model_dir: Path,
     pilot_text_model_dir: Path,
     pilot_vlm_device: str,
@@ -1275,6 +1434,8 @@ def run_pilot_runtime_loop(
             "hotkey": hotkey,
             "capture_monitor": capture_monitor,
             "capture_region": format_capture_region(capture_region),
+            "hud_hook_json": None if hud_hook_json is None else str(hud_hook_json),
+            "tesseract_bin": tesseract_bin,
             "pilot_vlm_model_dir": str(pilot_vlm_model_dir),
             "pilot_text_model_dir": str(pilot_text_model_dir),
             "pilot_vlm_device": pilot_vlm_device,
@@ -1385,6 +1546,8 @@ def run_pilot_runtime_loop(
                         tts_runtime_url=tts_runtime_url,
                         vlm_client=vlm_client,
                         grounded_reply_client=grounded_reply_client,
+                        hud_hook_json=hud_hook_json,
+                        tesseract_bin=tesseract_bin,
                         service_token=service_token,
                         playback_enabled=playback_enabled,
                         status_callback=lambda **kwargs: status_handle.transition(
@@ -1456,6 +1619,18 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="Optional capture region formatted as x,y,w,h.",
     )
     parser.add_argument(
+        "--hud-hook-json",
+        type=Path,
+        default=None,
+        help="Optional path to the latest ATM10 HUD mod-hook payload JSON.",
+    )
+    parser.add_argument(
+        "--tesseract-bin",
+        type=str,
+        default=DEFAULT_PILOT_TESSERACT_BIN,
+        help="Tesseract binary name/path for additive HUD OCR (default: tesseract).",
+    )
+    parser.add_argument(
         "--pilot-vlm-model-dir",
         type=Path,
         default=DEFAULT_OPENVINO_VLM_MODEL_DIR,
@@ -1519,6 +1694,8 @@ def main(argv: list[str] | None = None) -> int:
         hotkey=hotkey,
         capture_monitor=args.capture_monitor,
         capture_region=capture_region,
+        hud_hook_json=args.hud_hook_json,
+        tesseract_bin=args.tesseract_bin,
         pilot_vlm_model_dir=args.pilot_vlm_model_dir,
         pilot_text_model_dir=args.pilot_text_model_dir,
         pilot_vlm_device=args.pilot_vlm_device,

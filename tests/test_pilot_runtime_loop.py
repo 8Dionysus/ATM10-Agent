@@ -34,6 +34,64 @@ def _write_image_fixture(path: Path) -> None:
     image.save(path)
 
 
+def _fake_session_probe(
+    *,
+    capture_target_kind: str,
+    capture_bbox: list[int] | None = None,
+    now: datetime | None = None,
+    atm10_probable: bool = True,
+    foreground: bool = True,
+) -> dict[str, Any]:
+    _ = now
+    return {
+        "schema_version": "atm10_session_probe_v1",
+        "checked_at_utc": "2026-03-22T18:00:00+00:00",
+        "status": "ok" if atm10_probable and foreground else "attention",
+        "window_found": True,
+        "process_name": "javaw.exe",
+        "window_title": "Minecraft 1.21.1 - ATM10",
+        "foreground": foreground,
+        "window_bounds": {"left": 0, "top": 0, "right": 320, "bottom": 180, "width": 320, "height": 180},
+        "capture_target_kind": capture_target_kind,
+        "capture_bbox": capture_bbox,
+        "capture_intersects_window": True,
+        "atm10_probable": atm10_probable,
+        "reason_codes": ([] if atm10_probable else ["capture_target_miss"])
+        + ([] if foreground else ["atm10_window_not_foreground"]),
+    }
+
+
+def _fake_live_hud_state(
+    *,
+    screenshot_path: Path,
+    hook_json: Path | None = None,
+    tesseract_bin: str = "tesseract",
+    now: datetime | None = None,
+    status: str = "ok",
+) -> dict[str, Any]:
+    _ = hook_json, tesseract_bin, now
+    return {
+        "schema_version": "live_hud_state_v1",
+        "checked_at_utc": "2026-03-22T18:00:00+00:00",
+        "status": status,
+        "screenshot_path": str(screenshot_path),
+        "sources": {
+            "screenshot": {"status": "ok", "path": str(screenshot_path), "detail": None},
+            "mod_hook": {"status": "not_configured", "path": None, "detail": None},
+            "ocr": {"status": "ok", "path": str(screenshot_path), "detail": None, "line_count": 2},
+        },
+        "hud_lines": ["Quest Updated", "Collect 16 wood"],
+        "quest_updates": [{"id": "quest:start", "text": "Collect 16 wood", "status": "active"}],
+        "player_state": {"dimension": "minecraft:overworld"},
+        "context_tags": ["hud", "quest"],
+        "text_preview": "Quest Updated Collect 16 wood",
+        "hud_line_count": 2,
+        "quest_update_count": 1,
+        "has_player_state": True,
+        "reason_codes": ["mod_hook_not_configured"] if status == "ok" else ["ocr_unavailable"],
+    }
+
+
 def test_parse_capture_region_and_hotkey() -> None:
     assert pilot_runtime.parse_capture_region_value("10,20,300,400") == (10, 20, 300, 400)
     assert pilot_runtime.normalize_pilot_hotkey("f8") == "F8"
@@ -140,6 +198,8 @@ def test_run_pilot_turn_with_injected_locals_writes_contract(tmp_path: Path) -> 
         grounded_reply_client=DeterministicGroundedReplyStub(),
         playback_enabled=False,
         capture_func=_fake_capture,
+        session_probe_func=_fake_session_probe,
+        live_hud_state_func=_fake_live_hud_state,
         asr_func=_fake_asr,
         hybrid_query_func=_fake_hybrid,
         tts_func=_fake_tts,
@@ -154,6 +214,10 @@ def test_run_pilot_turn_with_injected_locals_writes_contract(tmp_path: Path) -> 
     assert payload["hybrid"]["planner_status"] == "hybrid_merged"
     assert payload["citations"][0]["title"] == "Quest Book"
     assert payload["tts"]["status"] == "ok"
+    assert payload["session"]["atm10_probable"] is True
+    assert payload["hud_state"]["status"] == "ok"
+    assert Path(payload["paths"]["session_probe_json"]).is_file()
+    assert Path(payload["paths"]["live_hud_state_json"]).is_file()
     assert Path(payload["paths"]["turn_json"]).is_file()
     saved_payload = json.loads(Path(payload["paths"]["turn_json"]).read_text(encoding="utf-8"))
     assert saved_payload["answer_text"]
@@ -213,6 +277,8 @@ def test_run_pilot_turn_records_degraded_failures(tmp_path: Path) -> None:
         grounded_reply_client=None,
         playback_enabled=False,
         capture_func=_failing_capture,
+        session_probe_func=lambda **kwargs: _fake_session_probe(atm10_probable=False, foreground=False, **kwargs),
+        live_hud_state_func=lambda **kwargs: _fake_live_hud_state(status="partial", **kwargs),
         asr_func=_fake_asr,
         hybrid_query_func=_fake_hybrid,
         tts_func=_failing_tts,
@@ -224,6 +290,8 @@ def test_run_pilot_turn_records_degraded_failures(tmp_path: Path) -> None:
     assert "capture_failed" in payload["degraded_flags"]
     assert "tts_failed" in payload["degraded_flags"]
     assert "retrieval_only_fallback" in payload["degraded_flags"]
+    assert "session_target_not_confirmed" in payload["degraded_flags"]
+    assert payload["hud_state"]["status"] == "partial"
     assert "desktop capture unavailable" in payload["errors"]["capture"]
     assert payload["answer_text"].startswith("Pilot degraded mode")
 
@@ -269,6 +337,8 @@ def test_run_pilot_runtime_loop_marks_error_when_hotkey_init_fails(
         hotkey="F8",
         capture_monitor=None,
         capture_region=None,
+        hud_hook_json=None,
+        tesseract_bin="tesseract",
         pilot_vlm_model_dir=tmp_path / "models" / "vlm",
         pilot_text_model_dir=tmp_path / "models" / "text",
         pilot_vlm_device="CPU",
