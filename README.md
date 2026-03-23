@@ -19,6 +19,7 @@ Local-first game companion for ATM10 on Windows 11 + PowerShell 7.
 - Combo A nightly promotion surface via `combo_a_operating_cycle_v1`, keeping live `combo_a` parity governed on a separate nightly/manual path
 - Gateway v1 local + HTTP paths, Streamlit operator panel, and the primary launcher `scripts/start_operator_product.py`
 - Operator startup/snapshot readiness for external `Qdrant` + `Neo4j`, plus profile-aware `combo_a` smoke/safe-action surfaces
+- Observer pilot runtime slice: local `F8` push-to-talk (`scripts/pilot_runtime_loop.py`) with Windows screen capture, `Whisper GenAI -> Qwen2.5-VL-7B -> hybrid_query(profile=combo_a) -> Qwen3-8B -> tts_runtime_service`, plus `pilot_runtime_status_v1` / `pilot_turn_v1` artifacts surfaced in the operator snapshot and Streamlit panel
 - Safe automation intent -> plan -> dry-run chain with public rollout records under `M6.19` for `open_quest_book`, `check_inventory_tool`, and `open_world_map`
 
 For the full current public snapshot, use `MANIFEST.md`. For runnable command depth, use `docs/RUNBOOK.md`.
@@ -61,6 +62,16 @@ python scripts/start_operator_product.py --runs-dir runs
 ```
 
 This is the canonical local launch path for `gateway + Streamlit`.
+
+Observer pilot example:
+
+```powershell
+cd <repo-root>
+.\.venv\Scripts\Activate.ps1
+python scripts/start_operator_product.py --runs-dir runs --start-voice-runtime --start-tts-runtime --start-pilot-runtime --capture-monitor 0
+```
+
+For the local observer pilot, `--capture-monitor <index>` or `--capture-region x,y,w,h` is required for live screen grounding. The default pilot model stack is `Qwen2.5-VL-7B` on `GPU` plus `Qwen3-8B` on `NPU`.
 
 ### Gateway local contract runner
 
@@ -155,7 +166,7 @@ Default dependency audit still inspects all declared requirement profiles for in
 - `docs/SOURCE_OF_TRUTH.md` - document roles and update rules
 - `docs/ARCHIVED_TRACKS.md` - recoverable paths and re-open criteria
 - `docs/RELEASE_WAVE6.md` - security hardening reference
-- `docs/QWEN3_MODEL_STACK.md` - active and archived model-stack posture
+- `docs/QWEN3_MODEL_STACK.md` - local OpenVINO model-stack posture (file name retained for continuity)
 
 ## License
 

@@ -14,6 +14,7 @@ Selected strategic baseline:
 * Runtime policy: `OpenVINO-first` with `CPU/GPU/NPU` fallback.
 * Model policy: pragmatic hybrid by task:
   * text/retrieval/rerank: Qwen3 stack,
+  * vision active pilot path: Qwen2.5-VL-7B,
   * ASR active path: Whisper GenAI,
   * archived paths remain recoverable via explicit opt-in.
 
@@ -38,6 +39,7 @@ Build a local-first game companion for ATM10 with a production-ready operator lo
 * M5: KAG baseline + Neo4j path + nightly guardrail + trend/severity policy.
 * M6.0-M6.19: Automation safe scaffold + intent-chain contract hardening.
 * M8.0-M8.1: Streamlit IA spec and operator panel baseline with smoke coverage.
+* M8.2: Observer pilot runtime slice (`F8` hotkey, local screen grounding/reply stack, additive operator snapshot and Streamlit surfaces).
 
 ## Active Public Themes
 
@@ -114,7 +116,7 @@ Definition of Done:
 
 ### 60-90 days
 
-* Prepare a pilot overlay/hotkey UX on top of the stabilized local API.
+* Complete live-readiness/manual acceptance for the observer pilot runtime and tighten optional overlay/hotkey UX on top of the stabilized local API.
 * Evaluate moving some automation from dry-run to supervised mode after security gates are in place.
 * Revisit archived R&D paths using the re-open criteria from `docs/ARCHIVED_TRACKS.md`.
 

@@ -14,18 +14,29 @@ import scripts.text_core_openvino_demo as text_demo
 def test_text_core_openvino_demo_writes_response_artifacts(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     calls: dict[str, object] = {}
 
+    class _FakeGenerationConfig:
+        def __init__(self) -> None:
+            self.max_new_tokens = None
+            self.temperature = 1.0
+            self.do_sample = False
+
     class _FakePipeline:
         def __init__(self, model_dir: str, device: str) -> None:
             calls["model_dir"] = model_dir
             calls["device"] = device
 
-        def generate(self, prompt: str, *, max_new_tokens: int, temperature: float):
+        def generate(self, prompt: str, *, generation_config: _FakeGenerationConfig):
             calls["prompt"] = prompt
-            calls["max_new_tokens"] = max_new_tokens
-            calls["temperature"] = temperature
+            calls["max_new_tokens"] = generation_config.max_new_tokens
+            calls["temperature"] = generation_config.temperature
+            calls["do_sample"] = generation_config.do_sample
             return SimpleNamespace(text="fake answer")
 
-    monkeypatch.setattr(text_demo, "_load_openvino_genai", lambda: SimpleNamespace(LLMPipeline=_FakePipeline))
+    monkeypatch.setattr(
+        text_demo,
+        "_load_openvino_genai",
+        lambda: SimpleNamespace(LLMPipeline=_FakePipeline, GenerationConfig=_FakeGenerationConfig),
+    )
 
     model_dir = tmp_path / "model"
     model_dir.mkdir(parents=True, exist_ok=True)
@@ -53,6 +64,54 @@ def test_text_core_openvino_demo_writes_response_artifacts(monkeypatch: pytest.M
         "prompt": "how to start mekanism?",
         "max_new_tokens": 64,
         "temperature": 0.1,
+        "do_sample": True,
+    }
+
+
+def test_text_core_openvino_demo_uses_greedy_config_for_zero_temperature(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    calls: dict[str, object] = {}
+
+    class _FakeGenerationConfig:
+        def __init__(self) -> None:
+            self.max_new_tokens = None
+            self.temperature = 1.0
+            self.do_sample = False
+
+    class _FakePipeline:
+        def __init__(self, model_dir: str, device: str) -> None:
+            _ = model_dir, device
+
+        def generate(self, prompt: str, *, generation_config: _FakeGenerationConfig):
+            calls["prompt"] = prompt
+            calls["max_new_tokens"] = generation_config.max_new_tokens
+            calls["temperature"] = generation_config.temperature
+            calls["do_sample"] = generation_config.do_sample
+            return SimpleNamespace(text="greedy answer")
+
+    monkeypatch.setattr(
+        text_demo,
+        "_load_openvino_genai",
+        lambda: SimpleNamespace(LLMPipeline=_FakePipeline, GenerationConfig=_FakeGenerationConfig),
+    )
+
+    model_dir = tmp_path / "model"
+    model_dir.mkdir(parents=True, exist_ok=True)
+    result = text_demo.run_text_core_openvino_demo(
+        model_dir=model_dir,
+        prompt="hello",
+        temperature=0.0,
+        runs_dir=tmp_path / "runs",
+        now=datetime(2026, 2, 22, 18, 0, 1, tzinfo=timezone.utc),
+    )
+
+    assert result["ok"] is True
+    assert calls == {
+        "prompt": "hello",
+        "max_new_tokens": 128,
+        "temperature": 1.0,
+        "do_sample": False,
     }
 
 

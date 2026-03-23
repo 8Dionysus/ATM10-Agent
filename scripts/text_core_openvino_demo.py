@@ -12,6 +12,7 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from src.agent_core.io_voice import VoiceRuntimeUnavailableError
+from src.agent_core.openvino_genai_compat import build_generation_config
 
 DEFAULT_TEXT_CORE_MODEL_DIR = Path("models") / "qwen3-8b-int4-cw-ov"
 
@@ -113,11 +114,12 @@ def run_text_core_openvino_demo(
 
         ov_genai = _load_openvino_genai()
         pipeline = ov_genai.LLMPipeline(str(model_dir), normalized_device)
-        result = pipeline.generate(
-            normalized_prompt,
+        generation_config = build_generation_config(
+            ov_genai,
             max_new_tokens=max_new_tokens,
             temperature=temperature,
         )
+        result = pipeline.generate(normalized_prompt, generation_config=generation_config)
         output_text = _extract_output_text(result)
         response_payload = {
             "prompt": normalized_prompt,

@@ -73,6 +73,9 @@ class _FakeStreamlit:
     def json(self, value: object) -> None:
         self.json_payloads.append(value)
 
+    def write(self, value: object) -> None:
+        self.infos.append(str(value))
+
 
 def test_canonical_summary_sources_returns_expected_paths(tmp_path: Path) -> None:
     sources = panel.canonical_summary_sources(tmp_path)
@@ -484,6 +487,7 @@ def test_safe_actions_tab_source_uses_gateway_and_not_local_subprocess() -> None
     assert "run_gateway_safe_action(" in source_text
     assert "Safe Actions require a reachable gateway operator API." in source_text
     assert "Operator triage" in source_text
+    assert "Pilot runtime" in source_text
     assert "Combo A Promotion" in source_text
     assert "Current Policy" in source_text
     assert "Why Hold" in source_text
@@ -593,6 +597,64 @@ def test_render_stack_health_tab_does_not_synthesize_operator_triage_without_sna
     )
 
     assert "Operator triage" not in fake_st.subheaders
+
+
+def test_render_stack_health_tab_renders_pilot_runtime_section(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    fake_st = _FakeStreamlit()
+    monkeypatch.setattr(panel, "st", fake_st)
+    monkeypatch.setattr(panel, "_render_combo_a_promotion_section", lambda *args, **kwargs: None)
+    monkeypatch.setattr(panel, "_render_operator_startup_section", lambda *args, **kwargs: None)
+    monkeypatch.setattr(panel, "_render_snapshot_warnings", lambda *args, **kwargs: None)
+
+    panel._render_stack_health_tab(
+        health_payload={"status": "ok"},
+        health_error=None,
+        operator_snapshot_payload={
+            "schema_version": "gateway_operator_status_v1",
+            "status": "ok",
+            "stack_services": {},
+            "operator_context": {
+                "pilot_runtime": {
+                    "status": "running",
+                    "state": "idle",
+                    "hotkey": "F8",
+                    "last_turn_id": "turn-1",
+                    "degraded_services": ["gateway"],
+                    "last_error": None,
+                    "paths": {"latest_status_json": "runs/pilot_runtime_status_latest.json"},
+                },
+                "last_turn_summary": {
+                    "turn_id": "turn-1",
+                    "status": "degraded",
+                    "timestamp_utc": "2026-03-22T18:00:00+00:00",
+                    "degraded_flags": ["retrieval_only_fallback"],
+                    "answer_preview": "Pilot degraded mode. Quest book is still the next step.",
+                },
+                "profiles": {"combo_a": {}},
+            },
+            "warnings": {"service_probes": [], "combo_a_policy_surface": [], "pilot_runtime": []},
+        },
+        operator_snapshot_error=None,
+        operator_startup_payload=None,
+        operator_startup_warnings=[],
+    )
+
+    assert "Pilot runtime" in fake_st.subheaders
+    pilot_table = next(
+        item
+        for item in fake_st.dataframes
+        if isinstance(item, list) and item and isinstance(item[0], dict) and item[0].get("last_turn_id") == "turn-1"
+    )
+    assert pilot_table[0]["status"] == "running"
+    assert any(
+        isinstance(item, list)
+        and item
+        and isinstance(item[0], dict)
+        and item[0].get("turn_id") == "turn-1"
+        for item in fake_st.dataframes
+    )
 
 
 def test_safe_actions_audit_append_and_load_newest_first(tmp_path: Path) -> None:
