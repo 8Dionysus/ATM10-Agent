@@ -147,6 +147,58 @@ def run_pilot_turn_smoke(
             "hybrid_run_dir": None,
         }
 
+    def _fake_session_probe(
+        *,
+        capture_target_kind: str,
+        capture_bbox: list[int] | None = None,
+        now: datetime | None = None,
+    ) -> dict[str, Any]:
+        _ = capture_bbox
+        return {
+            "schema_version": "atm10_session_probe_v1",
+            "checked_at_utc": effective_now.isoformat() if now is None else now.isoformat(),
+            "status": "ok",
+            "window_found": True,
+            "process_name": "javaw.exe",
+            "window_title": "Minecraft 1.21.1 - ATM10",
+            "foreground": True,
+            "window_bounds": {"left": 0, "top": 0, "right": 640, "bottom": 360, "width": 640, "height": 360},
+            "capture_target_kind": capture_target_kind,
+            "capture_bbox": [0, 0, 640, 360],
+            "capture_intersects_window": True,
+            "atm10_probable": True,
+            "reason_codes": [],
+        }
+
+    def _fake_live_hud_state(
+        *,
+        screenshot_path: Path,
+        hook_json: Path | None = None,
+        tesseract_bin: str = "tesseract",
+        now: datetime | None = None,
+    ) -> dict[str, Any]:
+        _ = hook_json, tesseract_bin, now
+        return {
+            "schema_version": "live_hud_state_v1",
+            "checked_at_utc": effective_now.isoformat(),
+            "status": "ok",
+            "screenshot_path": str(screenshot_path),
+            "sources": {
+                "screenshot": {"status": "ok", "path": str(screenshot_path), "detail": None},
+                "mod_hook": {"status": "not_configured", "path": None, "detail": None},
+                "ocr": {"status": "ok", "path": str(screenshot_path), "detail": None, "line_count": 2},
+            },
+            "hud_lines": ["Quest book nearby", "Mekanism steel progression visible"],
+            "quest_updates": [{"id": "quest_book", "text": "Open quest book", "status": "active"}],
+            "player_state": {"dimension": "minecraft:overworld"},
+            "context_tags": ["hud", "quest"],
+            "text_preview": "Quest book nearby Mekanism steel progression visible",
+            "hud_line_count": 2,
+            "quest_update_count": 1,
+            "has_player_state": True,
+            "reason_codes": ["mod_hook_not_configured"],
+        }
+
     def _fake_tts(
         *,
         tts_runtime_url: str,
@@ -191,6 +243,8 @@ def run_pilot_turn_smoke(
         grounded_reply_client=DeterministicGroundedReplyStub(),
         playback_enabled=False,
         capture_func=_fake_capture,
+        session_probe_func=_fake_session_probe,
+        live_hud_state_func=_fake_live_hud_state,
         asr_func=_fake_asr,
         hybrid_query_func=_fake_hybrid,
         tts_func=_fake_tts,

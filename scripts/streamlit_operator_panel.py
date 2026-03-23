@@ -1131,7 +1131,30 @@ def _render_pilot_runtime_section(
                     "status": last_turn_summary.get("status"),
                     "timestamp_utc": last_turn_summary.get("timestamp_utc"),
                     "degraded_flags": ", ".join(_normalize_reason_codes(last_turn_summary.get("degraded_flags"))),
+                    "atm10_probable": last_turn_summary.get("session_atm10_probable"),
+                    "foreground": last_turn_summary.get("session_foreground"),
+                    "hud_state_status": last_turn_summary.get("hud_state_status"),
                     "answer_preview": last_turn_summary.get("answer_preview"),
+                }
+            ],
+            width="stretch",
+        )
+        st.caption("Last ATM10 session / HUD evidence")
+        st.dataframe(
+            [
+                {
+                    "window_found": last_turn_summary.get("session_window_found"),
+                    "process_name": last_turn_summary.get("session_process_name"),
+                    "window_title": last_turn_summary.get("session_window_title"),
+                    "session_reason_codes": ", ".join(
+                        _normalize_reason_codes(last_turn_summary.get("session_reason_codes"))
+                    ),
+                    "hud_line_count": last_turn_summary.get("hud_line_count"),
+                    "quest_update_count": last_turn_summary.get("quest_update_count"),
+                    "has_player_state": last_turn_summary.get("has_player_state"),
+                    "hud_reason_codes": ", ".join(
+                        _normalize_reason_codes(last_turn_summary.get("hud_reason_codes"))
+                    ),
                 }
             ],
             width="stretch",
@@ -1177,6 +1200,10 @@ def _render_pilot_readiness_section(
                 ),
                 "last_turn_fresh": evidence.get("last_turn_fresh_within_window"),
                 "live_turn_evidence": evidence.get("live_turn_evidence"),
+                "session_window_found": evidence.get("session_window_found"),
+                "session_atm10_probable": evidence.get("session_atm10_probable"),
+                "session_foreground": evidence.get("session_foreground"),
+                "hud_state_status": evidence.get("hud_state_status"),
                 "next_step_code": pilot_readiness.get("next_step_code"),
                 "next_step": pilot_readiness.get("next_step"),
             }

@@ -177,6 +177,10 @@ def build_startup_plan(args: argparse.Namespace) -> dict[str, Any]:
             pilot_command.extend(["--capture-monitor", str(args.capture_monitor)])
         if args.capture_region is not None:
             pilot_command.extend(["--capture-region", str(args.capture_region)])
+        if args.pilot_hud_hook_json is not None:
+            pilot_command.extend(["--hud-hook-json", str(args.pilot_hud_hook_json)])
+        if args.pilot_tesseract_bin is not None:
+            pilot_command.extend(["--tesseract-bin", str(args.pilot_tesseract_bin)])
         managed_processes["pilot_runtime"] = {
             "managed": True,
             "configured": True,
@@ -721,6 +725,18 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         type=str,
         default=None,
         help="Optional pilot capture region formatted as x,y,w,h.",
+    )
+    parser.add_argument(
+        "--pilot-hud-hook-json",
+        type=Path,
+        default=None,
+        help="Optional path to the latest ATM10 HUD mod-hook payload JSON for the managed pilot runtime.",
+    )
+    parser.add_argument(
+        "--pilot-tesseract-bin",
+        type=str,
+        default=None,
+        help="Optional Tesseract binary override for additive pilot HUD OCR.",
     )
     parser.add_argument(
         "--pilot-vlm-model-dir",

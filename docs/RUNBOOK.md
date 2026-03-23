@@ -300,7 +300,7 @@ Optional downstream health aggregation for the operator product:
 python scripts/gateway_v1_http_service.py --host 127.0.0.1 --port 8770 --runs-dir runs\gateway-http --voice-service-url http://127.0.0.1:8765 --tts-service-url http://127.0.0.1:8780 --qdrant-url http://127.0.0.1:6333 --neo4j-url http://127.0.0.1:7474 --neo4j-database neo4j --neo4j-user neo4j --operator-health-timeout-sec 3.0
 ```
 
-With external services configured, `/v1/operator/snapshot` additively returns `operator_context.profiles.supported_profiles`, `operator_context.profiles.combo_a`, compact `operator_context.triage`, probe rows for `qdrant` / `neo4j`, and pilot-facing `operator_context.pilot_runtime` / `operator_context.last_turn_summary` / `operator_context.pilot_readiness` when those artifacts exist.
+With external services configured, `/v1/operator/snapshot` additively returns `operator_context.profiles.supported_profiles`, `operator_context.profiles.combo_a`, compact `operator_context.triage`, probe rows for `qdrant` / `neo4j`, and pilot-facing `operator_context.pilot_runtime` / `operator_context.last_turn_summary` / `operator_context.pilot_readiness` when those artifacts exist, including ATM10 session evidence and live HUD summaries from the latest turn.
 
 Operator diagnostics surface (additive, schema-compatible):
 
@@ -387,6 +387,7 @@ Optional managed local runtimes (launcher starts `voice_runtime_service` / `tts_
 python scripts/start_operator_product.py --runs-dir runs --start-voice-runtime --start-tts-runtime
 python scripts/start_operator_product.py --runs-dir runs --start-voice-runtime --start-tts-runtime --start-pilot-runtime --capture-monitor 0
 python scripts/start_operator_product.py --runs-dir runs --start-voice-runtime --start-tts-runtime --start-pilot-runtime --capture-region 0,0,1920,1080
+python scripts/start_operator_product.py --runs-dir runs --start-voice-runtime --start-tts-runtime --start-pilot-runtime --capture-monitor 0 --pilot-hud-hook-json <path-to-hud-hook.json> --pilot-tesseract-bin <path-to-tesseract.exe>
 ```
 
 Expected result:
@@ -401,6 +402,7 @@ Expected result:
 * If managed runtimes are enabled, `voice_runtime_service.log` / `tts_runtime_service.log` / `pilot_runtime.log` are also written into the launcher run dir.
 * If `pilot_runtime` is enabled, the launcher also writes `artifact_roots.pilot_runtime_runs_dir` and the pilot process publishes `pilot_runtime_status_latest.json` under that root.
 * The operator surface can read the latest launcher artifact back through the gateway/panel as startup-session context, including additive `combo_a` readiness/probe state for `qdrant` and `neo4j`, plus additive `pilot_runtime` / `last_turn_summary` / `pilot_readiness` blocks when pilot artifacts exist.
+* When `pilot_runtime` is enabled, operator surfaces also surface ATM10 session evidence (`window_found`, `atm10_probable`, `foreground`) and live HUD summary fields from the last turn.
 
 Notes:
 
@@ -408,6 +410,7 @@ Notes:
 * Manual per-service commands remain valid for recovery or focused debugging.
 * The pilot runtime is local-only and does not open a new HTTP port.
 * Live pilot grounding requires either `--capture-monitor <index>` or `--capture-region x,y,w,h`.
+* `--pilot-hud-hook-json` and `--pilot-tesseract-bin` are optional additive inputs; screenshot-only turns still publish `live_hud_state_v1`, but OCR/mod-hook improve evidence quality when available.
 * Current pilot defaults: `models\qwen2.5-vl-7b-instruct-int4-ov` on `GPU` for vision, `models\qwen3-8b-int4-cw-ov` on `NPU` for grounded reply.
 
 ## M8.pilot: Observer pilot runtime
@@ -426,6 +429,7 @@ Standalone local runtime loop:
 cd <repo-root>
 .\.venv\Scripts\Activate.ps1
 python scripts/pilot_runtime_loop.py --runs-dir runs\pilot-runtime --gateway-url http://127.0.0.1:8770 --voice-runtime-url http://127.0.0.1:8765 --tts-runtime-url http://127.0.0.1:8780 --capture-monitor 0
+python scripts/pilot_runtime_loop.py --runs-dir runs\pilot-runtime --gateway-url http://127.0.0.1:8770 --voice-runtime-url http://127.0.0.1:8765 --tts-runtime-url http://127.0.0.1:8780 --capture-monitor 0 --hud-hook-json <path-to-hud-hook.json> --tesseract-bin <path-to-tesseract.exe>
 ```
 
 Expected result:
@@ -433,7 +437,13 @@ Expected result:
 * `runs/<timestamp>-pilot-runtime/` is created.
 * The runtime publishes `pilot_runtime_status_v1` in `pilot_runtime_status.json` and `pilot_runtime_status_latest.json`.
 * Each completed turn writes `turns/<timestamp>-pilot-turn/pilot_turn.json` with schema `pilot_turn_v1`.
+* Each completed turn also writes sibling ATM10 evidence artifacts:
+  * `session_probe.json` with schema `atm10_session_probe_v1`
+  * `live_hud_state.json` with schema `live_hud_state_v1`
+* `pilot_turn_v1` additively includes `session`, `hud_state`, `paths.session_probe_json`, and `paths.live_hud_state_json`.
 * Live turns follow `push-to-talk -> ASR -> vision -> hybrid_query(profile=combo_a) -> grounded reply -> TTS`.
+* `atm10_session_probe_v1` is a read-only Windows heuristic probe. When the runtime cannot confidently match the current capture target to ATM10, the turn stays artifacted but is marked degraded instead of silently passing.
+* `live_hud_state_v1` accepts screenshot-only operation. OCR or mod-hook data enrich the artifact when available, but missing OCR/mod-hook do not fail the turn by themselves.
 * Degraded services and turn errors are carried into both status and turn artifacts; the runtime does not silently fall back to uncited guesses.
 
 ## M8.post: Observer pilot readiness summary
@@ -464,20 +474,21 @@ Readiness contract (`pilot_runtime_readiness_v1`):
 * `actionable_message`
 * `blocking_reason_codes`
 * `next_step_code`, `next_step`
-* `sources.startup|pilot_runtime_status|pilot_turn`
-* `evidence.startup_fresh_within_window|pilot_runtime_configured|capture_configured|last_turn_fresh_within_window|live_turn_evidence|hybrid_profile|hybrid_planner_status|hybrid_degraded`
+* `sources.startup|pilot_runtime_status|pilot_turn|session_probe|live_hud_state`
+* `evidence.startup_fresh_within_window|pilot_runtime_configured|capture_configured|last_turn_fresh_within_window|live_turn_evidence|session_window_found|session_atm10_probable|session_foreground|hud_state_status|hybrid_profile|hybrid_planner_status|hybrid_degraded`
 * `paths.summary_json`, `paths.history_summary_json`, `paths.summary_md`, `paths.history_summary_md`
 
 Readiness policy:
 
-* `ready` requires a fresh startup artifact, configured capture, a fresh live push-to-talk turn, and `hybrid_query(profile=combo_a)` without degraded fallback.
+* `ready` requires a fresh startup artifact, configured capture, a fresh live push-to-talk turn, valid `atm10_session_probe_v1` evidence (`window_found=true`, `atm10_probable=true`, `foreground=true`), `live_hud_state_v1` with `status=ok|partial`, and `hybrid_query(profile=combo_a)` without degraded fallback.
 * `attention` means the artifacts are valid but the latest evidence is stale, degraded, fixture-only, or the pilot session stopped after a recent good turn.
-* `blocked` means a required artifact or contract is missing/invalid, capture is not configured, the latest turn failed, or the turn does not prove `combo_a` grounding.
+* `blocked` means a required artifact or contract is missing/invalid, capture is not configured, the latest turn failed, the current capture target is not proven to be ATM10, the ATM10 window is not foreground, or the turn does not prove `combo_a` grounding.
 
 Notes:
 
 * `pilot_turn_smoke.py` remains diagnostic only and does not produce `readiness_status=ready`.
 * The operator snapshot and Streamlit `Stack Health` surface `pilot_readiness` additively when the summary artifact exists.
+* Screenshot-only HUD extraction is acceptable for the baseline live-readiness path; missing OCR or mod-hook data show up as additive HUD reason codes rather than hard blockers.
 
 ## M8.combo_a: Combo A live profile workflow
 

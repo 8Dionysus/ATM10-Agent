@@ -194,6 +194,10 @@ def test_build_startup_plan_manages_opt_in_pilot_runtime() -> None:
             "1",
             "--capture-region",
             "10,20,300,400",
+            "--pilot-hud-hook-json",
+            "runs/pilot-runtime/hud_hook.json",
+            "--pilot-tesseract-bin",
+            "C:/Tools/Tesseract/tesseract.exe",
         ]
     )
     plan = start_operator_product.build_startup_plan(args)
@@ -208,6 +212,10 @@ def test_build_startup_plan_manages_opt_in_pilot_runtime() -> None:
     assert "1" in pilot_plan["command"]
     assert "--capture-region" in pilot_plan["command"]
     assert "10,20,300,400" in pilot_plan["command"]
+    assert "--hud-hook-json" in pilot_plan["command"]
+    assert str(Path("runs") / "pilot-runtime" / "hud_hook.json") in pilot_plan["command"]
+    assert "--tesseract-bin" in pilot_plan["command"]
+    assert "C:/Tools/Tesseract/tesseract.exe" in pilot_plan["command"]
     assert "--pilot-vlm-device" in pilot_plan["command"]
     assert "GPU" in pilot_plan["command"]
     assert "--pilot-text-device" in pilot_plan["command"]

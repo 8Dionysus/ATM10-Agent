@@ -19,7 +19,9 @@ from scripts.operator_product_snapshot import (  # noqa: E402
     load_json_object,
     load_latest_operator_startup_status,
 )
+from src.agent_core.atm10_session_probe import ATM10_SESSION_PROBE_SCHEMA  # noqa: E402
 from src.agent_core.combo_a_profile import COMBO_A_PROFILE  # noqa: E402
+from src.agent_core.live_hud_state import LIVE_HUD_STATE_SCHEMA  # noqa: E402
 
 SCHEMA_VERSION = "pilot_runtime_readiness_v1"
 READINESS_ROOT_SUBDIR = "pilot-runtime-readiness"
@@ -175,6 +177,38 @@ def _reason_to_next_step(reason_code: str) -> tuple[str, str]:
             "configure_capture",
             "Relaunch the pilot runtime with `--capture-monitor` or `--capture-region` configured.",
         ),
+        "pilot_session_probe_missing": (
+            "complete_live_pilot_turn",
+            "Complete one live push-to-talk turn so the pilot publishes ATM10 session evidence.",
+        ),
+        "pilot_session_probe_invalid": (
+            "repair_session_probe_contract",
+            "Repair the ATM10 session probe artifact so the readiness checker can load it.",
+        ),
+        "pilot_session_window_not_found": (
+            "focus_atm10_window",
+            "Bring the ATM10 game window on screen and complete another live push-to-talk turn.",
+        ),
+        "pilot_session_not_atm10_probable": (
+            "retarget_atm10_capture",
+            "Retarget capture to the ATM10 game window or monitor, then complete another live turn.",
+        ),
+        "pilot_session_not_foreground": (
+            "focus_atm10_window",
+            "Focus the ATM10 game window before running another live push-to-talk turn.",
+        ),
+        "pilot_hud_state_missing": (
+            "complete_live_pilot_turn",
+            "Complete another live push-to-talk turn so the pilot publishes a fresh live_hud_state artifact.",
+        ),
+        "pilot_hud_state_invalid": (
+            "repair_live_hud_state_contract",
+            "Repair the live_hud_state artifact so the readiness checker can load it.",
+        ),
+        "pilot_hud_state_error": (
+            "inspect_live_hud_state",
+            "Inspect the latest live_hud_state artifact and resolve the capture/OCR/mod-hook issue before rerunning.",
+        ),
         "pilot_turn_missing": (
             "complete_live_pilot_turn",
             "Complete one live push-to-talk turn so the pilot publishes a fresh turn artifact.",
@@ -237,6 +271,14 @@ def _build_actionable_message(readiness_status: str, reason_codes: list[str]) ->
         return "Pilot acceptance evidence exists, but the latest turn is stale."
     if primary == "pilot_turn_degraded":
         return "Pilot acceptance evidence exists, but the latest turn is degraded."
+    if primary == "pilot_session_window_not_found":
+        return "Pilot evidence is present, but the runtime could not find an ATM10 game window."
+    if primary == "pilot_session_not_atm10_probable":
+        return "Pilot evidence is present, but the current capture target is not confidently ATM10."
+    if primary == "pilot_session_not_foreground":
+        return "Pilot evidence is present, but the ATM10 window is not in the foreground."
+    if primary == "pilot_hud_state_error":
+        return "Pilot evidence is present, but the live HUD extraction failed for the latest turn."
     if primary == "pilot_turn_not_completed":
         return "Pilot acceptance evidence is present, but the latest turn has not completed with status=ok yet."
     if primary == "pilot_session_stopped":
@@ -281,6 +323,10 @@ def _render_summary_md(summary_payload: Mapping[str, Any]) -> str:
             f"| capture_configured | {evidence.get('capture_configured')} |",
             f"| live_turn_evidence | {evidence.get('live_turn_evidence')} |",
             f"| last_turn_fresh | {evidence.get('last_turn_fresh_within_window')} |",
+            f"| session_window_found | {evidence.get('session_window_found')} |",
+            f"| session_atm10_probable | {evidence.get('session_atm10_probable')} |",
+            f"| session_foreground | {evidence.get('session_foreground')} |",
+            f"| hud_state_status | {evidence.get('hud_state_status')} |",
             f"| hybrid_profile | {evidence.get('hybrid_profile')} |",
             f"| hybrid_planner_status | {evidence.get('hybrid_planner_status')} |",
             f"| hybrid_degraded | {evidence.get('hybrid_degraded')} |",
@@ -452,6 +498,101 @@ def run_check_pilot_runtime_readiness(
                 "pilot_turn_invalid" if pilot_turn_source_status == "invalid" else "pilot_turn_missing"
             )
 
+        turn_paths_payload = None if pilot_turn_payload is None else pilot_turn_payload.get("paths", {})
+        turn_paths_payload = turn_paths_payload if isinstance(turn_paths_payload, Mapping) else {}
+
+        session_probe_json_value = turn_paths_payload.get("session_probe_json")
+        session_probe_json_path = (
+            Path(str(session_probe_json_value))
+            if isinstance(session_probe_json_value, str) and session_probe_json_value.strip()
+            else None
+        )
+        session_probe_payload: dict[str, Any] | None = None
+        session_probe_source_status = "present"
+        if session_probe_json_path is None:
+            session_probe_source_status = "missing"
+        else:
+            loaded_session_payload, session_load_error = load_json_object(session_probe_json_path)
+            if loaded_session_payload is None:
+                session_probe_source_status = (
+                    "missing" if session_load_error and session_load_error.startswith("missing file:") else "invalid"
+                )
+                if session_load_error is not None and session_probe_source_status == "invalid":
+                    warnings.append(f"{session_probe_json_path}: skipped ({session_load_error})")
+            elif str(loaded_session_payload.get("schema_version", "")).strip() != ATM10_SESSION_PROBE_SCHEMA:
+                session_probe_source_status = "invalid"
+                warnings.append(
+                    f"{session_probe_json_path}: skipped (schema_version={loaded_session_payload.get('schema_version')!r} "
+                    f"expected={ATM10_SESSION_PROBE_SCHEMA!r})"
+                )
+            else:
+                session_probe_payload = loaded_session_payload
+        session_probe_timestamp = (
+            None
+            if session_probe_payload is None
+            else _timestamp_from_mapping(session_probe_payload, "checked_at_utc")
+        )
+        sources["session_probe"] = _source_entry(
+            path=session_probe_json_path,
+            status=session_probe_source_status,
+            timestamp=session_probe_timestamp,
+            fresh_within_window=_is_fresh(session_probe_timestamp, now=effective_now)
+            if session_probe_payload is not None
+            else None,
+        )
+        if pilot_turn_payload is not None and session_probe_payload is None:
+            reason_codes.append(
+                "pilot_session_probe_invalid"
+                if session_probe_source_status == "invalid"
+                else "pilot_session_probe_missing"
+            )
+
+        live_hud_state_json_value = turn_paths_payload.get("live_hud_state_json")
+        live_hud_state_json_path = (
+            Path(str(live_hud_state_json_value))
+            if isinstance(live_hud_state_json_value, str) and live_hud_state_json_value.strip()
+            else None
+        )
+        live_hud_state_payload: dict[str, Any] | None = None
+        live_hud_state_source_status = "present"
+        if live_hud_state_json_path is None:
+            live_hud_state_source_status = "missing"
+        else:
+            loaded_hud_payload, hud_load_error = load_json_object(live_hud_state_json_path)
+            if loaded_hud_payload is None:
+                live_hud_state_source_status = (
+                    "missing" if hud_load_error and hud_load_error.startswith("missing file:") else "invalid"
+                )
+                if hud_load_error is not None and live_hud_state_source_status == "invalid":
+                    warnings.append(f"{live_hud_state_json_path}: skipped ({hud_load_error})")
+            elif str(loaded_hud_payload.get("schema_version", "")).strip() != LIVE_HUD_STATE_SCHEMA:
+                live_hud_state_source_status = "invalid"
+                warnings.append(
+                    f"{live_hud_state_json_path}: skipped (schema_version={loaded_hud_payload.get('schema_version')!r} "
+                    f"expected={LIVE_HUD_STATE_SCHEMA!r})"
+                )
+            else:
+                live_hud_state_payload = loaded_hud_payload
+        live_hud_state_timestamp = (
+            None
+            if live_hud_state_payload is None
+            else _timestamp_from_mapping(live_hud_state_payload, "checked_at_utc")
+        )
+        sources["live_hud_state"] = _source_entry(
+            path=live_hud_state_json_path,
+            status=live_hud_state_source_status,
+            timestamp=live_hud_state_timestamp,
+            fresh_within_window=_is_fresh(live_hud_state_timestamp, now=effective_now)
+            if live_hud_state_payload is not None
+            else None,
+        )
+        if pilot_turn_payload is not None and live_hud_state_payload is None:
+            reason_codes.append(
+                "pilot_hud_state_invalid"
+                if live_hud_state_source_status == "invalid"
+                else "pilot_hud_state_missing"
+            )
+
         turn_status = None if pilot_turn_payload is None else str(pilot_turn_payload.get("status", "")).strip().lower()
         if turn_status == "error":
             reason_codes.append("pilot_turn_error")
@@ -467,6 +608,31 @@ def run_check_pilot_runtime_readiness(
         live_turn_evidence = str(audio_payload.get("mode", "")).strip() == LIVE_AUDIO_MODE
         if pilot_turn_payload is not None and not live_turn_evidence:
             reason_codes.append("pilot_turn_not_live_evidence")
+
+        session_window_found = bool(
+            session_probe_payload.get("window_found")
+        ) if isinstance(session_probe_payload, Mapping) else False
+        session_atm10_probable = bool(
+            session_probe_payload.get("atm10_probable")
+        ) if isinstance(session_probe_payload, Mapping) else False
+        session_foreground = bool(
+            session_probe_payload.get("foreground")
+        ) if isinstance(session_probe_payload, Mapping) else False
+        if pilot_turn_payload is not None and session_probe_payload is not None:
+            if not session_window_found:
+                reason_codes.append("pilot_session_window_not_found")
+            if not session_atm10_probable:
+                reason_codes.append("pilot_session_not_atm10_probable")
+            if not session_foreground:
+                reason_codes.append("pilot_session_not_foreground")
+
+        hud_state_status = (
+            None
+            if live_hud_state_payload is None
+            else str(live_hud_state_payload.get("status", "")).strip().lower()
+        )
+        if live_hud_state_payload is not None and hud_state_status == "error":
+            reason_codes.append("pilot_hud_state_error")
 
         hybrid_payload = None if pilot_turn_payload is None else pilot_turn_payload.get("hybrid", {})
         hybrid_payload = hybrid_payload if isinstance(hybrid_payload, Mapping) else {}
@@ -487,6 +653,10 @@ def run_check_pilot_runtime_readiness(
             and turn_status == "ok"
             and turn_fresh
             and live_turn_evidence
+            and session_window_found
+            and session_atm10_probable
+            and session_foreground
+            and hud_state_status in {"ok", "partial"}
             and hybrid_profile == COMBO_A_PROFILE
             and not hybrid_degraded
             and hybrid_planner_status != "retrieval_only_fallback"
@@ -511,6 +681,14 @@ def run_check_pilot_runtime_readiness(
             "pilot_status_missing",
             "pilot_status_invalid",
             "capture_not_configured",
+            "pilot_session_probe_missing",
+            "pilot_session_probe_invalid",
+            "pilot_session_window_not_found",
+            "pilot_session_not_atm10_probable",
+            "pilot_session_not_foreground",
+            "pilot_hud_state_missing",
+            "pilot_hud_state_invalid",
+            "pilot_hud_state_error",
             "pilot_turn_missing",
             "pilot_turn_invalid",
             "pilot_turn_error",
@@ -551,6 +729,19 @@ def run_check_pilot_runtime_readiness(
                 "last_turn_fresh_within_window": turn_fresh if pilot_turn_payload is not None else False,
                 "live_turn_evidence": live_turn_evidence if pilot_turn_payload is not None else False,
                 "turn_audio_mode": audio_payload.get("mode"),
+                "session_window_found": session_window_found if session_probe_payload is not None else False,
+                "session_atm10_probable": session_atm10_probable if session_probe_payload is not None else False,
+                "session_foreground": session_foreground if session_probe_payload is not None else False,
+                "session_capture_target_kind": None if session_probe_payload is None else session_probe_payload.get("capture_target_kind"),
+                "session_reason_codes": []
+                if session_probe_payload is None
+                else session_probe_payload.get("reason_codes", []),
+                "hud_state_status": hud_state_status,
+                "hud_line_count": None if live_hud_state_payload is None else live_hud_state_payload.get("hud_line_count"),
+                "hud_has_player_state": None if live_hud_state_payload is None else live_hud_state_payload.get("has_player_state"),
+                "hud_reason_codes": []
+                if live_hud_state_payload is None
+                else live_hud_state_payload.get("reason_codes", []),
                 "hybrid_profile": hybrid_profile or None,
                 "hybrid_planner_status": hybrid_planner_status or None,
                 "hybrid_degraded": hybrid_degraded if pilot_turn_payload is not None else None,

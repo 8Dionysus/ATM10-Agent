@@ -630,6 +630,17 @@ def test_render_stack_health_tab_renders_pilot_runtime_section(
                     "status": "degraded",
                     "timestamp_utc": "2026-03-22T18:00:00+00:00",
                     "degraded_flags": ["retrieval_only_fallback"],
+                    "session_window_found": True,
+                    "session_atm10_probable": True,
+                    "session_foreground": True,
+                    "session_process_name": "javaw.exe",
+                    "session_window_title": "Minecraft 1.21.1 - ATM10",
+                    "session_reason_codes": [],
+                    "hud_state_status": "partial",
+                    "hud_line_count": 2,
+                    "quest_update_count": 1,
+                    "has_player_state": True,
+                    "hud_reason_codes": ["ocr_unavailable", "mod_hook_not_configured"],
                     "answer_preview": "Pilot degraded mode. Quest book is still the next step.",
                 },
                 "pilot_readiness": {
@@ -641,6 +652,10 @@ def test_render_stack_health_tab_renders_pilot_runtime_section(
                     "evidence": {
                         "last_turn_fresh_within_window": True,
                         "live_turn_evidence": False,
+                        "session_window_found": True,
+                        "session_atm10_probable": True,
+                        "session_foreground": True,
+                        "hud_state_status": "partial",
                     },
                     "paths": {"summary_json": "runs/pilot-runtime-readiness/readiness_summary.json"},
                 },
@@ -666,6 +681,16 @@ def test_render_stack_health_tab_renders_pilot_runtime_section(
         if isinstance(item, list) and item and isinstance(item[0], dict) and item[0].get("last_turn_id") == "turn-1"
     )
     assert pilot_table[0]["status"] == "running"
+    evidence_table = next(
+        item
+        for item in fake_st.dataframes
+        if isinstance(item, list)
+        and item
+        and isinstance(item[0], dict)
+        and "window_found" in item[0]
+    )
+    assert evidence_table[0]["window_found"] is True
+    assert evidence_table[0]["hud_line_count"] == 2
     readiness_table = next(
         item
         for item in fake_st.dataframes
@@ -699,6 +724,10 @@ def test_render_pilot_readiness_section_ready(monkeypatch: pytest.MonkeyPatch) -
             "evidence": {
                 "last_turn_fresh_within_window": True,
                 "live_turn_evidence": True,
+                "session_window_found": True,
+                "session_atm10_probable": True,
+                "session_foreground": True,
+                "hud_state_status": "partial",
             },
             "paths": {"summary_json": "runs/pilot-runtime-readiness/readiness_summary.json"},
         },
@@ -716,6 +745,8 @@ def test_render_pilot_readiness_section_ready(monkeypatch: pytest.MonkeyPatch) -
         and item[0].get("readiness_status") == "ready"
     )
     assert readiness_table[0]["last_turn_fresh"] is True
+    assert readiness_table[0]["session_atm10_probable"] is True
+    assert readiness_table[0]["hud_state_status"] == "partial"
 
 
 def test_render_pilot_readiness_section_not_available(monkeypatch: pytest.MonkeyPatch) -> None:
