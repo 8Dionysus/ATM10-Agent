@@ -3,11 +3,64 @@ from __future__ import annotations
 import json
 import subprocess
 import sys
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import pytest
 
 import scripts.start_operator_product as start_operator_product
+
+
+def test_wait_for_pilot_runtime_ready_rejects_stale_status_payload(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    pilot_runs_dir = tmp_path / "pilot-runtime"
+    runtime_run_dir = pilot_runs_dir / "20260323_120000-pilot-runtime"
+    runtime_run_dir.mkdir(parents=True, exist_ok=True)
+    status_path = pilot_runs_dir / "pilot_runtime_status_latest.json"
+    status_path.write_text(
+        json.dumps(
+            {
+                "schema_version": "pilot_runtime_status_v1",
+                "timestamp_utc": "2026-03-23T12:00:00+00:00",
+                "status": "running",
+                "state": "idle",
+                "paths": {"run_dir": str(runtime_run_dir)},
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    clock_values = iter([0.0, 0.0, 1.0])
+    monkeypatch.setattr(start_operator_product.time, "time", lambda: next(clock_values))
+    monkeypatch.setattr(start_operator_product.time, "sleep", lambda _seconds: None)
+
+    payload, error = start_operator_product._wait_for_pilot_runtime_ready(
+        pilot_runs_dir,
+        timeout_sec=0.5,
+        min_timestamp_utc=datetime(2026, 3, 23, 12, 5, 0, tzinfo=timezone.utc),
+    )
+
+    assert payload is None
+    assert error == "stale pilot runtime status payload is older than the current launch attempt"
+
+
+def test_wait_for_pilot_runtime_ready_returns_early_when_process_exits(tmp_path: Path) -> None:
+    class _ExitedProcess:
+        returncode = 17
+
+        def poll(self):
+            return self.returncode
+
+    payload, error = start_operator_product._wait_for_pilot_runtime_ready(
+        tmp_path / "pilot-runtime",
+        timeout_sec=0.5,
+        process=_ExitedProcess(),
+        min_timestamp_utc=datetime.now(timezone.utc) - timedelta(seconds=1),
+    )
+
+    assert payload is None
+    assert error == "pilot runtime process exited early with code 17"
 
 
 def test_build_startup_plan_uses_primary_operator_profile_defaults() -> None:
@@ -35,6 +88,14 @@ def test_parse_args_derives_child_run_dirs_from_base_runs_dir(tmp_path: Path) ->
     assert args.panel_runs_dir == tmp_path / "audit-root"
     assert args.voice_runtime_runs_dir == tmp_path / "audit-root" / "voice-runtime"
     assert args.tts_runtime_runs_dir == tmp_path / "audit-root" / "tts-runtime"
+    assert args.pilot_runtime_runs_dir == tmp_path / "audit-root" / "pilot-runtime"
+
+
+def test_parse_args_uses_qwen2_5_vl_7b_default_model_dir() -> None:
+    args = start_operator_product.parse_args([])
+    assert args.pilot_vlm_model_dir == Path("models") / "qwen2.5-vl-7b-instruct-int4-ov"
+    assert args.pilot_vlm_device == "GPU"
+    assert args.pilot_text_device == "NPU"
 
 
 def test_parse_args_keeps_explicit_child_run_dir_overrides(tmp_path: Path) -> None:
@@ -119,6 +180,39 @@ def test_build_startup_plan_manages_opt_in_runtimes() -> None:
     assert managed["tts_runtime_service"]["url"] == "http://127.0.0.1:8780"
     assert "--voice-service-url" in plan["gateway"]["command"]
     assert "--tts-service-url" in plan["gateway"]["command"]
+
+
+def test_build_startup_plan_manages_opt_in_pilot_runtime() -> None:
+    args = start_operator_product.parse_args(
+        [
+            "--start-voice-runtime",
+            "--start-tts-runtime",
+            "--start-pilot-runtime",
+            "--pilot-hotkey",
+            "F9",
+            "--capture-monitor",
+            "1",
+            "--capture-region",
+            "10,20,300,400",
+        ]
+    )
+    plan = start_operator_product.build_startup_plan(args)
+    pilot_plan = plan["managed_processes"]["pilot_runtime"]
+
+    assert pilot_plan["managed"] is True
+    assert pilot_plan["configured"] is True
+    assert "scripts/pilot_runtime_loop.py" in pilot_plan["command"]
+    assert "--pilot-hotkey" in pilot_plan["command"]
+    assert "F9" in pilot_plan["command"]
+    assert "--capture-monitor" in pilot_plan["command"]
+    assert "1" in pilot_plan["command"]
+    assert "--capture-region" in pilot_plan["command"]
+    assert "10,20,300,400" in pilot_plan["command"]
+    assert "--pilot-vlm-device" in pilot_plan["command"]
+    assert "GPU" in pilot_plan["command"]
+    assert "--pilot-text-device" in pilot_plan["command"]
+    assert "NPU" in pilot_plan["command"]
+    assert plan["artifact_roots"]["pilot_runtime_runs_dir"] == str(Path("runs") / "pilot-runtime")
 
 
 def test_parse_args_rejects_conflicting_voice_runtime_options() -> None:
@@ -213,6 +307,91 @@ def test_start_operator_product_smoke_managed_runtime_path(
     assert run_payload["session_state"]["streamlit"]["status"] == "stopped"
     assert run_payload["session_state"]["streamlit"]["last_probe"]["status"] == "ok"
     assert run_payload["startup_checkpoints"]
+
+
+def test_start_operator_product_smoke_managed_pilot_runtime_path(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    launched_commands: list[list[str]] = []
+
+    class _FakeProcess:
+        _next_pid = 8000
+
+        def __init__(self) -> None:
+            type(self)._next_pid += 1
+            self.pid = type(self)._next_pid
+
+        def poll(self):
+            return None
+
+        def terminate(self):
+            return None
+
+        def wait(self, timeout: float | None = None):
+            return 0
+
+        def kill(self):
+            return None
+
+    def _fake_launch_process(command: list[str], log_path: Path):
+        launched_commands.append(list(command))
+        log_path.parent.mkdir(parents=True, exist_ok=True)
+        log_path.write_text("", encoding="utf-8")
+        return _FakeProcess()
+
+    monkeypatch.setattr(start_operator_product, "_launch_process", _fake_launch_process)
+    monkeypatch.setattr(
+        start_operator_product,
+        "_wait_for_runtime_health",
+        lambda service_url, timeout_sec: ({"status": "ok"}, None),
+    )
+    monkeypatch.setattr(
+        start_operator_product,
+        "_wait_for_gateway_operator_snapshot",
+        lambda gateway_url, timeout_sec: ({"status": "ok", "checked_at_utc": "2026-03-21T12:00:00+00:00"}, None),
+    )
+    monkeypatch.setattr(
+        start_operator_product,
+        "_wait_for_pilot_runtime_ready",
+        lambda pilot_runs_dir, timeout_sec, process=None, min_timestamp_utc=None: (
+            {"schema_version": "pilot_runtime_status_v1", "status": "running", "state": "idle"},
+            None,
+        ),
+    )
+    monkeypatch.setattr(
+        start_operator_product,
+        "_wait_for_streamlit_ready",
+        lambda streamlit_url, timeout_sec, process=None: ({"status": "ok", "url": streamlit_url.rstrip('/') + "/"}, None),
+    )
+    monkeypatch.setattr(
+        start_operator_product.time,
+        "sleep",
+        lambda seconds: (_ for _ in ()).throw(KeyboardInterrupt()),
+    )
+
+    exit_code = start_operator_product.main(
+        [
+            "--runs-dir",
+            str(tmp_path / "runs"),
+            "--gateway-runs-dir",
+            str(tmp_path / "gateway"),
+            "--panel-runs-dir",
+            str(tmp_path / "panel"),
+            "--start-voice-runtime",
+            "--start-tts-runtime",
+            "--start-pilot-runtime",
+            "--pilot-hotkey",
+            "F8",
+        ]
+    )
+
+    assert exit_code == 0
+    assert any("scripts/pilot_runtime_loop.py" in command for command in launched_commands)
+    run_dirs = sorted((tmp_path / "runs").glob("*-start-operator-product*"))
+    assert run_dirs
+    run_payload = json.loads((run_dirs[0] / "run.json").read_text(encoding="utf-8"))
+    assert run_payload["managed_processes"]["pilot_runtime"]["managed"] is True
+    assert run_payload["session_state"]["pilot_runtime"]["last_probe"]["status"] == "ok"
 
 
 def test_start_operator_product_marks_never_launched_streamlit_not_started(

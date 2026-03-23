@@ -300,7 +300,7 @@ Optional downstream health aggregation for the operator product:
 python scripts/gateway_v1_http_service.py --host 127.0.0.1 --port 8770 --runs-dir runs\gateway-http --voice-service-url http://127.0.0.1:8765 --tts-service-url http://127.0.0.1:8780 --qdrant-url http://127.0.0.1:6333 --neo4j-url http://127.0.0.1:7474 --neo4j-database neo4j --neo4j-user neo4j --operator-health-timeout-sec 3.0
 ```
 
-With external services configured, `/v1/operator/snapshot` additively returns `operator_context.profiles.supported_profiles`, `operator_context.profiles.combo_a`, compact `operator_context.triage`, and probe rows for `qdrant` / `neo4j`.
+With external services configured, `/v1/operator/snapshot` additively returns `operator_context.profiles.supported_profiles`, `operator_context.profiles.combo_a`, compact `operator_context.triage`, probe rows for `qdrant` / `neo4j`, and pilot-facing `operator_context.pilot_runtime` / `operator_context.last_turn_summary` / `operator_context.pilot_readiness` when those artifacts exist.
 
 Operator diagnostics surface (additive, schema-compatible):
 
@@ -381,10 +381,12 @@ Optional runtime health wiring through the gateway operator snapshot:
 python scripts/start_operator_product.py --runs-dir runs --voice-runtime-url http://127.0.0.1:8765 --tts-runtime-url http://127.0.0.1:8780 --qdrant-url http://127.0.0.1:6333 --neo4j-url http://127.0.0.1:7474 --neo4j-database neo4j --neo4j-user neo4j
 ```
 
-Optional managed local runtimes (launcher starts `voice_runtime_service` / `tts_runtime_service` itself):
+Optional managed local runtimes (launcher starts `voice_runtime_service` / `tts_runtime_service` / `pilot_runtime` itself):
 
 ```powershell
 python scripts/start_operator_product.py --runs-dir runs --start-voice-runtime --start-tts-runtime
+python scripts/start_operator_product.py --runs-dir runs --start-voice-runtime --start-tts-runtime --start-pilot-runtime --capture-monitor 0
+python scripts/start_operator_product.py --runs-dir runs --start-voice-runtime --start-tts-runtime --start-pilot-runtime --capture-region 0,0,1920,1080
 ```
 
 Expected result:
@@ -396,13 +398,86 @@ Expected result:
 * Streamlit is started against that gateway URL as the primary operator cockpit.
 * If managed runtimes are enabled, launcher waits for `GET /health` on those loopback services before starting the gateway.
 * `gateway.log` and `streamlit.log` are written into the launcher run dir.
-* If managed runtimes are enabled, `voice_runtime_service.log` / `tts_runtime_service.log` are also written into the launcher run dir.
-* The operator surface can read the latest launcher artifact back through the gateway/panel as startup-session context, including additive `combo_a` readiness/probe state for `qdrant` and `neo4j`.
+* If managed runtimes are enabled, `voice_runtime_service.log` / `tts_runtime_service.log` / `pilot_runtime.log` are also written into the launcher run dir.
+* If `pilot_runtime` is enabled, the launcher also writes `artifact_roots.pilot_runtime_runs_dir` and the pilot process publishes `pilot_runtime_status_latest.json` under that root.
+* The operator surface can read the latest launcher artifact back through the gateway/panel as startup-session context, including additive `combo_a` readiness/probe state for `qdrant` and `neo4j`, plus additive `pilot_runtime` / `last_turn_summary` / `pilot_readiness` blocks when pilot artifacts exist.
 
 Notes:
 
 * This is the primary operator product startup path.
 * Manual per-service commands remain valid for recovery or focused debugging.
+* The pilot runtime is local-only and does not open a new HTTP port.
+* Live pilot grounding requires either `--capture-monitor <index>` or `--capture-region x,y,w,h`.
+* Current pilot defaults: `models\qwen2.5-vl-7b-instruct-int4-ov` on `GPU` for vision, `models\qwen3-8b-int4-cw-ov` on `NPU` for grounded reply.
+
+## M8.pilot: Observer pilot runtime
+
+Pilot turn smoke (deterministic local fixtures):
+
+```powershell
+cd <repo-root>
+.\.venv\Scripts\Activate.ps1
+python scripts/pilot_turn_smoke.py --runs-dir runs\pilot-runtime-smoke --summary-json runs\pilot-runtime-smoke\summary.json
+```
+
+Standalone local runtime loop:
+
+```powershell
+cd <repo-root>
+.\.venv\Scripts\Activate.ps1
+python scripts/pilot_runtime_loop.py --runs-dir runs\pilot-runtime --gateway-url http://127.0.0.1:8770 --voice-runtime-url http://127.0.0.1:8765 --tts-runtime-url http://127.0.0.1:8780 --capture-monitor 0
+```
+
+Expected result:
+
+* `runs/<timestamp>-pilot-runtime/` is created.
+* The runtime publishes `pilot_runtime_status_v1` in `pilot_runtime_status.json` and `pilot_runtime_status_latest.json`.
+* Each completed turn writes `turns/<timestamp>-pilot-turn/pilot_turn.json` with schema `pilot_turn_v1`.
+* Live turns follow `push-to-talk -> ASR -> vision -> hybrid_query(profile=combo_a) -> grounded reply -> TTS`.
+* Degraded services and turn errors are carried into both status and turn artifacts; the runtime does not silently fall back to uncited guesses.
+
+## M8.post: Observer pilot readiness summary
+
+Pilot readiness helper:
+
+```powershell
+cd <repo-root>
+.\.venv\Scripts\Activate.ps1
+python scripts/check_pilot_runtime_readiness.py --runs-dir runs --summary-json runs\pilot-runtime-readiness\readiness_summary.json --summary-md runs\pilot-runtime-readiness\summary.md
+```
+
+Manual live-acceptance flow:
+
+```powershell
+cd <repo-root>
+.\.venv\Scripts\Activate.ps1
+python scripts/start_operator_product.py --runs-dir runs --start-voice-runtime --start-tts-runtime --start-pilot-runtime --capture-monitor 0
+# complete one live F8 push-to-talk turn
+python scripts/check_pilot_runtime_readiness.py --runs-dir runs --summary-json runs\pilot-runtime-readiness\readiness_summary.json --summary-md runs\pilot-runtime-readiness\summary.md
+```
+
+Readiness contract (`pilot_runtime_readiness_v1`):
+
+* `schema_version = pilot_runtime_readiness_v1`
+* `status = ok|error`
+* `readiness_status = ready|attention|blocked`
+* `actionable_message`
+* `blocking_reason_codes`
+* `next_step_code`, `next_step`
+* `sources.startup|pilot_runtime_status|pilot_turn`
+* `evidence.startup_fresh_within_window|pilot_runtime_configured|capture_configured|last_turn_fresh_within_window|live_turn_evidence|hybrid_profile|hybrid_planner_status|hybrid_degraded`
+* `paths.summary_json`, `paths.history_summary_json`, `paths.summary_md`, `paths.history_summary_md`
+
+Readiness policy:
+
+* `ready` requires a fresh startup artifact, configured capture, a fresh live push-to-talk turn, and `hybrid_query(profile=combo_a)` without degraded fallback.
+* `attention` means the artifacts are valid but the latest evidence is stale, degraded, fixture-only, or the pilot session stopped after a recent good turn.
+* `blocked` means a required artifact or contract is missing/invalid, capture is not configured, the latest turn failed, or the turn does not prove `combo_a` grounding.
+
+Notes:
+
+* `pilot_turn_smoke.py` remains diagnostic only and does not produce `readiness_status=ready`.
+* The operator snapshot and Streamlit `Stack Health` surface `pilot_readiness` additively when the summary artifact exists.
 
 ## M8.combo_a: Combo A live profile workflow
 
@@ -1611,12 +1686,12 @@ Regression smoke-check:
 * `scripts/streamlit_operator_panel_smoke.py` validates the mobile policy contract and baseline viewport.
 * If the mobile baseline (`viewport > breakpoint` or `landscape`) is violated, smoke returns `status=error`, `exit_code=2`.
 
-## Qwen3 stack (OpenVINO-first)
+## Local OpenVINO stack (task-first)
 
 Active stack:
 
 * `Qwen3-8B`
-* `Qwen3-VL-4B-Instruct`
+* `Qwen2.5-VL-7B-Instruct`
 * `Qwen3-Embedding-0.6B`
 * `Qwen3-Reranker-0.6B`
 * `Whisper v3 Turbo (OpenVINO GenAI runtime path for ASR)`
@@ -1625,22 +1700,15 @@ Deactivated:
 
 * `Qwen3-TTS-12Hz-0.6B-CustomVoice` (archived; do not use in production runbook).
 * `Qwen3-ASR-0.6B` (archived; reversible via explicit opt-in flags).
+* `Qwen3-VL-4B-Instruct` custom OpenVINO export (archived for the active pilot path; current OpenVINO GenAI VLM runtime does not accept the `qwen3_vl` model type used by that export).
 
 Detailed matrix: `docs/QWEN3_MODEL_STACK.md`.
 
-### Qwen3-VL self-conversion (OpenVINO IR)
+Pilot runtime defaults:
 
-```powershell
-# Dry-run
-python scripts/export_qwen3_openvino.py --preset qwen3-vl-4b
-
-# Real export (standard path may still be blocked upstream)
-python scripts/export_qwen3_openvino.py --preset qwen3-vl-4b --execute
-
-# Working custom path
-python -m scripts.export_qwen3_custom_openvino --preset qwen3-vl-4b --model-source models\hf_raw\qwen3-vl-4b
-python -m scripts.export_qwen3_custom_openvino --preset qwen3-vl-4b --execute --model-source models\hf_raw\qwen3-vl-4b
-```
+* Vision: `models\qwen2.5-vl-7b-instruct-int4-ov` on `GPU`
+* Grounded reply: `models\qwen3-8b-int4-cw-ov` on `NPU`
+* ASR: `models\whisper-large-v3-turbo-ov` on `NPU`
 
 ### Qwen3-ASR self-conversion (archived reference, keep for future restore)
 
@@ -1682,12 +1750,12 @@ Expected result:
 `qwen3-tts` experimental `.venv-exp` environment has been removed from the active path.
 If you need to check the upstream again, create a new isolated environment manually.
 
-### Qwen3 cache cleanup (disk pressure)
+### Model cache cleanup (disk pressure)
 
 ```powershell
 Remove-Item models\hf_cache -Recurse -Force
-Remove-Item models\hf_raw\qwen3-vl-4b\.cache -Recurse -Force
-Remove-Item models\hf_raw\qwen3-vl-4b -Recurse -Force
+Remove-Item models\qwen3-vl-4b-instruct-ov-custom -Recurse -Force
+Remove-Item models\qwen2.5-vl-7b-instruct-int4-ov -Recurse -Force
 Remove-Item "$env:USERPROFILE\.cache\huggingface" -Recurse -Force
 ```
 
@@ -1697,6 +1765,7 @@ Remove-Item "$env:USERPROFILE\.cache\huggingface" -Recurse -Force
 cd <repo-root>
 .\.venv\Scripts\Activate.ps1
 python -m pip install -r requirements.txt
+python -m pip install "openvino==2026.0.0" "openvino-genai==2026.0.0.0"
 python -c "import openvino as ov; core=ov.Core(); print('openvino=', ov.__version__); print('devices=', core.available_devices)"
 python scripts/openvino_diag.py
 ```
@@ -1713,7 +1782,7 @@ Runtime deps installation:
 cd <repo-root>
 .\.venv\Scripts\Activate.ps1
 python -m pip install -r requirements.txt
-python -m pip install "openvino-genai>=2025.4.0"
+python -m pip install "openvino==2026.0.0" "openvino-genai==2026.0.0.0"
 ```
 
 Run demo:
@@ -1805,7 +1874,7 @@ Runtime deps installation:
 ```powershell
 cd <repo-root>
 .\.venv\Scripts\Activate.ps1
-python -m pip install "openvino-genai>=2025.4.0"
+python -m pip install "openvino==2026.0.0" "openvino-genai==2026.0.0.0"
 ```
 
 Preparing OpenVINO model Whisper v3 Turbo:

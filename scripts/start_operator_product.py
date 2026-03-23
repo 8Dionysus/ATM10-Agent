@@ -5,7 +5,7 @@ import json
 import subprocess
 import sys
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 from urllib import error as url_error
@@ -27,6 +27,18 @@ SCHEMA_VERSION = "operator_product_startup_v1"
 
 def _utc_now() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+def _parse_utc_timestamp(raw_value: Any) -> datetime | None:
+    if not isinstance(raw_value, str) or not raw_value.strip():
+        return None
+    try:
+        parsed = datetime.fromisoformat(raw_value)
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
 
 
 def _create_run_dir(root: Path, now: datetime) -> Path:
@@ -58,6 +70,9 @@ def _resolve_effective_runs_dirs(args: argparse.Namespace) -> argparse.Namespace
     )
     args.tts_runtime_runs_dir = (
         Path(args.tts_runtime_runs_dir) if args.tts_runtime_runs_dir is not None else args.runs_dir / "tts-runtime"
+    )
+    args.pilot_runtime_runs_dir = (
+        Path(args.pilot_runtime_runs_dir) if args.pilot_runtime_runs_dir is not None else args.runs_dir / "pilot-runtime"
     )
     return args
 
@@ -135,6 +150,43 @@ def build_startup_plan(args: argparse.Namespace) -> dict[str, Any]:
             "command": None,
         }
 
+    if args.start_pilot_runtime:
+        pilot_command = [
+            sys.executable,
+            "scripts/pilot_runtime_loop.py",
+            "--runs-dir",
+            str(args.pilot_runtime_runs_dir),
+            "--gateway-url",
+            gateway_url,
+            "--pilot-hotkey",
+            str(args.pilot_hotkey),
+            "--pilot-vlm-model-dir",
+            str(args.pilot_vlm_model_dir),
+            "--pilot-text-model-dir",
+            str(args.pilot_text_model_dir),
+            "--pilot-vlm-device",
+            str(args.pilot_vlm_device),
+            "--pilot-text-device",
+            str(args.pilot_text_device),
+        ]
+        if voice_runtime_url:
+            pilot_command.extend(["--voice-runtime-url", voice_runtime_url])
+        if tts_runtime_url:
+            pilot_command.extend(["--tts-runtime-url", tts_runtime_url])
+        if args.capture_monitor is not None:
+            pilot_command.extend(["--capture-monitor", str(args.capture_monitor)])
+        if args.capture_region is not None:
+            pilot_command.extend(["--capture-region", str(args.capture_region)])
+        managed_processes["pilot_runtime"] = {
+            "managed": True,
+            "configured": True,
+            "url": None,
+            "runs_dir": str(args.pilot_runtime_runs_dir),
+            "status_json": str(args.pilot_runtime_runs_dir / "pilot_runtime_status_latest.json"),
+            "command": pilot_command,
+            "launch_after": "gateway",
+        }
+
     gateway_command = [
         sys.executable,
         "scripts/gateway_v1_http_service.py",
@@ -197,6 +249,7 @@ def build_startup_plan(args: argparse.Namespace) -> dict[str, Any]:
             "gateway_runs_dir": str(args.gateway_runs_dir),
             "voice_runtime_runs_dir": str(args.voice_runtime_runs_dir),
             "tts_runtime_runs_dir": str(args.tts_runtime_runs_dir),
+            "pilot_runtime_runs_dir": str(args.pilot_runtime_runs_dir),
         },
         "managed_processes": managed_processes,
         "external_services": external_services,
@@ -222,16 +275,15 @@ def build_startup_plan(args: argparse.Namespace) -> dict[str, Any]:
 def _build_initial_session_state(plan: dict[str, Any], run_dir: Path) -> dict[str, dict[str, Any]]:
     session_state: dict[str, dict[str, Any]] = {}
     for service_name, service_plan in plan["managed_processes"].items():
+        configured = bool(service_plan.get("configured", bool(service_plan.get("url"))))
         session_state[service_name] = {
             "service_name": service_name,
             "managed": bool(service_plan.get("managed")),
-            "configured": bool(service_plan.get("url")),
+            "configured": configured,
             "effective_url": service_plan.get("url"),
             "runs_dir": service_plan.get("runs_dir"),
             "log_path": str(run_dir / f"{service_name}.log"),
-            "status": "pending" if service_plan.get("managed") else (
-                "external" if service_plan.get("url") else "not_configured"
-            ),
+            "status": "pending" if service_plan.get("managed") else ("external" if configured else "not_configured"),
             "pid": None,
             "last_probe": None,
             "error": None,
@@ -447,6 +499,59 @@ def _wait_for_runtime_health(
     return None, last_error
 
 
+def _wait_for_pilot_runtime_ready(
+    pilot_runs_dir: Path,
+    *,
+    timeout_sec: float,
+    process: subprocess.Popen[str] | None = None,
+    min_timestamp_utc: datetime | None = None,
+) -> tuple[dict[str, Any] | None, str | None]:
+    deadline = time.time() + max(timeout_sec, 0.1)
+    last_error = "pilot runtime status did not become ready"
+    status_path = Path(pilot_runs_dir) / "pilot_runtime_status_latest.json"
+    expected_root = Path(pilot_runs_dir).resolve()
+    while time.time() < deadline:
+        if process is not None and process.poll() is not None:
+            return None, f"pilot runtime process exited early with code {process.returncode}"
+        try:
+            payload = json.loads(status_path.read_text(encoding="utf-8"))
+            if isinstance(payload, dict) and str(payload.get("schema_version", "")).strip() == "pilot_runtime_status_v1":
+                status = str(payload.get("status", "")).strip().lower()
+                if status in {"running", "degraded", "ok"}:
+                    payload_timestamp = _parse_utc_timestamp(payload.get("timestamp_utc"))
+                    if min_timestamp_utc is not None:
+                        if payload_timestamp is None:
+                            last_error = "pilot runtime status is missing a valid timestamp_utc"
+                            time.sleep(0.5)
+                            continue
+                        if payload_timestamp < (min_timestamp_utc - timedelta(seconds=1)):
+                            last_error = "stale pilot runtime status payload is older than the current launch attempt"
+                            time.sleep(0.5)
+                            continue
+                    paths_payload = payload.get("paths")
+                    paths_payload = paths_payload if isinstance(paths_payload, dict) else {}
+                    run_dir_value = str(paths_payload.get("run_dir", "")).strip()
+                    if not run_dir_value:
+                        last_error = "pilot runtime status is missing paths.run_dir"
+                        time.sleep(0.5)
+                        continue
+                    run_dir = Path(run_dir_value).resolve()
+                    if run_dir.parent != expected_root:
+                        last_error = f"pilot runtime status points to unexpected run_dir: {run_dir_value}"
+                        time.sleep(0.5)
+                        continue
+                    return payload, None
+                last_error = f"unexpected pilot runtime status payload: {payload!r}"
+            else:
+                last_error = f"unexpected pilot runtime status payload: {payload!r}"
+        except FileNotFoundError:
+            last_error = f"{status_path} not found yet"
+        except Exception as exc:
+            last_error = f"{exc}"
+        time.sleep(0.5)
+    return None, last_error
+
+
 def _wait_for_streamlit_ready(
     streamlit_url: str,
     *,
@@ -589,6 +694,59 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="Managed TTS runtime runs directory (default: <runs-dir>/tts-runtime).",
     )
     parser.add_argument(
+        "--start-pilot-runtime",
+        action="store_true",
+        help="Launch pilot_runtime_loop as a managed child process.",
+    )
+    parser.add_argument(
+        "--pilot-runtime-runs-dir",
+        type=Path,
+        default=None,
+        help="Managed pilot runtime runs directory (default: <runs-dir>/pilot-runtime).",
+    )
+    parser.add_argument(
+        "--pilot-hotkey",
+        type=str,
+        default="F8",
+        help="Pilot push-to-talk hotkey (default: F8).",
+    )
+    parser.add_argument(
+        "--capture-monitor",
+        type=int,
+        default=None,
+        help="Windows monitor index for pilot live capture.",
+    )
+    parser.add_argument(
+        "--capture-region",
+        type=str,
+        default=None,
+        help="Optional pilot capture region formatted as x,y,w,h.",
+    )
+    parser.add_argument(
+        "--pilot-vlm-model-dir",
+        type=Path,
+        default=Path("models") / "qwen2.5-vl-7b-instruct-int4-ov",
+        help="Pilot local VLM model dir.",
+    )
+    parser.add_argument(
+        "--pilot-text-model-dir",
+        type=Path,
+        default=Path("models") / "qwen3-8b-int4-cw-ov",
+        help="Pilot local grounded-reply model dir.",
+    )
+    parser.add_argument(
+        "--pilot-vlm-device",
+        type=str,
+        default="GPU",
+        help="OpenVINO device for pilot VLM (default: GPU).",
+    )
+    parser.add_argument(
+        "--pilot-text-device",
+        type=str,
+        default="NPU",
+        help="OpenVINO device for pilot grounded-reply model (default: NPU).",
+    )
+    parser.add_argument(
         "--qdrant-url",
         type=str,
         default=None,
@@ -650,6 +808,7 @@ def main(argv: list[str] | None = None) -> int:
             "streamlit": plan["streamlit"]["url"],
             "voice_runtime_service": plan["gateway"].get("voice_runtime_url"),
             "tts_runtime_service": plan["gateway"].get("tts_runtime_url"),
+            "pilot_runtime": plan["managed_processes"].get("pilot_runtime", {}).get("status_json"),
             "qdrant": plan["gateway"].get("qdrant_url"),
             "neo4j": plan["gateway"].get("neo4j_url"),
         },
@@ -838,6 +997,74 @@ def main(argv: list[str] | None = None) -> int:
                 error=stack_payload.get("error"),
                 last_event="operator_snapshot_probe",
             )
+
+        pilot_plan = plan["managed_processes"].get("pilot_runtime", {})
+        if pilot_plan.get("managed"):
+            pilot_launch_started_at = datetime.now(timezone.utc)
+            process = _launch_process(pilot_plan["command"], run_dir / "pilot_runtime.log")
+            managed_processes.append(("pilot_runtime", process))
+            process_map["pilot_runtime"] = process
+            _update_session_entry(
+                run_payload,
+                "pilot_runtime",
+                status="starting",
+                pid=process.pid,
+                started_at_utc=_utc_now(),
+                last_event="process_started",
+            )
+            _update_child_process_state(run_payload, "pilot_runtime", process)
+            _append_startup_checkpoint(
+                run_payload,
+                stage="launch",
+                status="ok",
+                service_name="pilot_runtime",
+                message="pilot runtime process started",
+                details={"pid": process.pid, "runs_dir": pilot_plan.get("runs_dir")},
+            )
+            _write_json(run_json_path, run_payload)
+            pilot_status_payload, pilot_status_error = _wait_for_pilot_runtime_ready(
+                Path(str(pilot_plan.get("runs_dir"))),
+                timeout_sec=args.startup_timeout_sec,
+                process=process,
+                min_timestamp_utc=pilot_launch_started_at,
+            )
+            if pilot_status_payload is None:
+                _mark_probe_result(
+                    run_payload,
+                    "pilot_runtime",
+                    payload=None,
+                    error=pilot_status_error,
+                )
+                _append_startup_checkpoint(
+                    run_payload,
+                    stage="probe",
+                    status="error",
+                    service_name="pilot_runtime",
+                    message="pilot runtime status probe failed",
+                    details={"error": pilot_status_error},
+                )
+                raise RuntimeError(
+                    f"pilot_runtime did not become ready within startup timeout: {pilot_status_error}"
+                )
+            _mark_probe_result(
+                run_payload,
+                "pilot_runtime",
+                payload={
+                    "status": pilot_status_payload.get("status"),
+                    "state": pilot_status_payload.get("state"),
+                    "last_turn_id": pilot_status_payload.get("last_turn_id"),
+                },
+                error=None,
+            )
+            _append_startup_checkpoint(
+                run_payload,
+                stage="probe",
+                status="ok",
+                service_name="pilot_runtime",
+                message="pilot runtime status probe succeeded",
+                details={"status": pilot_status_payload.get("status"), "state": pilot_status_payload.get("state")},
+            )
+            _write_json(run_json_path, run_payload)
 
         streamlit_process = _launch_process(plan["streamlit"]["command"], run_dir / "streamlit.log")
         process_map["streamlit"] = streamlit_process

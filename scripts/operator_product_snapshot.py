@@ -22,6 +22,9 @@ GATEWAY_OPERATOR_RUNS_SCHEMA = "gateway_operator_runs_v1"
 GATEWAY_OPERATOR_HISTORY_SCHEMA = "gateway_operator_history_v1"
 GATEWAY_OPERATOR_GOVERNANCE_SCHEMA = "gateway_operator_governance_summary_v1"
 OPERATOR_PRODUCT_STARTUP_SCHEMA = "operator_product_startup_v1"
+PILOT_RUNTIME_STATUS_SCHEMA = "pilot_runtime_status_v1"
+PILOT_TURN_SCHEMA = "pilot_turn_v1"
+PILOT_RUNTIME_STATUS_FILENAME = "pilot_runtime_status_latest.json"
 
 FAIL_NIGHTLY_PROGRESS_SOURCE_SPECS: dict[str, dict[str, tuple[str, ...] | str]] = {
     "readiness": {
@@ -61,6 +64,11 @@ OPERATING_CYCLE_SOURCE_SPEC: dict[str, tuple[str, ...] | str] = {
 COMBO_A_OPERATING_CYCLE_SOURCE_SPEC: dict[str, tuple[str, ...] | str] = {
     "path_parts": ("nightly-combo-a-operating-cycle", "operating_cycle_summary.json"),
     "schema_version": "combo_a_operating_cycle_v1",
+}
+
+PILOT_RUNTIME_READINESS_SOURCE_SPEC: dict[str, tuple[str, ...] | str] = {
+    "path_parts": ("pilot-runtime-readiness", "readiness_summary.json"),
+    "schema_version": "pilot_runtime_readiness_v1",
 }
 
 HISTORY_SOURCE_SPECS: dict[str, dict[str, str | None]] = {
@@ -198,6 +206,15 @@ def canonical_combo_a_operating_cycle_source(runs_dir: Path) -> Path:
     return base.joinpath(*tuple(COMBO_A_OPERATING_CYCLE_SOURCE_SPEC["path_parts"]))
 
 
+def canonical_pilot_runtime_readiness_source(runs_dir: Path) -> Path:
+    base = Path(runs_dir)
+    return base.joinpath(*tuple(PILOT_RUNTIME_READINESS_SOURCE_SPEC["path_parts"]))
+
+
+def canonical_pilot_runtime_latest_status_source(runs_dir: Path) -> Path:
+    return Path(runs_dir) / "pilot-runtime" / PILOT_RUNTIME_STATUS_FILENAME
+
+
 def canonical_history_roots(runs_dir: Path) -> dict[str, Path]:
     base = Path(runs_dir)
     return {
@@ -216,6 +233,25 @@ def load_json_object(path: Path) -> tuple[dict[str, Any] | None, str | None]:
     if not isinstance(payload, dict):
         return None, f"json root must be object: {path}"
     return payload, None
+
+
+def load_latest_pilot_runtime_status(
+    pilot_runs_dir: Path,
+) -> tuple[dict[str, Any] | None, list[str]]:
+    warnings: list[str] = []
+    status_path = Path(pilot_runs_dir) / PILOT_RUNTIME_STATUS_FILENAME
+    payload, load_error = load_json_object(status_path)
+    if payload is None:
+        if load_error is not None and not load_error.startswith("missing file:"):
+            warnings.append(f"{status_path}: skipped ({load_error})")
+        return None, warnings
+    if str(payload.get("schema_version", "")).strip() != PILOT_RUNTIME_STATUS_SCHEMA:
+        warnings.append(
+            f"{status_path}: skipped (schema_version={payload.get('schema_version')!r} "
+            f"expected={PILOT_RUNTIME_STATUS_SCHEMA!r})"
+        )
+        return None, warnings
+    return payload, warnings
 
 
 def _load_optional_contract_payload(
@@ -515,6 +551,44 @@ def load_combo_a_operating_cycle_snapshot(
     return snapshot, []
 
 
+def load_pilot_runtime_readiness_snapshot(
+    runs_dir: Path,
+) -> tuple[dict[str, Any] | None, list[str]]:
+    path = canonical_pilot_runtime_readiness_source(runs_dir)
+    payload, load_error = _load_optional_contract_payload(
+        "pilot_runtime_readiness",
+        path,
+        expected_schema_version=str(PILOT_RUNTIME_READINESS_SOURCE_SPEC["schema_version"]),
+    )
+    if payload is None:
+        if load_error is not None and load_error.startswith("missing file:"):
+            return None, []
+        return None, [] if load_error is None else [load_error]
+
+    paths_payload = payload.get("paths")
+    paths_payload = paths_payload if isinstance(paths_payload, dict) else {}
+    snapshot = {
+        "schema_version": str(payload.get("schema_version")),
+        "status": payload.get("status"),
+        "checked_at_utc": payload.get("checked_at_utc"),
+        "readiness_status": payload.get("readiness_status"),
+        "actionable_message": payload.get("actionable_message"),
+        "blocking_reason_codes": _normalize_reason_codes(payload.get("blocking_reason_codes")),
+        "next_step_code": payload.get("next_step_code"),
+        "next_step": payload.get("next_step"),
+        "sources": payload.get("sources") if isinstance(payload.get("sources"), dict) else {},
+        "evidence": payload.get("evidence") if isinstance(payload.get("evidence"), dict) else {},
+        "paths": {
+            "summary_json": _coalesce(paths_payload.get("summary_json"), str(path)),
+            "history_summary_json": paths_payload.get("history_summary_json"),
+            "summary_md": paths_payload.get("summary_md"),
+            "history_summary_md": paths_payload.get("history_summary_md"),
+        },
+        "source_path": str(path),
+    }
+    return snapshot, []
+
+
 def build_operator_combo_a_profile_summary(
     *,
     combo_a_readiness: dict[str, Any] | None,
@@ -618,6 +692,7 @@ def _ordered_startup_service_names(session_state: Mapping[str, Any] | None) -> l
         "streamlit",
         "voice_runtime_service",
         "tts_runtime_service",
+        "pilot_runtime",
         "qdrant",
         "neo4j",
     )
@@ -724,6 +799,7 @@ def load_latest_operator_startup_status(
             "gateway_url": payload.get("gateway_url"),
             "streamlit_url": payload.get("streamlit_url"),
             "effective_urls": payload.get("effective_urls"),
+            "artifact_roots": payload.get("artifact_roots"),
             "managed_processes": payload.get("managed_processes"),
             "session_state": _normalize_startup_session_state(
                 payload.get("session_state"),
@@ -740,6 +816,7 @@ def load_latest_operator_startup_status(
                 "streamlit_log": paths_payload.get("streamlit_log"),
                 "voice_runtime_service_log": paths_payload.get("voice_runtime_service_log"),
                 "tts_runtime_service_log": paths_payload.get("tts_runtime_service_log"),
+                "pilot_runtime_log": paths_payload.get("pilot_runtime_log"),
             },
         }
         summary["diagnostics"] = _build_startup_diagnostics(summary)
@@ -915,6 +992,72 @@ def _attach_startup_diagnostics(
     enriched = dict(startup_snapshot)
     enriched["diagnostics"] = _build_startup_diagnostics(startup_snapshot)
     return enriched
+
+
+def _load_pilot_last_turn_summary(
+    pilot_status: Mapping[str, Any] | None,
+) -> dict[str, Any] | None:
+    if not isinstance(pilot_status, Mapping):
+        return None
+    turn_json = _nested_get(pilot_status, "paths", "last_turn_json")
+    if not isinstance(turn_json, str) or not turn_json.strip():
+        return None
+    payload, _load_error = load_json_object(Path(turn_json))
+    if payload is None:
+        return None
+    if str(payload.get("schema_version", "")).strip() != PILOT_TURN_SCHEMA:
+        return None
+    answer_text = str(payload.get("answer_text", "")).strip()
+    return {
+        "turn_id": payload.get("turn_id"),
+        "status": payload.get("status"),
+        "timestamp_utc": payload.get("timestamp_utc"),
+        "completed_at_utc": payload.get("completed_at_utc"),
+        "degraded_flags": payload.get("degraded_flags", []),
+        "degraded_services": payload.get("degraded_services", []),
+        "answer_preview": answer_text[:240] if answer_text else "",
+        "turn_json": turn_json,
+        "screenshot_png": _nested_get(payload, "paths", "screenshot_png"),
+        "tts_audio_wav": _nested_get(payload, "paths", "tts_audio_wav"),
+    }
+
+
+def _build_pilot_runtime_summary(
+    pilot_status: Mapping[str, Any] | None,
+    *,
+    pilot_runs_dir: Path | None,
+) -> dict[str, Any]:
+    if not isinstance(pilot_status, Mapping):
+        return {
+            "status": "not_available",
+            "state": "not_available",
+            "last_turn_id": None,
+            "degraded_services": [],
+            "last_error": None,
+            "paths": {
+                "pilot_runs_dir": None if pilot_runs_dir is None else str(pilot_runs_dir),
+                "latest_status_json": None if pilot_runs_dir is None else str(Path(pilot_runs_dir) / PILOT_RUNTIME_STATUS_FILENAME),
+            },
+        }
+    return {
+        "status": pilot_status.get("status"),
+        "state": pilot_status.get("state"),
+        "last_turn_id": pilot_status.get("last_turn_id"),
+        "last_turn_started_at_utc": pilot_status.get("last_turn_started_at_utc"),
+        "last_turn_completed_at_utc": pilot_status.get("last_turn_completed_at_utc"),
+        "degraded_services": pilot_status.get("degraded_services", []),
+        "last_error": pilot_status.get("last_error"),
+        "hotkey": pilot_status.get("hotkey"),
+        "latency_summary": pilot_status.get("latency_summary"),
+        "paths": {
+            "pilot_runs_dir": None if pilot_runs_dir is None else str(pilot_runs_dir),
+            **(
+                dict(pilot_status.get("paths", {}))
+                if isinstance(pilot_status.get("paths"), Mapping)
+                else {}
+            ),
+        },
+    }
 
 
 def _build_governance_diagnostics(
@@ -1996,9 +2139,21 @@ def build_operator_product_snapshot(
     integrity_snapshot = policy_context["integrity"]
     operating_cycle_snapshot = policy_context["operating_cycle"]
     combo_a_operating_cycle_snapshot, combo_a_operating_cycle_warnings = load_combo_a_operating_cycle_snapshot(runs_dir)
+    pilot_readiness_snapshot, pilot_readiness_warnings = load_pilot_runtime_readiness_snapshot(runs_dir)
     startup_snapshot, startup_warnings = load_latest_operator_startup_status(effective_operator_runs_dir)
     startup_snapshot = _attach_startup_diagnostics(startup_snapshot)
     governance_summary = _attach_governance_diagnostics(policy_context["governance"])
+    pilot_runs_dir_value = _nested_get(startup_snapshot, "artifact_roots", "pilot_runtime_runs_dir")
+    if not isinstance(pilot_runs_dir_value, str) or not pilot_runs_dir_value.strip():
+        pilot_runs_dir_value = _nested_get(startup_snapshot, "session_state", "pilot_runtime", "runs_dir")
+    pilot_runs_dir = (
+        Path(str(pilot_runs_dir_value))
+        if isinstance(pilot_runs_dir_value, str) and pilot_runs_dir_value.strip()
+        else effective_operator_runs_dir / "pilot-runtime"
+    )
+    pilot_status, pilot_warnings = load_latest_pilot_runtime_status(pilot_runs_dir)
+    pilot_runtime_summary = _build_pilot_runtime_summary(pilot_status, pilot_runs_dir=pilot_runs_dir)
+    last_turn_summary = _load_pilot_last_turn_summary(pilot_status)
 
     service_warnings: list[str] = []
     voice_health = fetch_service_health(
@@ -2096,8 +2251,12 @@ def build_operator_product_snapshot(
             "artifact_roots": {
                 "gateway_runs_dir": str(runs_dir),
                 "operator_runs_dir": str(effective_operator_runs_dir),
+                "pilot_runtime_runs_dir": str(pilot_runs_dir),
             },
             "startup": startup_snapshot,
+            "pilot_runtime": pilot_runtime_summary,
+            "pilot_readiness": pilot_readiness_snapshot,
+            "last_turn_summary": last_turn_summary,
             "governance": governance_summary,
             "triage": triage,
             "profiles": {
@@ -2126,6 +2285,8 @@ def build_operator_product_snapshot(
                 *policy_warnings["operating_cycle"],
             ],
             "service_probes": service_warnings,
+            "pilot_runtime": pilot_warnings,
+            "pilot_readiness": pilot_readiness_warnings,
             "startup": startup_warnings,
             "profile_readiness": combo_a_readiness["warnings"],
             "policy_surface": {

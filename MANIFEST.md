@@ -1,6 +1,6 @@
 # MANIFEST.md
 
-Current as of: 2026-03-22
+Current as of: 2026-03-23
 
 ## Snapshot
 
@@ -33,7 +33,10 @@ Current as of: 2026-03-22
 - Gateway SLA readiness nightly: `.github/workflows/gateway-sla-readiness-nightly.yml` with `readiness/governance/progress/transition/remediation/integrity/operating_cycle` summary/artifact wiring and promoted `fail_nightly` strict gate only when the operating cycle marks baseline eligible.
 - Gateway operator APIs: `GET /v1/operator/snapshot`, `GET /v1/operator/runs`, `GET /v1/operator/history`, `GET /v1/operator/safe-actions`, `POST /v1/operator/safe-actions/run` from `scripts/gateway_v1_http_service.py`, with additive `supported_profiles`, `operator_context.profiles.combo_a`, startup/governance surfaces, compact `operator_context.triage`, promoted baseline SLA policy posture, additive `combo_a` nightly policy posture, and `combo_a` smoke/suite/operating-cycle sources in run/history views.
 - Streamlit operator panel: `scripts/streamlit_operator_panel.py` + `scripts/streamlit_operator_panel_smoke.py`, with gateway-first `Stack Health`, `Run Explorer`, `Latest Metrics`, gateway-mediated smoke-only `Safe Actions`, scenario-first operator blocks for compact operator triage + startup-session + baseline SLA policy posture, and profile-aware baseline vs `combo_a` rows/actions including `Combo A Promotion` in the existing tabs.
-- Primary operator startup profile: `scripts/start_operator_product.py` (canonical local launch path for `gateway + Streamlit`, with opt-in managed `voice_runtime_service` / `tts_runtime_service`, external `Qdrant` / `Neo4j` readiness URLs, `startup_plan.json`, session-state checkpoints, and artifact pointers for the operator surface).
+- Observer pilot runtime slice: `scripts/pilot_runtime_loop.py` + `scripts/pilot_turn_smoke.py`, with local `F8` push-to-talk, Windows `monitor|region` screen capture, `Whisper GenAI -> OpenVINO VLM -> gateway hybrid_query(profile=combo_a) -> OpenVINO grounded reply -> tts_runtime_service`, and additive `pilot_runtime_status_v1` / `pilot_turn_v1` artifact contracts.
+- Observer pilot readiness helper: `scripts/check_pilot_runtime_readiness.py`, publishing `pilot_runtime_readiness_v1` from the latest startup artifact, pilot runtime status, and referenced pilot turn, with `ready|attention|blocked` acceptance posture and manual next-step guidance.
+- Primary operator startup profile: `scripts/start_operator_product.py` (canonical local launch path for `gateway + Streamlit`, with opt-in managed `voice_runtime_service` / `tts_runtime_service` / `pilot_runtime`, external `Qdrant` / `Neo4j` readiness URLs, `startup_plan.json`, session-state checkpoints, and artifact pointers for the operator surface).
+- Operator snapshot and Streamlit pilot surfaces: `scripts/operator_product_snapshot.py` and `scripts/streamlit_operator_panel.py` additively publish `operator_context.pilot_runtime`, `operator_context.last_turn_summary`, `operator_context.pilot_readiness`, and `Pilot runtime` / `Pilot readiness` sections in `Stack Health`.
 - Dependency profiles: `requirements-voice.txt`, `requirements-llm.txt`, `requirements-export.txt`, `requirements-audit.txt`.
 - Dependency audit: `scripts/dependency_audit.py` + report-only CI step with uploaded `dependency-audit-report` artifact.
 

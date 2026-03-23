@@ -46,6 +46,7 @@ from scripts.operator_product_snapshot import (
     load_fail_nightly_remediation_snapshot as shared_load_fail_nightly_remediation_snapshot,
     load_fail_nightly_transition_snapshot as shared_load_fail_nightly_transition_snapshot,
     load_json_object as shared_load_json_object,
+    load_latest_pilot_runtime_status as shared_load_latest_pilot_runtime_status,
     load_latest_operator_startup_status as shared_load_latest_operator_startup_status,
     load_operating_cycle_snapshot as shared_load_operating_cycle_snapshot,
 )
@@ -739,6 +740,7 @@ load_fail_nightly_transition_snapshot = shared_load_fail_nightly_transition_snap
 load_fail_nightly_integrity_snapshot = shared_load_fail_nightly_integrity_snapshot
 load_operating_cycle_snapshot = shared_load_operating_cycle_snapshot
 load_combo_a_operating_cycle_snapshot = shared_load_combo_a_operating_cycle_snapshot
+load_latest_pilot_runtime_status = shared_load_latest_pilot_runtime_status
 load_latest_operator_startup_status = shared_load_latest_operator_startup_status
 build_operator_governance_summary = shared_build_operator_governance_summary
 build_metrics_rows = shared_build_metrics_rows
@@ -1085,6 +1087,104 @@ def _render_operator_startup_section(snapshot: dict[str, Any] | None, warnings: 
 
     st.caption("Startup artifacts")
     st.json(snapshot.get("paths"))
+
+
+def _render_pilot_runtime_section(
+    pilot_runtime: dict[str, Any] | None,
+    last_turn_summary: dict[str, Any] | None,
+    warnings: list[str],
+) -> None:
+    _render_snapshot_warnings(
+        "Some pilot runtime artifacts were skipped due to parse/contract issues",
+        warnings,
+    )
+    st.subheader("Pilot runtime")
+    if not isinstance(pilot_runtime, dict):
+        st.info("Pilot runtime artifacts are not available yet.")
+        return
+
+    st.dataframe(
+        [
+            {
+                "status": pilot_runtime.get("status"),
+                "state": pilot_runtime.get("state"),
+                "hotkey": pilot_runtime.get("hotkey"),
+                "last_turn_id": pilot_runtime.get("last_turn_id"),
+                "degraded_services": ", ".join(_normalize_reason_codes(pilot_runtime.get("degraded_services"))),
+                "last_error": pilot_runtime.get("last_error"),
+            }
+        ],
+        width="stretch",
+    )
+    latency_summary = pilot_runtime.get("latency_summary")
+    latency_summary = latency_summary if isinstance(latency_summary, dict) else {}
+    if latency_summary:
+        st.caption("Pilot latency")
+        st.dataframe([latency_summary], width="stretch")
+
+    if isinstance(last_turn_summary, dict):
+        st.caption("Last pilot turn")
+        st.dataframe(
+            [
+                {
+                    "turn_id": last_turn_summary.get("turn_id"),
+                    "status": last_turn_summary.get("status"),
+                    "timestamp_utc": last_turn_summary.get("timestamp_utc"),
+                    "degraded_flags": ", ".join(_normalize_reason_codes(last_turn_summary.get("degraded_flags"))),
+                    "answer_preview": last_turn_summary.get("answer_preview"),
+                }
+            ],
+            width="stretch",
+        )
+    st.caption("Pilot artifacts")
+    st.json(pilot_runtime.get("paths"))
+
+
+def _render_pilot_readiness_section(
+    pilot_readiness: dict[str, Any] | None,
+    warnings: list[str],
+) -> None:
+    _render_snapshot_warnings(
+        "Some pilot readiness artifacts were skipped due to parse/contract issues",
+        warnings,
+    )
+    st.subheader("Pilot readiness")
+    if not isinstance(pilot_readiness, dict):
+        st.info("Pilot readiness summary is not available yet.")
+        return
+
+    readiness_status = str(pilot_readiness.get("readiness_status", "")).strip().lower()
+    actionable_message = str(
+        _coalesce(pilot_readiness.get("actionable_message"), "Pilot readiness summary is available.")
+    ).strip()
+    if readiness_status == "ready":
+        st.success(actionable_message)
+    elif readiness_status == "blocked":
+        st.error(actionable_message)
+    elif readiness_status == "attention":
+        st.warning(actionable_message)
+    else:
+        st.info(actionable_message)
+
+    evidence = pilot_readiness.get("evidence")
+    evidence = evidence if isinstance(evidence, dict) else {}
+    st.dataframe(
+        [
+            {
+                "readiness_status": pilot_readiness.get("readiness_status"),
+                "blocking_reason_codes": ", ".join(
+                    _normalize_reason_codes(pilot_readiness.get("blocking_reason_codes"))
+                ),
+                "last_turn_fresh": evidence.get("last_turn_fresh_within_window"),
+                "live_turn_evidence": evidence.get("live_turn_evidence"),
+                "next_step_code": pilot_readiness.get("next_step_code"),
+                "next_step": pilot_readiness.get("next_step"),
+            }
+        ],
+        width="stretch",
+    )
+    st.caption("Pilot readiness artifacts")
+    st.json(pilot_readiness.get("paths"))
 
 
 def _render_operator_governance_section(summary: dict[str, Any] | None) -> None:
@@ -1677,6 +1777,34 @@ def _render_stack_health_tab(
 
     st.subheader("Operator startup session")
     _render_operator_startup_section(operator_startup_payload, operator_startup_warnings)
+    pilot_runtime = (
+        _nested_get(operator_snapshot_payload, "operator_context", "pilot_runtime")
+        if isinstance(operator_snapshot_payload, dict)
+        else None
+    )
+    pilot_runtime = pilot_runtime if isinstance(pilot_runtime, dict) else None
+    last_turn_summary = (
+        _nested_get(operator_snapshot_payload, "operator_context", "last_turn_summary")
+        if isinstance(operator_snapshot_payload, dict)
+        else None
+    )
+    last_turn_summary = last_turn_summary if isinstance(last_turn_summary, dict) else None
+    pilot_warnings = [
+        str(item)
+        for item in _normalize_reason_codes(_nested_get(operator_snapshot_payload, "warnings", "pilot_runtime"))
+    ]
+    _render_pilot_runtime_section(pilot_runtime, last_turn_summary, pilot_warnings)
+    pilot_readiness = (
+        _nested_get(operator_snapshot_payload, "operator_context", "pilot_readiness")
+        if isinstance(operator_snapshot_payload, dict)
+        else None
+    )
+    pilot_readiness = pilot_readiness if isinstance(pilot_readiness, dict) else None
+    pilot_readiness_warnings = [
+        str(item)
+        for item in _normalize_reason_codes(_nested_get(operator_snapshot_payload, "warnings", "pilot_readiness"))
+    ]
+    _render_pilot_readiness_section(pilot_readiness, pilot_readiness_warnings)
 
 
 def _render_run_explorer_tab(

@@ -254,6 +254,7 @@ def _write_operator_startup_run(
     checkpoint_message: str | None = None,
     gateway_probe_status: str = "ok",
     gateway_probe_error: str | None = None,
+    pilot_runtime_runs_dir: Path | None = None,
 ) -> Path:
     run_dir = operator_runs_dir / run_name
     run_dir.mkdir(parents=True, exist_ok=True)
@@ -271,11 +272,16 @@ def _write_operator_startup_run(
             "gateway_url": "http://127.0.0.1:8770",
             "streamlit_url": "http://127.0.0.1:8501",
             "error": error,
+            "artifact_roots": {
+                "operator_runs_dir": str(operator_runs_dir),
+                "pilot_runtime_runs_dir": None if pilot_runtime_runs_dir is None else str(pilot_runtime_runs_dir),
+            },
             "paths": {
                 "run_json": str(run_json_path),
                 "startup_plan_json": str(startup_plan_json),
                 "gateway_log": str(run_dir / "gateway.log"),
                 "streamlit_log": str(run_dir / "streamlit.log"),
+                "pilot_runtime_log": str(run_dir / "pilot_runtime.log"),
             },
             "session_state": {
                 "gateway": {
@@ -289,9 +295,28 @@ def _write_operator_startup_run(
                         "status": gateway_probe_status,
                         "error": gateway_probe_error,
                     },
-                }
+                },
+                **(
+                    {
+                        "pilot_runtime": {
+                            "service_name": "pilot_runtime",
+                            "managed": True,
+                            "configured": True,
+                            "effective_url": None,
+                            "runs_dir": str(pilot_runtime_runs_dir),
+                            "status": "running",
+                            "pid": 5432,
+                            "last_probe": {"status": "ok"},
+                        }
+                    }
+                    if pilot_runtime_runs_dir is not None
+                    else {}
+                ),
             },
-            "child_processes": {"gateway": {"pid": 4321, "return_code": None}},
+            "child_processes": {
+                "gateway": {"pid": 4321, "return_code": None},
+                **({"pilot_runtime": {"pid": 5432, "return_code": None}} if pilot_runtime_runs_dir is not None else {}),
+            },
             "startup_checkpoints": [
                 {
                     "stage": "probe",
@@ -307,6 +332,90 @@ def _write_operator_startup_run(
         },
     )
     return run_json_path
+
+
+def _write_pilot_runtime_status(pilot_runs_dir: Path) -> None:
+    pilot_runs_dir.mkdir(parents=True, exist_ok=True)
+    turn_dir = pilot_runs_dir / "20260322_120500-pilot-runtime" / "turns" / "20260322_120501-pilot-turn"
+    turn_dir.mkdir(parents=True, exist_ok=True)
+    turn_json = turn_dir / "pilot_turn.json"
+    _write_json(
+        turn_json,
+        {
+            "schema_version": "pilot_turn_v1",
+            "turn_id": "20260322_120501-pilot-turn",
+            "status": "degraded",
+            "timestamp_utc": "2026-03-22T12:05:01+00:00",
+            "completed_at_utc": "2026-03-22T12:05:03+00:00",
+            "degraded_flags": ["retrieval_only_fallback"],
+            "degraded_services": ["gateway"],
+            "answer_text": "Pilot degraded mode (retrieval_only_fallback). Quest book is the next step.",
+            "paths": {
+                "turn_json": str(turn_json),
+                "screenshot_png": str(turn_dir / "screenshot.png"),
+                "tts_audio_wav": str(turn_dir / "tts_audio_out.wav"),
+            },
+        },
+    )
+    _write_json(
+        pilot_runs_dir / "pilot_runtime_status_latest.json",
+        {
+            "schema_version": "pilot_runtime_status_v1",
+            "status": "running",
+            "state": "idle",
+            "hotkey": "F8",
+            "last_turn_id": "20260322_120501-pilot-turn",
+            "last_turn_started_at_utc": "2026-03-22T12:05:01+00:00",
+            "last_turn_completed_at_utc": "2026-03-22T12:05:03+00:00",
+            "degraded_services": ["gateway"],
+            "last_error": None,
+            "latency_summary": {"total_sec": 2.1},
+            "paths": {
+                "run_dir": str(pilot_runs_dir / "20260322_120500-pilot-runtime"),
+                "status_json": str(pilot_runs_dir / "20260322_120500-pilot-runtime" / "pilot_runtime_status.json"),
+                "latest_status_json": str(pilot_runs_dir / "pilot_runtime_status_latest.json"),
+                "last_turn_json": str(turn_json),
+            },
+        },
+    )
+
+
+def _write_pilot_runtime_readiness_summary(
+    runs_dir: Path,
+    *,
+    readiness_status: str = "attention",
+    schema_version: str = "pilot_runtime_readiness_v1",
+) -> Path:
+    summary_path = operator_snapshot.canonical_pilot_runtime_readiness_source(runs_dir)
+    _write_json(
+        summary_path,
+        {
+            "schema_version": schema_version,
+            "status": "ok",
+            "checked_at_utc": "2026-03-22T12:06:00+00:00",
+            "readiness_status": readiness_status,
+            "actionable_message": "Pilot readiness summary for tests.",
+            "blocking_reason_codes": ["pilot_turn_degraded"] if readiness_status != "ready" else [],
+            "next_step_code": "repeat_live_pilot_turn" if readiness_status != "ready" else "none",
+            "next_step": "Complete one live push-to-talk turn.",
+            "sources": {
+                "startup": {"status": "present", "fresh_within_window": True},
+                "pilot_runtime_status": {"status": "present", "fresh_within_window": True},
+                "pilot_turn": {"status": "present", "fresh_within_window": readiness_status == "ready"},
+            },
+            "evidence": {
+                "last_turn_fresh_within_window": readiness_status == "ready",
+                "live_turn_evidence": readiness_status == "ready",
+            },
+            "paths": {
+                "summary_json": str(summary_path),
+                "history_summary_json": str(summary_path.parent / "20260322_120600-pilot-runtime-readiness" / "readiness_summary.json"),
+                "summary_md": str(summary_path.parent / "summary.md"),
+                "history_summary_md": str(summary_path.parent / "20260322_120600-pilot-runtime-readiness" / "summary.md"),
+            },
+        },
+    )
+    return summary_path
 
 
 def test_build_operator_product_snapshot_includes_policy_promotion_surface(tmp_path: Path) -> None:
@@ -506,6 +615,80 @@ def test_build_operator_product_snapshot_startup_diagnostics_prioritize_snapshot
     assert triage["primary_surface"] == "startup"
     assert triage["primary_message"] == "gateway boot failed"
     assert triage["primary_code"] == "inspect_managed_service"
+
+
+def test_build_operator_product_snapshot_includes_pilot_runtime_context(
+    tmp_path: Path, monkeypatch
+) -> None:
+    runs_dir = tmp_path / "runs"
+    _write_clean_operating_cycle_summary(runs_dir)
+    _write_pilot_runtime_readiness_summary(runs_dir, readiness_status="attention")
+    monkeypatch.setattr(
+        operator_snapshot,
+        "load_operator_policy_surface_context",
+        lambda _runs_dir: _clean_policy_surface_context(),
+    )
+    operator_runs_dir = tmp_path / "operator-runs"
+    pilot_runs_dir = tmp_path / "pilot-runtime"
+    _write_pilot_runtime_status(pilot_runs_dir)
+    _write_operator_startup_run(
+        operator_runs_dir,
+        status="running",
+        checkpoint_status="ok",
+        gateway_probe_status="ok",
+        pilot_runtime_runs_dir=pilot_runs_dir,
+    )
+
+    payload = operator_snapshot.build_operator_product_snapshot(
+        runs_dir=runs_dir,
+        operator_runs_dir=operator_runs_dir,
+        gateway_health={
+            "status": "ok",
+            "supported_operations": ["health"],
+            "supported_profiles": ["baseline_first", "combo_a"],
+        },
+    )
+
+    pilot_runtime = payload["operator_context"]["pilot_runtime"]
+    pilot_readiness = payload["operator_context"]["pilot_readiness"]
+    last_turn_summary = payload["operator_context"]["last_turn_summary"]
+    assert pilot_runtime["status"] == "running"
+    assert pilot_runtime["state"] == "idle"
+    assert pilot_runtime["hotkey"] == "F8"
+    assert pilot_runtime["last_turn_id"] == "20260322_120501-pilot-turn"
+    assert pilot_runtime["paths"]["pilot_runs_dir"] == str(pilot_runs_dir)
+    assert pilot_readiness["readiness_status"] == "attention"
+    assert pilot_readiness["next_step_code"] == "repeat_live_pilot_turn"
+    assert last_turn_summary["turn_id"] == "20260322_120501-pilot-turn"
+    assert "Quest book is the next step" in last_turn_summary["answer_preview"]
+    assert payload["warnings"]["pilot_runtime"] == []
+    assert payload["warnings"]["pilot_readiness"] == []
+
+
+def test_build_operator_product_snapshot_tolerates_invalid_pilot_readiness_summary(
+    tmp_path: Path, monkeypatch
+) -> None:
+    runs_dir = tmp_path / "runs"
+    _write_clean_operating_cycle_summary(runs_dir)
+    _write_pilot_runtime_readiness_summary(runs_dir, schema_version="wrong_pilot_runtime_readiness_v1")
+    monkeypatch.setattr(
+        operator_snapshot,
+        "load_operator_policy_surface_context",
+        lambda _runs_dir: _clean_policy_surface_context(),
+    )
+
+    payload = operator_snapshot.build_operator_product_snapshot(
+        runs_dir=runs_dir,
+        gateway_health={
+            "status": "ok",
+            "supported_operations": ["health"],
+            "supported_profiles": ["baseline_first", "combo_a"],
+        },
+    )
+
+    assert payload["operator_context"]["pilot_readiness"] is None
+    assert payload["warnings"]["pilot_readiness"]
+    assert any("schema_version mismatch" in item for item in payload["warnings"]["pilot_readiness"])
 
 
 def test_build_operator_product_snapshot_triage_prioritizes_governance_after_healthy_startup(
