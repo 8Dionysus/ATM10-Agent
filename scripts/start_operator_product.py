@@ -23,6 +23,15 @@ from src.agent_core.combo_a_profile import (
 )
 
 SCHEMA_VERSION = "operator_product_startup_v1"
+DEFAULT_LIVE_ASR_LANGUAGE = "ru"
+DEFAULT_LIVE_ASR_MAX_NEW_TOKENS = 64
+DEFAULT_LIVE_PILOT_VLM_MAX_NEW_TOKENS = 64
+DEFAULT_LIVE_PILOT_TEXT_MAX_NEW_TOKENS = 96
+DEFAULT_LIVE_PILOT_HYBRID_TIMEOUT_SEC = 1.5
+DEFAULT_LIVE_PILOT_GATEWAY_TOPK = 3
+DEFAULT_LIVE_PILOT_GATEWAY_CANDIDATE_K = 6
+DEFAULT_LIVE_PILOT_MAX_ENTITIES_PER_DOC = 32
+DEFAULT_LIVE_PILOT_INPUT_DEVICE_INDEX = 1
 
 
 def _utc_now() -> str:
@@ -102,20 +111,29 @@ def build_startup_plan(args: argparse.Namespace) -> dict[str, Any]:
 
     if args.start_voice_runtime:
         voice_runtime_url = f"http://127.0.0.1:{args.voice_runtime_port}"
+        voice_runtime_command = [
+            sys.executable,
+            "scripts/voice_runtime_service.py",
+            "--host",
+            "127.0.0.1",
+            "--port",
+            str(args.voice_runtime_port),
+            "--runs-dir",
+            str(args.voice_runtime_runs_dir),
+            "--asr-language",
+            str(args.voice_asr_language),
+            "--asr-max-new-tokens",
+            str(args.voice_asr_max_new_tokens),
+        ]
+        if args.voice_asr_warmup_request:
+            voice_runtime_command.append("--asr-warmup-request")
+        if args.voice_asr_warmup_language is not None:
+            voice_runtime_command.extend(["--asr-warmup-language", str(args.voice_asr_warmup_language)])
         managed_processes["voice_runtime_service"] = {
             "managed": True,
             "url": voice_runtime_url,
             "runs_dir": str(args.voice_runtime_runs_dir),
-            "command": [
-                sys.executable,
-                "scripts/voice_runtime_service.py",
-                "--host",
-                "127.0.0.1",
-                "--port",
-                str(args.voice_runtime_port),
-                "--runs-dir",
-                str(args.voice_runtime_runs_dir),
-            ],
+            "command": voice_runtime_command,
         }
     else:
         managed_processes["voice_runtime_service"] = {
@@ -172,7 +190,27 @@ def build_startup_plan(args: argparse.Namespace) -> dict[str, Any]:
             str(args.pilot_vlm_provider),
             "--pilot-text-provider",
             str(args.pilot_text_provider),
+            "--pilot-vlm-max-new-tokens",
+            str(args.pilot_vlm_max_new_tokens),
+            "--pilot-text-max-new-tokens",
+            str(args.pilot_text_max_new_tokens),
+            "--pilot-hybrid-timeout-sec",
+            str(args.pilot_hybrid_timeout_sec),
+            "--pilot-gateway-topk",
+            str(args.pilot_gateway_topk),
+            "--pilot-gateway-candidate-k",
+            str(args.pilot_gateway_candidate_k),
+            "--pilot-max-entities-per-doc",
+            str(args.pilot_max_entities_per_doc),
+            "--asr-language",
+            str(args.voice_asr_language),
+            "--asr-max-new-tokens",
+            str(args.voice_asr_max_new_tokens),
         ]
+        if args.voice_asr_warmup_request:
+            pilot_command.append("--asr-warmup-request")
+        if args.voice_asr_warmup_language is not None:
+            pilot_command.extend(["--asr-warmup-language", str(args.voice_asr_warmup_language)])
         if args.pilot_input_device_index is not None:
             pilot_command.extend(["--input-device-index", str(args.pilot_input_device_index)])
         if voice_runtime_url:
@@ -684,6 +722,30 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="Managed voice runtime runs directory (default: <runs-dir>/voice-runtime).",
     )
     parser.add_argument(
+        "--voice-asr-language",
+        type=str,
+        default=DEFAULT_LIVE_ASR_LANGUAGE,
+        help="Static language hint for managed live ASR (default: ru).",
+    )
+    parser.add_argument(
+        "--voice-asr-max-new-tokens",
+        type=int,
+        default=DEFAULT_LIVE_ASR_MAX_NEW_TOKENS,
+        help="ASR token budget for managed live voice runtime.",
+    )
+    parser.add_argument(
+        "--voice-asr-warmup-request",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Run one managed ASR warmup request on startup (default: enabled).",
+    )
+    parser.add_argument(
+        "--voice-asr-warmup-language",
+        type=str,
+        default=DEFAULT_LIVE_ASR_LANGUAGE,
+        help="Language hint for the managed ASR warmup request (default: ru).",
+    )
+    parser.add_argument(
         "--tts-runtime-url",
         type=str,
         default=None,
@@ -786,8 +848,44 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument(
         "--pilot-input-device-index",
         type=int,
-        default=None,
-        help="Optional explicit sounddevice input device index passed to pilot_runtime_loop.py.",
+        default=DEFAULT_LIVE_PILOT_INPUT_DEVICE_INDEX,
+        help="Explicit sounddevice input device index passed to pilot_runtime_loop.py (default: 1).",
+    )
+    parser.add_argument(
+        "--pilot-vlm-max-new-tokens",
+        type=int,
+        default=DEFAULT_LIVE_PILOT_VLM_MAX_NEW_TOKENS,
+        help="VLM token budget for the managed pilot runtime.",
+    )
+    parser.add_argument(
+        "--pilot-text-max-new-tokens",
+        type=int,
+        default=DEFAULT_LIVE_PILOT_TEXT_MAX_NEW_TOKENS,
+        help="Grounded-reply token budget for the managed pilot runtime.",
+    )
+    parser.add_argument(
+        "--pilot-hybrid-timeout-sec",
+        type=float,
+        default=DEFAULT_LIVE_PILOT_HYBRID_TIMEOUT_SEC,
+        help="Pilot-side timeout for opportunistic hybrid queries.",
+    )
+    parser.add_argument(
+        "--pilot-gateway-topk",
+        type=int,
+        default=DEFAULT_LIVE_PILOT_GATEWAY_TOPK,
+        help="Live pilot hybrid top-k budget.",
+    )
+    parser.add_argument(
+        "--pilot-gateway-candidate-k",
+        type=int,
+        default=DEFAULT_LIVE_PILOT_GATEWAY_CANDIDATE_K,
+        help="Live pilot hybrid candidate-k budget.",
+    )
+    parser.add_argument(
+        "--pilot-max-entities-per-doc",
+        type=int,
+        default=DEFAULT_LIVE_PILOT_MAX_ENTITIES_PER_DOC,
+        help="Live pilot hybrid entity budget per document.",
     )
     parser.add_argument(
         "--qdrant-url",

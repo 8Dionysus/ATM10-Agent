@@ -8,6 +8,21 @@ from src.agent_core.io_voice import VoiceRuntimeUnavailableError
 from src.agent_core.openvino_genai_compat import build_generation_config
 
 DEFAULT_GROUNDED_REPLY_MODEL_DIR = Path("models") / "qwen3-8b-int4-cw-ov"
+MAX_PLAYER_ANSWER_CHARS = 140
+_REASONING_LEAK_HINTS = (
+    "let's tackle this",
+    "the user is",
+    "i need to",
+    "the answer should",
+    "return only a json object",
+    "json format",
+    "preferred_answer_language",
+    "cited_entities",
+    "degraded_flags",
+    "hybrid_summary shows",
+    "visual_summary",
+    "transcript says",
+)
 
 
 def _load_openvino_genai() -> Any:
@@ -34,16 +49,85 @@ def _extract_output_text(result: Any) -> str:
     return str(result)
 
 
+def _normalize_answer_whitespace(text: str) -> str:
+    return " ".join(str(text or "").replace("\r", " ").replace("\n", " ").split())
+
+
+def _dedupe_flags(flags: list[str]) -> list[str]:
+    return list(dict.fromkeys(str(item).strip() for item in flags if str(item).strip()))
+
+
+def _cap_to_single_sentence(text: str) -> tuple[str, list[str]]:
+    normalized = _normalize_answer_whitespace(text)
+    if not normalized:
+        return "", []
+    first_sentence = normalized
+    flags: list[str] = []
+    for separator in (". ", "! ", "? "):
+        if separator in normalized:
+            first_sentence = normalized.split(separator, 1)[0].rstrip(".!?")
+            flags.append("grounded_reply_answer_sentence_capped")
+            break
+    return first_sentence.strip(), _dedupe_flags(flags)
+
+
+def _looks_like_reasoning_leak(text: str) -> bool:
+    normalized = _normalize_answer_whitespace(text).lower()
+    if not normalized:
+        return False
+    if "<think" in normalized or "</think>" in normalized:
+        return True
+    return any(hint in normalized for hint in _REASONING_LEAK_HINTS)
+
+
+def sanitize_grounded_reply_answer_text(answer_text: str) -> tuple[str, list[str]]:
+    raw_text = str(answer_text or "")
+    if _looks_like_reasoning_leak(raw_text):
+        return "", ["grounded_reply_reasoning_leak"]
+    normalized = _normalize_answer_whitespace(_strip_reasoning_markup(raw_text))
+    if not normalized:
+        return "", []
+    normalized, sentence_flags = _cap_to_single_sentence(normalized)
+    if not normalized:
+        return "", sentence_flags
+    if len(normalized) <= MAX_PLAYER_ANSWER_CHARS:
+        return normalized, sentence_flags
+    truncated = normalized[: MAX_PLAYER_ANSWER_CHARS - 3].rstrip()
+    if " " in truncated:
+        truncated = truncated.rsplit(" ", 1)[0]
+    truncated = truncated.rstrip(" ,;:.!?")
+    return f"{truncated}...", _dedupe_flags([*sentence_flags, "grounded_reply_answer_truncated"])
+
+
+def _build_reply_payload(
+    *,
+    answer_text: str,
+    cited_entities: list[Any] | None = None,
+    degraded_flags: list[Any] | None = None,
+) -> dict[str, Any]:
+    sanitized_answer_text, answer_flags = sanitize_grounded_reply_answer_text(answer_text)
+    return {
+        "answer_text": sanitized_answer_text,
+        "cited_entities": [str(item) for item in (cited_entities or []) if str(item).strip()],
+        "degraded_flags": _dedupe_flags([*(degraded_flags or []), *answer_flags]),
+    }
+
+
 def _parse_reply_json(response_text: str) -> dict[str, Any]:
-    normalized_response = _strip_reasoning_markup(response_text)
-    if not normalized_response.strip():
+    raw_response_text = str(response_text or "")
+    if not raw_response_text.strip():
         return {"answer_text": "", "cited_entities": [], "degraded_flags": []}
     try:
-        payload = json.loads(_extract_json_candidate(normalized_response))
+        payload = json.loads(_extract_json_candidate(raw_response_text))
     except json.JSONDecodeError:
-        return {"answer_text": normalized_response.strip(), "cited_entities": [], "degraded_flags": []}
+        payload = None
     if not isinstance(payload, dict):
-        return {"answer_text": normalized_response.strip(), "cited_entities": [], "degraded_flags": []}
+        fallback_payload = _build_reply_payload(
+            answer_text=raw_response_text,
+            cited_entities=[],
+            degraded_flags=["grounded_reply_output_not_json"],
+        )
+        return fallback_payload
 
     answer_text = payload.get("answer_text", "")
     cited_entities = payload.get("cited_entities", [])
@@ -54,11 +138,11 @@ def _parse_reply_json(response_text: str) -> dict[str, Any]:
         cited_entities = []
     if not isinstance(degraded_flags, list):
         degraded_flags = []
-    return {
-        "answer_text": answer_text.strip(),
-        "cited_entities": [str(item) for item in cited_entities if str(item).strip()],
-        "degraded_flags": [str(item) for item in degraded_flags if str(item).strip()],
-    }
+    return _build_reply_payload(
+        answer_text=answer_text,
+        cited_entities=cited_entities,
+        degraded_flags=degraded_flags,
+    )
 
 
 def _strip_reasoning_markup(response_text: str) -> str:
@@ -66,7 +150,7 @@ def _strip_reasoning_markup(response_text: str) -> str:
     while normalized.startswith("<think>"):
         end_index = normalized.find("</think>")
         if end_index < 0:
-            return normalized
+            return ""
         normalized = normalized[end_index + len("</think>") :].lstrip()
     return normalized
 
@@ -129,8 +213,11 @@ def build_grounded_reply_prompt(
         "Return only a JSON object with keys answer_text (string), "
         "cited_entities (array of short strings), degraded_flags (array of short strings). "
         "Do not emit chain-of-thought, reasoning, or <think> tags. "
-        "Keep answer_text short, actionable, and player-facing. "
+        "Start the response with { and end it with }. "
+        "Do not emit Markdown, XML, analysis, or preamble text. "
+        "Keep answer_text to one short player-facing sentence under 140 characters. "
         "Use Russian by default unless preferred_answer_language is en. "
+        "If transcript is empty or degraded_flags mention transcript_low_signal, ignore transcript and answer from the visible ATM10 context. "
         "Do not mention internal diagnostics, provider details, or grounding failures unless you cannot give a useful gameplay answer at all. "
         "Do not fabricate citations, and keep the answer grounded in the supplied transcript, screen summary, and citations.\n\n"
         f"{json.dumps(prompt_payload, ensure_ascii=False, indent=2)}"

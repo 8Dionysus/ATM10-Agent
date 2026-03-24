@@ -1038,6 +1038,11 @@ def _load_pilot_last_turn_summary(
         "live_hud_state_json": _nested_get(payload, "paths", "live_hud_state_json"),
         "tts_audio_wav": _nested_get(payload, "paths", "tts_audio_wav"),
         "answer_language": payload.get("answer_language"),
+        "reply_mode": payload.get("reply_mode"),
+        "transcript_quality_status": _nested_get(payload, "transcript_quality", "status"),
+        "transcript_quality_reason_codes": _normalize_reason_codes(
+            _nested_get(payload, "transcript_quality", "reason_codes")
+        ),
         "vision_provider": _nested_get(payload, "vision", "provider"),
         "grounded_reply_provider": _nested_get(payload, "grounded_reply", "provider"),
         "tts_engine": _summarize_tts_engine(_nested_get(payload, "tts")),
@@ -1088,8 +1093,14 @@ def _build_pilot_runtime_summary(
         "last_error": pilot_status.get("last_error"),
         "hotkey": pilot_status.get("hotkey"),
         "input_device_index": _nested_get(pilot_status, "effective_config", "input_device_index"),
+        "asr_language": _nested_get(pilot_status, "effective_config", "asr_language"),
+        "asr_max_new_tokens": _nested_get(pilot_status, "effective_config", "asr_max_new_tokens"),
+        "asr_warmup": _nested_get(pilot_status, "effective_config", "asr_warmup"),
         "vlm_provider": _nested_get(pilot_status, "effective_config", "vlm_provider"),
         "text_provider": _nested_get(pilot_status, "effective_config", "text_provider"),
+        "pilot_vlm_max_new_tokens": _nested_get(pilot_status, "effective_config", "pilot_vlm_max_new_tokens"),
+        "pilot_text_max_new_tokens": _nested_get(pilot_status, "effective_config", "pilot_text_max_new_tokens"),
+        "pilot_hybrid_timeout_sec": _nested_get(pilot_status, "effective_config", "pilot_hybrid_timeout_sec"),
         "provider_init": (
             dict(pilot_status.get("provider_init", {}))
             if isinstance(pilot_status.get("provider_init"), Mapping)

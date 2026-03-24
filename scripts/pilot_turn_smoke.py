@@ -95,8 +95,14 @@ def run_pilot_turn_smoke(
             "screenshot_path": str(output_path),
         }
 
-    def _fake_asr(*, voice_runtime_url: str, audio_path: Path, service_token: str | None = None) -> dict[str, Any]:
-        _ = voice_runtime_url, audio_path, service_token
+    def _fake_asr(
+        *,
+        voice_runtime_url: str,
+        audio_path: Path,
+        language: str | None = None,
+        service_token: str | None = None,
+    ) -> dict[str, Any]:
+        _ = voice_runtime_url, audio_path, language, service_token
         return {
             "timestamp_utc": effective_now.isoformat(),
             "audio_path": str(audio_input_path),
@@ -104,8 +110,17 @@ def run_pilot_turn_smoke(
             "language": "en",
         }
 
-    def _fake_hybrid(*, gateway_url: str, query: str, service_token: str | None = None) -> dict[str, Any]:
-        _ = gateway_url, query, service_token
+    def _fake_hybrid(
+        *,
+        gateway_url: str,
+        query: str,
+        timeout_sec: float = 0.0,
+        topk: int = 0,
+        candidate_k: int = 0,
+        max_entities_per_doc: int = 0,
+        service_token: str | None = None,
+    ) -> dict[str, Any]:
+        _ = gateway_url, query, timeout_sec, topk, candidate_k, max_entities_per_doc, service_token
         return {
             "response_payload": {"status": "ok"},
             "result_payload": {
@@ -249,6 +264,7 @@ def run_pilot_turn_smoke(
         asr_func=_fake_asr,
         hybrid_query_func=_fake_hybrid,
         tts_func=_fake_tts,
+        expected_asr_language="en",
         now=effective_now,
     )
     turn_payload = turn_result["turn_payload"]
@@ -261,12 +277,18 @@ def run_pilot_turn_smoke(
         voice_runtime_url="http://fixture.voice",
         tts_runtime_url="http://fixture.tts",
         input_device_index=None,
+        asr_language="en",
+        asr_max_new_tokens=64,
+        asr_warmup_requested=False,
         capture_monitor=None,
         capture_region=None,
         vlm_model_dir=Path("stub-vlm"),
         text_model_dir=Path("stub-text"),
         vlm_provider="stub",
         text_provider="stub",
+        pilot_vlm_max_new_tokens=64,
+        pilot_text_max_new_tokens=96,
+        pilot_hybrid_timeout_sec=1.5,
         provider_init={
             "vlm": {"status": "ok", "provider": "stub"},
             "text": {"status": "ok", "provider": "stub"},

@@ -621,11 +621,16 @@ def test_render_stack_health_tab_renders_pilot_runtime_section(
                     "state": "idle",
                     "hotkey": "F8",
                     "input_device_index": 1,
+                    "asr_language": "ru",
+                    "asr_max_new_tokens": 64,
                     "vlm_provider": "openvino",
                     "text_provider": "openvino",
+                    "pilot_vlm_max_new_tokens": 64,
+                    "pilot_text_max_new_tokens": 96,
+                    "pilot_hybrid_timeout_sec": 1.5,
                     "provider_init": {
-                        "vlm": {"status": "ok", "provider": "openvino"},
-                        "text": {"status": "ok", "provider": "openvino"},
+                        "vlm": {"status": "ok", "provider": "openvino", "warmup": {"requested": True, "ok": True}},
+                        "text": {"status": "ok", "provider": "openvino", "warmup": {"requested": True, "ok": True}},
                     },
                     "last_turn_id": "turn-1",
                     "degraded_services": ["gateway"],
@@ -637,6 +642,9 @@ def test_render_stack_health_tab_renders_pilot_runtime_section(
                     "status": "degraded",
                     "timestamp_utc": "2026-03-22T18:00:00+00:00",
                     "degraded_flags": ["retrieval_only_fallback"],
+                    "reply_mode": "visual_only_fallback",
+                    "transcript_quality_status": "low_signal",
+                    "transcript_quality_reason_codes": ["short_ascii_when_russian_expected"],
                     "answer_language": "ru",
                     "vision_provider": "openvino_genai_vlm_v1",
                     "grounded_reply_provider": "openvino_genai_grounded_reply_v1",
@@ -692,6 +700,8 @@ def test_render_stack_health_tab_renders_pilot_runtime_section(
         if isinstance(item, list) and item and isinstance(item[0], dict) and item[0].get("last_turn_id") == "turn-1"
     )
     assert pilot_table[0]["status"] == "running"
+    assert pilot_table[0]["asr_language"] == "ru"
+    assert pilot_table[0]["asr_max_new_tokens"] == 64
     assert pilot_table[0]["vlm_provider"] == "openvino"
     assert pilot_table[0]["text_provider"] == "openvino"
     evidence_table = next(
@@ -729,6 +739,8 @@ def test_render_stack_health_tab_renders_pilot_runtime_section(
         and item[0].get("turn_id") == "turn-1"
     )
     assert last_turn_table[0]["answer_language"] == "ru"
+    assert last_turn_table[0]["reply_mode"] == "visual_only_fallback"
+    assert last_turn_table[0]["transcript_quality"] == "low_signal"
     assert last_turn_table[0]["vision_provider"] == "openvino_genai_vlm_v1"
     assert last_turn_table[0]["tts_engine"] == "windows_sapi_fallback"
 

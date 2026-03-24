@@ -388,6 +388,8 @@ python scripts/start_operator_product.py --runs-dir runs --start-voice-runtime -
 python scripts/start_operator_product.py --runs-dir runs --start-voice-runtime --start-tts-runtime --start-pilot-runtime --capture-monitor 0
 python scripts/start_operator_product.py --runs-dir runs --start-voice-runtime --start-tts-runtime --start-pilot-runtime --capture-region 0,0,1920,1080
 python scripts/start_operator_product.py --runs-dir runs --start-voice-runtime --start-tts-runtime --start-pilot-runtime --capture-monitor 0 --pilot-hud-hook-json <path-to-hud-hook.json> --pilot-tesseract-bin <path-to-tesseract.exe>
+python scripts/start_operator_product.py --runs-dir runs --start-voice-runtime --start-tts-runtime --start-pilot-runtime --capture-monitor 0
+# optional explicit microphone override
 python scripts/start_operator_product.py --runs-dir runs --start-voice-runtime --start-tts-runtime --start-pilot-runtime --capture-monitor 0 --pilot-input-device-index 1
 # debugging-only provider override
 python scripts/start_operator_product.py --runs-dir runs --start-pilot-runtime --capture-monitor 0 --pilot-vlm-provider stub --pilot-text-provider stub
@@ -414,11 +416,12 @@ Notes:
 * The pilot runtime is local-only and does not open a new HTTP port.
 * Live pilot grounding requires either `--capture-monitor <index>` or `--capture-region x,y,w,h`.
 * Normal live pilot startup should use the default `OpenVINO` providers; do not pass `--pilot-vlm-provider stub --pilot-text-provider stub` unless you are explicitly debugging provider startup.
+* The managed live profile now forwards low-latency defaults into both `voice_runtime_service` and `pilot_runtime_loop`: `ASR language=ru`, `ASR max_new_tokens=64`, `ASR warmup=requested`, `pilot_vlm_max_new_tokens=64`, `pilot_text_max_new_tokens=96`, `pilot_hybrid_timeout_sec=1.5`, `pilot_gateway_topk=3`, `pilot_gateway_candidate_k=6`, `pilot_max_entities_per_doc=32`.
 * `--pilot-hud-hook-json` and `--pilot-tesseract-bin` are optional additive inputs; screenshot-only turns still publish `live_hud_state_v1`, but OCR/mod-hook improve evidence quality when available.
-* `--pilot-input-device-index <n>` pins push-to-talk capture to a specific `sounddevice` input source when the default Windows input resolves to a loopback/remap device instead of a real microphone.
+* The canonical managed live profile currently pins push-to-talk capture to `--pilot-input-device-index 1`; override it only if the Windows default resolves to the wrong source on your machine.
 * `--pilot-vlm-provider stub --pilot-text-provider stub` remains available as a deterministic diagnostics-only override when you want to validate the observer loop without waiting on local OpenVINO model load.
-* Current pilot defaults: `models\qwen2.5-vl-7b-instruct-int4-ov` on `GPU` for vision, `models\qwen3-8b-int4-cw-ov` on `NPU` for grounded reply, short player-facing replies, and Russian-by-default answer language policy.
-* Operator snapshot and Streamlit `Pilot runtime` surfaces show active `vlm_provider`, `text_provider`, last-turn `vision_provider`, `grounded_reply_provider`, `tts_engine`, and `answer_language`.
+* Current pilot defaults: `models\qwen2.5-vl-7b-instruct-int4-ov` on `GPU` for vision, `models\qwen3-8b-int4-cw-ov` on `NPU` for grounded reply, one-sentence player-facing replies, Russian-by-default answer language policy, and opportunistic hybrid fast-fail when grounding is unavailable or too slow.
+* Operator snapshot and Streamlit `Pilot runtime` surfaces show active `vlm_provider`, `text_provider`, `asr_language`, `asr_max_new_tokens`, provider warmup rollups, last-turn `vision_provider`, `grounded_reply_provider`, `tts_engine`, `answer_language`, `transcript_quality`, and `reply_mode`.
 
 ## M8.pilot: Observer pilot runtime
 
@@ -437,6 +440,7 @@ cd <repo-root>
 .\.venv\Scripts\Activate.ps1
 python scripts/pilot_runtime_loop.py --runs-dir runs\pilot-runtime --gateway-url http://127.0.0.1:8770 --voice-runtime-url http://127.0.0.1:8765 --tts-runtime-url http://127.0.0.1:8780 --capture-monitor 0
 python scripts/pilot_runtime_loop.py --runs-dir runs\pilot-runtime --gateway-url http://127.0.0.1:8770 --voice-runtime-url http://127.0.0.1:8765 --tts-runtime-url http://127.0.0.1:8780 --capture-monitor 0 --hud-hook-json <path-to-hud-hook.json> --tesseract-bin <path-to-tesseract.exe>
+python scripts/pilot_runtime_loop.py --runs-dir runs\pilot-runtime --gateway-url http://127.0.0.1:8770 --voice-runtime-url http://127.0.0.1:8765 --tts-runtime-url http://127.0.0.1:8780 --capture-monitor 0 --asr-language ru --asr-max-new-tokens 64 --asr-warmup-request --pilot-vlm-max-new-tokens 64 --pilot-text-max-new-tokens 96 --pilot-hybrid-timeout-sec 1.5
 ```
 
 Expected result:
@@ -448,10 +452,13 @@ Expected result:
   * `session_probe.json` with schema `atm10_session_probe_v1`
   * `live_hud_state.json` with schema `live_hud_state_v1`
 * `pilot_turn_v1` additively includes `session`, `hud_state`, `paths.session_probe_json`, and `paths.live_hud_state_json`.
-* Live turns follow `push-to-talk -> ASR -> vision -> hybrid_query(profile=combo_a) -> grounded reply -> TTS`.
+* `pilot_turn_v1` also additively includes `transcript_quality` and `reply_mode`.
+* `pilot_runtime_status_v1.effective_config` additively includes `asr_language`, `asr_max_new_tokens`, `asr_warmup`, `pilot_vlm_max_new_tokens`, `pilot_text_max_new_tokens`, and `pilot_hybrid_timeout_sec`, while `provider_init` includes warmup rollups for live VLM/reply providers.
+* Live turns follow `push-to-talk -> ASR -> vision -> opportunistic hybrid_query(profile=combo_a) -> grounded reply -> TTS`.
 * The runtime prints a short per-turn console summary (`turn/status/transcript/answer`) so manual live acceptance does not look like a silent no-op.
 * `atm10_session_probe_v1` is a read-only Windows heuristic probe. When the runtime cannot confidently match the current capture target to ATM10, the turn stays artifacted but is marked degraded instead of silently passing.
 * `live_hud_state_v1` accepts screenshot-only operation. OCR or mod-hook data enrich the artifact when available, but missing OCR/mod-hook do not fail the turn by themselves.
+* Low-signal transcripts (`empty`, punctuation-only, or short ASCII filler when Russian is expected) are marked in `transcript_quality`, are not spoken back to the user, and skip hybrid retrieval in favor of a local visual-only answer path.
 * Degraded services and turn errors are carried into both status and turn artifacts; the runtime does not silently fall back to uncited guesses.
 * When `combo_a` retrieval/KAG backends are unavailable, the hybrid stage stays machine-readable with degraded fallback (`retrieval_only_fallback`, `kag_only_fallback`, or `grounding_unavailable`) instead of failing the entire turn transport.
 
