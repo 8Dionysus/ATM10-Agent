@@ -396,6 +396,7 @@ def _write_pilot_runtime_status(pilot_runs_dir: Path) -> None:
             "completed_at_utc": "2026-03-22T12:05:03+00:00",
             "degraded_flags": ["retrieval_only_fallback"],
             "degraded_services": ["gateway"],
+            "answer_language": "ru",
             "session": {
                 "status": "ok",
                 "window_found": True,
@@ -412,6 +413,19 @@ def _write_pilot_runtime_status(pilot_runs_dir: Path) -> None:
                 "has_player_state": True,
                 "text_preview": "Quest book Collect 16 wood",
                 "reason_codes": ["ocr_unavailable", "mod_hook_not_configured"],
+            },
+            "vision": {
+                "provider": "openvino_genai_vlm_v1",
+                "model": "qwen2.5-vl-7b-instruct-int4-ov",
+            },
+            "grounded_reply": {
+                "provider": "openvino_genai_grounded_reply_v1",
+                "model": "qwen3-8b-int4-cw-ov",
+                "answer_language": "ru",
+            },
+            "tts": {
+                "status": "ok",
+                "chunk_engines": ["windows_sapi_fallback"],
             },
             "answer_text": "Pilot degraded mode (retrieval_only_fallback). Quest book is the next step.",
             "paths": {
@@ -430,6 +444,15 @@ def _write_pilot_runtime_status(pilot_runs_dir: Path) -> None:
             "status": "running",
             "state": "idle",
             "hotkey": "F8",
+            "effective_config": {
+                "input_device_index": 1,
+                "vlm_provider": "openvino",
+                "text_provider": "openvino",
+            },
+            "provider_init": {
+                "vlm": {"status": "ok", "provider": "openvino"},
+                "text": {"status": "ok", "provider": "openvino"},
+            },
             "last_turn_id": "20260322_120501-pilot-turn",
             "last_turn_started_at_utc": "2026-03-22T12:05:01+00:00",
             "last_turn_completed_at_utc": "2026-03-22T12:05:03+00:00",
@@ -725,11 +748,19 @@ def test_build_operator_product_snapshot_includes_pilot_runtime_context(
     assert pilot_runtime["status"] == "running"
     assert pilot_runtime["state"] == "idle"
     assert pilot_runtime["hotkey"] == "F8"
+    assert pilot_runtime["input_device_index"] == 1
+    assert pilot_runtime["vlm_provider"] == "openvino"
+    assert pilot_runtime["text_provider"] == "openvino"
+    assert pilot_runtime["provider_init"]["vlm"]["status"] == "ok"
     assert pilot_runtime["last_turn_id"] == "20260322_120501-pilot-turn"
     assert pilot_runtime["paths"]["pilot_runs_dir"] == str(pilot_runs_dir)
     assert pilot_readiness["readiness_status"] == "attention"
     assert pilot_readiness["next_step_code"] == "repeat_live_pilot_turn"
     assert last_turn_summary["turn_id"] == "20260322_120501-pilot-turn"
+    assert last_turn_summary["answer_language"] == "ru"
+    assert last_turn_summary["vision_provider"] == "openvino_genai_vlm_v1"
+    assert last_turn_summary["grounded_reply_provider"] == "openvino_genai_grounded_reply_v1"
+    assert last_turn_summary["tts_engine"] == "windows_sapi_fallback"
     assert last_turn_summary["session_atm10_probable"] is True
     assert last_turn_summary["session_foreground"] is True
     assert last_turn_summary["hud_state_status"] == "partial"

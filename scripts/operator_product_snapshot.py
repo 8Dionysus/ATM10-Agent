@@ -994,6 +994,22 @@ def _attach_startup_diagnostics(
     return enriched
 
 
+def _summarize_tts_engine(tts_payload: Mapping[str, Any] | None) -> str | None:
+    if not isinstance(tts_payload, Mapping):
+        return None
+    chunk_engines = tts_payload.get("chunk_engines")
+    if isinstance(chunk_engines, list):
+        normalized = [str(item).strip() for item in chunk_engines if str(item).strip()]
+        if normalized:
+            return normalized[0]
+    completed_event = tts_payload.get("completed_event")
+    if isinstance(completed_event, Mapping):
+        engine_name = str(completed_event.get("engine", "")).strip()
+        if engine_name:
+            return engine_name
+    return None
+
+
 def _load_pilot_last_turn_summary(
     pilot_status: Mapping[str, Any] | None,
 ) -> dict[str, Any] | None:
@@ -1021,6 +1037,10 @@ def _load_pilot_last_turn_summary(
         "session_probe_json": _nested_get(payload, "paths", "session_probe_json"),
         "live_hud_state_json": _nested_get(payload, "paths", "live_hud_state_json"),
         "tts_audio_wav": _nested_get(payload, "paths", "tts_audio_wav"),
+        "answer_language": payload.get("answer_language"),
+        "vision_provider": _nested_get(payload, "vision", "provider"),
+        "grounded_reply_provider": _nested_get(payload, "grounded_reply", "provider"),
+        "tts_engine": _summarize_tts_engine(_nested_get(payload, "tts")),
         "session_status": _nested_get(payload, "session", "status"),
         "session_window_found": _nested_get(payload, "session", "window_found"),
         "session_atm10_probable": _nested_get(payload, "session", "atm10_probable"),
@@ -1049,6 +1069,10 @@ def _build_pilot_runtime_summary(
             "last_turn_id": None,
             "degraded_services": [],
             "last_error": None,
+            "input_device_index": None,
+            "vlm_provider": None,
+            "text_provider": None,
+            "provider_init": {},
             "paths": {
                 "pilot_runs_dir": None if pilot_runs_dir is None else str(pilot_runs_dir),
                 "latest_status_json": None if pilot_runs_dir is None else str(Path(pilot_runs_dir) / PILOT_RUNTIME_STATUS_FILENAME),
@@ -1063,6 +1087,14 @@ def _build_pilot_runtime_summary(
         "degraded_services": pilot_status.get("degraded_services", []),
         "last_error": pilot_status.get("last_error"),
         "hotkey": pilot_status.get("hotkey"),
+        "input_device_index": _nested_get(pilot_status, "effective_config", "input_device_index"),
+        "vlm_provider": _nested_get(pilot_status, "effective_config", "vlm_provider"),
+        "text_provider": _nested_get(pilot_status, "effective_config", "text_provider"),
+        "provider_init": (
+            dict(pilot_status.get("provider_init", {}))
+            if isinstance(pilot_status.get("provider_init"), Mapping)
+            else {}
+        ),
         "latency_summary": pilot_status.get("latency_summary"),
         "paths": {
             "pilot_runs_dir": None if pilot_runs_dir is None else str(pilot_runs_dir),

@@ -30,6 +30,7 @@ from src.agent_core.tts_runtime import (
     TTSRequest,
     TTSRuntimeError,
     TTSRuntimeService,
+    make_silence_wav_bytes,
 )
 from scripts.gateway_artifact_policy import redact_error_entry
 
@@ -244,6 +245,85 @@ def _disabled_engine(name: str, reason: str) -> CallbackTTSEngine:
 
     def _synthesize(_text: str, _language: str, _speaker: str | None) -> tuple[bytes, int]:
         raise TTSRuntimeError(error_message)
+
+    return CallbackTTSEngine(name=name, synthesize_fn=_synthesize, prewarm_fn=_prewarm)
+
+
+def _build_silence_fallback_engine(name: str = "silence_fallback", *, sample_rate: int = 22050) -> CallbackTTSEngine:
+    def _prewarm() -> None:
+        return None
+
+    def _synthesize(text: str, _language: str, _speaker: str | None) -> tuple[bytes, int]:
+        duration_ms = min(max(300, len(text) * 16), 1500)
+        return make_silence_wav_bytes(duration_ms=duration_ms, sample_rate=sample_rate), sample_rate
+
+    return CallbackTTSEngine(name=name, synthesize_fn=_synthesize, prewarm_fn=_prewarm)
+
+
+def _synthesize_windows_sapi_wav(*, text: str, language: str, speaker: str | None) -> tuple[bytes, int]:
+    text_payload_b64 = base64.b64encode(text.encode("utf-8")).decode("ascii")
+    language_payload_b64 = base64.b64encode(str(language or "").encode("utf-8")).decode("ascii")
+    speaker_name = (speaker or os.getenv("WINDOWS_SAPI_VOICE_NAME", "")).strip()
+    speaker_payload_b64 = base64.b64encode(speaker_name.encode("utf-8")).decode("ascii")
+
+    with tempfile.TemporaryDirectory(prefix="atm10-windows-sapi-") as temp_dir:
+        output_path = Path(temp_dir) / "tts.wav"
+        output_path_b64 = base64.b64encode(str(output_path).encode("utf-8")).decode("ascii")
+        powershell_script = "\n".join(
+            [
+                "$ErrorActionPreference = 'Stop'",
+                "Add-Type -AssemblyName System.Speech",
+                f"$text = [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String('{text_payload_b64}'))",
+                f"$languageTag = [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String('{language_payload_b64}'))",
+                f"$voiceName = [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String('{speaker_payload_b64}'))",
+                f"$outputPath = [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String('{output_path_b64}'))",
+                "$synth = New-Object System.Speech.Synthesis.SpeechSynthesizer",
+                "try {",
+                "  if (-not [string]::IsNullOrWhiteSpace($voiceName)) {",
+                "    $synth.SelectVoice($voiceName)",
+                "  } elseif (-not [string]::IsNullOrWhiteSpace($languageTag)) {",
+                "    $candidate = $synth.GetInstalledVoices() | Where-Object { $_.Enabled } | ForEach-Object { $_.VoiceInfo } | Where-Object { $_.Culture.Name -like ($languageTag + '*') } | Select-Object -First 1",
+                "    if ($null -ne $candidate) { $synth.SelectVoice($candidate.Name) }",
+                "  }",
+                "  $synth.SetOutputToWaveFile($outputPath)",
+                "  $synth.Speak($text)",
+                "} finally {",
+                "  $synth.Dispose()",
+                "}",
+            ]
+        )
+        encoded_script = base64.b64encode(powershell_script.encode("utf-16le")).decode("ascii")
+        try:
+            completed = subprocess.run(
+                ["powershell.exe", "-NoProfile", "-NonInteractive", "-EncodedCommand", encoded_script],
+                capture_output=True,
+                text=True,
+                check=False,
+                timeout=30,
+            )
+        except FileNotFoundError as exc:
+            raise TTSRuntimeError("Windows PowerShell is unavailable for System.Speech fallback.") from exc
+        except subprocess.TimeoutExpired as exc:
+            raise TTSRuntimeError("Windows SAPI fallback timed out.") from exc
+        if completed.returncode != 0:
+            message = (completed.stderr or completed.stdout or "").strip() or f"exit_code={completed.returncode}"
+            raise TTSRuntimeError(f"Windows SAPI fallback failed: {message}")
+        if not output_path.exists():
+            raise TTSRuntimeError("Windows SAPI fallback did not produce an output wav file.")
+        wav_bytes = output_path.read_bytes()
+        if not wav_bytes:
+            raise TTSRuntimeError("Windows SAPI fallback produced empty audio.")
+        with wave.open(io.BytesIO(wav_bytes), "rb") as wav_file:
+            sample_rate = int(wav_file.getframerate())
+        return wav_bytes, sample_rate
+
+
+def _build_windows_sapi_engine(name: str = "windows_sapi_fallback") -> CallbackTTSEngine:
+    def _prewarm() -> None:
+        _synthesize_windows_sapi_wav(text="ATM10 pilot runtime probe.", language="en", speaker=None)
+
+    def _synthesize(text: str, language: str, speaker: str | None) -> tuple[bytes, int]:
+        return _synthesize_windows_sapi_wav(text=text, language=language, speaker=speaker)
 
     return CallbackTTSEngine(name=name, synthesize_fn=_synthesize, prewarm_fn=_prewarm)
 
@@ -468,6 +548,10 @@ def _build_default_service(*, cache_items: int, chunk_chars: int, queue_size: in
         xtts_engine=xtts,
         piper_engine=piper,
         silero_engine=silero,
+        fallback_engines=[
+            _build_windows_sapi_engine(),
+            _build_silence_fallback_engine(),
+        ],
         max_chunk_chars=chunk_chars,
         queue_size=queue_size,
         cache=PhraseCache(max_items=cache_items),

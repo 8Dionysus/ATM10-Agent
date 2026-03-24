@@ -13,7 +13,7 @@ from datetime import datetime, timezone
 from io import BytesIO
 from pathlib import Path
 from time import perf_counter
-from typing import Any, Callable, Mapping
+from typing import Any, Callable, Mapping, Sequence
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
@@ -63,6 +63,27 @@ DEFAULT_PILOT_GATEWAY_TOPK = 5
 DEFAULT_PILOT_GATEWAY_CANDIDATE_K = 10
 DEFAULT_PILOT_MAX_ENTITIES_PER_DOC = 128
 DEFAULT_PILOT_TESSERACT_BIN = "tesseract"
+_MICROPHONE_POSITIVE_HINTS = (
+    "microphone",
+    "mic",
+    "микрофон",
+    "набор микрофонов",
+    "headset",
+    "гарнитур",
+)
+_MICROPHONE_NEGATIVE_HINTS = (
+    "stereo mix",
+    "stereo input",
+    "стерео микшер",
+    "loopback",
+    "переназначение",
+    "remap",
+    "output",
+    "speaker",
+    "динамик",
+    "headphones",
+    "monitor",
+)
 
 
 def _utc_now() -> str:
@@ -276,6 +297,34 @@ def _decode_tts_chunk_audio(chunk_payload: Mapping[str, Any]) -> tuple[np.ndarra
     return _load_wav_bytes_mono(base64.b64decode(audio_b64))
 
 
+def _is_tts_silence_fallback_engine(engine_name: str) -> bool:
+    return str(engine_name).strip().lower() == "silence_fallback"
+
+
+def _contains_cyrillic(text: str) -> bool:
+    return any("\u0400" <= char <= "\u04FF" for char in str(text or ""))
+
+
+def _infer_tts_language(*, text: str, preferred_language: str | None = None) -> str:
+    normalized_preferred = str(preferred_language or "").strip().lower()
+    if normalized_preferred:
+        return normalized_preferred
+    if _contains_cyrillic(text):
+        return "ru"
+    return "en"
+
+
+def _infer_reply_language(*, transcript: str, transcript_language: str | None = None) -> str:
+    normalized_language = str(transcript_language or "").strip().lower()
+    if normalized_language.startswith("en"):
+        return "en"
+    if normalized_language.startswith("ru"):
+        return "ru"
+    if _contains_cyrillic(transcript):
+        return "ru"
+    return "ru"
+
+
 def _play_waveform_if_enabled(
     *,
     waveform: np.ndarray,
@@ -305,21 +354,59 @@ def build_fallback_answer(
     citations: list[Mapping[str, Any]],
     degraded_flags: list[str],
     stage_errors: Mapping[str, str],
+    preferred_language: str | None = None,
 ) -> str:
-    parts = [_degraded_prefix(degraded_flags).strip() or "Pilot degraded mode."]
-    if transcript.strip():
-        parts.append(f"I heard: {transcript.strip()}.")
-    else:
-        parts.append("I could not recover a usable transcript from the microphone input.")
-    if isinstance(visual_summary, str) and visual_summary.strip():
-        parts.append(f"Visible context: {visual_summary.strip()}.")
     titles = [str(item.get("title", "")).strip() for item in citations if str(item.get("title", "")).strip()]
-    if titles:
-        parts.append(f"Grounding sources: {', '.join(titles[:3])}.")
-    if stage_errors:
-        rendered_errors = ", ".join(f"{name}={message}" for name, message in sorted(stage_errors.items()))
-        parts.append(f"Unavailable components: {rendered_errors}.")
+    normalized_language = _infer_reply_language(
+        transcript=transcript,
+        transcript_language=preferred_language,
+    )
+    parts: list[str] = []
+    if normalized_language == "ru":
+        if transcript.strip():
+            parts.append(f"Я услышал: {transcript.strip()}.")
+        if isinstance(visual_summary, str) and visual_summary.strip():
+            parts.append(f"На экране: {visual_summary.strip()}.")
+        elif titles:
+            parts.append(f"Опора: {', '.join(titles[:2])}.")
+        if not parts:
+            parts.append("Пока не могу дать уверенную подсказку. Повтори запрос коротко.")
+        elif stage_errors and len(parts) == 1 and not transcript.strip():
+            parts.append("Повтори запрос ещё раз.")
+    else:
+        if transcript.strip():
+            parts.append(f"I heard: {transcript.strip()}.")
+        if isinstance(visual_summary, str) and visual_summary.strip():
+            parts.append(f"Visible context: {visual_summary.strip()}.")
+        elif titles:
+            parts.append(f"Grounding: {', '.join(titles[:2])}.")
+        if not parts:
+            parts.append("I could not build a confident answer yet. Please try again.")
+        elif stage_errors and len(parts) == 1 and not transcript.strip():
+            parts.append("Please repeat the request.")
     return " ".join(part for part in parts if part).strip()
+
+
+def _emit_turn_console_summary(turn_payload: Mapping[str, Any]) -> None:
+    turn_id = str(turn_payload.get("turn_id", "")).strip() or "<unknown>"
+    status = str(turn_payload.get("status", "")).strip() or "unknown"
+    transcript = str(turn_payload.get("request", {}).get("transcript", "")).strip()
+    answer_text = str(turn_payload.get("answer_text", "")).strip()
+    session = turn_payload.get("session")
+    session = session if isinstance(session, Mapping) else {}
+    tts = turn_payload.get("tts")
+    tts = tts if isinstance(tts, Mapping) else {}
+    session_title = str(session.get("window_title", "")).strip() or "<window-unknown>"
+    atm10_probable = bool(session.get("atm10_probable"))
+    tts_status = str(tts.get("status", "")).strip() or "unknown"
+    print(
+        f"[pilot_runtime] turn={turn_id} status={status} "
+        f"atm10_probable={str(atm10_probable).lower()} tts={tts_status} window={session_title}"
+    )
+    if transcript:
+        print(f"[pilot_runtime] transcript: {transcript}")
+    if answer_text:
+        print(f"[pilot_runtime] answer: {answer_text}")
 
 
 def _coerce_turn_status(*, degraded_flags: list[str], stage_errors: Mapping[str, str], answer_text: str) -> str:
@@ -526,6 +613,7 @@ def synthesize_with_tts_runtime(
     *,
     tts_runtime_url: str,
     text: str,
+    language: str | None = None,
     turn_dir: Path,
     service_token: str | None = None,
     playback_enabled: bool = True,
@@ -533,15 +621,17 @@ def synthesize_with_tts_runtime(
     tts_json_path = turn_dir / "tts_response.json"
     tts_stream_events_path = turn_dir / "tts_stream_events.jsonl"
     tts_audio_path = turn_dir / "tts_audio_out.wav"
+    tts_language = _infer_tts_language(text=text, preferred_language=language)
 
     try:
         events = _request_ndjson(
             method="POST",
             url=f"{tts_runtime_url.rstrip('/')}/tts_stream",
-            payload={"text": text, "language": "en"},
+            payload={"text": text, "language": tts_language},
             service_token=service_token,
         )
         collected_waveforms: list[np.ndarray] = []
+        chunk_engines: list[str] = []
         sample_rate: int | None = None
         playback_error: str | None = None
         for event in events:
@@ -557,6 +647,7 @@ def synthesize_with_tts_runtime(
             elif sample_rate != chunk_sample_rate:
                 raise RuntimeError("tts_stream returned inconsistent sample rates across chunks")
             collected_waveforms.append(waveform)
+            chunk_engines.append(str(event.get("engine", "")).strip())
             if playback_error is None:
                 playback_error = _play_waveform_if_enabled(
                     waveform=waveform,
@@ -571,19 +662,21 @@ def synthesize_with_tts_runtime(
             raise RuntimeError("tts_stream did not emit a completed event")
         if not collected_waveforms or sample_rate is None:
             raise RuntimeError("tts_stream completed without audio chunks")
+        silence_fallback_used = any(_is_tts_silence_fallback_engine(name) for name in chunk_engines)
         write_wav_pcm16(
             path=tts_audio_path,
             waveform=np.concatenate(collected_waveforms),
             sample_rate=sample_rate,
         )
         payload = {
-            "status": "ok" if playback_error is None else "degraded",
+            "status": "ok" if playback_error is None and not silence_fallback_used else "degraded",
             "mode": "tts_stream",
             "streaming_mode": "stream",
-            "fallback_used": False,
-            "fallback_reason": None,
+            "fallback_used": silence_fallback_used,
+            "fallback_reason": "silence_fallback_audio" if silence_fallback_used else None,
             "chunk_count": sum(1 for item in events if item.get("event") == "audio_chunk"),
             "events_count": len(events),
+            "chunk_engines": chunk_engines,
             "audio_out_wav": str(tts_audio_path),
             "stream_events_jsonl": str(tts_stream_events_path),
             "playback_error": playback_error,
@@ -595,7 +688,7 @@ def synthesize_with_tts_runtime(
         response = _request_json(
             method="POST",
             url=f"{tts_runtime_url.rstrip('/')}/tts",
-            payload={"text": text, "language": "en"},
+            payload={"text": text, "language": tts_language},
             service_token=service_token,
         )
         if not bool(response.get("ok")):
@@ -609,6 +702,7 @@ def synthesize_with_tts_runtime(
         if not chunks:
             raise RuntimeError(f"tts_stream failed ({stream_exc}) and /tts fallback returned no audio")
         collected_waveforms: list[np.ndarray] = []
+        chunk_engines: list[str] = []
         sample_rate: int | None = None
         playback_error: str | None = None
         for chunk in chunks:
@@ -619,6 +713,7 @@ def synthesize_with_tts_runtime(
             elif sample_rate != chunk_sample_rate:
                 raise RuntimeError("tts fallback returned inconsistent sample rates across chunks")
             collected_waveforms.append(waveform)
+            chunk_engines.append(str(chunk.get("engine", "")).strip())
             if playback_error is None:
                 playback_error = _play_waveform_if_enabled(
                     waveform=waveform,
@@ -626,19 +721,24 @@ def synthesize_with_tts_runtime(
                     playback_enabled=playback_enabled,
                 )
         assert sample_rate is not None
+        silence_fallback_used = any(_is_tts_silence_fallback_engine(name) for name in chunk_engines)
         write_wav_pcm16(
             path=tts_audio_path,
             waveform=np.concatenate(collected_waveforms),
             sample_rate=sample_rate,
         )
+        fallback_reasons = [str(stream_exc)]
+        if silence_fallback_used:
+            fallback_reasons.append("silence_fallback_audio")
         payload = {
-            "status": "ok" if playback_error is None else "degraded",
+            "status": "ok" if playback_error is None and not silence_fallback_used else "degraded",
             "mode": "tts",
             "streaming_mode": "fallback_full_response",
             "fallback_used": True,
-            "fallback_reason": str(stream_exc),
+            "fallback_reason": "; ".join(reason for reason in fallback_reasons if reason),
             "chunk_count": len(chunks),
             "events_count": 0,
+            "chunk_engines": chunk_engines,
             "audio_out_wav": str(tts_audio_path),
             "stream_events_jsonl": str(tts_stream_events_path) if tts_stream_events_path.exists() else None,
             "playback_error": playback_error,
@@ -697,10 +797,14 @@ def _status_payload(
     gateway_url: str | None,
     voice_runtime_url: str | None,
     tts_runtime_url: str | None,
+    input_device_index: int | None,
     capture_monitor: int | None,
     capture_region: tuple[int, int, int, int] | None,
     vlm_model_dir: Path,
     text_model_dir: Path,
+    vlm_provider: str,
+    text_provider: str,
+    provider_init: Mapping[str, Any] | None,
     degraded_services: list[str],
     last_turn_payload: Mapping[str, Any] | None = None,
     last_error: str | None = None,
@@ -732,11 +836,15 @@ def _status_payload(
             "gateway_url": gateway_url,
             "voice_runtime_url": voice_runtime_url,
             "tts_runtime_url": tts_runtime_url,
+            "input_device_index": input_device_index,
             "capture_monitor": capture_monitor,
             "capture_region": format_capture_region(capture_region),
             "vlm_model_dir": str(vlm_model_dir),
             "text_model_dir": str(text_model_dir),
+            "vlm_provider": vlm_provider,
+            "text_provider": text_provider,
         },
+        "provider_init": dict(provider_init or {}),
         "degraded_services": degraded_services,
         "last_error": last_error,
         "last_turn_id": last_turn_id,
@@ -788,10 +896,14 @@ class PilotRuntimeStatusHandle:
     gateway_url: str | None
     voice_runtime_url: str | None
     tts_runtime_url: str | None
+    input_device_index: int | None
     capture_monitor: int | None
     capture_region: tuple[int, int, int, int] | None
     vlm_model_dir: Path
     text_model_dir: Path
+    vlm_provider: str
+    text_provider: str
+    provider_init: dict[str, Any] | None = None
     state: str = "idle"
     last_turn_payload: dict[str, Any] | None = None
     last_error: str | None = None
@@ -807,10 +919,14 @@ class PilotRuntimeStatusHandle:
             gateway_url=self.gateway_url,
             voice_runtime_url=self.voice_runtime_url,
             tts_runtime_url=self.tts_runtime_url,
+            input_device_index=self.input_device_index,
             capture_monitor=self.capture_monitor,
             capture_region=self.capture_region,
             vlm_model_dir=self.vlm_model_dir,
             text_model_dir=self.text_model_dir,
+            vlm_provider=self.vlm_provider,
+            text_provider=self.text_provider,
+            provider_init=dict(self.provider_init or {}),
             degraded_services=list(self.degraded_services or []),
             last_turn_payload=self.last_turn_payload,
             last_error=self.last_error,
@@ -863,8 +979,14 @@ class PollingHotkey:
 
 
 class PushToTalkRecorder:
-    def __init__(self, *, sample_rate: int = DEFAULT_PILOT_SAMPLE_RATE) -> None:
+    def __init__(
+        self,
+        *,
+        sample_rate: int = DEFAULT_PILOT_SAMPLE_RATE,
+        preferred_input_device_index: int | None = None,
+    ) -> None:
         self._sample_rate = int(sample_rate)
+        self._preferred_input_device_index = preferred_input_device_index
         self._input_device_index: int | None = None
         self._input_device_name: str | None = None
         self._chunks: list[np.ndarray] = []
@@ -880,25 +1002,70 @@ class PushToTalkRecorder:
             ) from exc
         return sd
 
+    @staticmethod
+    def _candidate_device_score(device_name: str) -> int:
+        normalized = str(device_name).strip().lower()
+        score = 0
+        if any(hint in normalized for hint in _MICROPHONE_POSITIVE_HINTS):
+            score += 10
+        if any(hint in normalized for hint in _MICROPHONE_NEGATIVE_HINTS):
+            score -= 20
+        return score
+
+    @classmethod
+    def select_input_device_index(
+        cls,
+        *,
+        devices: Sequence[Mapping[str, Any]],
+        default_device: Any,
+        preferred_input_device_index: int | None = None,
+    ) -> int:
+        input_candidates = [
+            index for index, item in enumerate(devices) if int(item.get("max_input_channels", 0) or 0) > 0
+        ]
+        if not input_candidates:
+            raise RuntimeError("No audio input device with input channels is available.")
+
+        if preferred_input_device_index is not None:
+            if preferred_input_device_index not in input_candidates:
+                raise RuntimeError(
+                    f"Configured input device index {preferred_input_device_index} is not a valid audio input device."
+                )
+            return int(preferred_input_device_index)
+
+        default_input_index: int | None = None
+        if isinstance(default_device, (list, tuple)) and default_device:
+            candidate = int(default_device[0])
+            if candidate in input_candidates:
+                default_input_index = candidate
+        elif isinstance(default_device, int) and default_device in input_candidates:
+            default_input_index = int(default_device)
+
+        scored_candidates: list[tuple[int, int, int]] = []
+        for index in input_candidates:
+            item = devices[index]
+            score = cls._candidate_device_score(str(item.get("name", f"device_{index}")))
+            if default_input_index == index:
+                score += 5
+            scored_candidates.append((score, int(item.get("max_input_channels", 0) or 0), -index))
+
+        best_position = max(range(len(scored_candidates)), key=scored_candidates.__getitem__)
+        best_score = scored_candidates[best_position][0]
+        if best_score <= 0 and default_input_index is not None:
+            return int(default_input_index)
+        return int(input_candidates[best_position])
+
     def start(self) -> dict[str, Any]:
         if self._stream is not None:
             raise RuntimeError("push-to-talk recorder is already active")
         sd = self._resolve_sd()
         devices = sd.query_devices()
         default_device = sd.default.device
-        input_index = None
-        if isinstance(default_device, (list, tuple)) and default_device:
-            if int(default_device[0]) >= 0:
-                input_index = int(default_device[0])
-        elif isinstance(default_device, int) and default_device >= 0:
-            input_index = int(default_device)
-        if input_index is None:
-            for index, item in enumerate(devices):
-                if int(item.get("max_input_channels", 0)) > 0:
-                    input_index = index
-                    break
-        if input_index is None:
-            raise RuntimeError("No audio input device with input channels is available.")
+        input_index = self.select_input_device_index(
+            devices=devices,
+            default_device=default_device,
+            preferred_input_device_index=self._preferred_input_device_index,
+        )
 
         self._input_device_index = int(input_index)
         self._input_device_name = str(devices[self._input_device_index].get("name", f"device_{input_index}"))
@@ -1043,8 +1210,9 @@ def run_pilot_turn(
         },
         "vision": {"summary": None, "next_steps": [], "error": None},
         "hybrid": {"planner_status": None, "degraded": None, "warnings": [], "citations": [], "error": None},
-        "grounded_reply": {"answer_text": None, "cited_entities": [], "error": None},
+        "grounded_reply": {"answer_text": None, "cited_entities": [], "answer_language": None, "error": None},
         "tts": {"status": "not_started", "error": None},
+        "answer_language": None,
         "degraded_flags": [],
         "degraded_services": [],
         "latency": {},
@@ -1240,6 +1408,8 @@ def run_pilot_turn(
                 stage_errors["hybrid"] = str(exc)
                 degraded_flags.append("hybrid_query_failed")
         hybrid_summary, citations = _summarize_hybrid_payload(gateway_result)
+        if bool(hybrid_summary.get("degraded")):
+            degraded_flags.append("hybrid_degraded")
         if str(hybrid_summary.get("planner_status", "")).strip() == "retrieval_only_fallback":
             degraded_flags.append("retrieval_only_fallback")
         base_payload["hybrid"] = {
@@ -1251,6 +1421,10 @@ def run_pilot_turn(
 
         stage_started = perf_counter()
         grounded_reply_payload: dict[str, Any] | None = None
+        preferred_reply_language = _infer_reply_language(
+            transcript=transcript,
+            transcript_language=language,
+        )
         if grounded_reply_client is not None:
             try:
                 grounded_reply_payload = grounded_reply_client.generate_reply(
@@ -1259,10 +1433,14 @@ def run_pilot_turn(
                     citations=citations,
                     hybrid_summary=hybrid_summary,
                     degraded_flags=list(sorted(dict.fromkeys(degraded_flags))),
+                    preferred_language=preferred_reply_language,
                 )
             except Exception as exc:
                 stage_errors["grounded_reply"] = str(exc)
                 degraded_flags.append("grounded_reply_failed")
+        else:
+            stage_errors["grounded_reply"] = "local grounded reply provider is unavailable"
+            degraded_flags.append("grounded_reply_unavailable")
         if grounded_reply_payload is None:
             grounded_reply_payload = {
                 "provider": "deterministic_fallback_v1",
@@ -1275,6 +1453,7 @@ def run_pilot_turn(
                     citations=citations,
                     degraded_flags=list(sorted(dict.fromkeys(degraded_flags))),
                     stage_errors=stage_errors,
+                    preferred_language=preferred_reply_language,
                 ),
                 "cited_entities": [
                     str(item.get("title", "")).strip()
@@ -1282,28 +1461,28 @@ def run_pilot_turn(
                     if str(item.get("title", "")).strip()
                 ],
                 "degraded_flags": list(sorted(dict.fromkeys(degraded_flags))),
+                "answer_language": preferred_reply_language,
                 "raw_response_text": "",
             }
         answer_text = str(grounded_reply_payload.get("answer_text", "")).strip()
         current_degraded_flags = list(sorted(dict.fromkeys(degraded_flags)))
-        if current_degraded_flags:
-            prefix = _degraded_prefix(current_degraded_flags)
-            if answer_text and not answer_text.startswith(prefix):
-                answer_text = f"{prefix}{answer_text}".strip()
-            elif not answer_text:
-                answer_text = build_fallback_answer(
-                    transcript=transcript,
-                    visual_summary=visual_summary,
-                    citations=citations,
-                    degraded_flags=current_degraded_flags,
-                    stage_errors=stage_errors,
-                )
+        if not answer_text:
+            answer_text = build_fallback_answer(
+                transcript=transcript,
+                visual_summary=visual_summary,
+                citations=citations,
+                degraded_flags=current_degraded_flags,
+                stage_errors=stage_errors,
+                preferred_language=preferred_reply_language,
+            )
         grounded_reply_payload["answer_text"] = answer_text
+        grounded_reply_payload["answer_language"] = preferred_reply_language
         base_payload["grounded_reply"] = {
             **grounded_reply_payload,
             "error": stage_errors.get("grounded_reply"),
         }
         base_payload["answer_text"] = answer_text
+        base_payload["answer_language"] = preferred_reply_language
         base_payload["cited_entities"] = list(grounded_reply_payload.get("cited_entities", []))
         base_payload["citations"] = citations
         base_payload["latency"]["grounded_reply_sec"] = round(perf_counter() - stage_started, 6)
@@ -1322,6 +1501,7 @@ def run_pilot_turn(
                 tts_payload = tts_func(
                     tts_runtime_url=tts_runtime_url,
                     text=answer_text,
+                    language=preferred_reply_language,
                     turn_dir=turn_dir,
                     service_token=service_token,
                     playback_enabled=playback_enabled,
@@ -1395,6 +1575,7 @@ def run_pilot_runtime_loop(
     voice_runtime_url: str | None,
     tts_runtime_url: str | None,
     hotkey: str,
+    input_device_index: int | None = None,
     capture_monitor: int | None,
     capture_region: tuple[int, int, int, int] | None,
     hud_hook_json: Path | None,
@@ -1432,6 +1613,7 @@ def run_pilot_runtime_loop(
             "voice_runtime_url": voice_runtime_url,
             "tts_runtime_url": tts_runtime_url,
             "hotkey": hotkey,
+            "input_device_index": input_device_index,
             "capture_monitor": capture_monitor,
             "capture_region": format_capture_region(capture_region),
             "hud_hook_json": None if hud_hook_json is None else str(hud_hook_json),
@@ -1498,10 +1680,14 @@ def run_pilot_runtime_loop(
         gateway_url=gateway_url,
         voice_runtime_url=voice_runtime_url,
         tts_runtime_url=tts_runtime_url,
+        input_device_index=input_device_index,
         capture_monitor=capture_monitor,
         capture_region=capture_region,
         vlm_model_dir=pilot_vlm_model_dir,
         text_model_dir=pilot_text_model_dir,
+        vlm_provider=pilot_vlm_provider,
+        text_provider=pilot_text_provider,
+        provider_init=dict(run_payload["provider_init"]),
         degraded_services=sorted(dict.fromkeys(degraded_services)),
     )
     recorder: PushToTalkRecorder | None = None
@@ -1509,7 +1695,10 @@ def run_pilot_runtime_loop(
 
     try:
         hotkey_watcher = PollingHotkey(hotkey)
-        recorder = PushToTalkRecorder(sample_rate=sample_rate)
+        recorder = PushToTalkRecorder(
+            sample_rate=sample_rate,
+            preferred_input_device_index=input_device_index,
+        )
         temp_audio_path = runtime_run_dir / "live_recording.wav"
         status_handle.publish()
         _write_json(run_json_path, run_payload)
@@ -1575,6 +1764,7 @@ def run_pilot_runtime_loop(
                         last_turn_payload=turn_payload,
                         status="degraded" if turn_payload.get("status") == "degraded" else "running",
                     )
+                    _emit_turn_console_summary(turn_payload)
                 except Exception as exc:
                     run_payload["error"] = str(exc)
                     _write_json(run_json_path, run_payload)
@@ -1648,13 +1838,19 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         "--pilot-vlm-provider",
         choices=("openvino", "stub"),
         default="openvino",
-        help="Pilot VLM provider (default: openvino).",
+        help="Pilot VLM provider (default: openvino; use stub only for diagnostics).",
     )
     parser.add_argument(
         "--pilot-text-provider",
         choices=("openvino", "stub"),
         default="openvino",
-        help="Pilot grounded-reply provider (default: openvino).",
+        help="Pilot grounded-reply provider (default: openvino; use stub only for diagnostics).",
+    )
+    parser.add_argument(
+        "--input-device-index",
+        type=int,
+        default=None,
+        help="Optional explicit sounddevice input device index for push-to-talk capture.",
     )
     parser.add_argument("--sample-rate", type=int, default=DEFAULT_PILOT_SAMPLE_RATE, help="Microphone sample rate.")
     parser.add_argument(
@@ -1692,6 +1888,7 @@ def main(argv: list[str] | None = None) -> int:
         voice_runtime_url=args.voice_runtime_url,
         tts_runtime_url=args.tts_runtime_url,
         hotkey=hotkey,
+        input_device_index=args.input_device_index,
         capture_monitor=args.capture_monitor,
         capture_region=capture_region,
         hud_hook_json=args.hud_hook_json,

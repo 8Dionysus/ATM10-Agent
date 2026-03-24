@@ -203,11 +203,12 @@ def run_pilot_turn_smoke(
         *,
         tts_runtime_url: str,
         text: str,
+        language: str | None = None,
         turn_dir: Path,
         service_token: str | None = None,
         playback_enabled: bool = True,
     ) -> dict[str, Any]:
-        _ = tts_runtime_url, service_token, playback_enabled
+        _ = tts_runtime_url, language, service_token, playback_enabled
         output_path = turn_dir / "tts_audio_out.wav"
         timeline = np.linspace(0.0, 0.3, int(16000 * 0.3), endpoint=False)
         waveform = (0.1 * np.sin(2.0 * np.pi * 330.0 * timeline)).astype(np.float32)
@@ -259,10 +260,17 @@ def run_pilot_turn_smoke(
         gateway_url="http://fixture.gateway",
         voice_runtime_url="http://fixture.voice",
         tts_runtime_url="http://fixture.tts",
+        input_device_index=None,
         capture_monitor=None,
         capture_region=None,
         vlm_model_dir=Path("stub-vlm"),
         text_model_dir=Path("stub-text"),
+        vlm_provider="stub",
+        text_provider="stub",
+        provider_init={
+            "vlm": {"status": "ok", "provider": "stub"},
+            "text": {"status": "ok", "provider": "stub"},
+        },
         degraded_services=list(turn_payload.get("degraded_services", [])),
         last_turn_payload=turn_payload,
     )

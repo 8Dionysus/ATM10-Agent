@@ -168,7 +168,13 @@ def build_startup_plan(args: argparse.Namespace) -> dict[str, Any]:
             str(args.pilot_vlm_device),
             "--pilot-text-device",
             str(args.pilot_text_device),
+            "--pilot-vlm-provider",
+            str(args.pilot_vlm_provider),
+            "--pilot-text-provider",
+            str(args.pilot_text_provider),
         ]
+        if args.pilot_input_device_index is not None:
+            pilot_command.extend(["--input-device-index", str(args.pilot_input_device_index)])
         if voice_runtime_url:
             pilot_command.extend(["--voice-runtime-url", voice_runtime_url])
         if tts_runtime_url:
@@ -467,10 +473,11 @@ def _wait_for_gateway_operator_snapshot(
     deadline = time.time() + max(timeout_sec, 0.1)
     last_error = "gateway operator snapshot did not become ready"
     url = gateway_url.rstrip("/") + "/v1/operator/snapshot"
+    request_timeout = max(0.5, min(timeout_sec, 15.0))
     while time.time() < deadline:
         req = request.Request(url=url, method="GET")
         try:
-            with request.urlopen(req, timeout=min(2.0, timeout_sec)) as response:
+            with request.urlopen(req, timeout=request_timeout) as response:
                 payload = json.loads(response.read().decode("utf-8"))
             if isinstance(payload, dict) and str(payload.get("status", "")).strip() == "ok":
                 return payload, None
@@ -489,10 +496,11 @@ def _wait_for_runtime_health(
     deadline = time.time() + max(timeout_sec, 0.1)
     last_error = "runtime health did not become ready"
     url = service_url.rstrip("/") + "/health"
+    request_timeout = max(0.5, min(timeout_sec, 15.0))
     while time.time() < deadline:
         req = request.Request(url=url, method="GET")
         try:
-            with request.urlopen(req, timeout=min(2.0, timeout_sec)) as response:
+            with request.urlopen(req, timeout=request_timeout) as response:
                 payload = json.loads(response.read().decode("utf-8"))
             if isinstance(payload, dict) and str(payload.get("status", "")).strip() == "ok":
                 return payload, None
@@ -565,12 +573,13 @@ def _wait_for_streamlit_ready(
     deadline = time.time() + max(timeout_sec, 0.1)
     last_error = "streamlit did not become ready"
     url = streamlit_url.rstrip("/") + "/"
+    request_timeout = max(0.5, min(timeout_sec, 15.0))
     while time.time() < deadline:
         if process is not None and process.poll() is not None:
             return None, f"streamlit process exited early with code {process.returncode}"
         req = request.Request(url=url, method="GET")
         try:
-            with request.urlopen(req, timeout=min(2.0, timeout_sec)):
+            with request.urlopen(req, timeout=request_timeout):
                 return {"status": "ok", "url": url}, None
         except Exception as exc:
             last_error = f"{exc}"
@@ -761,6 +770,24 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         type=str,
         default="NPU",
         help="OpenVINO device for pilot grounded-reply model (default: NPU).",
+    )
+    parser.add_argument(
+        "--pilot-vlm-provider",
+        choices=("openvino", "stub"),
+        default="openvino",
+        help="Pilot VLM provider passed to pilot_runtime_loop.py (default: openvino; use stub only for diagnostics).",
+    )
+    parser.add_argument(
+        "--pilot-text-provider",
+        choices=("openvino", "stub"),
+        default="openvino",
+        help="Pilot grounded-reply provider passed to pilot_runtime_loop.py (default: openvino; use stub only for diagnostics).",
+    )
+    parser.add_argument(
+        "--pilot-input-device-index",
+        type=int,
+        default=None,
+        help="Optional explicit sounddevice input device index passed to pilot_runtime_loop.py.",
     )
     parser.add_argument(
         "--qdrant-url",

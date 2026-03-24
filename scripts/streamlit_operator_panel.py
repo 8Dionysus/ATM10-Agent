@@ -1109,6 +1109,9 @@ def _render_pilot_runtime_section(
                 "status": pilot_runtime.get("status"),
                 "state": pilot_runtime.get("state"),
                 "hotkey": pilot_runtime.get("hotkey"),
+                "input_device_index": pilot_runtime.get("input_device_index"),
+                "vlm_provider": pilot_runtime.get("vlm_provider"),
+                "text_provider": pilot_runtime.get("text_provider"),
                 "last_turn_id": pilot_runtime.get("last_turn_id"),
                 "degraded_services": ", ".join(_normalize_reason_codes(pilot_runtime.get("degraded_services"))),
                 "last_error": pilot_runtime.get("last_error"),
@@ -1121,6 +1124,11 @@ def _render_pilot_runtime_section(
     if latency_summary:
         st.caption("Pilot latency")
         st.dataframe([latency_summary], width="stretch")
+    provider_init = pilot_runtime.get("provider_init")
+    provider_init = provider_init if isinstance(provider_init, dict) else {}
+    if provider_init:
+        st.caption("Pilot providers")
+        st.json(provider_init)
 
     if isinstance(last_turn_summary, dict):
         st.caption("Last pilot turn")
@@ -1131,6 +1139,10 @@ def _render_pilot_runtime_section(
                     "status": last_turn_summary.get("status"),
                     "timestamp_utc": last_turn_summary.get("timestamp_utc"),
                     "degraded_flags": ", ".join(_normalize_reason_codes(last_turn_summary.get("degraded_flags"))),
+                    "answer_language": last_turn_summary.get("answer_language"),
+                    "vision_provider": last_turn_summary.get("vision_provider"),
+                    "grounded_reply_provider": last_turn_summary.get("grounded_reply_provider"),
+                    "tts_engine": last_turn_summary.get("tts_engine"),
                     "atm10_probable": last_turn_summary.get("session_atm10_probable"),
                     "foreground": last_turn_summary.get("session_foreground"),
                     "hud_state_status": last_turn_summary.get("hud_state_status"),

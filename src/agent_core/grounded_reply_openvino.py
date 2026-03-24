@@ -79,6 +79,15 @@ def _extract_json_candidate(response_text: str) -> str:
     return response_text
 
 
+def _normalize_preferred_reply_language(
+    preferred_language: str | None,
+) -> str:
+    normalized = str(preferred_language or "").strip().lower()
+    if normalized.startswith("en"):
+        return "en"
+    return "ru"
+
+
 def build_grounded_reply_prompt(
     *,
     transcript: str,
@@ -86,6 +95,7 @@ def build_grounded_reply_prompt(
     citations: list[Mapping[str, Any]],
     hybrid_summary: Mapping[str, Any] | None,
     degraded_flags: list[str],
+    preferred_language: str | None = None,
 ) -> str:
     rendered_citations: list[str] = []
     for item in citations[:5]:
@@ -112,14 +122,17 @@ def build_grounded_reply_prompt(
         "hybrid_summary": hybrid_summary_payload,
         "citations": rendered_citations,
         "degraded_flags": degraded_flags,
+        "preferred_answer_language": _normalize_preferred_reply_language(preferred_language),
     }
     return (
-        "You are a local ATM10 observer copilot. "
+        "You are a local ATM10 observer copilot speaking to the player during live gameplay. "
         "Return only a JSON object with keys answer_text (string), "
         "cited_entities (array of short strings), degraded_flags (array of short strings). "
         "Do not emit chain-of-thought, reasoning, or <think> tags. "
-        "Be explicit when any input is degraded or unavailable, do not fabricate citations, "
-        "and keep the answer grounded in the supplied transcript, screen summary, and citations.\n\n"
+        "Keep answer_text short, actionable, and player-facing. "
+        "Use Russian by default unless preferred_answer_language is en. "
+        "Do not mention internal diagnostics, provider details, or grounding failures unless you cannot give a useful gameplay answer at all. "
+        "Do not fabricate citations, and keep the answer grounded in the supplied transcript, screen summary, and citations.\n\n"
         f"{json.dumps(prompt_payload, ensure_ascii=False, indent=2)}"
     )
 
@@ -177,6 +190,7 @@ class OpenVINOGroundedReplyClient:
         citations: list[Mapping[str, Any]],
         hybrid_summary: Mapping[str, Any] | None,
         degraded_flags: list[str] | None = None,
+        preferred_language: str | None = None,
     ) -> dict[str, Any]:
         prompt = build_grounded_reply_prompt(
             transcript=transcript,
@@ -184,6 +198,7 @@ class OpenVINOGroundedReplyClient:
             citations=citations,
             hybrid_summary=hybrid_summary,
             degraded_flags=list(degraded_flags or []),
+            preferred_language=preferred_language,
         )
         ov_genai = _load_openvino_genai()
         generation_config = build_generation_config(
@@ -209,6 +224,16 @@ class OpenVINOGroundedReplyClient:
 class DeterministicGroundedReplyStub:
     """Deterministic local stub for smoke tests and artifact coverage."""
 
+    @staticmethod
+    def _has_usable_transcript(text: str) -> bool:
+        normalized = str(text or "").strip()
+        return any(char.isalnum() for char in normalized)
+
+    @staticmethod
+    def _humanize_status(status: str) -> str:
+        normalized = str(status or "").strip().replace("_", " ")
+        return normalized or "unknown"
+
     def generate_reply(
         self,
         *,
@@ -217,24 +242,49 @@ class DeterministicGroundedReplyStub:
         citations: list[Mapping[str, Any]],
         hybrid_summary: Mapping[str, Any] | None,
         degraded_flags: list[str] | None = None,
+        preferred_language: str | None = None,
     ) -> dict[str, Any]:
         cited_entities: list[str] = []
         for item in citations[:3]:
             title = str(item.get("title", "")).strip()
             if title:
                 cited_entities.append(title)
-        answer_parts = [f"You asked: {transcript.strip() or 'no transcript available'}."]
-        if isinstance(visual_summary, str) and visual_summary.strip():
-            answer_parts.append(f"Screen summary: {visual_summary.strip()}.")
-        if cited_entities:
-            answer_parts.append(f"Relevant citations: {', '.join(cited_entities)}.")
+        transcript_text = str(transcript or "").strip()
+        answer_parts: list[str] = []
+        normalized_language = _normalize_preferred_reply_language(preferred_language)
         if hybrid_summary is not None:
             planner_status = str(hybrid_summary.get("planner_status", "")).strip()
-            if planner_status:
-                answer_parts.append(f"Hybrid status: {planner_status}.")
+        else:
+            planner_status = ""
         degraded = [str(item) for item in (degraded_flags or []) if str(item).strip()]
         if degraded:
-            answer_parts.insert(0, f"Pilot degraded mode ({', '.join(degraded)}).")
+            answer_parts.append("Режим с ограничениями." if normalized_language == "ru" else "Pilot degraded.")
+        if self._has_usable_transcript(transcript_text):
+            if normalized_language == "ru":
+                answer_parts.append(f"Я услышал: {transcript_text}.")
+            else:
+                answer_parts.append(f"Heard: {transcript_text}.")
+        else:
+            answer_parts.append(
+                "Голос не разобран."
+                if normalized_language == "ru"
+                else "Microphone transcript unavailable."
+            )
+        if planner_status:
+            if normalized_language == "ru":
+                answer_parts.append(f"Контекст: {self._humanize_status(planner_status)}.")
+            else:
+                answer_parts.append(f"Hybrid: {self._humanize_status(planner_status)}.")
+        elif cited_entities:
+            if normalized_language == "ru":
+                answer_parts.append(f"Опора: {', '.join(cited_entities[:2])}.")
+            else:
+                answer_parts.append(f"Refs: {', '.join(cited_entities[:2])}.")
+        elif isinstance(visual_summary, str) and visual_summary.strip() and "Stub analysis:" not in visual_summary:
+            if normalized_language == "ru":
+                answer_parts.append(f"На экране: {visual_summary.strip()}.")
+            else:
+                answer_parts.append(f"Screen: {visual_summary.strip()}.")
         return {
             "provider": "deterministic_grounded_reply_stub_v1",
             "model": "stub",

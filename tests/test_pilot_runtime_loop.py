@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 import json
 from datetime import datetime, timezone
 from pathlib import Path
@@ -98,6 +99,36 @@ def test_parse_capture_region_and_hotkey() -> None:
     assert pilot_runtime.hotkey_virtual_key("F8") == 0x77
 
 
+def test_push_to_talk_recorder_prefers_microphone_over_remap_input() -> None:
+    devices = [
+        {"name": "Переназначение звуковых устр. - Input", "max_input_channels": 2},
+        {"name": "Набор микрофонов (Технология Intel Smart Sound)", "max_input_channels": 4},
+    ]
+
+    selected = pilot_runtime.PushToTalkRecorder.select_input_device_index(
+        devices=devices,
+        default_device=[0, 3],
+        preferred_input_device_index=None,
+    )
+
+    assert selected == 1
+
+
+def test_push_to_talk_recorder_uses_explicit_input_device_index() -> None:
+    devices = [
+        {"name": "Переназначение звуковых устр. - Input", "max_input_channels": 2},
+        {"name": "Набор микрофонов", "max_input_channels": 4},
+    ]
+
+    selected = pilot_runtime.PushToTalkRecorder.select_input_device_index(
+        devices=devices,
+        default_device=[0, 3],
+        preferred_input_device_index=1,
+    )
+
+    assert selected == 1
+
+
 def test_run_pilot_turn_with_injected_locals_writes_contract(tmp_path: Path) -> None:
     runtime_run_dir = tmp_path / "pilot-runtime"
     runtime_run_dir.mkdir(parents=True, exist_ok=True)
@@ -162,11 +193,12 @@ def test_run_pilot_turn_with_injected_locals_writes_contract(tmp_path: Path) -> 
         *,
         tts_runtime_url: str,
         text: str,
+        language: str | None = None,
         turn_dir: Path,
         service_token: str | None = None,
         playback_enabled: bool = True,
     ) -> dict[str, Any]:
-        _ = tts_runtime_url, service_token, playback_enabled
+        _ = tts_runtime_url, language, service_token, playback_enabled
         out_wav = turn_dir / "tts_audio_out.wav"
         _write_audio_fixture(out_wav)
         return {
@@ -214,6 +246,9 @@ def test_run_pilot_turn_with_injected_locals_writes_contract(tmp_path: Path) -> 
     assert payload["hybrid"]["planner_status"] == "hybrid_merged"
     assert payload["citations"][0]["title"] == "Quest Book"
     assert payload["tts"]["status"] == "ok"
+    assert payload["grounded_reply"]["provider"] == "deterministic_grounded_reply_stub_v1"
+    assert payload["vision"]["provider"] == "deterministic_stub_v1"
+    assert payload["answer_language"] == "en"
     assert payload["session"]["atm10_probable"] is True
     assert payload["hud_state"]["status"] == "ok"
     assert Path(payload["paths"]["session_probe_json"]).is_file()
@@ -256,11 +291,12 @@ def test_run_pilot_turn_records_degraded_failures(tmp_path: Path) -> None:
         *,
         tts_runtime_url: str,
         text: str,
+        language: str | None = None,
         turn_dir: Path,
         service_token: str | None = None,
         playback_enabled: bool = True,
     ) -> dict[str, Any]:
-        _ = tts_runtime_url, text, turn_dir, service_token, playback_enabled
+        _ = tts_runtime_url, text, language, turn_dir, service_token, playback_enabled
         raise RuntimeError("tts unavailable")
 
     result = pilot_runtime.run_pilot_turn(
@@ -293,7 +329,228 @@ def test_run_pilot_turn_records_degraded_failures(tmp_path: Path) -> None:
     assert "session_target_not_confirmed" in payload["degraded_flags"]
     assert payload["hud_state"]["status"] == "partial"
     assert "desktop capture unavailable" in payload["errors"]["capture"]
-    assert payload["answer_text"].startswith("Pilot degraded mode")
+    assert payload["grounded_reply"]["provider"] == "deterministic_fallback_v1"
+    assert payload["answer_language"] == "en"
+    assert not payload["answer_text"].startswith("Pilot degraded mode")
+
+
+def test_run_pilot_turn_marks_hybrid_degraded_when_gateway_response_is_degraded(tmp_path: Path) -> None:
+    runtime_run_dir = tmp_path / "pilot-runtime"
+    runtime_run_dir.mkdir(parents=True, exist_ok=True)
+    audio_path = tmp_path / "audio.wav"
+    image_path = tmp_path / "image.png"
+    audio_meta = _write_audio_fixture(audio_path)
+    _write_image_fixture(image_path)
+
+    def _fake_capture(*, output_path: Path, **_kwargs: Any) -> dict[str, Any]:
+        output_path.write_bytes(image_path.read_bytes())
+        return {
+            "capture_mode": "fixture",
+            "monitor_index": 0,
+            "region": None,
+            "bbox": [0, 0, 320, 180],
+            "width": 320,
+            "height": 180,
+            "screenshot_path": str(output_path),
+        }
+
+    def _fake_asr(*, voice_runtime_url: str, audio_path: Path, service_token: str | None = None) -> dict[str, Any]:
+        _ = voice_runtime_url, audio_path, service_token
+        return {"text": "what next", "language": "en"}
+
+    def _fake_hybrid(*, gateway_url: str, query: str, service_token: str | None = None) -> dict[str, Any]:
+        _ = gateway_url, query, service_token
+        return {
+            "response_payload": {"status": "ok"},
+            "result_payload": {"planner_status": "grounding_unavailable", "degraded": True},
+            "hybrid_results_payload": {
+                "planner_status": "grounding_unavailable",
+                "degraded": True,
+                "warnings": ["retrieval stage fallback: qdrant collection missing"],
+                "merged_results": [],
+            },
+            "hybrid_results_json": None,
+            "hybrid_run_dir": None,
+        }
+
+    def _fake_tts(
+        *,
+        tts_runtime_url: str,
+        text: str,
+        language: str | None = None,
+        turn_dir: Path,
+        service_token: str | None = None,
+        playback_enabled: bool = True,
+    ) -> dict[str, Any]:
+        _ = tts_runtime_url, text, language, turn_dir, service_token, playback_enabled
+        return {
+            "status": "ok",
+            "mode": "stub",
+            "streaming_mode": "fixture",
+            "fallback_used": False,
+            "fallback_reason": None,
+            "chunk_count": 1,
+            "events_count": 1,
+            "audio_out_wav": None,
+            "stream_events_jsonl": None,
+            "playback_error": None,
+            "completed_event": {"event": "completed"},
+        }
+
+    result = pilot_runtime.run_pilot_turn(
+        runtime_run_dir=runtime_run_dir,
+        audio_input_path=audio_path,
+        audio_input_meta=audio_meta,
+        hotkey="F8",
+        capture_monitor=0,
+        capture_region=None,
+        gateway_url="http://fixture.gateway",
+        voice_runtime_url="http://fixture.voice",
+        tts_runtime_url="http://fixture.tts",
+        vlm_client=DeterministicStubVLM(),
+        grounded_reply_client=DeterministicGroundedReplyStub(),
+        playback_enabled=False,
+        capture_func=_fake_capture,
+        session_probe_func=_fake_session_probe,
+        live_hud_state_func=_fake_live_hud_state,
+        asr_func=_fake_asr,
+        hybrid_query_func=_fake_hybrid,
+        tts_func=_fake_tts,
+        now=datetime(2026, 3, 22, 18, 7, 0, tzinfo=timezone.utc),
+    )
+
+    payload = result["turn_payload"]
+    assert payload["status"] == "degraded"
+    assert "hybrid_degraded" in payload["degraded_flags"]
+    assert payload["hybrid"]["planner_status"] == "grounding_unavailable"
+    assert payload["answer_language"] == "en"
+
+
+def test_run_pilot_turn_defaults_reply_language_to_russian_when_asr_language_is_missing(tmp_path: Path) -> None:
+    runtime_run_dir = tmp_path / "pilot-runtime"
+    runtime_run_dir.mkdir(parents=True, exist_ok=True)
+    audio_path = tmp_path / "audio.wav"
+    image_path = tmp_path / "image.png"
+    audio_meta = _write_audio_fixture(audio_path)
+    _write_image_fixture(image_path)
+    seen_tts_languages: list[str | None] = []
+
+    def _fake_capture(*, output_path: Path, **_kwargs: Any) -> dict[str, Any]:
+        output_path.write_bytes(image_path.read_bytes())
+        return {
+            "capture_mode": "fixture",
+            "monitor_index": 0,
+            "region": None,
+            "bbox": [0, 0, 320, 180],
+            "width": 320,
+            "height": 180,
+            "screenshot_path": str(output_path),
+        }
+
+    def _fake_asr(*, voice_runtime_url: str, audio_path: Path, service_token: str | None = None) -> dict[str, Any]:
+        _ = voice_runtime_url, audio_path, service_token
+        return {"text": "what next", "language": ""}
+
+    def _fake_tts(
+        *,
+        tts_runtime_url: str,
+        text: str,
+        language: str | None = None,
+        turn_dir: Path,
+        service_token: str | None = None,
+        playback_enabled: bool = True,
+    ) -> dict[str, Any]:
+        _ = tts_runtime_url, text, turn_dir, service_token, playback_enabled
+        seen_tts_languages.append(language)
+        return {
+            "status": "ok",
+            "mode": "stub",
+            "streaming_mode": "fixture",
+            "fallback_used": False,
+            "fallback_reason": None,
+            "chunk_count": 1,
+            "events_count": 1,
+            "chunk_engines": ["windows_sapi_fallback"],
+            "audio_out_wav": None,
+            "stream_events_jsonl": None,
+            "playback_error": None,
+            "completed_event": {"event": "completed"},
+        }
+
+    result = pilot_runtime.run_pilot_turn(
+        runtime_run_dir=runtime_run_dir,
+        audio_input_path=audio_path,
+        audio_input_meta=audio_meta,
+        hotkey="F8",
+        capture_monitor=0,
+        capture_region=None,
+        gateway_url=None,
+        voice_runtime_url="http://fixture.voice",
+        tts_runtime_url="http://fixture.tts",
+        vlm_client=DeterministicStubVLM(),
+        grounded_reply_client=DeterministicGroundedReplyStub(),
+        playback_enabled=False,
+        capture_func=_fake_capture,
+        session_probe_func=_fake_session_probe,
+        live_hud_state_func=_fake_live_hud_state,
+        asr_func=_fake_asr,
+        tts_func=_fake_tts,
+        now=datetime(2026, 3, 22, 18, 9, 0, tzinfo=timezone.utc),
+    )
+
+    payload = result["turn_payload"]
+    assert payload["answer_language"] == "ru"
+    assert payload["grounded_reply"]["answer_language"] == "ru"
+    assert seen_tts_languages == ["ru"]
+
+
+def test_synthesize_with_tts_runtime_marks_silence_fallback_as_degraded(tmp_path: Path) -> None:
+    audio_path = tmp_path / "chunk.wav"
+    audio_meta = _write_audio_fixture(audio_path, sample_rate=22050)
+    audio_bytes = audio_path.read_bytes()
+    seen_payloads: list[dict[str, Any]] = []
+
+    def _fake_request_ndjson(
+        *,
+        method: str,
+        url: str,
+        payload: dict[str, Any] | None,
+        timeout_sec: float = 300.0,
+        service_token: str | None = None,
+    ) -> list[dict[str, Any]]:
+        _ = method, url, payload, timeout_sec, service_token, audio_meta
+        if payload is not None:
+            seen_payloads.append(dict(payload))
+        return [
+            {"event": "started"},
+            {
+                "event": "audio_chunk",
+                "index": 0,
+                "engine": "silence_fallback",
+                "sample_rate": 22050,
+                "cached": False,
+                "audio_wav_b64": base64.b64encode(audio_bytes).decode("ascii"),
+            },
+            {"event": "completed"},
+        ]
+
+    original_request_ndjson = pilot_runtime._request_ndjson
+    try:
+        pilot_runtime._request_ndjson = _fake_request_ndjson
+        payload = pilot_runtime.synthesize_with_tts_runtime(
+            tts_runtime_url="http://fixture.tts",
+            text="привет fallback",
+            turn_dir=tmp_path / "turn",
+            playback_enabled=False,
+        )
+    finally:
+        pilot_runtime._request_ndjson = original_request_ndjson
+
+    assert payload["status"] == "degraded"
+    assert payload["fallback_used"] is True
+    assert payload["fallback_reason"] == "silence_fallback_audio"
+    assert payload["chunk_engines"] == ["silence_fallback"]
+    assert seen_payloads[0]["language"] == "ru"
 
 
 def test_pilot_turn_smoke_writes_turn_and_status_artifacts(tmp_path: Path) -> None:
@@ -356,4 +613,8 @@ def test_run_pilot_runtime_loop_marks_error_when_hotkey_init_fails(
     assert latest_status_payload["schema_version"] == pilot_runtime.PILOT_RUNTIME_STATUS_SCHEMA
     assert latest_status_payload["status"] == "error"
     assert latest_status_payload["last_error"] == "hotkey polling unavailable"
+    assert latest_status_payload["effective_config"]["vlm_provider"] == "openvino"
+    assert latest_status_payload["effective_config"]["text_provider"] == "openvino"
+    assert latest_status_payload["provider_init"]["vlm"]["status"] == "ok"
+    assert latest_status_payload["provider_init"]["text"]["status"] == "ok"
     assert latest_status_payload["paths"]["run_dir"] == str(result["run_dir"])

@@ -4,7 +4,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import src.agent_core.grounded_reply_openvino as grounded_reply_openvino
-from src.agent_core.grounded_reply_openvino import OpenVINOGroundedReplyClient
+from src.agent_core.grounded_reply_openvino import DeterministicGroundedReplyStub, OpenVINOGroundedReplyClient
 
 
 class _FakeGenerationConfig:
@@ -43,12 +43,14 @@ def test_openvino_grounded_reply_parses_json(monkeypatch, tmp_path: Path) -> Non
         citations=[{"title": "Quest Book", "citation": {"path": "fixture.jsonl"}}],
         hybrid_summary={"planner_status": "retrieval_only_fallback"},
         degraded_flags=["retrieval_only_fallback"],
+        preferred_language="ru",
     )
 
     assert result["provider"] == "openvino_genai_grounded_reply_v1"
     assert "quest book" in result["answer_text"].lower()
     assert result["cited_entities"] == ["Quest Book"]
     assert result["degraded_flags"] == ["retrieval_only_fallback"]
+    assert '"preferred_answer_language": "ru"' in result["prompt"]
 
 
 def test_openvino_grounded_reply_strips_thinking_markup(monkeypatch, tmp_path: Path) -> None:
@@ -79,7 +81,26 @@ def test_openvino_grounded_reply_strips_thinking_markup(monkeypatch, tmp_path: P
         citations=[{"title": "Quest Book", "citation": {"path": "fixture.jsonl"}}],
         hybrid_summary={"planner_status": "ok"},
         degraded_flags=[],
+        preferred_language="en",
     )
 
     assert result["answer_text"] == "Check the quest book first."
     assert result["cited_entities"] == ["Quest Book"]
+
+
+def test_deterministic_grounded_reply_stub_keeps_answer_concise_for_missing_transcript() -> None:
+    client = DeterministicGroundedReplyStub()
+
+    result = client.generate_reply(
+        transcript=".",
+        visual_summary="Stub analysis: no real vision model invoked.",
+        citations=[],
+        hybrid_summary={"planner_status": "grounding_unavailable"},
+        degraded_flags=["hybrid_degraded"],
+        preferred_language="ru",
+    )
+
+    assert result["answer_text"].startswith("Режим с ограничениями.")
+    assert "Голос не разобран." in result["answer_text"]
+    assert "Контекст: grounding unavailable." in result["answer_text"]
+    assert len(result["answer_text"]) < 100

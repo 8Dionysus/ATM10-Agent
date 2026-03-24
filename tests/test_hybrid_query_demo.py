@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 
 import scripts.hybrid_query_demo as hybrid_query_demo
-from src.hybrid.planner import execute_hybrid_baseline_query, merge_hybrid_results
+from src.hybrid.planner import execute_hybrid_baseline_query, execute_hybrid_query, merge_hybrid_results
 
 
 def _fixture_path(name: str) -> Path:
@@ -203,6 +203,89 @@ def test_execute_hybrid_baseline_query_kag_failure_degrades(
     assert result["kag_results_count"] == 0
     assert result["results_count"] >= 1
     assert result["warnings"]
+
+
+def test_execute_hybrid_query_retrieval_failure_degrades_to_kag_only(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def _boom_retrieval(*args, **kwargs):
+        raise RuntimeError("qdrant collection missing")
+
+    def _fake_query_kag_neo4j(**kwargs):
+        assert kwargs["dataset_tag"] == "atm10_combo_a_fixture"
+        return [
+            {
+                "id": "doc:steel_tools",
+                "source": "ftbquests",
+                "title": "Steel Tools",
+                "score": 2.0,
+                "matched_entities": ["steel"],
+                "citation": {"id": "doc:steel_tools", "source": "ftbquests", "path": "docs.jsonl"},
+            }
+        ]
+
+    monkeypatch.setattr("src.hybrid.planner.retrieve_top_k_qdrant", _boom_retrieval)
+    monkeypatch.setattr("src.hybrid.planner.query_kag_neo4j", _fake_query_kag_neo4j)
+
+    result = execute_hybrid_query(
+        query="steel tools",
+        docs_path=None,
+        topk=5,
+        candidate_k=10,
+        reranker="none",
+        reranker_model="Qwen/Qwen3-Reranker-0.6B",
+        reranker_runtime="torch",
+        reranker_device="AUTO",
+        reranker_max_length=1024,
+        max_entities_per_doc=128,
+        retrieval_backend="qdrant",
+        kag_backend="neo4j",
+        neo4j_password="fixture-password",
+        neo4j_dataset_tag="atm10_combo_a_fixture",
+    )
+
+    assert result["planner_status"] == "kag_only_fallback"
+    assert result["degraded"] is True
+    assert result["retrieval_results_count"] == 0
+    assert result["kag_results_count"] == 1
+    assert result["results_count"] == 1
+    assert any("retrieval stage fallback" in warning for warning in result["warnings"])
+
+
+def test_execute_hybrid_query_retrieval_failure_without_kag_results_marks_grounding_unavailable(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def _boom_retrieval(*args, **kwargs):
+        raise RuntimeError("qdrant collection missing")
+
+    def _empty_query_kag_neo4j(**kwargs):
+        return []
+
+    monkeypatch.setattr("src.hybrid.planner.retrieve_top_k_qdrant", _boom_retrieval)
+    monkeypatch.setattr("src.hybrid.planner.query_kag_neo4j", _empty_query_kag_neo4j)
+
+    result = execute_hybrid_query(
+        query="steel tools",
+        docs_path=None,
+        topk=5,
+        candidate_k=10,
+        reranker="none",
+        reranker_model="Qwen/Qwen3-Reranker-0.6B",
+        reranker_runtime="torch",
+        reranker_device="AUTO",
+        reranker_max_length=1024,
+        max_entities_per_doc=128,
+        retrieval_backend="qdrant",
+        kag_backend="neo4j",
+        neo4j_password="fixture-password",
+        neo4j_dataset_tag="atm10_combo_a_fixture",
+    )
+
+    assert result["planner_status"] == "grounding_unavailable"
+    assert result["degraded"] is True
+    assert result["retrieval_results_count"] == 0
+    assert result["kag_results_count"] == 0
+    assert result["results_count"] == 0
 
 
 def test_hybrid_query_demo_writes_artifacts(tmp_path: Path) -> None:

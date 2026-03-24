@@ -146,6 +146,8 @@ class TTSRuntimeService:
         xtts_engine: CallbackTTSEngine | None,
         piper_engine: CallbackTTSEngine | None,
         silero_engine: CallbackTTSEngine | None,
+        fallback_engine: CallbackTTSEngine | None = None,
+        fallback_engines: list[CallbackTTSEngine] | None = None,
         max_chunk_chars: int = 220,
         queue_size: int = 128,
         cache: PhraseCache | None = None,
@@ -153,6 +155,13 @@ class TTSRuntimeService:
         self.xtts_engine = xtts_engine
         self.piper_engine = piper_engine
         self.silero_engine = silero_engine
+        self.fallback_engine = fallback_engine
+        combined_fallbacks: list[CallbackTTSEngine] = []
+        if fallback_engine is not None:
+            combined_fallbacks.append(fallback_engine)
+        if fallback_engines:
+            combined_fallbacks.extend(engine for engine in fallback_engines if engine is not None)
+        self.fallback_engines = combined_fallbacks
         self.max_chunk_chars = max(20, int(max_chunk_chars))
         self.cache = cache or PhraseCache(max_items=512)
 
@@ -167,6 +176,7 @@ class TTSRuntimeService:
             engines = [self.silero_engine, self.piper_engine]
         else:
             engines = [self.xtts_engine, self.piper_engine]
+        engines.extend(self.fallback_engines)
         return [engine for engine in engines if engine is not None]
 
     def _cache_key(self, *, request: TTSRequest, chunk_text: str) -> str:
@@ -231,7 +241,7 @@ class TTSRuntimeService:
 
     def prewarm(self) -> dict[str, dict[str, Any]]:
         status: dict[str, dict[str, Any]] = {}
-        for engine in (self.xtts_engine, self.piper_engine, self.silero_engine):
+        for engine in (self.xtts_engine, self.piper_engine, self.silero_engine, *self.fallback_engines):
             if engine is None:
                 continue
             try:

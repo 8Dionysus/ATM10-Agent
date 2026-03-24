@@ -388,6 +388,9 @@ python scripts/start_operator_product.py --runs-dir runs --start-voice-runtime -
 python scripts/start_operator_product.py --runs-dir runs --start-voice-runtime --start-tts-runtime --start-pilot-runtime --capture-monitor 0
 python scripts/start_operator_product.py --runs-dir runs --start-voice-runtime --start-tts-runtime --start-pilot-runtime --capture-region 0,0,1920,1080
 python scripts/start_operator_product.py --runs-dir runs --start-voice-runtime --start-tts-runtime --start-pilot-runtime --capture-monitor 0 --pilot-hud-hook-json <path-to-hud-hook.json> --pilot-tesseract-bin <path-to-tesseract.exe>
+python scripts/start_operator_product.py --runs-dir runs --start-voice-runtime --start-tts-runtime --start-pilot-runtime --capture-monitor 0 --pilot-input-device-index 1
+# debugging-only provider override
+python scripts/start_operator_product.py --runs-dir runs --start-pilot-runtime --capture-monitor 0 --pilot-vlm-provider stub --pilot-text-provider stub
 ```
 
 Expected result:
@@ -410,8 +413,12 @@ Notes:
 * Manual per-service commands remain valid for recovery or focused debugging.
 * The pilot runtime is local-only and does not open a new HTTP port.
 * Live pilot grounding requires either `--capture-monitor <index>` or `--capture-region x,y,w,h`.
+* Normal live pilot startup should use the default `OpenVINO` providers; do not pass `--pilot-vlm-provider stub --pilot-text-provider stub` unless you are explicitly debugging provider startup.
 * `--pilot-hud-hook-json` and `--pilot-tesseract-bin` are optional additive inputs; screenshot-only turns still publish `live_hud_state_v1`, but OCR/mod-hook improve evidence quality when available.
-* Current pilot defaults: `models\qwen2.5-vl-7b-instruct-int4-ov` on `GPU` for vision, `models\qwen3-8b-int4-cw-ov` on `NPU` for grounded reply.
+* `--pilot-input-device-index <n>` pins push-to-talk capture to a specific `sounddevice` input source when the default Windows input resolves to a loopback/remap device instead of a real microphone.
+* `--pilot-vlm-provider stub --pilot-text-provider stub` remains available as a deterministic diagnostics-only override when you want to validate the observer loop without waiting on local OpenVINO model load.
+* Current pilot defaults: `models\qwen2.5-vl-7b-instruct-int4-ov` on `GPU` for vision, `models\qwen3-8b-int4-cw-ov` on `NPU` for grounded reply, short player-facing replies, and Russian-by-default answer language policy.
+* Operator snapshot and Streamlit `Pilot runtime` surfaces show active `vlm_provider`, `text_provider`, last-turn `vision_provider`, `grounded_reply_provider`, `tts_engine`, and `answer_language`.
 
 ## M8.pilot: Observer pilot runtime
 
@@ -442,9 +449,11 @@ Expected result:
   * `live_hud_state.json` with schema `live_hud_state_v1`
 * `pilot_turn_v1` additively includes `session`, `hud_state`, `paths.session_probe_json`, and `paths.live_hud_state_json`.
 * Live turns follow `push-to-talk -> ASR -> vision -> hybrid_query(profile=combo_a) -> grounded reply -> TTS`.
+* The runtime prints a short per-turn console summary (`turn/status/transcript/answer`) so manual live acceptance does not look like a silent no-op.
 * `atm10_session_probe_v1` is a read-only Windows heuristic probe. When the runtime cannot confidently match the current capture target to ATM10, the turn stays artifacted but is marked degraded instead of silently passing.
 * `live_hud_state_v1` accepts screenshot-only operation. OCR or mod-hook data enrich the artifact when available, but missing OCR/mod-hook do not fail the turn by themselves.
 * Degraded services and turn errors are carried into both status and turn artifacts; the runtime does not silently fall back to uncited guesses.
+* When `combo_a` retrieval/KAG backends are unavailable, the hybrid stage stays machine-readable with degraded fallback (`retrieval_only_fallback`, `kag_only_fallback`, or `grounding_unavailable`) instead of failing the entire turn transport.
 
 ## M8.post: Observer pilot readiness summary
 
@@ -2023,7 +2032,7 @@ Accepted runtime design:
 
 * Router: FastAPI
 * Main engine: XTTS v2
-* Fallback engines: Piper, Silero (for `ru` service voice)
+* Fallback engines: Piper, Silero (for `ru` service voice), Windows `System.Speech` on Windows hosts, plus a last-resort `silence_fallback`
 * Techniques: prewarm, queue, chunking, phrase cache, true streaming for `/tts_stream`
 * HTTP hardening: payload limits (`max_request_bytes/json_depth/string/array/object`) + sanitized internal errors
 * Optional auth hardening: `--service-token` or `ATM10_SERVICE_TOKEN` -> require `X-ATM10-Token`
@@ -2061,6 +2070,7 @@ Security policy for Silero source:
 * Default mode expects local source (`SILERO_REPO_OR_DIR` as local path) and keeps remote hub disabled.
 * Remote hub source requires explicit opt-in (`SILERO_ALLOW_REMOTE_HUB=true`) and pinned revision (`SILERO_REPO_REF` or `owner/repo:ref` in `SILERO_REPO_OR_DIR`).
 * If secure Silero configuration is missing, `tts_runtime_service` still starts, but the `ru` service-voice fallback stays disabled until Silero is configured correctly.
+* If `XTTS`, `Piper`, and `Silero` are unavailable, `/tts` and `/tts_stream` first try the Windows `System.Speech` fallback on Windows hosts and only then fall back to `silence_fallback`; callers should treat `silence_fallback` as degraded response quality rather than spoken-quality success.
 
 Example TTS request:
 

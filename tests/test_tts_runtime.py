@@ -130,3 +130,63 @@ def test_queue_submit_processes_request() -> None:
         assert result["chunks"][0].engine == "xtts_v2"
     finally:
         service.stop()
+
+
+def test_runtime_uses_explicit_fallback_engine_when_primary_engines_fail() -> None:
+    xtts = CallbackTTSEngine(
+        name="xtts_v2",
+        synthesize_fn=lambda _text, _language, _speaker: (_ for _ in ()).throw(RuntimeError("xtts failed")),
+    )
+    piper = CallbackTTSEngine(
+        name="piper",
+        synthesize_fn=lambda _text, _language, _speaker: (_ for _ in ()).throw(RuntimeError("piper failed")),
+    )
+    fallback = CallbackTTSEngine(
+        name="silence_fallback",
+        synthesize_fn=lambda text, _language, _speaker: (make_silence_wav_bytes(duration_ms=180 + len(text)), 22050),
+    )
+    service = TTSRuntimeService(
+        xtts_engine=xtts,
+        piper_engine=piper,
+        silero_engine=None,
+        fallback_engine=fallback,
+        cache=PhraseCache(max_items=16),
+    )
+
+    result = service.synthesize(TTSRequest(text="hello fallback", language="en"))
+
+    assert result["chunk_count"] == 1
+    assert result["chunks"][0].engine == "silence_fallback"
+    assert result["router_chain"] == ["xtts_v2", "piper", "silence_fallback"]
+
+
+def test_runtime_tries_multiple_fallback_engines_in_order() -> None:
+    xtts = CallbackTTSEngine(
+        name="xtts_v2",
+        synthesize_fn=lambda _text, _language, _speaker: (_ for _ in ()).throw(RuntimeError("xtts failed")),
+    )
+    piper = CallbackTTSEngine(
+        name="piper",
+        synthesize_fn=lambda _text, _language, _speaker: (_ for _ in ()).throw(RuntimeError("piper failed")),
+    )
+    windows_sapi = CallbackTTSEngine(
+        name="windows_sapi_fallback",
+        synthesize_fn=lambda _text, _language, _speaker: (_ for _ in ()).throw(RuntimeError("windows failed")),
+    )
+    silence = CallbackTTSEngine(
+        name="silence_fallback",
+        synthesize_fn=lambda text, _language, _speaker: (make_silence_wav_bytes(duration_ms=200 + len(text)), 22050),
+    )
+    service = TTSRuntimeService(
+        xtts_engine=xtts,
+        piper_engine=piper,
+        silero_engine=None,
+        fallback_engines=[windows_sapi, silence],
+        cache=PhraseCache(max_items=16),
+    )
+
+    result = service.synthesize(TTSRequest(text="hello ordered fallback", language="en"))
+
+    assert result["chunk_count"] == 1
+    assert result["chunks"][0].engine == "silence_fallback"
+    assert result["router_chain"] == ["xtts_v2", "piper", "windows_sapi_fallback", "silence_fallback"]

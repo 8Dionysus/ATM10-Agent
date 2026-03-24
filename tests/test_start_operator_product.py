@@ -198,6 +198,12 @@ def test_build_startup_plan_manages_opt_in_pilot_runtime() -> None:
             "runs/pilot-runtime/hud_hook.json",
             "--pilot-tesseract-bin",
             "C:/Tools/Tesseract/tesseract.exe",
+            "--pilot-vlm-provider",
+            "stub",
+            "--pilot-text-provider",
+            "stub",
+            "--pilot-input-device-index",
+            "1",
         ]
     )
     plan = start_operator_product.build_startup_plan(args)
@@ -216,11 +222,34 @@ def test_build_startup_plan_manages_opt_in_pilot_runtime() -> None:
     assert str(Path("runs") / "pilot-runtime" / "hud_hook.json") in pilot_plan["command"]
     assert "--tesseract-bin" in pilot_plan["command"]
     assert "C:/Tools/Tesseract/tesseract.exe" in pilot_plan["command"]
+    assert "--pilot-vlm-provider" in pilot_plan["command"]
+    assert "stub" in pilot_plan["command"]
+    assert "--pilot-text-provider" in pilot_plan["command"]
     assert "--pilot-vlm-device" in pilot_plan["command"]
     assert "GPU" in pilot_plan["command"]
     assert "--pilot-text-device" in pilot_plan["command"]
     assert "NPU" in pilot_plan["command"]
+    assert "--input-device-index" in pilot_plan["command"]
+    assert "1" in pilot_plan["command"]
     assert plan["artifact_roots"]["pilot_runtime_runs_dir"] == str(Path("runs") / "pilot-runtime")
+
+
+def test_build_startup_plan_uses_openvino_pilot_providers_by_default() -> None:
+    args = start_operator_product.parse_args(
+        [
+            "--start-pilot-runtime",
+            "--capture-monitor",
+            "0",
+        ]
+    )
+
+    plan = start_operator_product.build_startup_plan(args)
+    pilot_plan = plan["managed_processes"]["pilot_runtime"]
+
+    assert "--pilot-vlm-provider" in pilot_plan["command"]
+    assert "--pilot-text-provider" in pilot_plan["command"]
+    assert "openvino" in pilot_plan["command"]
+    assert "stub" not in pilot_plan["command"]
 
 
 def test_parse_args_rejects_conflicting_voice_runtime_options() -> None:
