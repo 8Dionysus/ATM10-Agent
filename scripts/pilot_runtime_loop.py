@@ -906,14 +906,15 @@ def _summarize_hybrid_payload(
     return summary, citations
 
 
-_PILOT_WARMUP_PNG_B64 = (
-    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9sZrxhQAAAAASUVORK5CYII="
-)
-
-
 def _write_warmup_image(path: Path) -> Path:
+    from PIL import Image
+
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_bytes(base64.b64decode(_PILOT_WARMUP_PNG_B64))
+    image = Image.new("RGB", (56, 56), color=(18, 24, 28))
+    for x in range(14, 42):
+        for y in range(14, 42):
+            image.putpixel((x, y), (90, 160, 120))
+    image.save(path, format="PNG")
     return path
 
 

@@ -129,6 +129,18 @@ def test_push_to_talk_recorder_uses_explicit_input_device_index() -> None:
     assert selected == 1
 
 
+def test_write_warmup_image_creates_valid_png(tmp_path: Path) -> None:
+    warmup_path = pilot_runtime._write_warmup_image(tmp_path / "pilot_vlm_warmup.png")
+
+    assert warmup_path.is_file()
+
+    image = Image.open(warmup_path)
+    image.load()
+
+    assert image.size == (56, 56)
+    assert image.mode == "RGB"
+
+
 def test_run_pilot_turn_with_injected_locals_writes_contract(tmp_path: Path) -> None:
     runtime_run_dir = tmp_path / "pilot-runtime"
     runtime_run_dir.mkdir(parents=True, exist_ok=True)
