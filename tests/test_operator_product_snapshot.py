@@ -396,6 +396,15 @@ def _write_pilot_runtime_status(pilot_runs_dir: Path) -> None:
             "completed_at_utc": "2026-03-22T12:05:03+00:00",
             "degraded_flags": ["retrieval_only_fallback"],
             "degraded_services": ["gateway"],
+            "answer_language": "ru",
+            "reply_mode": "visual_only_fallback",
+            "transcript_quality": {
+                "status": "low_signal",
+                "reason_codes": ["short_ascii_when_russian_expected"],
+                "expected_language": "ru",
+                "detected_language": "en",
+                "transcript_used": False,
+            },
             "session": {
                 "status": "ok",
                 "window_found": True,
@@ -412,6 +421,19 @@ def _write_pilot_runtime_status(pilot_runs_dir: Path) -> None:
                 "has_player_state": True,
                 "text_preview": "Quest book Collect 16 wood",
                 "reason_codes": ["ocr_unavailable", "mod_hook_not_configured"],
+            },
+            "vision": {
+                "provider": "openvino_genai_vlm_v1",
+                "model": "qwen2.5-vl-7b-instruct-int4-ov",
+            },
+            "grounded_reply": {
+                "provider": "openvino_genai_grounded_reply_v1",
+                "model": "qwen3-8b-int4-cw-ov",
+                "answer_language": "ru",
+            },
+            "tts": {
+                "status": "ok",
+                "chunk_engines": ["windows_sapi_fallback"],
             },
             "answer_text": "Pilot degraded mode (retrieval_only_fallback). Quest book is the next step.",
             "paths": {
@@ -430,6 +452,21 @@ def _write_pilot_runtime_status(pilot_runs_dir: Path) -> None:
             "status": "running",
             "state": "idle",
             "hotkey": "F8",
+            "effective_config": {
+                "input_device_index": 1,
+                "asr_language": "ru",
+                "asr_max_new_tokens": 64,
+                "asr_warmup": {"requested": True},
+                "vlm_provider": "openvino",
+                "text_provider": "openvino",
+                "pilot_vlm_max_new_tokens": 64,
+                "pilot_text_max_new_tokens": 96,
+                "pilot_hybrid_timeout_sec": 1.5,
+            },
+            "provider_init": {
+                "vlm": {"status": "ok", "provider": "openvino", "warmup": {"requested": True, "ok": True}},
+                "text": {"status": "ok", "provider": "openvino", "warmup": {"requested": True, "ok": True}},
+            },
             "last_turn_id": "20260322_120501-pilot-turn",
             "last_turn_started_at_utc": "2026-03-22T12:05:01+00:00",
             "last_turn_completed_at_utc": "2026-03-22T12:05:03+00:00",
@@ -698,6 +735,31 @@ def test_build_operator_product_snapshot_includes_pilot_runtime_context(
         "load_operator_policy_surface_context",
         lambda _runs_dir: _clean_policy_surface_context(),
     )
+    monkeypatch.setattr(
+        operator_snapshot,
+        "fetch_service_health",
+        lambda *, service_name, service_url, timeout_sec, service_token=None: (
+            {
+                "service_name": service_name,
+                "configured": service_name == "tts_runtime_service",
+                "status": "ok" if service_name == "tts_runtime_service" else "not_configured",
+                "url": service_url,
+                "health_path": "/health",
+                "payload": (
+                    {
+                        "status": "ok",
+                        "preferred_tts_engine": "piper",
+                        "piper_available": True,
+                        "piper_prewarm_ok": True,
+                        "tts_degraded_reason": None,
+                    }
+                    if service_name == "tts_runtime_service"
+                    else None
+                ),
+                "error": None,
+            }
+        ),
+    )
     operator_runs_dir = tmp_path / "operator-runs"
     pilot_runs_dir = tmp_path / "pilot-runtime"
     _write_pilot_runtime_status(pilot_runs_dir)
@@ -717,6 +779,7 @@ def test_build_operator_product_snapshot_includes_pilot_runtime_context(
             "supported_operations": ["health"],
             "supported_profiles": ["baseline_first", "combo_a"],
         },
+        tts_service_url="http://127.0.0.1:8780",
     )
 
     pilot_runtime = payload["operator_context"]["pilot_runtime"]
@@ -725,11 +788,43 @@ def test_build_operator_product_snapshot_includes_pilot_runtime_context(
     assert pilot_runtime["status"] == "running"
     assert pilot_runtime["state"] == "idle"
     assert pilot_runtime["hotkey"] == "F8"
+    assert pilot_runtime["input_device_index"] == 1
+    assert pilot_runtime["asr_language"] == "ru"
+    assert pilot_runtime["asr_max_new_tokens"] == 64
+    assert pilot_runtime["vlm_provider"] == "openvino"
+    assert pilot_runtime["text_provider"] == "openvino"
+    assert pilot_runtime["pilot_vlm_max_new_tokens"] == 64
+    assert pilot_runtime["pilot_text_max_new_tokens"] == 96
+    assert pilot_runtime["pilot_hybrid_timeout_sec"] == 1.5
+    assert pilot_runtime["provider_init"]["vlm"]["status"] == "ok"
+    assert pilot_runtime["provider_init"]["vlm"]["warmup"]["ok"] is True
+    assert pilot_runtime["preferred_tts_engine"] == "piper"
+    assert pilot_runtime["active_tts_engine_last_turn"] == "windows_sapi_fallback"
+    assert pilot_runtime["piper_available"] is True
+    assert pilot_runtime["piper_prewarm_ok"] is True
+    assert (
+        pilot_runtime["tts_degraded_reason"]
+        == "last_turn_used_windows_sapi_fallback_instead_of_piper"
+    )
     assert pilot_runtime["last_turn_id"] == "20260322_120501-pilot-turn"
     assert pilot_runtime["paths"]["pilot_runs_dir"] == str(pilot_runs_dir)
     assert pilot_readiness["readiness_status"] == "attention"
     assert pilot_readiness["next_step_code"] == "repeat_live_pilot_turn"
     assert last_turn_summary["turn_id"] == "20260322_120501-pilot-turn"
+    assert last_turn_summary["answer_language"] == "ru"
+    assert last_turn_summary["reply_mode"] == "visual_only_fallback"
+    assert last_turn_summary["transcript_quality_status"] == "low_signal"
+    assert "short_ascii_when_russian_expected" in last_turn_summary["transcript_quality_reason_codes"]
+    assert last_turn_summary["vision_provider"] == "openvino_genai_vlm_v1"
+    assert last_turn_summary["grounded_reply_provider"] == "openvino_genai_grounded_reply_v1"
+    assert last_turn_summary["tts_engine"] == "windows_sapi_fallback"
+    assert last_turn_summary["preferred_tts_engine"] == "piper"
+    assert last_turn_summary["piper_available"] is True
+    assert last_turn_summary["piper_prewarm_ok"] is True
+    assert (
+        last_turn_summary["tts_degraded_reason"]
+        == "last_turn_used_windows_sapi_fallback_instead_of_piper"
+    )
     assert last_turn_summary["session_atm10_probable"] is True
     assert last_turn_summary["session_foreground"] is True
     assert last_turn_summary["hud_state_status"] == "partial"

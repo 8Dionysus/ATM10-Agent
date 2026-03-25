@@ -103,6 +103,52 @@ def test_build_piper_engine_invokes_subprocess(monkeypatch: pytest.MonkeyPatch, 
     assert wav_bytes.startswith(b"RIFF")
 
 
+def test_parse_args_accepts_explicit_piper_cli_args() -> None:
+    args = tts_runtime_service.parse_args(
+        [
+            "--tts-piper-executable",
+            "C:/Tools/piper/piper.exe",
+            "--tts-piper-model-path",
+            "models/piper/ru.onnx",
+            "--tts-piper-speaker",
+            "0",
+        ]
+    )
+
+    assert args.tts_piper_executable == "C:/Tools/piper/piper.exe"
+    assert args.tts_piper_model_path == "models/piper/ru.onnx"
+    assert args.tts_piper_speaker == "0"
+
+
+def test_build_windows_sapi_engine_invokes_system_speech(monkeypatch: pytest.MonkeyPatch) -> None:
+    def _fake_run(command, capture_output, text, check, timeout):
+        assert command[:4] == ["powershell.exe", "-NoProfile", "-NonInteractive", "-EncodedCommand"]
+        decoded_script = base64.b64decode(command[4]).decode("utf-16le")
+        assert "System.Speech" in decoded_script
+        marker = "FromBase64String('"
+        segments = decoded_script.split(marker)
+        language_b64 = segments[2].split("')", 1)[0]
+        output_path_b64 = segments[4].split("')", 1)[0]
+        assert base64.b64decode(language_b64).decode("utf-8") == "en"
+        output_path = Path(base64.b64decode(output_path_b64).decode("utf-8"))
+        waveform = np.zeros(2205, dtype=np.float32)
+        pcm16 = (waveform * 32767.0).astype(np.int16)
+        with wave.open(str(output_path), "wb") as wav_file:
+            wav_file.setnchannels(1)
+            wav_file.setsampwidth(2)
+            wav_file.setframerate(22050)
+            wav_file.writeframes(pcm16.tobytes())
+        return types.SimpleNamespace(returncode=0, stdout="", stderr="")
+
+    monkeypatch.setattr(tts_runtime_service.subprocess, "run", _fake_run)
+
+    engine = tts_runtime_service._build_windows_sapi_engine()
+    wav_bytes, sample_rate = engine.synthesize(text="hello", language="en", speaker=None)
+
+    assert sample_rate == 22050
+    assert wav_bytes.startswith(b"RIFF")
+
+
 def test_build_xtts_engine_uses_lazy_import(monkeypatch: pytest.MonkeyPatch) -> None:
     class _FakeSynthesizer:
         output_sample_rate = 24000
@@ -212,6 +258,11 @@ def test_build_default_service_degrades_silero_to_disabled_engine(monkeypatch: p
     monkeypatch.delenv("SILERO_ALLOW_REMOTE_HUB", raising=False)
     monkeypatch.delenv("SILERO_REPO_REF", raising=False)
     monkeypatch.delenv("PIPER_MODEL_PATH", raising=False)
+    monkeypatch.setattr(
+        tts_runtime_service,
+        "_synthesize_windows_sapi_wav",
+        lambda **_kwargs: (_ for _ in ()).throw(tts_runtime_service.TTSRuntimeError("windows unavailable")),
+    )
 
     service = tts_runtime_service._build_default_service(
         cache_items=32,
@@ -223,15 +274,136 @@ def test_build_default_service_degrades_silero_to_disabled_engine(monkeypatch: p
     assert service.silero_engine is not None
     assert prewarm_status["silero_ru_service"]["ok"] is False
     assert "disabled by default" in str(prewarm_status["silero_ru_service"]["error"])
-
-    with pytest.raises(tts_runtime_service.TTSRuntimeError, match="disabled by default"):
-        service.synthesize(
-            tts_runtime_service.TTSRequest(
-                text="служебное сообщение",
-                language="ru",
-                service_voice=True,
-            )
+    result = service.synthesize(
+        tts_runtime_service.TTSRequest(
+            text="служебное сообщение",
+            language="ru",
+            service_voice=True,
         )
+    )
+    assert result["chunks"][0].engine == "silence_fallback"
+
+
+def test_build_default_service_uses_silence_fallback_for_standard_tts(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("SILERO_REPO_OR_DIR", "snakers4/silero-models")
+    monkeypatch.delenv("SILERO_ALLOW_REMOTE_HUB", raising=False)
+    monkeypatch.delenv("SILERO_REPO_REF", raising=False)
+    monkeypatch.delenv("PIPER_MODEL_PATH", raising=False)
+    monkeypatch.setattr(
+        tts_runtime_service,
+        "_synthesize_windows_sapi_wav",
+        lambda **_kwargs: (_ for _ in ()).throw(tts_runtime_service.TTSRuntimeError("windows unavailable")),
+    )
+
+    service = tts_runtime_service._build_default_service(
+        cache_items=32,
+        chunk_chars=220,
+        queue_size=16,
+    )
+
+    prewarm_status = service.prewarm()
+    result = service.synthesize(tts_runtime_service.TTSRequest(text="hello there", language="en"))
+
+    assert prewarm_status["silence_fallback"]["ok"] is True
+    assert result["chunks"][0].engine == "silence_fallback"
+    assert result["router_chain"][-2:] == ["windows_sapi_fallback", "silence_fallback"]
+
+
+def test_build_default_service_uses_windows_sapi_before_silence(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("SILERO_REPO_OR_DIR", "snakers4/silero-models")
+    monkeypatch.delenv("SILERO_ALLOW_REMOTE_HUB", raising=False)
+    monkeypatch.delenv("SILERO_REPO_REF", raising=False)
+    monkeypatch.delenv("PIPER_MODEL_PATH", raising=False)
+    monkeypatch.setattr(
+        tts_runtime_service,
+        "_synthesize_windows_sapi_wav",
+        lambda **_kwargs: (b"RIFFfakewindows", 22050),
+    )
+
+    service = tts_runtime_service._build_default_service(
+        cache_items=32,
+        chunk_chars=220,
+        queue_size=16,
+    )
+
+    prewarm_status = service.prewarm()
+    result = service.synthesize(tts_runtime_service.TTSRequest(text="hello there", language="en"))
+
+    assert prewarm_status["windows_sapi_fallback"]["ok"] is True
+    assert result["chunks"][0].engine == "windows_sapi_fallback"
+    assert result["router_chain"][-2:] == ["windows_sapi_fallback", "silence_fallback"]
+
+
+def test_build_default_service_prefers_piper_before_fallbacks(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("SILERO_REPO_OR_DIR", "snakers4/silero-models")
+    monkeypatch.delenv("SILERO_ALLOW_REMOTE_HUB", raising=False)
+    monkeypatch.delenv("SILERO_REPO_REF", raising=False)
+    monkeypatch.setattr(
+        tts_runtime_service,
+        "_build_xtts_engine",
+        lambda: tts_runtime_service._disabled_engine("xtts_v2", "xtts unavailable"),
+    )
+    monkeypatch.setattr(
+        tts_runtime_service,
+        "_synthesize_windows_sapi_wav",
+        lambda **_kwargs: (b"RIFFfakewindows", 22050),
+    )
+
+    def _fake_run(command, input, capture_output, text, check, timeout):
+        output_file = Path(command[command.index("--output_file") + 1])
+        waveform = np.zeros(1600, dtype=np.float32)
+        pcm16 = (waveform * 32767.0).astype(np.int16)
+        with wave.open(str(output_file), "wb") as wav_file:
+            wav_file.setnchannels(1)
+            wav_file.setsampwidth(2)
+            wav_file.setframerate(22050)
+            wav_file.writeframes(pcm16.tobytes())
+        return types.SimpleNamespace(returncode=0, stdout="", stderr="")
+
+    monkeypatch.setattr(tts_runtime_service.subprocess, "run", _fake_run)
+
+    service = tts_runtime_service._build_default_service(
+        cache_items=32,
+        chunk_chars=220,
+        queue_size=16,
+        piper_executable="C:/Tools/piper/piper.exe",
+        piper_model_path="models/piper/ru.onnx",
+        piper_speaker="0",
+    )
+
+    prewarm_status = service.prewarm()
+    health = service.health()
+    result = service.synthesize(tts_runtime_service.TTSRequest(text="привет", language="ru"))
+
+    assert prewarm_status["piper"]["ok"] is True
+    assert health["preferred_tts_engine"] == "piper"
+    assert health["piper_available"] is True
+    assert health["piper_prewarm_ok"] is True
+    assert health["effective_config"]["piper"]["model_path"] == "models/piper/ru.onnx"
+    assert result["chunks"][0].engine == "piper"
+
+
+def test_build_default_service_reports_piper_not_configured_in_health(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("SILERO_REPO_OR_DIR", "snakers4/silero-models")
+    monkeypatch.delenv("SILERO_ALLOW_REMOTE_HUB", raising=False)
+    monkeypatch.delenv("SILERO_REPO_REF", raising=False)
+    monkeypatch.delenv("PIPER_MODEL_PATH", raising=False)
+
+    service = tts_runtime_service._build_default_service(
+        cache_items=32,
+        chunk_chars=220,
+        queue_size=16,
+    )
+
+    service.prewarm()
+    health = service.health()
+
+    assert health["preferred_tts_engine"] == "windows_sapi_fallback"
+    assert health["piper_available"] is False
+    assert health["piper_prewarm_ok"] is False
+    assert health["tts_degraded_reason"] == "piper_not_configured"
+    assert health["engines"]["piper"]["configured"] is False
+    assert health["engines"]["piper"]["ok"] is False
 
 
 def test_tts_runtime_service_main_starts_with_disabled_silero_config(
@@ -253,6 +425,10 @@ def test_tts_runtime_service_main_starts_with_disabled_silero_config(
             "8780",
             "--runs-dir",
             str(tmp_path / "runs"),
+            "--tts-piper-model-path",
+            "models/piper/ru.onnx",
+            "--tts-piper-speaker",
+            "0",
             "--no-prewarm",
         ]
     )
@@ -263,6 +439,9 @@ def test_tts_runtime_service_main_starts_with_disabled_silero_config(
     run_payload = json.loads((run_dirs[0] / "run.json").read_text(encoding="utf-8"))
     assert run_payload["status"] == "stopped"
     assert run_payload["service"]["base_url"] == "http://127.0.0.1:8780"
+    assert run_payload["service"]["tts"]["preferred_tts_engine"] == "piper"
+    assert run_payload["service"]["tts"]["piper"]["model_path"] == "models/piper/ru.onnx"
+    assert run_payload["service"]["tts"]["piper"]["speaker"] == "0"
 
 
 def test_tts_stream_endpoint_uses_iter_synthesize_without_submit() -> None:
@@ -424,6 +603,64 @@ def test_tts_endpoint_keeps_non_streaming_submit_path() -> None:
     payload = response.json()
     assert payload["ok"] is True
     assert service.submit_called is True
+
+
+def test_tts_endpoint_returns_silence_fallback_when_default_engines_are_unavailable(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from fastapi.testclient import TestClient
+
+    monkeypatch.setenv("SILERO_REPO_OR_DIR", "snakers4/silero-models")
+    monkeypatch.delenv("SILERO_ALLOW_REMOTE_HUB", raising=False)
+    monkeypatch.delenv("SILERO_REPO_REF", raising=False)
+    monkeypatch.delenv("PIPER_MODEL_PATH", raising=False)
+    monkeypatch.setattr(
+        tts_runtime_service,
+        "_synthesize_windows_sapi_wav",
+        lambda **_kwargs: (_ for _ in ()).throw(tts_runtime_service.TTSRuntimeError("windows unavailable")),
+    )
+
+    service = tts_runtime_service._build_default_service(
+        cache_items=32,
+        chunk_chars=220,
+        queue_size=16,
+    )
+    app = tts_runtime_service.create_app(service, prewarm=False)
+    with TestClient(app) as client:
+        response = client.post("/tts", json={"text": "hello fallback", "language": "en"})
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["ok"] is True
+    assert payload["result"]["chunks"][0]["engine"] == "silence_fallback"
+
+
+def test_tts_endpoint_returns_windows_sapi_audio_when_available(monkeypatch: pytest.MonkeyPatch) -> None:
+    from fastapi.testclient import TestClient
+
+    monkeypatch.setenv("SILERO_REPO_OR_DIR", "snakers4/silero-models")
+    monkeypatch.delenv("SILERO_ALLOW_REMOTE_HUB", raising=False)
+    monkeypatch.delenv("SILERO_REPO_REF", raising=False)
+    monkeypatch.delenv("PIPER_MODEL_PATH", raising=False)
+    monkeypatch.setattr(
+        tts_runtime_service,
+        "_synthesize_windows_sapi_wav",
+        lambda **_kwargs: (b"RIFFfakewindows", 22050),
+    )
+
+    service = tts_runtime_service._build_default_service(
+        cache_items=32,
+        chunk_chars=220,
+        queue_size=16,
+    )
+    app = tts_runtime_service.create_app(service, prewarm=False)
+    with TestClient(app) as client:
+        response = client.post("/tts", json={"text": "hello fallback", "language": "en"})
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["ok"] is True
+    assert payload["result"]["chunks"][0]["engine"] == "windows_sapi_fallback"
 
 
 def test_tts_service_maps_payload_too_large_to_413() -> None:

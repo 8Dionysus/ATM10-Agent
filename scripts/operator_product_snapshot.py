@@ -994,6 +994,22 @@ def _attach_startup_diagnostics(
     return enriched
 
 
+def _summarize_tts_engine(tts_payload: Mapping[str, Any] | None) -> str | None:
+    if not isinstance(tts_payload, Mapping):
+        return None
+    chunk_engines = tts_payload.get("chunk_engines")
+    if isinstance(chunk_engines, list):
+        normalized = [str(item).strip() for item in chunk_engines if str(item).strip()]
+        if normalized:
+            return normalized[0]
+    completed_event = tts_payload.get("completed_event")
+    if isinstance(completed_event, Mapping):
+        engine_name = str(completed_event.get("engine", "")).strip()
+        if engine_name:
+            return engine_name
+    return None
+
+
 def _load_pilot_last_turn_summary(
     pilot_status: Mapping[str, Any] | None,
 ) -> dict[str, Any] | None:
@@ -1021,6 +1037,15 @@ def _load_pilot_last_turn_summary(
         "session_probe_json": _nested_get(payload, "paths", "session_probe_json"),
         "live_hud_state_json": _nested_get(payload, "paths", "live_hud_state_json"),
         "tts_audio_wav": _nested_get(payload, "paths", "tts_audio_wav"),
+        "answer_language": payload.get("answer_language"),
+        "reply_mode": payload.get("reply_mode"),
+        "transcript_quality_status": _nested_get(payload, "transcript_quality", "status"),
+        "transcript_quality_reason_codes": _normalize_reason_codes(
+            _nested_get(payload, "transcript_quality", "reason_codes")
+        ),
+        "vision_provider": _nested_get(payload, "vision", "provider"),
+        "grounded_reply_provider": _nested_get(payload, "grounded_reply", "provider"),
+        "tts_engine": _summarize_tts_engine(_nested_get(payload, "tts")),
         "session_status": _nested_get(payload, "session", "status"),
         "session_window_found": _nested_get(payload, "session", "window_found"),
         "session_atm10_probable": _nested_get(payload, "session", "atm10_probable"),
@@ -1037,6 +1062,59 @@ def _load_pilot_last_turn_summary(
     }
 
 
+def _coerce_optional_bool(value: Any) -> bool | None:
+    if isinstance(value, bool):
+        return value
+    return None
+
+
+def _build_tts_runtime_diagnostics(
+    tts_health: Mapping[str, Any] | None,
+    last_turn_summary: Mapping[str, Any] | None,
+) -> dict[str, Any]:
+    payload = _nested_get(tts_health, "payload")
+    payload = payload if isinstance(payload, Mapping) else {}
+    preferred_tts_engine_value = payload.get("preferred_tts_engine")
+    preferred_tts_engine = (
+        str(preferred_tts_engine_value).strip()
+        if preferred_tts_engine_value is not None
+        else ""
+    ) or None
+    piper_available = _coerce_optional_bool(payload.get("piper_available"))
+    piper_prewarm_ok = _coerce_optional_bool(payload.get("piper_prewarm_ok"))
+    base_tts_degraded_reason_value = payload.get("tts_degraded_reason")
+    base_tts_degraded_reason = (
+        str(base_tts_degraded_reason_value).strip()
+        if base_tts_degraded_reason_value is not None
+        else ""
+    ) or None
+    active_tts_engine_last_turn = None
+    if isinstance(last_turn_summary, Mapping):
+        active_tts_engine_last_turn = str(last_turn_summary.get("tts_engine", "")).strip() or None
+
+    tts_degraded_reason = base_tts_degraded_reason
+    if (
+        preferred_tts_engine
+        and active_tts_engine_last_turn
+        and preferred_tts_engine != active_tts_engine_last_turn
+    ):
+        fallback_reason = (
+            f"last_turn_used_{active_tts_engine_last_turn}_instead_of_{preferred_tts_engine}"
+        )
+        tts_degraded_reason = (
+            f"{base_tts_degraded_reason}; {fallback_reason}"
+            if base_tts_degraded_reason
+            else fallback_reason
+        )
+    return {
+        "preferred_tts_engine": preferred_tts_engine,
+        "active_tts_engine_last_turn": active_tts_engine_last_turn,
+        "piper_available": piper_available,
+        "piper_prewarm_ok": piper_prewarm_ok,
+        "tts_degraded_reason": tts_degraded_reason,
+    }
+
+
 def _build_pilot_runtime_summary(
     pilot_status: Mapping[str, Any] | None,
     *,
@@ -1049,6 +1127,15 @@ def _build_pilot_runtime_summary(
             "last_turn_id": None,
             "degraded_services": [],
             "last_error": None,
+            "input_device_index": None,
+            "vlm_provider": None,
+            "text_provider": None,
+            "preferred_tts_engine": None,
+            "active_tts_engine_last_turn": None,
+            "piper_available": None,
+            "piper_prewarm_ok": None,
+            "tts_degraded_reason": None,
+            "provider_init": {},
             "paths": {
                 "pilot_runs_dir": None if pilot_runs_dir is None else str(pilot_runs_dir),
                 "latest_status_json": None if pilot_runs_dir is None else str(Path(pilot_runs_dir) / PILOT_RUNTIME_STATUS_FILENAME),
@@ -1063,6 +1150,25 @@ def _build_pilot_runtime_summary(
         "degraded_services": pilot_status.get("degraded_services", []),
         "last_error": pilot_status.get("last_error"),
         "hotkey": pilot_status.get("hotkey"),
+        "input_device_index": _nested_get(pilot_status, "effective_config", "input_device_index"),
+        "asr_language": _nested_get(pilot_status, "effective_config", "asr_language"),
+        "asr_max_new_tokens": _nested_get(pilot_status, "effective_config", "asr_max_new_tokens"),
+        "asr_warmup": _nested_get(pilot_status, "effective_config", "asr_warmup"),
+        "vlm_provider": _nested_get(pilot_status, "effective_config", "vlm_provider"),
+        "text_provider": _nested_get(pilot_status, "effective_config", "text_provider"),
+        "pilot_vlm_max_new_tokens": _nested_get(pilot_status, "effective_config", "pilot_vlm_max_new_tokens"),
+        "pilot_text_max_new_tokens": _nested_get(pilot_status, "effective_config", "pilot_text_max_new_tokens"),
+        "pilot_hybrid_timeout_sec": _nested_get(pilot_status, "effective_config", "pilot_hybrid_timeout_sec"),
+        "preferred_tts_engine": None,
+        "active_tts_engine_last_turn": None,
+        "piper_available": None,
+        "piper_prewarm_ok": None,
+        "tts_degraded_reason": None,
+        "provider_init": (
+            dict(pilot_status.get("provider_init", {}))
+            if isinstance(pilot_status.get("provider_init"), Mapping)
+            else {}
+        ),
         "latency_summary": pilot_status.get("latency_summary"),
         "paths": {
             "pilot_runs_dir": None if pilot_runs_dir is None else str(pilot_runs_dir),
@@ -2167,7 +2273,6 @@ def build_operator_product_snapshot(
         else effective_operator_runs_dir / "pilot-runtime"
     )
     pilot_status, pilot_warnings = load_latest_pilot_runtime_status(pilot_runs_dir)
-    pilot_runtime_summary = _build_pilot_runtime_summary(pilot_status, pilot_runs_dir=pilot_runs_dir)
     last_turn_summary = _load_pilot_last_turn_summary(pilot_status)
 
     service_warnings: list[str] = []
@@ -2199,6 +2304,19 @@ def build_operator_product_snapshot(
             service_warnings.append(
                 f"{service_health.get('service_name')}: {service_health.get('error')}"
             )
+    tts_runtime_diagnostics = _build_tts_runtime_diagnostics(tts_health, last_turn_summary)
+    pilot_runtime_summary = _build_pilot_runtime_summary(pilot_status, pilot_runs_dir=pilot_runs_dir)
+    pilot_runtime_summary.update(tts_runtime_diagnostics)
+    if isinstance(last_turn_summary, dict):
+        last_turn_summary.update(
+            {
+                "preferred_tts_engine": tts_runtime_diagnostics.get("preferred_tts_engine"),
+                "active_tts_engine_last_turn": tts_runtime_diagnostics.get("active_tts_engine_last_turn"),
+                "piper_available": tts_runtime_diagnostics.get("piper_available"),
+                "piper_prewarm_ok": tts_runtime_diagnostics.get("piper_prewarm_ok"),
+                "tts_degraded_reason": tts_runtime_diagnostics.get("tts_degraded_reason"),
+            }
+        )
 
     combo_a_profile_available = all(
         str(service.get("status", "")).strip() == "ok"

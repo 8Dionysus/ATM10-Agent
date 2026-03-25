@@ -233,45 +233,57 @@ def execute_hybrid_query(
         assert docs_path is not None
         docs = load_docs(docs_path)
 
-    if retrieval_backend == "in_memory":
-        assert docs is not None
-        retrieval_results = retrieve_top_k(
-            query,
-            docs,
-            topk=topk,
-            candidate_k=candidate_k,
-            reranker=reranker,
-            reranker_model=reranker_model,
-            reranker_max_length=reranker_max_length,
-            reranker_runtime=reranker_runtime,
-            reranker_device=reranker_device,
-        )
-    else:
-        retrieval_results = retrieve_top_k_qdrant(
-            query,
-            collection=qdrant_collection,
-            topk=topk,
-            candidate_k=candidate_k,
-            reranker=reranker,
-            reranker_model=reranker_model,
-            reranker_max_length=reranker_max_length,
-            reranker_runtime=reranker_runtime,
-            reranker_device=reranker_device,
-            host=qdrant_host,
-            port=qdrant_port,
-            vector_size=qdrant_vector_size,
-            timeout_sec=qdrant_timeout_sec,
-        )
+    warnings: list[str] = []
+    degraded = False
+    planner_status = "hybrid_merged"
+    graph_payload: dict[str, Any] | None = None
+    retrieval_stage_error: str | None = None
+
+    try:
+        if retrieval_backend == "in_memory":
+            assert docs is not None
+            retrieval_results = retrieve_top_k(
+                query,
+                docs,
+                topk=topk,
+                candidate_k=candidate_k,
+                reranker=reranker,
+                reranker_model=reranker_model,
+                reranker_max_length=reranker_max_length,
+                reranker_runtime=reranker_runtime,
+                reranker_device=reranker_device,
+            )
+        else:
+            retrieval_results = retrieve_top_k_qdrant(
+                query,
+                collection=qdrant_collection,
+                topk=topk,
+                candidate_k=candidate_k,
+                reranker=reranker,
+                reranker_model=reranker_model,
+                reranker_max_length=reranker_max_length,
+                reranker_runtime=reranker_runtime,
+                reranker_device=reranker_device,
+                host=qdrant_host,
+                port=qdrant_port,
+                vector_size=qdrant_vector_size,
+                timeout_sec=qdrant_timeout_sec,
+            )
+    except Exception as exc:
+        degraded = True
+        retrieval_stage_error = str(exc)
+        retrieval_results = []
+        warnings.append(f"retrieval stage fallback: {exc}")
 
     retrieval_results_payload = [dict(item) for item in retrieval_results]
     retrieval_results_count = len(retrieval_results_payload)
-    if retrieval_results_count == 0:
+    if retrieval_results_count == 0 and retrieval_stage_error is None:
         return {
             "schema_version": HYBRID_QUERY_RESULTS_SCHEMA,
             "planner_mode": DEFAULT_HYBRID_PLANNER_MODE,
             "planner_status": "retrieval_empty",
             "degraded": False,
-            "warnings": [],
+            "warnings": warnings,
             "retrieval_backend": retrieval_backend,
             "kag_backend": kag_backend,
             "retrieval_results": retrieval_results_payload,
@@ -284,10 +296,6 @@ def execute_hybrid_query(
         }
 
     kag_results_payload: list[dict[str, Any]] = []
-    warnings: list[str] = []
-    degraded = False
-    planner_status = "hybrid_merged"
-    graph_payload: dict[str, Any] | None = None
 
     try:
         if kag_backend == "file":
@@ -308,18 +316,23 @@ def execute_hybrid_query(
                 dataset_tag=neo4j_dataset_tag,
             )
         kag_results_payload = [dict(item) for item in kag_results]
-        if not kag_results_payload:
-            degraded = True
-            planner_status = "retrieval_only_fallback"
-            warnings.append("kag stage returned no expansion results; using retrieval-only fallback")
     except Exception as exc:
         degraded = True
-        planner_status = "retrieval_only_fallback"
         warnings.append(f"kag stage fallback: {exc}")
+
+    if retrieval_stage_error is not None:
+        if kag_results_payload:
+            planner_status = "kag_only_fallback"
+        else:
+            planner_status = "grounding_unavailable"
+    elif not kag_results_payload:
+        degraded = True
+        planner_status = "retrieval_only_fallback"
+        warnings.append("kag stage returned no expansion results; using retrieval-only fallback")
 
     merged_results = merge_hybrid_results(
         retrieval_results_payload,
-        [] if degraded else kag_results_payload,
+        kag_results_payload,
         topk=topk,
     )
     return {
@@ -332,8 +345,8 @@ def execute_hybrid_query(
         "kag_backend": kag_backend,
         "retrieval_results": retrieval_results_payload,
         "retrieval_results_count": retrieval_results_count,
-        "kag_results": [] if degraded else kag_results_payload,
-        "kag_results_count": 0 if degraded else len(kag_results_payload),
+        "kag_results": kag_results_payload,
+        "kag_results_count": len(kag_results_payload),
         "merged_results": merged_results,
         "results_count": len(merged_results),
         "graph_payload": graph_payload,

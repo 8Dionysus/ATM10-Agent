@@ -96,6 +96,20 @@ def test_parse_args_uses_qwen2_5_vl_7b_default_model_dir() -> None:
     assert args.pilot_vlm_model_dir == Path("models") / "qwen2.5-vl-7b-instruct-int4-ov"
     assert args.pilot_vlm_device == "GPU"
     assert args.pilot_text_device == "NPU"
+    assert args.voice_asr_language == "ru"
+    assert args.voice_asr_max_new_tokens == 64
+    assert args.voice_asr_warmup_request is True
+    assert args.voice_asr_warmup_language == "ru"
+    assert args.pilot_input_device_index == 1
+    assert args.pilot_vlm_max_new_tokens == 64
+    assert args.pilot_text_max_new_tokens == 96
+    assert args.pilot_hybrid_timeout_sec == 1.5
+    assert args.pilot_gateway_topk == 3
+    assert args.pilot_gateway_candidate_k == 6
+    assert args.pilot_max_entities_per_doc == 32
+    assert args.tts_piper_executable is None
+    assert args.tts_piper_model_path is None
+    assert args.tts_piper_speaker is None
 
 
 def test_parse_args_keeps_explicit_child_run_dir_overrides(tmp_path: Path) -> None:
@@ -178,8 +192,39 @@ def test_build_startup_plan_manages_opt_in_runtimes() -> None:
     assert managed["tts_runtime_service"]["managed"] is True
     assert managed["voice_runtime_service"]["url"] == "http://127.0.0.1:8765"
     assert managed["tts_runtime_service"]["url"] == "http://127.0.0.1:8780"
+    assert "--asr-language" in managed["voice_runtime_service"]["command"]
+    assert "ru" in managed["voice_runtime_service"]["command"]
+    assert "--asr-max-new-tokens" in managed["voice_runtime_service"]["command"]
+    assert "64" in managed["voice_runtime_service"]["command"]
+    assert "--asr-warmup-request" in managed["voice_runtime_service"]["command"]
+    assert "--asr-warmup-language" in managed["voice_runtime_service"]["command"]
+    assert "--tts-piper-model-path" not in managed["tts_runtime_service"]["command"]
     assert "--voice-service-url" in plan["gateway"]["command"]
     assert "--tts-service-url" in plan["gateway"]["command"]
+
+
+def test_build_startup_plan_passes_explicit_tts_piper_flags() -> None:
+    args = start_operator_product.parse_args(
+        [
+            "--start-tts-runtime",
+            "--tts-piper-executable",
+            "C:/Tools/piper/piper.exe",
+            "--tts-piper-model-path",
+            "models/piper/ru.onnx",
+            "--tts-piper-speaker",
+            "0",
+        ]
+    )
+
+    plan = start_operator_product.build_startup_plan(args)
+    command = plan["managed_processes"]["tts_runtime_service"]["command"]
+
+    assert "--tts-piper-executable" in command
+    assert "C:/Tools/piper/piper.exe" in command
+    assert "--tts-piper-model-path" in command
+    assert "models/piper/ru.onnx" in command
+    assert "--tts-piper-speaker" in command
+    assert "0" in command
 
 
 def test_build_startup_plan_manages_opt_in_pilot_runtime() -> None:
@@ -198,6 +243,12 @@ def test_build_startup_plan_manages_opt_in_pilot_runtime() -> None:
             "runs/pilot-runtime/hud_hook.json",
             "--pilot-tesseract-bin",
             "C:/Tools/Tesseract/tesseract.exe",
+            "--pilot-vlm-provider",
+            "stub",
+            "--pilot-text-provider",
+            "stub",
+            "--pilot-input-device-index",
+            "1",
         ]
     )
     plan = start_operator_product.build_startup_plan(args)
@@ -216,11 +267,51 @@ def test_build_startup_plan_manages_opt_in_pilot_runtime() -> None:
     assert str(Path("runs") / "pilot-runtime" / "hud_hook.json") in pilot_plan["command"]
     assert "--tesseract-bin" in pilot_plan["command"]
     assert "C:/Tools/Tesseract/tesseract.exe" in pilot_plan["command"]
+    assert "--pilot-vlm-provider" in pilot_plan["command"]
+    assert "stub" in pilot_plan["command"]
+    assert "--pilot-text-provider" in pilot_plan["command"]
     assert "--pilot-vlm-device" in pilot_plan["command"]
     assert "GPU" in pilot_plan["command"]
     assert "--pilot-text-device" in pilot_plan["command"]
     assert "NPU" in pilot_plan["command"]
+    assert "--input-device-index" in pilot_plan["command"]
+    assert "1" in pilot_plan["command"]
+    assert "--pilot-vlm-max-new-tokens" in pilot_plan["command"]
+    assert "64" in pilot_plan["command"]
+    assert "--pilot-text-max-new-tokens" in pilot_plan["command"]
+    assert "96" in pilot_plan["command"]
+    assert "--pilot-hybrid-timeout-sec" in pilot_plan["command"]
+    assert "1.5" in pilot_plan["command"]
+    assert "--pilot-gateway-topk" in pilot_plan["command"]
+    assert "3" in pilot_plan["command"]
+    assert "--pilot-gateway-candidate-k" in pilot_plan["command"]
+    assert "6" in pilot_plan["command"]
+    assert "--pilot-max-entities-per-doc" in pilot_plan["command"]
+    assert "32" in pilot_plan["command"]
+    assert "--asr-language" in pilot_plan["command"]
+    assert "--asr-max-new-tokens" in pilot_plan["command"]
+    assert "--asr-warmup-request" in pilot_plan["command"]
     assert plan["artifact_roots"]["pilot_runtime_runs_dir"] == str(Path("runs") / "pilot-runtime")
+
+
+def test_build_startup_plan_uses_openvino_pilot_providers_by_default() -> None:
+    args = start_operator_product.parse_args(
+        [
+            "--start-pilot-runtime",
+            "--capture-monitor",
+            "0",
+        ]
+    )
+
+    plan = start_operator_product.build_startup_plan(args)
+    pilot_plan = plan["managed_processes"]["pilot_runtime"]
+
+    assert "--pilot-vlm-provider" in pilot_plan["command"]
+    assert "--pilot-text-provider" in pilot_plan["command"]
+    assert "openvino" in pilot_plan["command"]
+    assert "stub" not in pilot_plan["command"]
+    assert "--input-device-index" in pilot_plan["command"]
+    assert "1" in pilot_plan["command"]
 
 
 def test_parse_args_rejects_conflicting_voice_runtime_options() -> None:

@@ -332,6 +332,61 @@ def test_gateway_v1_local_hybrid_query_combo_a_allows_missing_docs_path(
     assert response_payload["result"]["kag_backend"] == "neo4j"
 
 
+def test_gateway_v1_local_hybrid_query_returns_ok_for_degraded_combo_a_result(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def _fake_run_hybrid_query(**kwargs) -> dict[str, object]:
+        run_dir = kwargs["runs_dir"] / "20260227_100331-hybrid-query"
+        run_dir.mkdir(parents=True, exist_ok=True)
+        (run_dir / "run.json").write_text("{}", encoding="utf-8")
+        (run_dir / "hybrid_query_results.json").write_text("{}", encoding="utf-8")
+        return {
+            "ok": True,
+            "run_dir": run_dir,
+            "run_payload": {"status": "ok"},
+            "results_payload": {
+                "schema_version": "hybrid_query_results_v1",
+                "query": kwargs["query"],
+                "planner_mode": "retrieval_first_kag_expansion",
+                "planner_status": "grounding_unavailable",
+                "degraded": True,
+                "retrieval_backend": kwargs["retrieval_backend"],
+                "kag_backend": kwargs["kag_backend"],
+                "retrieval_results_count": 0,
+                "kag_results_count": 0,
+                "results_count": 0,
+            },
+        }
+
+    monkeypatch.setattr(gateway, "run_hybrid_query", _fake_run_hybrid_query)
+
+    result = gateway.run_gateway_request(
+        request_payload={
+            "schema_version": "gateway_request_v1",
+            "operation": "hybrid_query",
+            "payload": {
+                "profile": "combo_a",
+                "query": "steel tools",
+                "retrieval_backend": "qdrant",
+                "kag_backend": "neo4j",
+                "collection": "atm10_combo_a_fixture",
+                "topk": 5,
+                "candidate_k": 10,
+                "reranker": "none",
+                "neo4j_password": "fixture-password",
+            },
+        },
+        runs_dir=tmp_path / "runs",
+        now=datetime(2026, 2, 27, 10, 3, 31, tzinfo=timezone.utc),
+    )
+
+    response_payload = result["response_payload"]
+    assert result["ok"] is True
+    assert response_payload["status"] == "ok"
+    assert response_payload["result"]["planner_status"] == "grounding_unavailable"
+    assert response_payload["result"]["degraded"] is True
+
+
 def test_gateway_v1_local_automation_dry_run_ok(tmp_path: Path) -> None:
     result = gateway.run_gateway_request(
         request_payload={

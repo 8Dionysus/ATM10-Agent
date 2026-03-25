@@ -4,6 +4,7 @@ import argparse
 import base64
 import ctypes
 import json
+import re
 import shutil
 import sys
 import time
@@ -13,7 +14,7 @@ from datetime import datetime, timezone
 from io import BytesIO
 from pathlib import Path
 from time import perf_counter
-from typing import Any, Callable, Mapping
+from typing import Any, Callable, Mapping, Sequence
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
@@ -27,6 +28,7 @@ from src.agent_core.grounded_reply_openvino import (  # noqa: E402
     DEFAULT_GROUNDED_REPLY_MODEL_DIR,
     DeterministicGroundedReplyStub,
     OpenVINOGroundedReplyClient,
+    sanitize_grounded_reply_answer_text,
 )
 from src.agent_core.atm10_session_probe import (  # noqa: E402
     ATM10_SESSION_PROBE_SCHEMA,
@@ -57,12 +59,47 @@ DEFAULT_POLL_INTERVAL_SEC = 0.05
 DEFAULT_PILOT_SAMPLE_RATE = 16000
 DEFAULT_PILOT_VLM_PROMPT = (
     "Return only JSON with keys summary (string) and next_steps (array of short strings). "
-    "Describe the actionable ATM10 context visible on screen."
+    "Keep summary to one short sentence under 140 characters. "
+    "Leave next_steps empty unless one immediate ATM10 action is obvious."
 )
-DEFAULT_PILOT_GATEWAY_TOPK = 5
-DEFAULT_PILOT_GATEWAY_CANDIDATE_K = 10
-DEFAULT_PILOT_MAX_ENTITIES_PER_DOC = 128
+DEFAULT_PILOT_VLM_MAX_NEW_TOKENS = 64
+DEFAULT_PILOT_TEXT_MAX_NEW_TOKENS = 96
+DEFAULT_PILOT_ASR_LANGUAGE = "ru"
+DEFAULT_PILOT_ASR_MAX_NEW_TOKENS = 64
+DEFAULT_PILOT_GATEWAY_TOPK = 3
+DEFAULT_PILOT_GATEWAY_CANDIDATE_K = 6
+DEFAULT_PILOT_MAX_ENTITIES_PER_DOC = 32
+DEFAULT_PILOT_HYBRID_TIMEOUT_SEC = 1.5
 DEFAULT_PILOT_TESSERACT_BIN = "tesseract"
+_MICROPHONE_POSITIVE_HINTS = (
+    "microphone",
+    "mic",
+    "микрофон",
+    "набор микрофонов",
+    "headset",
+    "гарнитур",
+)
+_MICROPHONE_NEGATIVE_HINTS = (
+    "stereo mix",
+    "stereo input",
+    "стерео микшер",
+    "loopback",
+    "переназначение",
+    "remap",
+    "output",
+    "speaker",
+    "динамик",
+    "headphones",
+    "monitor",
+)
+_LOW_SIGNAL_ASCII_FILLERS = (
+    "thank you",
+    "thanks",
+    "thank you.",
+    "thanks.",
+    "ok",
+    "okay",
+)
 
 
 def _utc_now() -> str:
@@ -276,6 +313,129 @@ def _decode_tts_chunk_audio(chunk_payload: Mapping[str, Any]) -> tuple[np.ndarra
     return _load_wav_bytes_mono(base64.b64decode(audio_b64))
 
 
+def _is_tts_silence_fallback_engine(engine_name: str) -> bool:
+    return str(engine_name).strip().lower() == "silence_fallback"
+
+
+def _contains_cyrillic(text: str) -> bool:
+    return any("\u0400" <= char <= "\u04FF" for char in str(text or ""))
+
+
+def _infer_tts_language(*, text: str, preferred_language: str | None = None) -> str:
+    normalized_preferred = str(preferred_language or "").strip().lower()
+    if normalized_preferred:
+        return normalized_preferred
+    if _contains_cyrillic(text):
+        return "ru"
+    return "en"
+
+
+def _infer_reply_language(*, transcript: str, transcript_language: str | None = None) -> str:
+    normalized_language = str(transcript_language or "").strip().lower()
+    if normalized_language.startswith("en"):
+        return "en"
+    if normalized_language.startswith("ru"):
+        return "ru"
+    if _contains_cyrillic(transcript):
+        return "ru"
+    return "ru"
+
+
+def _normalize_text_whitespace(text: str) -> str:
+    return " ".join(str(text or "").replace("\r", " ").replace("\n", " ").split())
+
+
+def _evaluate_transcript_quality(
+    *,
+    transcript: str,
+    transcript_language: str | None,
+    expected_language: str | None,
+) -> dict[str, Any]:
+    normalized_transcript = _normalize_text_whitespace(transcript)
+    normalized_detected_language = str(transcript_language or "").strip().lower()
+    normalized_expected_language = str(expected_language or "").strip().lower()
+    reason_codes: list[str] = []
+    if not normalized_transcript:
+        reason_codes.append("empty")
+    elif not any(char.isalnum() for char in normalized_transcript):
+        reason_codes.append("punctuation_only")
+
+    expected_russian = normalized_expected_language.startswith("ru")
+    ascii_only = normalized_transcript.isascii()
+    lowered = normalized_transcript.lower().strip(" \t\r\n.!?,;:")
+    alpha_words = [
+        word
+        for word in re.split(r"\s+", lowered)
+        if any(char.isalpha() for char in word)
+    ]
+    if expected_russian and normalized_transcript and ascii_only:
+        if lowered in _LOW_SIGNAL_ASCII_FILLERS:
+            reason_codes.append("ascii_filler")
+        elif len(alpha_words) <= 2:
+            reason_codes.append("short_ascii_when_russian_expected")
+
+    if normalized_transcript and len(normalized_transcript) <= 2 and not any(char.isdigit() for char in normalized_transcript):
+        reason_codes.append("too_short")
+
+    unique_reason_codes = list(dict.fromkeys(reason_codes))
+    status = "low_signal" if unique_reason_codes else "ok"
+    return {
+        "status": status,
+        "reason_codes": unique_reason_codes,
+        "expected_language": normalized_expected_language or None,
+        "detected_language": normalized_detected_language or None,
+        "transcript_used": status == "ok",
+    }
+
+
+def _compose_local_context_summary(
+    *,
+    visual_summary: str,
+    session_payload: Mapping[str, Any] | None,
+    hud_payload: Mapping[str, Any] | None,
+) -> str:
+    parts: list[str] = []
+    normalized_visual_summary = _normalize_text_whitespace(visual_summary)
+    if normalized_visual_summary:
+        parts.append(normalized_visual_summary)
+    hud_mapping = hud_payload if isinstance(hud_payload, Mapping) else {}
+    hud_preview = _normalize_text_whitespace(str(hud_mapping.get("text_preview", "")))
+    if hud_preview:
+        parts.append(f"HUD: {hud_preview}")
+    else:
+        context_tags = hud_mapping.get("context_tags")
+        if isinstance(context_tags, list):
+            normalized_tags = [str(item).strip() for item in context_tags[:3] if str(item).strip()]
+            if normalized_tags:
+                parts.append(f"HUD tags: {', '.join(normalized_tags)}")
+    session_mapping = session_payload if isinstance(session_payload, Mapping) else {}
+    window_title = _normalize_text_whitespace(str(session_mapping.get("window_title", "")))
+    if window_title and not parts:
+        parts.append(f"Window: {window_title}")
+    combined = "; ".join(part for part in parts if part).strip()
+    return combined[:280].rstrip()
+
+
+def _finalize_spoken_answer_text(answer_text: str) -> tuple[str, list[str]]:
+    normalized = _normalize_text_whitespace(answer_text)
+    if not normalized:
+        return "", []
+    flags: list[str] = []
+    sentence_match = re.split(r"(?<=[.!?])\s+", normalized, maxsplit=1)
+    if sentence_match:
+        first_sentence = sentence_match[0].strip()
+        if first_sentence and first_sentence != normalized:
+            normalized = first_sentence
+            flags.append("spoken_answer_sentence_capped")
+    if len(normalized) <= 140:
+        return normalized, list(dict.fromkeys(flags))
+    truncated = normalized[:137].rstrip()
+    if " " in truncated:
+        truncated = truncated.rsplit(" ", 1)[0]
+    truncated = truncated.rstrip(" ,;:.!?")
+    return f"{truncated}...", list(dict.fromkeys([*flags, "spoken_answer_truncated"]))
+
+
 def _play_waveform_if_enabled(
     *,
     waveform: np.ndarray,
@@ -305,21 +465,56 @@ def build_fallback_answer(
     citations: list[Mapping[str, Any]],
     degraded_flags: list[str],
     stage_errors: Mapping[str, str],
+    preferred_language: str | None = None,
 ) -> str:
-    parts = [_degraded_prefix(degraded_flags).strip() or "Pilot degraded mode."]
-    if transcript.strip():
-        parts.append(f"I heard: {transcript.strip()}.")
-    else:
-        parts.append("I could not recover a usable transcript from the microphone input.")
-    if isinstance(visual_summary, str) and visual_summary.strip():
-        parts.append(f"Visible context: {visual_summary.strip()}.")
     titles = [str(item.get("title", "")).strip() for item in citations if str(item.get("title", "")).strip()]
+    normalized_language = _infer_reply_language(
+        transcript=transcript,
+        transcript_language=preferred_language,
+    )
+    normalized_visual_summary = _normalize_text_whitespace(str(visual_summary or ""))
+    if normalized_language == "ru":
+        if normalized_visual_summary:
+            return f"Вижу следующее: {normalized_visual_summary}"
+        if titles:
+            return f"Пока могу опереться на {', '.join(titles[:2])}; повтори запрос короче."
+        if stage_errors:
+            return "Повтори запрос коротко, чтобы я дал точную подсказку."
+        return "Скажи короткий запрос, и я отвечу по текущему экрану."
+    if normalized_visual_summary:
+        return f"I can see this: {normalized_visual_summary}"
     if titles:
-        parts.append(f"Grounding sources: {', '.join(titles[:3])}.")
+        return f"I can ground on {', '.join(titles[:2])}; please repeat the request more briefly."
     if stage_errors:
-        rendered_errors = ", ".join(f"{name}={message}" for name, message in sorted(stage_errors.items()))
-        parts.append(f"Unavailable components: {rendered_errors}.")
-    return " ".join(part for part in parts if part).strip()
+        return "Please repeat the request briefly so I can answer precisely."
+    return "Say a short request and I will answer from the current screen."
+
+
+def _emit_turn_console_summary(turn_payload: Mapping[str, Any]) -> None:
+    turn_id = str(turn_payload.get("turn_id", "")).strip() or "<unknown>"
+    status = str(turn_payload.get("status", "")).strip() or "unknown"
+    transcript = str(turn_payload.get("request", {}).get("transcript", "")).strip()
+    answer_text = str(turn_payload.get("answer_text", "")).strip()
+    session = turn_payload.get("session")
+    session = session if isinstance(session, Mapping) else {}
+    tts = turn_payload.get("tts")
+    tts = tts if isinstance(tts, Mapping) else {}
+    transcript_quality = turn_payload.get("transcript_quality")
+    transcript_quality = transcript_quality if isinstance(transcript_quality, Mapping) else {}
+    reply_mode = str(turn_payload.get("reply_mode", "")).strip() or "unknown"
+    session_title = str(session.get("window_title", "")).strip() or "<window-unknown>"
+    atm10_probable = bool(session.get("atm10_probable"))
+    tts_status = str(tts.get("status", "")).strip() or "unknown"
+    print(
+        f"[pilot_runtime] turn={turn_id} status={status} "
+        f"atm10_probable={str(atm10_probable).lower()} tts={tts_status} "
+        f"reply_mode={reply_mode} transcript_quality={transcript_quality.get('status', 'unknown')} "
+        f"window={session_title}"
+    )
+    if transcript:
+        print(f"[pilot_runtime] transcript: {transcript}")
+    if answer_text:
+        print(f"[pilot_runtime] answer: {answer_text}")
 
 
 def _coerce_turn_status(*, degraded_flags: list[str], stage_errors: Mapping[str, str], answer_text: str) -> str:
@@ -351,6 +546,10 @@ def _service_names_from_flags(degraded_flags: list[str], stage_errors: Mapping[s
             services.append("tts_runtime_service")
         elif normalized.startswith("voice") or normalized.startswith("asr"):
             services.append("voice_runtime_service")
+        elif normalized.startswith("transcript"):
+            services.append("voice_runtime_service")
+        elif normalized.startswith("grounded_reply"):
+            services.append("text_core")
     for stage_name in stage_errors:
         if stage_name == "capture":
             services.append("capture")
@@ -453,12 +652,16 @@ def call_voice_asr(
     *,
     voice_runtime_url: str,
     audio_path: Path,
+    language: str | None = None,
     service_token: str | None = None,
 ) -> dict[str, Any]:
     response = _request_json(
         method="POST",
         url=f"{voice_runtime_url.rstrip('/')}/asr",
-        payload={"audio_path": str(audio_path)},
+        payload={
+            "audio_path": str(audio_path),
+            **({"language": str(language).strip()} if isinstance(language, str) and language.strip() else {}),
+        },
         service_token=service_token,
     )
     if not bool(response.get("ok")):
@@ -477,6 +680,7 @@ def call_gateway_hybrid_query(
     topk: int = DEFAULT_PILOT_GATEWAY_TOPK,
     candidate_k: int = DEFAULT_PILOT_GATEWAY_CANDIDATE_K,
     max_entities_per_doc: int = DEFAULT_PILOT_MAX_ENTITIES_PER_DOC,
+    timeout_sec: float = DEFAULT_PILOT_HYBRID_TIMEOUT_SEC,
 ) -> dict[str, Any]:
     response = _request_json(
         method="POST",
@@ -493,6 +697,7 @@ def call_gateway_hybrid_query(
                 "max_entities_per_doc": int(max_entities_per_doc),
             },
         },
+        timeout_sec=timeout_sec,
         service_token=service_token,
     )
     if str(response.get("status", "")).strip().lower() != "ok":
@@ -526,6 +731,7 @@ def synthesize_with_tts_runtime(
     *,
     tts_runtime_url: str,
     text: str,
+    language: str | None = None,
     turn_dir: Path,
     service_token: str | None = None,
     playback_enabled: bool = True,
@@ -533,15 +739,17 @@ def synthesize_with_tts_runtime(
     tts_json_path = turn_dir / "tts_response.json"
     tts_stream_events_path = turn_dir / "tts_stream_events.jsonl"
     tts_audio_path = turn_dir / "tts_audio_out.wav"
+    tts_language = _infer_tts_language(text=text, preferred_language=language)
 
     try:
         events = _request_ndjson(
             method="POST",
             url=f"{tts_runtime_url.rstrip('/')}/tts_stream",
-            payload={"text": text, "language": "en"},
+            payload={"text": text, "language": tts_language},
             service_token=service_token,
         )
         collected_waveforms: list[np.ndarray] = []
+        chunk_engines: list[str] = []
         sample_rate: int | None = None
         playback_error: str | None = None
         for event in events:
@@ -557,6 +765,7 @@ def synthesize_with_tts_runtime(
             elif sample_rate != chunk_sample_rate:
                 raise RuntimeError("tts_stream returned inconsistent sample rates across chunks")
             collected_waveforms.append(waveform)
+            chunk_engines.append(str(event.get("engine", "")).strip())
             if playback_error is None:
                 playback_error = _play_waveform_if_enabled(
                     waveform=waveform,
@@ -571,19 +780,21 @@ def synthesize_with_tts_runtime(
             raise RuntimeError("tts_stream did not emit a completed event")
         if not collected_waveforms or sample_rate is None:
             raise RuntimeError("tts_stream completed without audio chunks")
+        silence_fallback_used = any(_is_tts_silence_fallback_engine(name) for name in chunk_engines)
         write_wav_pcm16(
             path=tts_audio_path,
             waveform=np.concatenate(collected_waveforms),
             sample_rate=sample_rate,
         )
         payload = {
-            "status": "ok" if playback_error is None else "degraded",
+            "status": "ok" if playback_error is None and not silence_fallback_used else "degraded",
             "mode": "tts_stream",
             "streaming_mode": "stream",
-            "fallback_used": False,
-            "fallback_reason": None,
+            "fallback_used": silence_fallback_used,
+            "fallback_reason": "silence_fallback_audio" if silence_fallback_used else None,
             "chunk_count": sum(1 for item in events if item.get("event") == "audio_chunk"),
             "events_count": len(events),
+            "chunk_engines": chunk_engines,
             "audio_out_wav": str(tts_audio_path),
             "stream_events_jsonl": str(tts_stream_events_path),
             "playback_error": playback_error,
@@ -595,7 +806,7 @@ def synthesize_with_tts_runtime(
         response = _request_json(
             method="POST",
             url=f"{tts_runtime_url.rstrip('/')}/tts",
-            payload={"text": text, "language": "en"},
+            payload={"text": text, "language": tts_language},
             service_token=service_token,
         )
         if not bool(response.get("ok")):
@@ -609,6 +820,7 @@ def synthesize_with_tts_runtime(
         if not chunks:
             raise RuntimeError(f"tts_stream failed ({stream_exc}) and /tts fallback returned no audio")
         collected_waveforms: list[np.ndarray] = []
+        chunk_engines: list[str] = []
         sample_rate: int | None = None
         playback_error: str | None = None
         for chunk in chunks:
@@ -619,6 +831,7 @@ def synthesize_with_tts_runtime(
             elif sample_rate != chunk_sample_rate:
                 raise RuntimeError("tts fallback returned inconsistent sample rates across chunks")
             collected_waveforms.append(waveform)
+            chunk_engines.append(str(chunk.get("engine", "")).strip())
             if playback_error is None:
                 playback_error = _play_waveform_if_enabled(
                     waveform=waveform,
@@ -626,19 +839,24 @@ def synthesize_with_tts_runtime(
                     playback_enabled=playback_enabled,
                 )
         assert sample_rate is not None
+        silence_fallback_used = any(_is_tts_silence_fallback_engine(name) for name in chunk_engines)
         write_wav_pcm16(
             path=tts_audio_path,
             waveform=np.concatenate(collected_waveforms),
             sample_rate=sample_rate,
         )
+        fallback_reasons = [str(stream_exc)]
+        if silence_fallback_used:
+            fallback_reasons.append("silence_fallback_audio")
         payload = {
-            "status": "ok" if playback_error is None else "degraded",
+            "status": "ok" if playback_error is None and not silence_fallback_used else "degraded",
             "mode": "tts",
             "streaming_mode": "fallback_full_response",
             "fallback_used": True,
-            "fallback_reason": str(stream_exc),
+            "fallback_reason": "; ".join(reason for reason in fallback_reasons if reason),
             "chunk_count": len(chunks),
             "events_count": 0,
+            "chunk_engines": chunk_engines,
             "audio_out_wav": str(tts_audio_path),
             "stream_events_jsonl": str(tts_stream_events_path) if tts_stream_events_path.exists() else None,
             "playback_error": playback_error,
@@ -688,6 +906,61 @@ def _summarize_hybrid_payload(
     return summary, citations
 
 
+def _write_warmup_image(path: Path) -> Path:
+    from PIL import Image
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+    image = Image.new("RGB", (56, 56), color=(18, 24, 28))
+    for x in range(14, 42):
+        for y in range(14, 42):
+            image.putpixel((x, y), (90, 160, 120))
+    image.save(path, format="PNG")
+    return path
+
+
+def _warmup_vlm_provider(
+    *,
+    vlm_client: Any,
+    runtime_run_dir: Path,
+) -> dict[str, Any]:
+    warmup_image_path = _write_warmup_image(runtime_run_dir / "tmp" / "pilot_vlm_warmup.png")
+    started = perf_counter()
+    result = vlm_client.analyze_image(
+        image_path=warmup_image_path,
+        prompt=DEFAULT_PILOT_VLM_PROMPT,
+    )
+    latency_sec = round(perf_counter() - started, 6)
+    return {
+        "requested": True,
+        "ok": True,
+        "latency_sec": latency_sec,
+        "image_path": str(warmup_image_path),
+        "result_preview": _normalize_text_whitespace(str(result.get("summary", "")))[:140],
+    }
+
+
+def _warmup_grounded_reply_provider(
+    *,
+    grounded_reply_client: Any,
+) -> dict[str, Any]:
+    started = perf_counter()
+    result = grounded_reply_client.generate_reply(
+        transcript="Что на экране",
+        visual_summary="Темная пещера и интерфейс ATM10.",
+        citations=[],
+        hybrid_summary={"planner_status": "warmup_local_only"},
+        degraded_flags=[],
+        preferred_language="ru",
+    )
+    latency_sec = round(perf_counter() - started, 6)
+    return {
+        "requested": True,
+        "ok": True,
+        "latency_sec": latency_sec,
+        "result_preview": _normalize_text_whitespace(str(result.get("answer_text", "")))[:140],
+    }
+
+
 def _status_payload(
     *,
     runtime_run_dir: Path,
@@ -697,10 +970,20 @@ def _status_payload(
     gateway_url: str | None,
     voice_runtime_url: str | None,
     tts_runtime_url: str | None,
+    input_device_index: int | None,
+    asr_language: str | None,
+    asr_max_new_tokens: int,
+    asr_warmup_requested: bool,
     capture_monitor: int | None,
     capture_region: tuple[int, int, int, int] | None,
     vlm_model_dir: Path,
     text_model_dir: Path,
+    vlm_provider: str,
+    text_provider: str,
+    pilot_vlm_max_new_tokens: int,
+    pilot_text_max_new_tokens: int,
+    pilot_hybrid_timeout_sec: float,
+    provider_init: Mapping[str, Any] | None,
     degraded_services: list[str],
     last_turn_payload: Mapping[str, Any] | None = None,
     last_error: str | None = None,
@@ -732,11 +1015,21 @@ def _status_payload(
             "gateway_url": gateway_url,
             "voice_runtime_url": voice_runtime_url,
             "tts_runtime_url": tts_runtime_url,
+            "input_device_index": input_device_index,
+            "asr_language": asr_language,
+            "asr_max_new_tokens": int(asr_max_new_tokens),
+            "asr_warmup": {"requested": bool(asr_warmup_requested)},
             "capture_monitor": capture_monitor,
             "capture_region": format_capture_region(capture_region),
             "vlm_model_dir": str(vlm_model_dir),
             "text_model_dir": str(text_model_dir),
+            "vlm_provider": vlm_provider,
+            "text_provider": text_provider,
+            "pilot_vlm_max_new_tokens": int(pilot_vlm_max_new_tokens),
+            "pilot_text_max_new_tokens": int(pilot_text_max_new_tokens),
+            "pilot_hybrid_timeout_sec": float(pilot_hybrid_timeout_sec),
         },
+        "provider_init": dict(provider_init or {}),
         "degraded_services": degraded_services,
         "last_error": last_error,
         "last_turn_id": last_turn_id,
@@ -788,10 +1081,20 @@ class PilotRuntimeStatusHandle:
     gateway_url: str | None
     voice_runtime_url: str | None
     tts_runtime_url: str | None
+    input_device_index: int | None
+    asr_language: str | None
+    asr_max_new_tokens: int
+    asr_warmup_requested: bool
     capture_monitor: int | None
     capture_region: tuple[int, int, int, int] | None
     vlm_model_dir: Path
     text_model_dir: Path
+    vlm_provider: str
+    text_provider: str
+    pilot_vlm_max_new_tokens: int
+    pilot_text_max_new_tokens: int
+    pilot_hybrid_timeout_sec: float
+    provider_init: dict[str, Any] | None = None
     state: str = "idle"
     last_turn_payload: dict[str, Any] | None = None
     last_error: str | None = None
@@ -807,10 +1110,20 @@ class PilotRuntimeStatusHandle:
             gateway_url=self.gateway_url,
             voice_runtime_url=self.voice_runtime_url,
             tts_runtime_url=self.tts_runtime_url,
+            input_device_index=self.input_device_index,
+            asr_language=self.asr_language,
+            asr_max_new_tokens=self.asr_max_new_tokens,
+            asr_warmup_requested=self.asr_warmup_requested,
             capture_monitor=self.capture_monitor,
             capture_region=self.capture_region,
             vlm_model_dir=self.vlm_model_dir,
             text_model_dir=self.text_model_dir,
+            vlm_provider=self.vlm_provider,
+            text_provider=self.text_provider,
+            pilot_vlm_max_new_tokens=self.pilot_vlm_max_new_tokens,
+            pilot_text_max_new_tokens=self.pilot_text_max_new_tokens,
+            pilot_hybrid_timeout_sec=self.pilot_hybrid_timeout_sec,
+            provider_init=dict(self.provider_init or {}),
             degraded_services=list(self.degraded_services or []),
             last_turn_payload=self.last_turn_payload,
             last_error=self.last_error,
@@ -863,8 +1176,14 @@ class PollingHotkey:
 
 
 class PushToTalkRecorder:
-    def __init__(self, *, sample_rate: int = DEFAULT_PILOT_SAMPLE_RATE) -> None:
+    def __init__(
+        self,
+        *,
+        sample_rate: int = DEFAULT_PILOT_SAMPLE_RATE,
+        preferred_input_device_index: int | None = None,
+    ) -> None:
         self._sample_rate = int(sample_rate)
+        self._preferred_input_device_index = preferred_input_device_index
         self._input_device_index: int | None = None
         self._input_device_name: str | None = None
         self._chunks: list[np.ndarray] = []
@@ -880,25 +1199,70 @@ class PushToTalkRecorder:
             ) from exc
         return sd
 
+    @staticmethod
+    def _candidate_device_score(device_name: str) -> int:
+        normalized = str(device_name).strip().lower()
+        score = 0
+        if any(hint in normalized for hint in _MICROPHONE_POSITIVE_HINTS):
+            score += 10
+        if any(hint in normalized for hint in _MICROPHONE_NEGATIVE_HINTS):
+            score -= 20
+        return score
+
+    @classmethod
+    def select_input_device_index(
+        cls,
+        *,
+        devices: Sequence[Mapping[str, Any]],
+        default_device: Any,
+        preferred_input_device_index: int | None = None,
+    ) -> int:
+        input_candidates = [
+            index for index, item in enumerate(devices) if int(item.get("max_input_channels", 0) or 0) > 0
+        ]
+        if not input_candidates:
+            raise RuntimeError("No audio input device with input channels is available.")
+
+        if preferred_input_device_index is not None:
+            if preferred_input_device_index not in input_candidates:
+                raise RuntimeError(
+                    f"Configured input device index {preferred_input_device_index} is not a valid audio input device."
+                )
+            return int(preferred_input_device_index)
+
+        default_input_index: int | None = None
+        if isinstance(default_device, (list, tuple)) and default_device:
+            candidate = int(default_device[0])
+            if candidate in input_candidates:
+                default_input_index = candidate
+        elif isinstance(default_device, int) and default_device in input_candidates:
+            default_input_index = int(default_device)
+
+        scored_candidates: list[tuple[int, int, int]] = []
+        for index in input_candidates:
+            item = devices[index]
+            score = cls._candidate_device_score(str(item.get("name", f"device_{index}")))
+            if default_input_index == index:
+                score += 5
+            scored_candidates.append((score, int(item.get("max_input_channels", 0) or 0), -index))
+
+        best_position = max(range(len(scored_candidates)), key=scored_candidates.__getitem__)
+        best_score = scored_candidates[best_position][0]
+        if best_score <= 0 and default_input_index is not None:
+            return int(default_input_index)
+        return int(input_candidates[best_position])
+
     def start(self) -> dict[str, Any]:
         if self._stream is not None:
             raise RuntimeError("push-to-talk recorder is already active")
         sd = self._resolve_sd()
         devices = sd.query_devices()
         default_device = sd.default.device
-        input_index = None
-        if isinstance(default_device, (list, tuple)) and default_device:
-            if int(default_device[0]) >= 0:
-                input_index = int(default_device[0])
-        elif isinstance(default_device, int) and default_device >= 0:
-            input_index = int(default_device)
-        if input_index is None:
-            for index, item in enumerate(devices):
-                if int(item.get("max_input_channels", 0)) > 0:
-                    input_index = index
-                    break
-        if input_index is None:
-            raise RuntimeError("No audio input device with input channels is available.")
+        input_index = self.select_input_device_index(
+            devices=devices,
+            default_device=default_device,
+            preferred_input_device_index=self._preferred_input_device_index,
+        )
 
         self._input_device_index = int(input_index)
         self._input_device_name = str(devices[self._input_device_index].get("name", f"device_{input_index}"))
@@ -974,6 +1338,11 @@ def run_pilot_turn(
     tts_runtime_url: str | None,
     vlm_client: Any,
     grounded_reply_client: Any,
+    expected_asr_language: str | None = DEFAULT_PILOT_ASR_LANGUAGE,
+    pilot_hybrid_timeout_sec: float = DEFAULT_PILOT_HYBRID_TIMEOUT_SEC,
+    pilot_gateway_topk: int = DEFAULT_PILOT_GATEWAY_TOPK,
+    pilot_gateway_candidate_k: int = DEFAULT_PILOT_GATEWAY_CANDIDATE_K,
+    pilot_max_entities_per_doc: int = DEFAULT_PILOT_MAX_ENTITIES_PER_DOC,
     hud_hook_json: Path | None = None,
     tesseract_bin: str = DEFAULT_PILOT_TESSERACT_BIN,
     service_token: str | None = None,
@@ -1043,8 +1412,17 @@ def run_pilot_turn(
         },
         "vision": {"summary": None, "next_steps": [], "error": None},
         "hybrid": {"planner_status": None, "degraded": None, "warnings": [], "citations": [], "error": None},
-        "grounded_reply": {"answer_text": None, "cited_entities": [], "error": None},
+        "grounded_reply": {"answer_text": None, "cited_entities": [], "answer_language": None, "error": None},
         "tts": {"status": "not_started", "error": None},
+        "transcript_quality": {
+            "status": "not_started",
+            "reason_codes": [],
+            "expected_language": str(expected_asr_language or "").strip().lower() or None,
+            "detected_language": None,
+            "transcript_used": False,
+        },
+        "reply_mode": "not_started",
+        "answer_language": None,
         "degraded_flags": [],
         "degraded_services": [],
         "latency": {},
@@ -1184,6 +1562,7 @@ def run_pilot_turn(
                 asr_payload = asr_func(
                     voice_runtime_url=voice_runtime_url,
                     audio_path=copied_audio_path,
+                    language=expected_asr_language,
                     service_token=service_token,
                 )
                 transcript = str(asr_payload.get("text", "")).strip()
@@ -1191,13 +1570,22 @@ def run_pilot_turn(
             except Exception as exc:
                 stage_errors["asr"] = str(exc)
                 degraded_flags.append("asr_failed")
-        if not transcript:
+        transcript_quality = _evaluate_transcript_quality(
+            transcript=transcript,
+            transcript_language=language,
+            expected_language=expected_asr_language,
+        )
+        if transcript_quality["status"] != "ok":
+            degraded_flags.append("transcript_low_signal")
+        if "empty" in transcript_quality["reason_codes"]:
             degraded_flags.append("transcript_empty")
         base_payload["request"]["transcript"] = transcript
         base_payload["request"]["language"] = language
+        base_payload["transcript_quality"] = transcript_quality
         base_payload["latency"]["asr_sec"] = round(perf_counter() - stage_started, 6)
 
         stage_started = perf_counter()
+        transcript_for_answer = transcript if bool(base_payload["transcript_quality"].get("transcript_used")) else ""
         visual_summary = ""
         vision_payload: dict[str, Any] | None = None
         if capture_payload is not None and vlm_client is not None:
@@ -1222,24 +1610,41 @@ def run_pilot_turn(
         base_payload["latency"]["vision_sec"] = round(perf_counter() - stage_started, 6)
 
         stage_started = perf_counter()
+        local_context_summary = _compose_local_context_summary(
+            visual_summary=visual_summary,
+            session_payload=base_payload.get("session"),
+            hud_payload=base_payload.get("hud_state"),
+        )
         gateway_result: dict[str, Any] | None = None
         if gateway_url is None:
             stage_errors["hybrid"] = "gateway URL is not configured"
             degraded_flags.append("hybrid_unconfigured")
-        elif not transcript:
-            stage_errors["hybrid"] = "hybrid_query skipped because transcript is empty"
-            degraded_flags.append("hybrid_skipped_no_transcript")
+        elif not transcript_for_answer:
+            if str(base_payload["transcript_quality"].get("status", "")).strip() == "low_signal":
+                stage_errors["hybrid"] = "hybrid_query skipped because transcript is low-signal"
+                degraded_flags.append("hybrid_skipped_low_signal")
+            else:
+                stage_errors["hybrid"] = "hybrid_query skipped because transcript is empty"
+                degraded_flags.append("hybrid_skipped_no_transcript")
         else:
             try:
                 gateway_result = hybrid_query_func(
                     gateway_url=gateway_url,
-                    query=transcript,
+                    query=transcript_for_answer,
+                    timeout_sec=pilot_hybrid_timeout_sec,
+                    topk=pilot_gateway_topk,
+                    candidate_k=pilot_gateway_candidate_k,
+                    max_entities_per_doc=pilot_max_entities_per_doc,
                     service_token=service_token,
                 )
             except Exception as exc:
                 stage_errors["hybrid"] = str(exc)
                 degraded_flags.append("hybrid_query_failed")
+                degraded_flags.append("hybrid_fast_fail")
         hybrid_summary, citations = _summarize_hybrid_payload(gateway_result)
+        if bool(hybrid_summary.get("degraded")):
+            degraded_flags.append("hybrid_degraded")
+            degraded_flags.append("hybrid_fast_fail")
         if str(hybrid_summary.get("planner_status", "")).strip() == "retrieval_only_fallback":
             degraded_flags.append("retrieval_only_fallback")
         base_payload["hybrid"] = {
@@ -1251,18 +1656,30 @@ def run_pilot_turn(
 
         stage_started = perf_counter()
         grounded_reply_payload: dict[str, Any] | None = None
+        preferred_language_hint = language if transcript_for_answer else (expected_asr_language or language)
+        preferred_reply_language = _infer_reply_language(
+            transcript=transcript_for_answer,
+            transcript_language=preferred_language_hint,
+        )
+        reply_mode = "normal_local"
+        if not transcript_for_answer:
+            reply_mode = "visual_only_fallback"
         if grounded_reply_client is not None:
             try:
                 grounded_reply_payload = grounded_reply_client.generate_reply(
-                    transcript=transcript,
-                    visual_summary=visual_summary,
+                    transcript=transcript_for_answer,
+                    visual_summary=local_context_summary or visual_summary,
                     citations=citations,
                     hybrid_summary=hybrid_summary,
                     degraded_flags=list(sorted(dict.fromkeys(degraded_flags))),
+                    preferred_language=preferred_reply_language,
                 )
             except Exception as exc:
                 stage_errors["grounded_reply"] = str(exc)
                 degraded_flags.append("grounded_reply_failed")
+        else:
+            stage_errors["grounded_reply"] = "local grounded reply provider is unavailable"
+            degraded_flags.append("grounded_reply_unavailable")
         if grounded_reply_payload is None:
             grounded_reply_payload = {
                 "provider": "deterministic_fallback_v1",
@@ -1270,11 +1687,12 @@ def run_pilot_turn(
                 "device": "local",
                 "prompt": "",
                 "answer_text": build_fallback_answer(
-                    transcript=transcript,
-                    visual_summary=visual_summary,
+                    transcript=transcript_for_answer,
+                    visual_summary=local_context_summary or visual_summary,
                     citations=citations,
                     degraded_flags=list(sorted(dict.fromkeys(degraded_flags))),
                     stage_errors=stage_errors,
+                    preferred_language=preferred_reply_language,
                 ),
                 "cited_entities": [
                     str(item.get("title", "")).strip()
@@ -1282,28 +1700,83 @@ def run_pilot_turn(
                     if str(item.get("title", "")).strip()
                 ],
                 "degraded_flags": list(sorted(dict.fromkeys(degraded_flags))),
+                "answer_language": preferred_reply_language,
                 "raw_response_text": "",
             }
+            reply_mode = "fallback_answer"
+        provider_degraded_flags = [
+            str(item)
+            for item in grounded_reply_payload.get("degraded_flags", [])
+            if str(item).strip()
+            and str(item).strip()
+            not in {"grounded_reply_answer_sentence_capped", "grounded_reply_answer_truncated"}
+        ]
+        degraded_flags.extend(provider_degraded_flags)
         answer_text = str(grounded_reply_payload.get("answer_text", "")).strip()
+        sanitized_answer_text, answer_sanitization_flags = sanitize_grounded_reply_answer_text(answer_text)
+        degraded_flags.extend(
+            [
+                flag
+                for flag in answer_sanitization_flags
+                if flag not in {"grounded_reply_answer_sentence_capped", "grounded_reply_answer_truncated"}
+            ]
+        )
+        grounded_reply_payload["degraded_flags"] = list(
+            sorted(dict.fromkeys([*provider_degraded_flags, *answer_sanitization_flags]))
+        )
         current_degraded_flags = list(sorted(dict.fromkeys(degraded_flags)))
-        if current_degraded_flags:
-            prefix = _degraded_prefix(current_degraded_flags)
-            if answer_text and not answer_text.startswith(prefix):
-                answer_text = f"{prefix}{answer_text}".strip()
-            elif not answer_text:
-                answer_text = build_fallback_answer(
-                    transcript=transcript,
-                    visual_summary=visual_summary,
-                    citations=citations,
-                    degraded_flags=current_degraded_flags,
-                    stage_errors=stage_errors,
+        if answer_text and not sanitized_answer_text:
+            degraded_flags.append("grounded_reply_answer_fallback")
+            grounded_reply_payload["degraded_flags"] = list(
+                sorted(dict.fromkeys([*grounded_reply_payload["degraded_flags"], "grounded_reply_answer_fallback"]))
+            )
+            current_degraded_flags = list(sorted(dict.fromkeys(degraded_flags)))
+        answer_text = sanitized_answer_text
+        if not answer_text:
+            answer_text = build_fallback_answer(
+                transcript=transcript_for_answer,
+                visual_summary=local_context_summary or visual_summary,
+                citations=citations,
+                degraded_flags=current_degraded_flags,
+                stage_errors=stage_errors,
+                preferred_language=preferred_reply_language,
+            )
+            reply_mode = "fallback_answer"
+        answer_text, spoken_answer_flags = _finalize_spoken_answer_text(answer_text)
+        grounded_reply_payload["degraded_flags"] = list(
+            sorted(dict.fromkeys([*grounded_reply_payload["degraded_flags"], *spoken_answer_flags]))
+        )
+        if not answer_text:
+            answer_text = build_fallback_answer(
+                transcript="",
+                visual_summary=local_context_summary or visual_summary,
+                citations=citations,
+                degraded_flags=list(sorted(dict.fromkeys(degraded_flags))),
+                stage_errors=stage_errors,
+                preferred_language=preferred_reply_language,
+            )
+            answer_text, fallback_finalize_flags = _finalize_spoken_answer_text(answer_text)
+            grounded_reply_payload["degraded_flags"] = list(
+                sorted(
+                    dict.fromkeys(
+                        [
+                            *grounded_reply_payload["degraded_flags"],
+                            "grounded_reply_answer_fallback",
+                            *fallback_finalize_flags,
+                        ]
+                    )
                 )
+            )
+            reply_mode = "fallback_answer"
         grounded_reply_payload["answer_text"] = answer_text
+        grounded_reply_payload["answer_language"] = preferred_reply_language
         base_payload["grounded_reply"] = {
             **grounded_reply_payload,
             "error": stage_errors.get("grounded_reply"),
         }
         base_payload["answer_text"] = answer_text
+        base_payload["reply_mode"] = reply_mode
+        base_payload["answer_language"] = preferred_reply_language
         base_payload["cited_entities"] = list(grounded_reply_payload.get("cited_entities", []))
         base_payload["citations"] = citations
         base_payload["latency"]["grounded_reply_sec"] = round(perf_counter() - stage_started, 6)
@@ -1322,6 +1795,7 @@ def run_pilot_turn(
                 tts_payload = tts_func(
                     tts_runtime_url=tts_runtime_url,
                     text=answer_text,
+                    language=preferred_reply_language,
                     turn_dir=turn_dir,
                     service_token=service_token,
                     playback_enabled=playback_enabled,
@@ -1373,18 +1847,27 @@ def _build_provider(
     model_dir: Path,
     device: str,
     provider_kind: str,
+    max_new_tokens: int,
 ) -> Any:
     normalized_provider = str(provider_name).strip().lower()
     if provider_kind == "vlm":
         if normalized_provider == "stub":
             return DeterministicStubVLM()
         if normalized_provider == "openvino":
-            return OpenVINOVLMClient.from_pretrained(model_dir=model_dir, device=device)
+            return OpenVINOVLMClient.from_pretrained(
+                model_dir=model_dir,
+                device=device,
+                max_new_tokens=max_new_tokens,
+            )
         raise ValueError("pilot VLM provider must be one of: openvino, stub.")
     if normalized_provider == "stub":
         return DeterministicGroundedReplyStub()
     if normalized_provider == "openvino":
-        return OpenVINOGroundedReplyClient.from_pretrained(model_dir=model_dir, device=device)
+        return OpenVINOGroundedReplyClient.from_pretrained(
+            model_dir=model_dir,
+            device=device,
+            max_new_tokens=max_new_tokens,
+        )
     raise ValueError("pilot text provider must be one of: openvino, stub.")
 
 
@@ -1395,6 +1878,7 @@ def run_pilot_runtime_loop(
     voice_runtime_url: str | None,
     tts_runtime_url: str | None,
     hotkey: str,
+    input_device_index: int | None = None,
     capture_monitor: int | None,
     capture_region: tuple[int, int, int, int] | None,
     hud_hook_json: Path | None,
@@ -1405,6 +1889,16 @@ def run_pilot_runtime_loop(
     pilot_text_device: str,
     pilot_vlm_provider: str = "openvino",
     pilot_text_provider: str = "openvino",
+    pilot_vlm_max_new_tokens: int = DEFAULT_PILOT_VLM_MAX_NEW_TOKENS,
+    pilot_text_max_new_tokens: int = DEFAULT_PILOT_TEXT_MAX_NEW_TOKENS,
+    asr_language: str | None = DEFAULT_PILOT_ASR_LANGUAGE,
+    asr_max_new_tokens: int = DEFAULT_PILOT_ASR_MAX_NEW_TOKENS,
+    asr_warmup_requested: bool = False,
+    asr_warmup_language: str | None = DEFAULT_PILOT_ASR_LANGUAGE,
+    pilot_hybrid_timeout_sec: float = DEFAULT_PILOT_HYBRID_TIMEOUT_SEC,
+    pilot_gateway_topk: int = DEFAULT_PILOT_GATEWAY_TOPK,
+    pilot_gateway_candidate_k: int = DEFAULT_PILOT_GATEWAY_CANDIDATE_K,
+    pilot_max_entities_per_doc: int = DEFAULT_PILOT_MAX_ENTITIES_PER_DOC,
     sample_rate: int = DEFAULT_PILOT_SAMPLE_RATE,
     poll_interval_sec: float = DEFAULT_POLL_INTERVAL_SEC,
     service_token: str | None = None,
@@ -1432,6 +1926,7 @@ def run_pilot_runtime_loop(
             "voice_runtime_url": voice_runtime_url,
             "tts_runtime_url": tts_runtime_url,
             "hotkey": hotkey,
+            "input_device_index": input_device_index,
             "capture_monitor": capture_monitor,
             "capture_region": format_capture_region(capture_region),
             "hud_hook_json": None if hud_hook_json is None else str(hud_hook_json),
@@ -1442,6 +1937,16 @@ def run_pilot_runtime_loop(
             "pilot_text_device": pilot_text_device,
             "pilot_vlm_provider": pilot_vlm_provider,
             "pilot_text_provider": pilot_text_provider,
+            "pilot_vlm_max_new_tokens": int(pilot_vlm_max_new_tokens),
+            "pilot_text_max_new_tokens": int(pilot_text_max_new_tokens),
+            "asr_language": asr_language,
+            "asr_max_new_tokens": int(asr_max_new_tokens),
+            "asr_warmup_request": bool(asr_warmup_requested),
+            "asr_warmup_language": asr_warmup_language,
+            "pilot_hybrid_timeout_sec": float(pilot_hybrid_timeout_sec),
+            "pilot_gateway_topk": int(pilot_gateway_topk),
+            "pilot_gateway_candidate_k": int(pilot_gateway_candidate_k),
+            "pilot_max_entities_per_doc": int(pilot_max_entities_per_doc),
             "sample_rate": int(sample_rate),
             "poll_interval_sec": float(poll_interval_sec),
             "playback_enabled": bool(playback_enabled),
@@ -1462,11 +1967,27 @@ def run_pilot_runtime_loop(
             model_dir=pilot_vlm_model_dir,
             device=pilot_vlm_device,
             provider_kind="vlm",
+            max_new_tokens=pilot_vlm_max_new_tokens,
         )
-        run_payload["provider_init"]["vlm"] = {"status": "ok", "provider": pilot_vlm_provider}
+        run_payload["provider_init"]["vlm"] = {
+            "status": "ok",
+            "provider": pilot_vlm_provider,
+            "device": pilot_vlm_device,
+            "model_dir": str(pilot_vlm_model_dir),
+            "max_new_tokens": int(pilot_vlm_max_new_tokens),
+            "warmup": {"requested": pilot_vlm_provider == "openvino", "ok": None, "error": None},
+        }
     except Exception as exc:
         degraded_services.append("vlm")
-        run_payload["provider_init"]["vlm"] = {"status": "error", "provider": pilot_vlm_provider, "error": str(exc)}
+        run_payload["provider_init"]["vlm"] = {
+            "status": "error",
+            "provider": pilot_vlm_provider,
+            "device": pilot_vlm_device,
+            "model_dir": str(pilot_vlm_model_dir),
+            "max_new_tokens": int(pilot_vlm_max_new_tokens),
+            "warmup": {"requested": pilot_vlm_provider == "openvino", "ok": None, "error": None},
+            "error": str(exc),
+        }
 
     try:
         grounded_reply_client = _build_provider(
@@ -1474,13 +1995,25 @@ def run_pilot_runtime_loop(
             model_dir=pilot_text_model_dir,
             device=pilot_text_device,
             provider_kind="text",
+            max_new_tokens=pilot_text_max_new_tokens,
         )
-        run_payload["provider_init"]["text"] = {"status": "ok", "provider": pilot_text_provider}
+        run_payload["provider_init"]["text"] = {
+            "status": "ok",
+            "provider": pilot_text_provider,
+            "device": pilot_text_device,
+            "model_dir": str(pilot_text_model_dir),
+            "max_new_tokens": int(pilot_text_max_new_tokens),
+            "warmup": {"requested": pilot_text_provider == "openvino", "ok": None, "error": None},
+        }
     except Exception as exc:
         degraded_services.append("text_core")
         run_payload["provider_init"]["text"] = {
             "status": "error",
             "provider": pilot_text_provider,
+            "device": pilot_text_device,
+            "model_dir": str(pilot_text_model_dir),
+            "max_new_tokens": int(pilot_text_max_new_tokens),
+            "warmup": {"requested": pilot_text_provider == "openvino", "ok": None, "error": None},
             "error": str(exc),
         }
 
@@ -1491,6 +2024,33 @@ def run_pilot_runtime_loop(
     if tts_runtime_url is None:
         degraded_services.append("tts_runtime_service")
 
+    if vlm_client is not None and pilot_vlm_provider == "openvino":
+        try:
+            run_payload["provider_init"]["vlm"]["warmup"] = _warmup_vlm_provider(
+                vlm_client=vlm_client,
+                runtime_run_dir=runtime_run_dir,
+            )
+        except Exception as exc:
+            degraded_services.append("vlm")
+            run_payload["provider_init"]["vlm"]["warmup"] = {
+                "requested": True,
+                "ok": False,
+                "error": str(exc),
+            }
+
+    if grounded_reply_client is not None and pilot_text_provider == "openvino":
+        try:
+            run_payload["provider_init"]["text"]["warmup"] = _warmup_grounded_reply_provider(
+                grounded_reply_client=grounded_reply_client,
+            )
+        except Exception as exc:
+            degraded_services.append("text_core")
+            run_payload["provider_init"]["text"]["warmup"] = {
+                "requested": True,
+                "ok": False,
+                "error": str(exc),
+            }
+
     status_handle = PilotRuntimeStatusHandle(
         runtime_run_dir=runtime_run_dir,
         latest_status_path=latest_status_path,
@@ -1498,10 +2058,20 @@ def run_pilot_runtime_loop(
         gateway_url=gateway_url,
         voice_runtime_url=voice_runtime_url,
         tts_runtime_url=tts_runtime_url,
+        input_device_index=input_device_index,
+        asr_language=asr_language,
+        asr_max_new_tokens=asr_max_new_tokens,
+        asr_warmup_requested=asr_warmup_requested,
         capture_monitor=capture_monitor,
         capture_region=capture_region,
         vlm_model_dir=pilot_vlm_model_dir,
         text_model_dir=pilot_text_model_dir,
+        vlm_provider=pilot_vlm_provider,
+        text_provider=pilot_text_provider,
+        pilot_vlm_max_new_tokens=pilot_vlm_max_new_tokens,
+        pilot_text_max_new_tokens=pilot_text_max_new_tokens,
+        pilot_hybrid_timeout_sec=pilot_hybrid_timeout_sec,
+        provider_init=dict(run_payload["provider_init"]),
         degraded_services=sorted(dict.fromkeys(degraded_services)),
     )
     recorder: PushToTalkRecorder | None = None
@@ -1509,7 +2079,10 @@ def run_pilot_runtime_loop(
 
     try:
         hotkey_watcher = PollingHotkey(hotkey)
-        recorder = PushToTalkRecorder(sample_rate=sample_rate)
+        recorder = PushToTalkRecorder(
+            sample_rate=sample_rate,
+            preferred_input_device_index=input_device_index,
+        )
         temp_audio_path = runtime_run_dir / "live_recording.wav"
         status_handle.publish()
         _write_json(run_json_path, run_payload)
@@ -1546,6 +2119,11 @@ def run_pilot_runtime_loop(
                         tts_runtime_url=tts_runtime_url,
                         vlm_client=vlm_client,
                         grounded_reply_client=grounded_reply_client,
+                        expected_asr_language=asr_language or asr_warmup_language or DEFAULT_PILOT_ASR_LANGUAGE,
+                        pilot_hybrid_timeout_sec=pilot_hybrid_timeout_sec,
+                        pilot_gateway_topk=pilot_gateway_topk,
+                        pilot_gateway_candidate_k=pilot_gateway_candidate_k,
+                        pilot_max_entities_per_doc=pilot_max_entities_per_doc,
                         hud_hook_json=hud_hook_json,
                         tesseract_bin=tesseract_bin,
                         service_token=service_token,
@@ -1575,6 +2153,7 @@ def run_pilot_runtime_loop(
                         last_turn_payload=turn_payload,
                         status="degraded" if turn_payload.get("status") == "degraded" else "running",
                     )
+                    _emit_turn_console_summary(turn_payload)
                 except Exception as exc:
                     run_payload["error"] = str(exc)
                     _write_json(run_json_path, run_payload)
@@ -1648,13 +2227,78 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         "--pilot-vlm-provider",
         choices=("openvino", "stub"),
         default="openvino",
-        help="Pilot VLM provider (default: openvino).",
+        help="Pilot VLM provider (default: openvino; use stub only for diagnostics).",
     )
     parser.add_argument(
         "--pilot-text-provider",
         choices=("openvino", "stub"),
         default="openvino",
-        help="Pilot grounded-reply provider (default: openvino).",
+        help="Pilot grounded-reply provider (default: openvino; use stub only for diagnostics).",
+    )
+    parser.add_argument(
+        "--pilot-vlm-max-new-tokens",
+        type=int,
+        default=DEFAULT_PILOT_VLM_MAX_NEW_TOKENS,
+        help="VLM token budget for live pilot turns.",
+    )
+    parser.add_argument(
+        "--pilot-text-max-new-tokens",
+        type=int,
+        default=DEFAULT_PILOT_TEXT_MAX_NEW_TOKENS,
+        help="Grounded-reply token budget for live pilot turns.",
+    )
+    parser.add_argument(
+        "--input-device-index",
+        type=int,
+        default=None,
+        help="Optional explicit sounddevice input device index for push-to-talk capture.",
+    )
+    parser.add_argument(
+        "--asr-language",
+        type=str,
+        default=DEFAULT_PILOT_ASR_LANGUAGE,
+        help="Expected ASR language for live turns (default: ru).",
+    )
+    parser.add_argument(
+        "--asr-max-new-tokens",
+        type=int,
+        default=DEFAULT_PILOT_ASR_MAX_NEW_TOKENS,
+        help="Observed ASR token budget for live turns.",
+    )
+    parser.add_argument(
+        "--asr-warmup-request",
+        action="store_true",
+        help="Record that managed ASR warmup is expected for this live profile.",
+    )
+    parser.add_argument(
+        "--asr-warmup-language",
+        type=str,
+        default=DEFAULT_PILOT_ASR_LANGUAGE,
+        help="Language hint used by managed ASR warmup.",
+    )
+    parser.add_argument(
+        "--pilot-hybrid-timeout-sec",
+        type=float,
+        default=DEFAULT_PILOT_HYBRID_TIMEOUT_SEC,
+        help="Pilot-side timeout for opportunistic hybrid queries.",
+    )
+    parser.add_argument(
+        "--pilot-gateway-topk",
+        type=int,
+        default=DEFAULT_PILOT_GATEWAY_TOPK,
+        help="Pilot hybrid top-k budget.",
+    )
+    parser.add_argument(
+        "--pilot-gateway-candidate-k",
+        type=int,
+        default=DEFAULT_PILOT_GATEWAY_CANDIDATE_K,
+        help="Pilot hybrid candidate-k budget.",
+    )
+    parser.add_argument(
+        "--pilot-max-entities-per-doc",
+        type=int,
+        default=DEFAULT_PILOT_MAX_ENTITIES_PER_DOC,
+        help="Pilot hybrid entity budget per document.",
     )
     parser.add_argument("--sample-rate", type=int, default=DEFAULT_PILOT_SAMPLE_RATE, help="Microphone sample rate.")
     parser.add_argument(
@@ -1692,6 +2336,7 @@ def main(argv: list[str] | None = None) -> int:
         voice_runtime_url=args.voice_runtime_url,
         tts_runtime_url=args.tts_runtime_url,
         hotkey=hotkey,
+        input_device_index=args.input_device_index,
         capture_monitor=args.capture_monitor,
         capture_region=capture_region,
         hud_hook_json=args.hud_hook_json,
@@ -1702,6 +2347,16 @@ def main(argv: list[str] | None = None) -> int:
         pilot_text_device=args.pilot_text_device,
         pilot_vlm_provider=args.pilot_vlm_provider,
         pilot_text_provider=args.pilot_text_provider,
+        pilot_vlm_max_new_tokens=args.pilot_vlm_max_new_tokens,
+        pilot_text_max_new_tokens=args.pilot_text_max_new_tokens,
+        asr_language=args.asr_language,
+        asr_max_new_tokens=args.asr_max_new_tokens,
+        asr_warmup_requested=args.asr_warmup_request,
+        asr_warmup_language=args.asr_warmup_language,
+        pilot_hybrid_timeout_sec=args.pilot_hybrid_timeout_sec,
+        pilot_gateway_topk=args.pilot_gateway_topk,
+        pilot_gateway_candidate_k=args.pilot_gateway_candidate_k,
+        pilot_max_entities_per_doc=args.pilot_max_entities_per_doc,
         sample_rate=args.sample_rate,
         poll_interval_sec=args.poll_interval_sec,
         service_token=args.service_token,

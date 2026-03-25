@@ -23,6 +23,15 @@ from src.agent_core.combo_a_profile import (
 )
 
 SCHEMA_VERSION = "operator_product_startup_v1"
+DEFAULT_LIVE_ASR_LANGUAGE = "ru"
+DEFAULT_LIVE_ASR_MAX_NEW_TOKENS = 64
+DEFAULT_LIVE_PILOT_VLM_MAX_NEW_TOKENS = 64
+DEFAULT_LIVE_PILOT_TEXT_MAX_NEW_TOKENS = 96
+DEFAULT_LIVE_PILOT_HYBRID_TIMEOUT_SEC = 1.5
+DEFAULT_LIVE_PILOT_GATEWAY_TOPK = 3
+DEFAULT_LIVE_PILOT_GATEWAY_CANDIDATE_K = 6
+DEFAULT_LIVE_PILOT_MAX_ENTITIES_PER_DOC = 32
+DEFAULT_LIVE_PILOT_INPUT_DEVICE_INDEX = 1
 
 
 def _utc_now() -> str:
@@ -102,20 +111,29 @@ def build_startup_plan(args: argparse.Namespace) -> dict[str, Any]:
 
     if args.start_voice_runtime:
         voice_runtime_url = f"http://127.0.0.1:{args.voice_runtime_port}"
+        voice_runtime_command = [
+            sys.executable,
+            "scripts/voice_runtime_service.py",
+            "--host",
+            "127.0.0.1",
+            "--port",
+            str(args.voice_runtime_port),
+            "--runs-dir",
+            str(args.voice_runtime_runs_dir),
+            "--asr-language",
+            str(args.voice_asr_language),
+            "--asr-max-new-tokens",
+            str(args.voice_asr_max_new_tokens),
+        ]
+        if args.voice_asr_warmup_request:
+            voice_runtime_command.append("--asr-warmup-request")
+        if args.voice_asr_warmup_language is not None:
+            voice_runtime_command.extend(["--asr-warmup-language", str(args.voice_asr_warmup_language)])
         managed_processes["voice_runtime_service"] = {
             "managed": True,
             "url": voice_runtime_url,
             "runs_dir": str(args.voice_runtime_runs_dir),
-            "command": [
-                sys.executable,
-                "scripts/voice_runtime_service.py",
-                "--host",
-                "127.0.0.1",
-                "--port",
-                str(args.voice_runtime_port),
-                "--runs-dir",
-                str(args.voice_runtime_runs_dir),
-            ],
+            "command": voice_runtime_command,
         }
     else:
         managed_processes["voice_runtime_service"] = {
@@ -126,21 +144,28 @@ def build_startup_plan(args: argparse.Namespace) -> dict[str, Any]:
         }
 
     if args.start_tts_runtime:
+        tts_runtime_command = [
+            sys.executable,
+            "scripts/tts_runtime_service.py",
+            "--host",
+            "127.0.0.1",
+            "--port",
+            str(args.tts_runtime_port),
+            "--runs-dir",
+            str(args.tts_runtime_runs_dir),
+        ]
+        if args.tts_piper_executable is not None:
+            tts_runtime_command.extend(["--tts-piper-executable", str(args.tts_piper_executable)])
+        if args.tts_piper_model_path is not None:
+            tts_runtime_command.extend(["--tts-piper-model-path", str(args.tts_piper_model_path)])
+        if args.tts_piper_speaker is not None:
+            tts_runtime_command.extend(["--tts-piper-speaker", str(args.tts_piper_speaker)])
         tts_runtime_url = f"http://127.0.0.1:{args.tts_runtime_port}"
         managed_processes["tts_runtime_service"] = {
             "managed": True,
             "url": tts_runtime_url,
             "runs_dir": str(args.tts_runtime_runs_dir),
-            "command": [
-                sys.executable,
-                "scripts/tts_runtime_service.py",
-                "--host",
-                "127.0.0.1",
-                "--port",
-                str(args.tts_runtime_port),
-                "--runs-dir",
-                str(args.tts_runtime_runs_dir),
-            ],
+            "command": tts_runtime_command,
         }
     else:
         managed_processes["tts_runtime_service"] = {
@@ -168,7 +193,33 @@ def build_startup_plan(args: argparse.Namespace) -> dict[str, Any]:
             str(args.pilot_vlm_device),
             "--pilot-text-device",
             str(args.pilot_text_device),
+            "--pilot-vlm-provider",
+            str(args.pilot_vlm_provider),
+            "--pilot-text-provider",
+            str(args.pilot_text_provider),
+            "--pilot-vlm-max-new-tokens",
+            str(args.pilot_vlm_max_new_tokens),
+            "--pilot-text-max-new-tokens",
+            str(args.pilot_text_max_new_tokens),
+            "--pilot-hybrid-timeout-sec",
+            str(args.pilot_hybrid_timeout_sec),
+            "--pilot-gateway-topk",
+            str(args.pilot_gateway_topk),
+            "--pilot-gateway-candidate-k",
+            str(args.pilot_gateway_candidate_k),
+            "--pilot-max-entities-per-doc",
+            str(args.pilot_max_entities_per_doc),
+            "--asr-language",
+            str(args.voice_asr_language),
+            "--asr-max-new-tokens",
+            str(args.voice_asr_max_new_tokens),
         ]
+        if args.voice_asr_warmup_request:
+            pilot_command.append("--asr-warmup-request")
+        if args.voice_asr_warmup_language is not None:
+            pilot_command.extend(["--asr-warmup-language", str(args.voice_asr_warmup_language)])
+        if args.pilot_input_device_index is not None:
+            pilot_command.extend(["--input-device-index", str(args.pilot_input_device_index)])
         if voice_runtime_url:
             pilot_command.extend(["--voice-runtime-url", voice_runtime_url])
         if tts_runtime_url:
@@ -467,10 +518,11 @@ def _wait_for_gateway_operator_snapshot(
     deadline = time.time() + max(timeout_sec, 0.1)
     last_error = "gateway operator snapshot did not become ready"
     url = gateway_url.rstrip("/") + "/v1/operator/snapshot"
+    request_timeout = max(0.5, min(timeout_sec, 15.0))
     while time.time() < deadline:
         req = request.Request(url=url, method="GET")
         try:
-            with request.urlopen(req, timeout=min(2.0, timeout_sec)) as response:
+            with request.urlopen(req, timeout=request_timeout) as response:
                 payload = json.loads(response.read().decode("utf-8"))
             if isinstance(payload, dict) and str(payload.get("status", "")).strip() == "ok":
                 return payload, None
@@ -489,10 +541,11 @@ def _wait_for_runtime_health(
     deadline = time.time() + max(timeout_sec, 0.1)
     last_error = "runtime health did not become ready"
     url = service_url.rstrip("/") + "/health"
+    request_timeout = max(0.5, min(timeout_sec, 15.0))
     while time.time() < deadline:
         req = request.Request(url=url, method="GET")
         try:
-            with request.urlopen(req, timeout=min(2.0, timeout_sec)) as response:
+            with request.urlopen(req, timeout=request_timeout) as response:
                 payload = json.loads(response.read().decode("utf-8"))
             if isinstance(payload, dict) and str(payload.get("status", "")).strip() == "ok":
                 return payload, None
@@ -565,12 +618,13 @@ def _wait_for_streamlit_ready(
     deadline = time.time() + max(timeout_sec, 0.1)
     last_error = "streamlit did not become ready"
     url = streamlit_url.rstrip("/") + "/"
+    request_timeout = max(0.5, min(timeout_sec, 15.0))
     while time.time() < deadline:
         if process is not None and process.poll() is not None:
             return None, f"streamlit process exited early with code {process.returncode}"
         req = request.Request(url=url, method="GET")
         try:
-            with request.urlopen(req, timeout=min(2.0, timeout_sec)):
+            with request.urlopen(req, timeout=request_timeout):
                 return {"status": "ok", "url": url}, None
         except Exception as exc:
             last_error = f"{exc}"
@@ -675,6 +729,30 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="Managed voice runtime runs directory (default: <runs-dir>/voice-runtime).",
     )
     parser.add_argument(
+        "--voice-asr-language",
+        type=str,
+        default=DEFAULT_LIVE_ASR_LANGUAGE,
+        help="Static language hint for managed live ASR (default: ru).",
+    )
+    parser.add_argument(
+        "--voice-asr-max-new-tokens",
+        type=int,
+        default=DEFAULT_LIVE_ASR_MAX_NEW_TOKENS,
+        help="ASR token budget for managed live voice runtime.",
+    )
+    parser.add_argument(
+        "--voice-asr-warmup-request",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Run one managed ASR warmup request on startup (default: enabled).",
+    )
+    parser.add_argument(
+        "--voice-asr-warmup-language",
+        type=str,
+        default=DEFAULT_LIVE_ASR_LANGUAGE,
+        help="Language hint for the managed ASR warmup request (default: ru).",
+    )
+    parser.add_argument(
         "--tts-runtime-url",
         type=str,
         default=None,
@@ -696,6 +774,24 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         type=Path,
         default=None,
         help="Managed TTS runtime runs directory (default: <runs-dir>/tts-runtime).",
+    )
+    parser.add_argument(
+        "--tts-piper-executable",
+        type=str,
+        default=None,
+        help="Optional Piper executable override forwarded to managed tts_runtime_service.",
+    )
+    parser.add_argument(
+        "--tts-piper-model-path",
+        type=str,
+        default=None,
+        help="Optional Piper model path forwarded to managed tts_runtime_service.",
+    )
+    parser.add_argument(
+        "--tts-piper-speaker",
+        type=str,
+        default=None,
+        help="Optional Piper speaker override forwarded to managed tts_runtime_service.",
     )
     parser.add_argument(
         "--start-pilot-runtime",
@@ -761,6 +857,60 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         type=str,
         default="NPU",
         help="OpenVINO device for pilot grounded-reply model (default: NPU).",
+    )
+    parser.add_argument(
+        "--pilot-vlm-provider",
+        choices=("openvino", "stub"),
+        default="openvino",
+        help="Pilot VLM provider passed to pilot_runtime_loop.py (default: openvino; use stub only for diagnostics).",
+    )
+    parser.add_argument(
+        "--pilot-text-provider",
+        choices=("openvino", "stub"),
+        default="openvino",
+        help="Pilot grounded-reply provider passed to pilot_runtime_loop.py (default: openvino; use stub only for diagnostics).",
+    )
+    parser.add_argument(
+        "--pilot-input-device-index",
+        type=int,
+        default=DEFAULT_LIVE_PILOT_INPUT_DEVICE_INDEX,
+        help="Explicit sounddevice input device index passed to pilot_runtime_loop.py (default: 1).",
+    )
+    parser.add_argument(
+        "--pilot-vlm-max-new-tokens",
+        type=int,
+        default=DEFAULT_LIVE_PILOT_VLM_MAX_NEW_TOKENS,
+        help="VLM token budget for the managed pilot runtime.",
+    )
+    parser.add_argument(
+        "--pilot-text-max-new-tokens",
+        type=int,
+        default=DEFAULT_LIVE_PILOT_TEXT_MAX_NEW_TOKENS,
+        help="Grounded-reply token budget for the managed pilot runtime.",
+    )
+    parser.add_argument(
+        "--pilot-hybrid-timeout-sec",
+        type=float,
+        default=DEFAULT_LIVE_PILOT_HYBRID_TIMEOUT_SEC,
+        help="Pilot-side timeout for opportunistic hybrid queries.",
+    )
+    parser.add_argument(
+        "--pilot-gateway-topk",
+        type=int,
+        default=DEFAULT_LIVE_PILOT_GATEWAY_TOPK,
+        help="Live pilot hybrid top-k budget.",
+    )
+    parser.add_argument(
+        "--pilot-gateway-candidate-k",
+        type=int,
+        default=DEFAULT_LIVE_PILOT_GATEWAY_CANDIDATE_K,
+        help="Live pilot hybrid candidate-k budget.",
+    )
+    parser.add_argument(
+        "--pilot-max-entities-per-doc",
+        type=int,
+        default=DEFAULT_LIVE_PILOT_MAX_ENTITIES_PER_DOC,
+        help="Live pilot hybrid entity budget per document.",
     )
     parser.add_argument(
         "--qdrant-url",

@@ -30,6 +30,7 @@ from src.agent_core.tts_runtime import (
     TTSRequest,
     TTSRuntimeError,
     TTSRuntimeService,
+    make_silence_wav_bytes,
 )
 from scripts.gateway_artifact_policy import redact_error_entry
 
@@ -248,6 +249,85 @@ def _disabled_engine(name: str, reason: str) -> CallbackTTSEngine:
     return CallbackTTSEngine(name=name, synthesize_fn=_synthesize, prewarm_fn=_prewarm)
 
 
+def _build_silence_fallback_engine(name: str = "silence_fallback", *, sample_rate: int = 22050) -> CallbackTTSEngine:
+    def _prewarm() -> None:
+        return None
+
+    def _synthesize(text: str, _language: str, _speaker: str | None) -> tuple[bytes, int]:
+        duration_ms = min(max(300, len(text) * 16), 1500)
+        return make_silence_wav_bytes(duration_ms=duration_ms, sample_rate=sample_rate), sample_rate
+
+    return CallbackTTSEngine(name=name, synthesize_fn=_synthesize, prewarm_fn=_prewarm)
+
+
+def _synthesize_windows_sapi_wav(*, text: str, language: str, speaker: str | None) -> tuple[bytes, int]:
+    text_payload_b64 = base64.b64encode(text.encode("utf-8")).decode("ascii")
+    language_payload_b64 = base64.b64encode(str(language or "").encode("utf-8")).decode("ascii")
+    speaker_name = (speaker or os.getenv("WINDOWS_SAPI_VOICE_NAME", "")).strip()
+    speaker_payload_b64 = base64.b64encode(speaker_name.encode("utf-8")).decode("ascii")
+
+    with tempfile.TemporaryDirectory(prefix="atm10-windows-sapi-") as temp_dir:
+        output_path = Path(temp_dir) / "tts.wav"
+        output_path_b64 = base64.b64encode(str(output_path).encode("utf-8")).decode("ascii")
+        powershell_script = "\n".join(
+            [
+                "$ErrorActionPreference = 'Stop'",
+                "Add-Type -AssemblyName System.Speech",
+                f"$text = [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String('{text_payload_b64}'))",
+                f"$languageTag = [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String('{language_payload_b64}'))",
+                f"$voiceName = [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String('{speaker_payload_b64}'))",
+                f"$outputPath = [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String('{output_path_b64}'))",
+                "$synth = New-Object System.Speech.Synthesis.SpeechSynthesizer",
+                "try {",
+                "  if (-not [string]::IsNullOrWhiteSpace($voiceName)) {",
+                "    $synth.SelectVoice($voiceName)",
+                "  } elseif (-not [string]::IsNullOrWhiteSpace($languageTag)) {",
+                "    $candidate = $synth.GetInstalledVoices() | Where-Object { $_.Enabled } | ForEach-Object { $_.VoiceInfo } | Where-Object { $_.Culture.Name -like ($languageTag + '*') } | Select-Object -First 1",
+                "    if ($null -ne $candidate) { $synth.SelectVoice($candidate.Name) }",
+                "  }",
+                "  $synth.SetOutputToWaveFile($outputPath)",
+                "  $synth.Speak($text)",
+                "} finally {",
+                "  $synth.Dispose()",
+                "}",
+            ]
+        )
+        encoded_script = base64.b64encode(powershell_script.encode("utf-16le")).decode("ascii")
+        try:
+            completed = subprocess.run(
+                ["powershell.exe", "-NoProfile", "-NonInteractive", "-EncodedCommand", encoded_script],
+                capture_output=True,
+                text=True,
+                check=False,
+                timeout=30,
+            )
+        except FileNotFoundError as exc:
+            raise TTSRuntimeError("Windows PowerShell is unavailable for System.Speech fallback.") from exc
+        except subprocess.TimeoutExpired as exc:
+            raise TTSRuntimeError("Windows SAPI fallback timed out.") from exc
+        if completed.returncode != 0:
+            message = (completed.stderr or completed.stdout or "").strip() or f"exit_code={completed.returncode}"
+            raise TTSRuntimeError(f"Windows SAPI fallback failed: {message}")
+        if not output_path.exists():
+            raise TTSRuntimeError("Windows SAPI fallback did not produce an output wav file.")
+        wav_bytes = output_path.read_bytes()
+        if not wav_bytes:
+            raise TTSRuntimeError("Windows SAPI fallback produced empty audio.")
+        with wave.open(io.BytesIO(wav_bytes), "rb") as wav_file:
+            sample_rate = int(wav_file.getframerate())
+        return wav_bytes, sample_rate
+
+
+def _build_windows_sapi_engine(name: str = "windows_sapi_fallback") -> CallbackTTSEngine:
+    def _prewarm() -> None:
+        _synthesize_windows_sapi_wav(text="ATM10 pilot runtime probe.", language="en", speaker=None)
+
+    def _synthesize(text: str, language: str, speaker: str | None) -> tuple[bytes, int]:
+        return _synthesize_windows_sapi_wav(text=text, language=language, speaker=speaker)
+
+    return CallbackTTSEngine(name=name, synthesize_fn=_synthesize, prewarm_fn=_prewarm)
+
+
 def _env_flag(value: str | None) -> bool:
     if value is None:
         return False
@@ -354,10 +434,42 @@ def _build_xtts_engine() -> CallbackTTSEngine:
     return CallbackTTSEngine(name="xtts_v2", synthesize_fn=_synthesize, prewarm_fn=_prewarm)
 
 
-def _build_piper_engine() -> CallbackTTSEngine:
-    piper_executable = os.getenv("PIPER_EXECUTABLE", "piper")
-    piper_model_path = os.getenv("PIPER_MODEL_PATH")
-    default_speaker = os.getenv("PIPER_SPEAKER")
+def _resolve_piper_config(
+    *,
+    piper_executable: str | None = None,
+    piper_model_path: str | None = None,
+    piper_speaker: str | None = None,
+) -> dict[str, str | None]:
+    effective_executable = str(piper_executable or os.getenv("PIPER_EXECUTABLE", "piper")).strip() or "piper"
+    model_path_value = piper_model_path
+    if model_path_value is None:
+        model_path_value = os.getenv("PIPER_MODEL_PATH")
+    speaker_value = piper_speaker
+    if speaker_value is None:
+        speaker_value = os.getenv("PIPER_SPEAKER")
+    normalized_model_path = str(model_path_value).strip() if model_path_value is not None else ""
+    normalized_speaker = str(speaker_value).strip() if speaker_value is not None else ""
+    return {
+        "executable": effective_executable,
+        "model_path": normalized_model_path or None,
+        "speaker": normalized_speaker or None,
+    }
+
+
+def _build_piper_engine(
+    *,
+    piper_executable: str | None = None,
+    piper_model_path: str | None = None,
+    piper_speaker: str | None = None,
+) -> CallbackTTSEngine:
+    resolved_piper = _resolve_piper_config(
+        piper_executable=piper_executable,
+        piper_model_path=piper_model_path,
+        piper_speaker=piper_speaker,
+    )
+    piper_executable = str(resolved_piper["executable"])
+    piper_model_path = resolved_piper["model_path"]
+    default_speaker = resolved_piper["speaker"]
 
     if not piper_model_path:
         return _disabled_engine("piper", "PIPER_MODEL_PATH is not set.")
@@ -457,9 +569,26 @@ def _build_silero_engine() -> CallbackTTSEngine:
     return CallbackTTSEngine(name="silero_ru_service", synthesize_fn=_synthesize, prewarm_fn=_prewarm)
 
 
-def _build_default_service(*, cache_items: int, chunk_chars: int, queue_size: int) -> TTSRuntimeService:
+def _build_default_service(
+    *,
+    cache_items: int,
+    chunk_chars: int,
+    queue_size: int,
+    piper_executable: str | None = None,
+    piper_model_path: str | None = None,
+    piper_speaker: str | None = None,
+) -> TTSRuntimeService:
     xtts = _build_xtts_engine()
-    piper = _build_piper_engine()
+    resolved_piper = _resolve_piper_config(
+        piper_executable=piper_executable,
+        piper_model_path=piper_model_path,
+        piper_speaker=piper_speaker,
+    )
+    piper = _build_piper_engine(
+        piper_executable=str(resolved_piper["executable"]),
+        piper_model_path=resolved_piper["model_path"],
+        piper_speaker=resolved_piper["speaker"],
+    )
     try:
         silero = _build_silero_engine()
     except TTSRuntimeError as exc:
@@ -468,9 +597,16 @@ def _build_default_service(*, cache_items: int, chunk_chars: int, queue_size: in
         xtts_engine=xtts,
         piper_engine=piper,
         silero_engine=silero,
+        fallback_engines=[
+            _build_windows_sapi_engine(),
+            _build_silence_fallback_engine(),
+        ],
         max_chunk_chars=chunk_chars,
         queue_size=queue_size,
         cache=PhraseCache(max_items=cache_items),
+        effective_config={
+            "piper": dict(resolved_piper),
+        },
     )
 
 
@@ -746,6 +882,24 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--chunk-chars", type=int, default=220, help="Chunk size for long text (default: 220).")
     parser.add_argument("--cache-items", type=int, default=512, help="Phrase cache max entries (default: 512).")
     parser.add_argument(
+        "--tts-piper-executable",
+        type=str,
+        default=None,
+        help="Optional Piper executable override. Falls back to PIPER_EXECUTABLE or 'piper'.",
+    )
+    parser.add_argument(
+        "--tts-piper-model-path",
+        type=str,
+        default=None,
+        help="Optional Piper model path override. Falls back to PIPER_MODEL_PATH.",
+    )
+    parser.add_argument(
+        "--tts-piper-speaker",
+        type=str,
+        default=None,
+        help="Optional Piper speaker override. Falls back to PIPER_SPEAKER.",
+    )
+    parser.add_argument(
         "--max-request-bytes",
         type=int,
         default=TTS_HTTP_DEFAULT_MAX_REQUEST_BODY_BYTES,
@@ -815,6 +969,9 @@ def main(argv: list[str] | None = None) -> int:
         cache_items=args.cache_items,
         chunk_chars=args.chunk_chars,
         queue_size=args.queue_size,
+        piper_executable=args.tts_piper_executable,
+        piper_model_path=args.tts_piper_model_path,
+        piper_speaker=args.tts_piper_speaker,
     )
     http_policy = TTSHTTPPolicy(
         max_request_body_bytes=args.max_request_bytes,
@@ -834,6 +991,11 @@ def main(argv: list[str] | None = None) -> int:
     now = datetime.now(timezone.utc)
     run_dir = _create_run_dir(args.runs_dir, now=now)
     run_json_path = run_dir / "run.json"
+    resolved_piper = _resolve_piper_config(
+        piper_executable=args.tts_piper_executable,
+        piper_model_path=args.tts_piper_model_path,
+        piper_speaker=args.tts_piper_speaker,
+    )
     run_payload: dict[str, Any] = {
         "timestamp_utc": now.astimezone(timezone.utc).isoformat(),
         "mode": "tts_runtime_service",
@@ -847,6 +1009,14 @@ def main(argv: list[str] | None = None) -> int:
             "auth": {
                 "enabled": bool(service_token),
                 "header": _SERVICE_TOKEN_HEADER,
+            },
+            "tts": {
+                "preferred_tts_engine": "piper" if resolved_piper["model_path"] else "windows_sapi_fallback",
+                "piper": {
+                    "executable": resolved_piper["executable"],
+                    "model_path": resolved_piper["model_path"],
+                    "speaker": resolved_piper["speaker"],
+                },
             },
         },
         "paths": {
