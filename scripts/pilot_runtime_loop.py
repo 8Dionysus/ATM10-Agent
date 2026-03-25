@@ -63,13 +63,15 @@ DEFAULT_PILOT_VLM_PROMPT = (
     "Leave next_steps empty unless one immediate ATM10 action is obvious."
 )
 DEFAULT_PILOT_VLM_MAX_NEW_TOKENS = 64
-DEFAULT_PILOT_TEXT_MAX_NEW_TOKENS = 96
+DEFAULT_PILOT_TEXT_MAX_NEW_TOKENS = 64
+DEFAULT_PILOT_VLM_DEVICE = "GPU"
+DEFAULT_PILOT_TEXT_DEVICE = "GPU"
 DEFAULT_PILOT_ASR_LANGUAGE = "ru"
 DEFAULT_PILOT_ASR_MAX_NEW_TOKENS = 64
 DEFAULT_PILOT_GATEWAY_TOPK = 3
 DEFAULT_PILOT_GATEWAY_CANDIDATE_K = 6
 DEFAULT_PILOT_MAX_ENTITIES_PER_DOC = 32
-DEFAULT_PILOT_HYBRID_TIMEOUT_SEC = 1.5
+DEFAULT_PILOT_HYBRID_TIMEOUT_SEC = 1.0
 DEFAULT_PILOT_TESSERACT_BIN = "tesseract"
 _MICROPHONE_POSITIVE_HINTS = (
     "microphone",
@@ -2221,8 +2223,18 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         default=DEFAULT_GROUNDED_REPLY_MODEL_DIR,
         help=f"Local OpenVINO grounded reply model dir (default: {DEFAULT_GROUNDED_REPLY_MODEL_DIR}).",
     )
-    parser.add_argument("--pilot-vlm-device", type=str, default="GPU", help="OpenVINO device for pilot VLM.")
-    parser.add_argument("--pilot-text-device", type=str, default="NPU", help="OpenVINO device for grounded reply model.")
+    parser.add_argument(
+        "--pilot-vlm-device",
+        type=str,
+        default=DEFAULT_PILOT_VLM_DEVICE,
+        help=f"OpenVINO device for pilot VLM (default: {DEFAULT_PILOT_VLM_DEVICE}).",
+    )
+    parser.add_argument(
+        "--pilot-text-device",
+        type=str,
+        default=DEFAULT_PILOT_TEXT_DEVICE,
+        help=f"OpenVINO device for grounded reply model (default: {DEFAULT_PILOT_TEXT_DEVICE}).",
+    )
     parser.add_argument(
         "--pilot-vlm-provider",
         choices=("openvino", "stub"),
