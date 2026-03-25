@@ -102,6 +102,14 @@ _LOW_SIGNAL_ASCII_FILLERS = (
     "ok",
     "okay",
 )
+_LOW_SIGNAL_RUSSIAN_FILLERS = (
+    "продолжение следует",
+)
+_LOW_SIGNAL_PEAK_THRESHOLD = 0.01
+_LOW_SIGNAL_RMS_THRESHOLD = 0.003
+_LOW_SIGNAL_NONTRIVIAL_ABS_THRESHOLD = 0.02
+_ASR_NORMALIZATION_TARGET_PEAK = 0.25
+_ASR_NORMALIZATION_MAX_GAIN = 64.0
 
 
 def _utc_now() -> str:
@@ -347,11 +355,101 @@ def _normalize_text_whitespace(text: str) -> str:
     return " ".join(str(text or "").replace("\r", " ").replace("\n", " ").split())
 
 
+def _load_wav_path_mono(path: Path) -> tuple[np.ndarray, int]:
+    with wave.open(str(path), "rb") as wav_file:
+        sample_rate = wav_file.getframerate()
+        sample_width = wav_file.getsampwidth()
+        channels = wav_file.getnchannels()
+        frames = wav_file.readframes(wav_file.getnframes())
+    if sample_width != 2:
+        raise ValueError("Only 16-bit PCM WAV files are supported for pilot ASR preprocessing.")
+    waveform = np.frombuffer(frames, dtype=np.int16).astype(np.float32) / 32768.0
+    if channels > 1:
+        waveform = waveform.reshape(-1, channels).mean(axis=1)
+    return waveform.reshape(-1), int(sample_rate)
+
+
+def _analyze_audio_signal(
+    *,
+    waveform: np.ndarray,
+    sample_rate: int,
+) -> dict[str, Any]:
+    mono = np.asarray(waveform, dtype=np.float32).reshape(-1)
+    abs_waveform = np.abs(mono)
+    if abs_waveform.size == 0:
+        peak_abs = 0.0
+        rms = 0.0
+        mean_abs = 0.0
+        p95_abs = 0.0
+        nontrivial_ratio = 0.0
+    else:
+        peak_abs = float(abs_waveform.max())
+        rms = float(np.sqrt(np.mean(np.square(mono))))
+        mean_abs = float(abs_waveform.mean())
+        p95_abs = float(np.quantile(abs_waveform, 0.95))
+        nontrivial_ratio = float(np.mean(abs_waveform >= _LOW_SIGNAL_NONTRIVIAL_ABS_THRESHOLD))
+    low_signal = bool(peak_abs < _LOW_SIGNAL_PEAK_THRESHOLD and rms < _LOW_SIGNAL_RMS_THRESHOLD)
+    return {
+        "status": "low_signal" if low_signal else "ok",
+        "sample_rate": int(sample_rate),
+        "num_samples": int(mono.shape[0]),
+        "duration_sec": round(float(mono.shape[0]) / float(sample_rate), 6) if sample_rate > 0 else 0.0,
+        "peak_abs": round(peak_abs, 6),
+        "rms": round(rms, 6),
+        "mean_abs": round(mean_abs, 6),
+        "p95_abs": round(p95_abs, 6),
+        "nontrivial_ratio": round(nontrivial_ratio, 6),
+    }
+
+
+def _prepare_asr_audio_input(
+    *,
+    audio_path: Path,
+    turn_dir: Path,
+) -> dict[str, Any]:
+    waveform, sample_rate = _load_wav_path_mono(audio_path)
+    raw_signal = _analyze_audio_signal(waveform=waveform, sample_rate=sample_rate)
+    centered_waveform = waveform - float(np.mean(waveform)) if waveform.size else waveform
+    peak_abs = max(float(raw_signal.get("peak_abs", 0.0) or 0.0), 0.0)
+    gain_applied = 1.0
+    prepared_path = audio_path
+    preprocess_mode = "copy"
+
+    if peak_abs > 0.0 and peak_abs < _ASR_NORMALIZATION_TARGET_PEAK:
+        gain_applied = min(_ASR_NORMALIZATION_TARGET_PEAK / peak_abs, _ASR_NORMALIZATION_MAX_GAIN)
+        if gain_applied > 1.05:
+            prepared_path = turn_dir / "audio_input_asr.wav"
+            amplified_waveform = np.clip(centered_waveform * gain_applied, -1.0, 1.0)
+            write_wav_pcm16(path=prepared_path, waveform=amplified_waveform, sample_rate=sample_rate)
+            preprocess_mode = "normalized_gain"
+
+    if prepared_path == audio_path:
+        prepared_signal = dict(raw_signal)
+    else:
+        prepared_waveform, prepared_sample_rate = _load_wav_path_mono(prepared_path)
+        prepared_signal = _analyze_audio_signal(waveform=prepared_waveform, sample_rate=prepared_sample_rate)
+
+    return {
+        "audio_path": prepared_path,
+        "signal": {
+            "status": str(raw_signal.get("status", "ok")),
+            "raw": raw_signal,
+            "asr_input": prepared_signal,
+        },
+        "asr_preprocess": {
+            "status": "ok",
+            "mode": preprocess_mode,
+            "gain_applied": round(float(gain_applied), 4),
+        },
+    }
+
+
 def _evaluate_transcript_quality(
     *,
     transcript: str,
     transcript_language: str | None,
     expected_language: str | None,
+    audio_signal: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     normalized_transcript = _normalize_text_whitespace(transcript)
     normalized_detected_language = str(transcript_language or "").strip().lower()
@@ -364,7 +462,7 @@ def _evaluate_transcript_quality(
 
     expected_russian = normalized_expected_language.startswith("ru")
     ascii_only = normalized_transcript.isascii()
-    lowered = normalized_transcript.lower().strip(" \t\r\n.!?,;:")
+    lowered = normalized_transcript.lower().replace("…", "...").strip(" \t\r\n.!?,;:")
     alpha_words = [
         word
         for word in re.split(r"\s+", lowered)
@@ -376,8 +474,25 @@ def _evaluate_transcript_quality(
         elif len(alpha_words) <= 2:
             reason_codes.append("short_ascii_when_russian_expected")
 
+    if expected_russian and any(phrase in lowered for phrase in _LOW_SIGNAL_RUSSIAN_FILLERS):
+        reason_codes.append("known_low_signal_phrase")
+
     if normalized_transcript and len(normalized_transcript) <= 2 and not any(char.isdigit() for char in normalized_transcript):
         reason_codes.append("too_short")
+
+    signal_mapping = audio_signal if isinstance(audio_signal, Mapping) else {}
+    raw_signal = signal_mapping.get("raw")
+    raw_signal = raw_signal if isinstance(raw_signal, Mapping) else signal_mapping
+    audio_signal_status = str(raw_signal.get("status", "")).strip().lower()
+    if audio_signal_status == "low_signal" and (
+        not normalized_transcript
+        or "punctuation_only" in reason_codes
+        or "too_short" in reason_codes
+        or "ascii_filler" in reason_codes
+        or "short_ascii_when_russian_expected" in reason_codes
+        or "known_low_signal_phrase" in reason_codes
+    ):
+        reason_codes.append("audio_signal_low")
 
     unique_reason_codes = list(dict.fromkeys(reason_codes))
     status = "low_signal" if unique_reason_codes else "ok"
@@ -386,6 +501,7 @@ def _evaluate_transcript_quality(
         "reason_codes": unique_reason_codes,
         "expected_language": normalized_expected_language or None,
         "detected_language": normalized_detected_language or None,
+        "audio_signal_status": audio_signal_status or None,
         "transcript_used": status == "ok",
     }
 
@@ -1374,7 +1490,11 @@ def run_pilot_turn(
             "hotkey": hotkey,
             "hud_hook_json": None if hud_hook_json is None else str(hud_hook_json),
         },
-        "audio": dict(audio_input_meta or {}),
+        "audio": {
+            **dict(audio_input_meta or {}),
+            "signal": {"status": "not_started", "raw": None, "asr_input": None},
+            "asr_preprocess": {"status": "not_started", "mode": None, "gain_applied": 1.0},
+        },
         "capture": {
             "monitor_index": capture_monitor,
             "region": format_capture_region(capture_region),
@@ -1421,6 +1541,7 @@ def run_pilot_turn(
             "reason_codes": [],
             "expected_language": str(expected_asr_language or "").strip().lower() or None,
             "detected_language": None,
+            "audio_signal_status": None,
             "transcript_used": False,
         },
         "reply_mode": "not_started",
@@ -1432,6 +1553,7 @@ def run_pilot_turn(
             "turn_dir": str(turn_dir),
             "turn_json": str(turn_json_path),
             "audio_input_wav": str(copied_audio_path),
+            "audio_asr_wav": str(copied_audio_path),
             "screenshot_png": str(turn_dir / "screenshot.png"),
             "session_probe_json": str(turn_dir / "session_probe.json"),
             "live_hud_state_json": str(turn_dir / "live_hud_state.json"),
@@ -1554,6 +1676,28 @@ def run_pilot_turn(
         base_payload["latency"]["hud_state_sec"] = round(perf_counter() - stage_started, 6)
 
         stage_started = perf_counter()
+        asr_audio_path = copied_audio_path
+        try:
+            prepared_audio = _prepare_asr_audio_input(audio_path=copied_audio_path, turn_dir=turn_dir)
+            base_payload["audio"]["signal"] = prepared_audio["signal"]
+            base_payload["audio"]["asr_preprocess"] = prepared_audio["asr_preprocess"]
+            asr_audio_path = Path(str(prepared_audio["audio_path"]))
+            base_payload["paths"]["audio_asr_wav"] = str(asr_audio_path)
+        except Exception as exc:
+            degraded_flags.append("audio_signal_analysis_failed")
+            base_payload["audio"]["signal"] = {
+                "status": "error",
+                "raw": None,
+                "asr_input": None,
+                "error": str(exc),
+            }
+            base_payload["audio"]["asr_preprocess"] = {
+                "status": "error",
+                "mode": "copy",
+                "gain_applied": 1.0,
+                "error": str(exc),
+            }
+
         transcript = ""
         language = ""
         if voice_runtime_url is None:
@@ -1563,7 +1707,7 @@ def run_pilot_turn(
             try:
                 asr_payload = asr_func(
                     voice_runtime_url=voice_runtime_url,
-                    audio_path=copied_audio_path,
+                    audio_path=asr_audio_path,
                     language=expected_asr_language,
                     service_token=service_token,
                 )
@@ -1576,6 +1720,7 @@ def run_pilot_turn(
             transcript=transcript,
             transcript_language=language,
             expected_language=expected_asr_language,
+            audio_signal=base_payload["audio"].get("signal"),
         )
         if transcript_quality["status"] != "ok":
             degraded_flags.append("transcript_low_signal")
@@ -1664,9 +1809,30 @@ def run_pilot_turn(
             transcript_language=preferred_language_hint,
         )
         reply_mode = "normal_local"
+        skip_grounded_reply_for_low_signal = str(base_payload["transcript_quality"].get("status", "")).strip() == "low_signal"
         if not transcript_for_answer:
             reply_mode = "visual_only_fallback"
-        if grounded_reply_client is not None:
+        if skip_grounded_reply_for_low_signal:
+            degraded_flags.append("grounded_reply_skipped_low_signal")
+            grounded_reply_payload = {
+                "provider": "visual_only_fallback_v1",
+                "model": "fallback",
+                "device": "local",
+                "prompt": "",
+                "answer_text": build_fallback_answer(
+                    transcript="",
+                    visual_summary=local_context_summary or visual_summary,
+                    citations=citations,
+                    degraded_flags=list(sorted(dict.fromkeys(degraded_flags))),
+                    stage_errors=stage_errors,
+                    preferred_language=preferred_reply_language,
+                ),
+                "cited_entities": [],
+                "degraded_flags": list(sorted(dict.fromkeys(degraded_flags))),
+                "answer_language": preferred_reply_language,
+                "raw_response_text": "",
+            }
+        elif grounded_reply_client is not None:
             try:
                 grounded_reply_payload = grounded_reply_client.generate_reply(
                     transcript=transcript_for_answer,

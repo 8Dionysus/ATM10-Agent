@@ -30,6 +30,19 @@ def _write_audio_fixture(path: Path, *, sample_rate: int = 16000) -> dict[str, A
     }
 
 
+def _write_quiet_audio_fixture(path: Path, *, sample_rate: int = 16000) -> dict[str, Any]:
+    timeline = np.linspace(0.0, 0.4, int(sample_rate * 0.4), endpoint=False)
+    waveform = (0.003 * np.sin(2.0 * np.pi * 220.0 * timeline)).astype(np.float32)
+    write_wav_pcm16(path=path, waveform=waveform, sample_rate=sample_rate)
+    return {
+        "mode": "fixture_audio_quiet",
+        "sample_rate": sample_rate,
+        "duration_sec": 0.4,
+        "num_samples": int(waveform.shape[0]),
+        "audio_path": str(path),
+    }
+
+
 def _write_image_fixture(path: Path) -> None:
     image = Image.new("RGB", (320, 180), color=(15, 20, 22))
     image.save(path)
@@ -149,6 +162,23 @@ def test_write_warmup_image_creates_valid_png(tmp_path: Path) -> None:
 
     assert image.size == (56, 56)
     assert image.mode == "RGB"
+
+
+def test_prepare_asr_audio_input_boosts_quiet_waveform(tmp_path: Path) -> None:
+    audio_path = tmp_path / "audio.wav"
+    _write_quiet_audio_fixture(audio_path)
+
+    prepared = pilot_runtime._prepare_asr_audio_input(
+        audio_path=audio_path,
+        turn_dir=tmp_path,
+    )
+
+    assert Path(prepared["audio_path"]).name == "audio_input_asr.wav"
+    assert prepared["signal"]["raw"]["status"] == "low_signal"
+    assert prepared["signal"]["raw"]["peak_abs"] < 0.01
+    assert prepared["signal"]["asr_input"]["peak_abs"] > prepared["signal"]["raw"]["peak_abs"]
+    assert prepared["asr_preprocess"]["mode"] == "normalized_gain"
+    assert prepared["asr_preprocess"]["gain_applied"] > 1.0
 
 
 def test_run_pilot_turn_with_injected_locals_writes_contract(tmp_path: Path) -> None:
@@ -587,6 +617,106 @@ def test_run_pilot_turn_skips_hybrid_for_low_signal_transcript(tmp_path: Path) -
     assert payload["reply_mode"] == "visual_only_fallback"
     assert payload["answer_language"] == "ru"
     assert "Thank you" not in payload["answer_text"]
+
+
+def test_run_pilot_turn_marks_quiet_russian_hallucination_as_low_signal(tmp_path: Path) -> None:
+    runtime_run_dir = tmp_path / "pilot-runtime"
+    runtime_run_dir.mkdir(parents=True, exist_ok=True)
+    audio_path = tmp_path / "audio.wav"
+    image_path = tmp_path / "image.png"
+    audio_meta = _write_quiet_audio_fixture(audio_path)
+    _write_image_fixture(image_path)
+    seen_asr_paths: list[Path] = []
+
+    def _fake_capture(*, output_path: Path, **_kwargs: Any) -> dict[str, Any]:
+        output_path.write_bytes(image_path.read_bytes())
+        return {
+            "capture_mode": "fixture",
+            "monitor_index": 0,
+            "region": None,
+            "bbox": [0, 0, 320, 180],
+            "width": 320,
+            "height": 180,
+            "screenshot_path": str(output_path),
+        }
+
+    def _fake_asr(
+        *,
+        voice_runtime_url: str,
+        audio_path: Path,
+        language: str | None = None,
+        service_token: str | None = None,
+    ) -> dict[str, Any]:
+        _ = voice_runtime_url, language, service_token
+        seen_asr_paths.append(audio_path)
+        return {"text": "Продолжение следует...", "language": "ru"}
+
+    def _failing_hybrid(**_kwargs: Any) -> dict[str, Any]:
+        raise AssertionError("hybrid should be skipped for a quiet hallucinated transcript")
+
+    def _failing_grounded_reply(**_kwargs: Any) -> dict[str, Any]:
+        raise AssertionError("grounded reply should be skipped for a quiet hallucinated transcript")
+
+    def _fake_tts(
+        *,
+        tts_runtime_url: str,
+        text: str,
+        language: str | None = None,
+        turn_dir: Path,
+        service_token: str | None = None,
+        playback_enabled: bool = True,
+    ) -> dict[str, Any]:
+        _ = tts_runtime_url, text, language, turn_dir, service_token, playback_enabled
+        return {
+            "status": "ok",
+            "mode": "stub",
+            "streaming_mode": "fixture",
+            "fallback_used": False,
+            "fallback_reason": None,
+            "chunk_count": 1,
+            "events_count": 1,
+            "audio_out_wav": None,
+            "stream_events_jsonl": None,
+            "playback_error": None,
+            "completed_event": {"event": "completed"},
+        }
+
+    result = pilot_runtime.run_pilot_turn(
+        runtime_run_dir=runtime_run_dir,
+        audio_input_path=audio_path,
+        audio_input_meta=audio_meta,
+        hotkey="F8",
+        capture_monitor=0,
+        capture_region=None,
+        gateway_url="http://fixture.gateway",
+        voice_runtime_url="http://fixture.voice",
+        tts_runtime_url="http://fixture.tts",
+        vlm_client=DeterministicStubVLM(),
+        grounded_reply_client=type("UnusedReply", (), {"generate_reply": staticmethod(_failing_grounded_reply)})(),
+        playback_enabled=False,
+        capture_func=_fake_capture,
+        session_probe_func=_fake_session_probe,
+        live_hud_state_func=_fake_live_hud_state,
+        asr_func=_fake_asr,
+        hybrid_query_func=_failing_hybrid,
+        tts_func=_fake_tts,
+        expected_asr_language="ru",
+        now=datetime(2026, 3, 25, 4, 20, 0, tzinfo=timezone.utc),
+    )
+
+    payload = result["turn_payload"]
+    assert seen_asr_paths
+    assert seen_asr_paths[0].name == "audio_input_asr.wav"
+    assert payload["status"] == "degraded"
+    assert payload["audio"]["signal"]["raw"]["status"] == "low_signal"
+    assert payload["transcript_quality"]["status"] == "low_signal"
+    assert "known_low_signal_phrase" in payload["transcript_quality"]["reason_codes"]
+    assert "audio_signal_low" in payload["transcript_quality"]["reason_codes"]
+    assert "hybrid_skipped_low_signal" in payload["degraded_flags"]
+    assert "grounded_reply_skipped_low_signal" in payload["degraded_flags"]
+    assert payload["reply_mode"] == "visual_only_fallback"
+    assert payload["grounded_reply"]["provider"] == "visual_only_fallback_v1"
+    assert "Продолжение следует" not in payload["answer_text"]
 
 
 def test_run_pilot_turn_replaces_reasoning_leak_before_tts(tmp_path: Path) -> None:
