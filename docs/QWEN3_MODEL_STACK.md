@@ -16,7 +16,7 @@ Rule: prefer the strongest locally supported OpenVINO path per task. `Qwen3` rem
 
 ## Pilot runtime defaults
 
-* Grounded reply text core: `models/qwen3-8b-int4-cw-ov` on `NPU`
+* Grounded reply text core: `models/qwen3-8b-int4-cw-ov` on `GPU`
 * Live screen grounding: `models/qwen2.5-vl-7b-instruct-int4-ov` on `GPU`
 * ASR: `models/whisper-large-v3-turbo-ov` on `NPU`
 
@@ -42,7 +42,7 @@ Rule: prefer the strongest locally supported OpenVINO path per task. `Qwen3` rem
 ### Use pre-converted OpenVINO models now
 
 * Text core:
-  * `OpenVINO/Qwen3-8B-int4-cw-ov` (preferred `NPU`)
+  * `OpenVINO/Qwen3-8B-int4-cw-ov` (preferred `GPU` for the active pilot runtime on the repo host)
   * fallback: `OpenVINO/Qwen3-8B-int8-ov`, `OpenVINO/Qwen3-8B-fp16-ov`
 * Vision:
   * `OpenVINO/Qwen2.5-VL-7B-Instruct-int4-ov` (preferred `GPU`)

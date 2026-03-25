@@ -420,11 +420,11 @@ Notes:
 * Live pilot grounding requires either `--capture-monitor <index>` or `--capture-region x,y,w,h`.
 * Normal live pilot startup should use the default `OpenVINO` providers; do not pass `--pilot-vlm-provider stub --pilot-text-provider stub` unless you are explicitly debugging provider startup.
 * When `--tts-piper-model-path` is provided, the managed launcher forwards explicit `Piper` CLI parameters into `tts_runtime_service` and keeps `Piper` as the preferred live TTS path for normal pilot replies.
-* The managed live profile now forwards low-latency defaults into both `voice_runtime_service` and `pilot_runtime_loop`: `ASR language=ru`, `ASR max_new_tokens=64`, `ASR warmup=requested`, `pilot_vlm_max_new_tokens=64`, `pilot_text_max_new_tokens=96`, `pilot_hybrid_timeout_sec=1.5`, `pilot_gateway_topk=3`, `pilot_gateway_candidate_k=6`, `pilot_max_entities_per_doc=32`.
+* The managed live profile now forwards low-latency defaults into both `voice_runtime_service` and `pilot_runtime_loop`: `ASR language=ru`, `ASR max_new_tokens=64`, `ASR warmup=requested`, `pilot_vlm_max_new_tokens=64`, `pilot_text_max_new_tokens=64`, `pilot_hybrid_timeout_sec=1.0`, `pilot_gateway_topk=3`, `pilot_gateway_candidate_k=6`, `pilot_max_entities_per_doc=32`.
 * `--pilot-hud-hook-json` and `--pilot-tesseract-bin` are optional additive inputs; screenshot-only turns still publish `live_hud_state_v1`, but OCR/mod-hook improve evidence quality when available.
 * The canonical managed live profile currently pins push-to-talk capture to `--pilot-input-device-index 1`; override it only if the Windows default resolves to the wrong source on your machine.
 * `--pilot-vlm-provider stub --pilot-text-provider stub` remains available as a deterministic diagnostics-only override when you want to validate the observer loop without waiting on local OpenVINO model load.
-* Current pilot defaults: `models\qwen2.5-vl-7b-instruct-int4-ov` on `GPU` for vision, `models\qwen3-8b-int4-cw-ov` on `NPU` for grounded reply, one-sentence player-facing replies, Russian-by-default answer language policy, and opportunistic hybrid fast-fail when grounding is unavailable or too slow.
+* Current pilot defaults: `models\qwen2.5-vl-7b-instruct-int4-ov` on `GPU` for vision, `models\qwen3-8b-int4-cw-ov` on `GPU` for grounded reply, one-sentence player-facing replies, Russian-by-default answer language policy, and opportunistic hybrid fast-fail when grounding is unavailable or too slow.
 * Operator snapshot and Streamlit `Pilot runtime` surfaces show active `vlm_provider`, `text_provider`, `asr_language`, `asr_max_new_tokens`, provider warmup rollups, `preferred_tts_engine`, `active_tts_engine_last_turn`, `piper_available`, `piper_prewarm_ok`, `tts_degraded_reason`, plus last-turn `vision_provider`, `grounded_reply_provider`, `tts_engine`, `answer_language`, `transcript_quality`, and `reply_mode`.
 
 ## M8.pilot: Observer pilot runtime
@@ -444,7 +444,7 @@ cd <repo-root>
 .\.venv\Scripts\Activate.ps1
 python scripts/pilot_runtime_loop.py --runs-dir runs\pilot-runtime --gateway-url http://127.0.0.1:8770 --voice-runtime-url http://127.0.0.1:8765 --tts-runtime-url http://127.0.0.1:8780 --capture-monitor 0
 python scripts/pilot_runtime_loop.py --runs-dir runs\pilot-runtime --gateway-url http://127.0.0.1:8770 --voice-runtime-url http://127.0.0.1:8765 --tts-runtime-url http://127.0.0.1:8780 --capture-monitor 0 --hud-hook-json <path-to-hud-hook.json> --tesseract-bin <path-to-tesseract.exe>
-python scripts/pilot_runtime_loop.py --runs-dir runs\pilot-runtime --gateway-url http://127.0.0.1:8770 --voice-runtime-url http://127.0.0.1:8765 --tts-runtime-url http://127.0.0.1:8780 --capture-monitor 0 --asr-language ru --asr-max-new-tokens 64 --asr-warmup-request --pilot-vlm-max-new-tokens 64 --pilot-text-max-new-tokens 96 --pilot-hybrid-timeout-sec 1.5
+python scripts/pilot_runtime_loop.py --runs-dir runs\pilot-runtime --gateway-url http://127.0.0.1:8770 --voice-runtime-url http://127.0.0.1:8765 --tts-runtime-url http://127.0.0.1:8780 --capture-monitor 0 --asr-language ru --asr-max-new-tokens 64 --asr-warmup-request --pilot-vlm-max-new-tokens 64 --pilot-text-max-new-tokens 64 --pilot-hybrid-timeout-sec 1.0
 ```
 
 Expected result:
@@ -1738,7 +1738,7 @@ Detailed matrix: `docs/QWEN3_MODEL_STACK.md`.
 Pilot runtime defaults:
 
 * Vision: `models\qwen2.5-vl-7b-instruct-int4-ov` on `GPU`
-* Grounded reply: `models\qwen3-8b-int4-cw-ov` on `NPU`
+* Grounded reply: `models\qwen3-8b-int4-cw-ov` on `GPU`
 * ASR: `models\whisper-large-v3-turbo-ov` on `NPU`
 
 ### Qwen3-ASR self-conversion (archived reference, keep for future restore)
@@ -1819,7 +1819,7 @@ python -m pip install "openvino==2026.0.0" "openvino-genai==2026.0.0.0"
 Run demo:
 
 ```powershell
-python scripts/text_core_openvino_demo.py --model-dir models\qwen3-8b-int4-cw-ov --prompt "Give me a short ATM10 starter plan" --device NPU
+python scripts/text_core_openvino_demo.py --model-dir models\qwen3-8b-int4-cw-ov --prompt "Give me a short ATM10 starter plan" --device GPU
 ```
 
 Expected result:

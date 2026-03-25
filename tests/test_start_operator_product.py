@@ -95,15 +95,15 @@ def test_parse_args_uses_qwen2_5_vl_7b_default_model_dir() -> None:
     args = start_operator_product.parse_args([])
     assert args.pilot_vlm_model_dir == Path("models") / "qwen2.5-vl-7b-instruct-int4-ov"
     assert args.pilot_vlm_device == "GPU"
-    assert args.pilot_text_device == "NPU"
+    assert args.pilot_text_device == "GPU"
     assert args.voice_asr_language == "ru"
     assert args.voice_asr_max_new_tokens == 64
     assert args.voice_asr_warmup_request is True
     assert args.voice_asr_warmup_language == "ru"
     assert args.pilot_input_device_index == 1
     assert args.pilot_vlm_max_new_tokens == 64
-    assert args.pilot_text_max_new_tokens == 96
-    assert args.pilot_hybrid_timeout_sec == 1.5
+    assert args.pilot_text_max_new_tokens == 64
+    assert args.pilot_hybrid_timeout_sec == 1.0
     assert args.pilot_gateway_topk == 3
     assert args.pilot_gateway_candidate_k == 6
     assert args.pilot_max_entities_per_doc == 32
@@ -273,15 +273,15 @@ def test_build_startup_plan_manages_opt_in_pilot_runtime() -> None:
     assert "--pilot-vlm-device" in pilot_plan["command"]
     assert "GPU" in pilot_plan["command"]
     assert "--pilot-text-device" in pilot_plan["command"]
-    assert "NPU" in pilot_plan["command"]
+    assert pilot_plan["command"][pilot_plan["command"].index("--pilot-text-device") + 1] == "GPU"
     assert "--input-device-index" in pilot_plan["command"]
     assert "1" in pilot_plan["command"]
     assert "--pilot-vlm-max-new-tokens" in pilot_plan["command"]
     assert "64" in pilot_plan["command"]
     assert "--pilot-text-max-new-tokens" in pilot_plan["command"]
-    assert "96" in pilot_plan["command"]
+    assert pilot_plan["command"][pilot_plan["command"].index("--pilot-text-max-new-tokens") + 1] == "64"
     assert "--pilot-hybrid-timeout-sec" in pilot_plan["command"]
-    assert "1.5" in pilot_plan["command"]
+    assert pilot_plan["command"][pilot_plan["command"].index("--pilot-hybrid-timeout-sec") + 1] == "1.0"
     assert "--pilot-gateway-topk" in pilot_plan["command"]
     assert "3" in pilot_plan["command"]
     assert "--pilot-gateway-candidate-k" in pilot_plan["command"]

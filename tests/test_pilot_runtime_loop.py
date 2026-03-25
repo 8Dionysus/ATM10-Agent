@@ -99,6 +99,16 @@ def test_parse_capture_region_and_hotkey() -> None:
     assert pilot_runtime.hotkey_virtual_key("F8") == 0x77
 
 
+def test_parse_args_uses_gpu_defaults_for_live_openvino_models() -> None:
+    args = pilot_runtime.parse_args([])
+
+    assert args.pilot_vlm_device == "GPU"
+    assert args.pilot_text_device == "GPU"
+    assert args.pilot_vlm_max_new_tokens == 64
+    assert args.pilot_text_max_new_tokens == 64
+    assert args.pilot_hybrid_timeout_sec == 1.0
+
+
 def test_push_to_talk_recorder_prefers_microphone_over_remap_input() -> None:
     devices = [
         {"name": "Переназначение звуковых устр. - Input", "max_input_channels": 2},

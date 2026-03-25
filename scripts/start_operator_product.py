@@ -25,9 +25,11 @@ from src.agent_core.combo_a_profile import (
 SCHEMA_VERSION = "operator_product_startup_v1"
 DEFAULT_LIVE_ASR_LANGUAGE = "ru"
 DEFAULT_LIVE_ASR_MAX_NEW_TOKENS = 64
+DEFAULT_LIVE_PILOT_VLM_DEVICE = "GPU"
+DEFAULT_LIVE_PILOT_TEXT_DEVICE = "GPU"
 DEFAULT_LIVE_PILOT_VLM_MAX_NEW_TOKENS = 64
-DEFAULT_LIVE_PILOT_TEXT_MAX_NEW_TOKENS = 96
-DEFAULT_LIVE_PILOT_HYBRID_TIMEOUT_SEC = 1.5
+DEFAULT_LIVE_PILOT_TEXT_MAX_NEW_TOKENS = 64
+DEFAULT_LIVE_PILOT_HYBRID_TIMEOUT_SEC = 1.0
 DEFAULT_LIVE_PILOT_GATEWAY_TOPK = 3
 DEFAULT_LIVE_PILOT_GATEWAY_CANDIDATE_K = 6
 DEFAULT_LIVE_PILOT_MAX_ENTITIES_PER_DOC = 32
@@ -849,14 +851,14 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument(
         "--pilot-vlm-device",
         type=str,
-        default="GPU",
-        help="OpenVINO device for pilot VLM (default: GPU).",
+        default=DEFAULT_LIVE_PILOT_VLM_DEVICE,
+        help=f"OpenVINO device for pilot VLM (default: {DEFAULT_LIVE_PILOT_VLM_DEVICE}).",
     )
     parser.add_argument(
         "--pilot-text-device",
         type=str,
-        default="NPU",
-        help="OpenVINO device for pilot grounded-reply model (default: NPU).",
+        default=DEFAULT_LIVE_PILOT_TEXT_DEVICE,
+        help=f"OpenVINO device for pilot grounded-reply model (default: {DEFAULT_LIVE_PILOT_TEXT_DEVICE}).",
     )
     parser.add_argument(
         "--pilot-vlm-provider",
