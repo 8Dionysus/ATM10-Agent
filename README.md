@@ -170,4 +170,4 @@ Default dependency audit still inspects all declared requirement profiles for in
 
 ## License
 
-Released under the [MIT License](LICENSE).
+Released under the [Apache License 2.0](LICENSE).
