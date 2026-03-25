@@ -387,10 +387,13 @@ Optional managed local runtimes (launcher starts `voice_runtime_service` / `tts_
 python scripts/start_operator_product.py --runs-dir runs --start-voice-runtime --start-tts-runtime
 python scripts/start_operator_product.py --runs-dir runs --start-voice-runtime --start-tts-runtime --start-pilot-runtime --capture-monitor 0
 python scripts/start_operator_product.py --runs-dir runs --start-voice-runtime --start-tts-runtime --start-pilot-runtime --capture-region 0,0,1920,1080
+python scripts/start_operator_product.py --runs-dir runs --start-voice-runtime --start-tts-runtime --tts-piper-executable <path-to-piper.exe> --tts-piper-model-path <path-to-piper-model.onnx> --tts-piper-speaker 0 --start-pilot-runtime --capture-monitor 0
 python scripts/start_operator_product.py --runs-dir runs --start-voice-runtime --start-tts-runtime --start-pilot-runtime --capture-monitor 0 --pilot-hud-hook-json <path-to-hud-hook.json> --pilot-tesseract-bin <path-to-tesseract.exe>
 python scripts/start_operator_product.py --runs-dir runs --start-voice-runtime --start-tts-runtime --start-pilot-runtime --capture-monitor 0
 # optional explicit microphone override
 python scripts/start_operator_product.py --runs-dir runs --start-voice-runtime --start-tts-runtime --start-pilot-runtime --capture-monitor 0 --pilot-input-device-index 1
+# explicit audible fallback / debug launch without Piper
+python scripts/start_operator_product.py --runs-dir runs --start-voice-runtime --start-tts-runtime --start-pilot-runtime --capture-monitor 0
 # debugging-only provider override
 python scripts/start_operator_product.py --runs-dir runs --start-pilot-runtime --capture-monitor 0 --pilot-vlm-provider stub --pilot-text-provider stub
 ```
@@ -416,12 +419,13 @@ Notes:
 * The pilot runtime is local-only and does not open a new HTTP port.
 * Live pilot grounding requires either `--capture-monitor <index>` or `--capture-region x,y,w,h`.
 * Normal live pilot startup should use the default `OpenVINO` providers; do not pass `--pilot-vlm-provider stub --pilot-text-provider stub` unless you are explicitly debugging provider startup.
+* When `--tts-piper-model-path` is provided, the managed launcher forwards explicit `Piper` CLI parameters into `tts_runtime_service` and keeps `Piper` as the preferred live TTS path for normal pilot replies.
 * The managed live profile now forwards low-latency defaults into both `voice_runtime_service` and `pilot_runtime_loop`: `ASR language=ru`, `ASR max_new_tokens=64`, `ASR warmup=requested`, `pilot_vlm_max_new_tokens=64`, `pilot_text_max_new_tokens=96`, `pilot_hybrid_timeout_sec=1.5`, `pilot_gateway_topk=3`, `pilot_gateway_candidate_k=6`, `pilot_max_entities_per_doc=32`.
 * `--pilot-hud-hook-json` and `--pilot-tesseract-bin` are optional additive inputs; screenshot-only turns still publish `live_hud_state_v1`, but OCR/mod-hook improve evidence quality when available.
 * The canonical managed live profile currently pins push-to-talk capture to `--pilot-input-device-index 1`; override it only if the Windows default resolves to the wrong source on your machine.
 * `--pilot-vlm-provider stub --pilot-text-provider stub` remains available as a deterministic diagnostics-only override when you want to validate the observer loop without waiting on local OpenVINO model load.
 * Current pilot defaults: `models\qwen2.5-vl-7b-instruct-int4-ov` on `GPU` for vision, `models\qwen3-8b-int4-cw-ov` on `NPU` for grounded reply, one-sentence player-facing replies, Russian-by-default answer language policy, and opportunistic hybrid fast-fail when grounding is unavailable or too slow.
-* Operator snapshot and Streamlit `Pilot runtime` surfaces show active `vlm_provider`, `text_provider`, `asr_language`, `asr_max_new_tokens`, provider warmup rollups, last-turn `vision_provider`, `grounded_reply_provider`, `tts_engine`, `answer_language`, `transcript_quality`, and `reply_mode`.
+* Operator snapshot and Streamlit `Pilot runtime` surfaces show active `vlm_provider`, `text_provider`, `asr_language`, `asr_max_new_tokens`, provider warmup rollups, `preferred_tts_engine`, `active_tts_engine_last_turn`, `piper_available`, `piper_prewarm_ok`, `tts_degraded_reason`, plus last-turn `vision_provider`, `grounded_reply_provider`, `tts_engine`, `answer_language`, `transcript_quality`, and `reply_mode`.
 
 ## M8.pilot: Observer pilot runtime
 
@@ -2027,6 +2031,7 @@ cd <repo-root>
 .\.venv\Scripts\Activate.ps1
 python -m pip install fastapi uvicorn
 python scripts/tts_runtime_service.py --host 127.0.0.1 --port 8780 --runs-dir runs\tts-runtime
+python scripts/tts_runtime_service.py --host 127.0.0.1 --port 8780 --runs-dir runs\tts-runtime --tts-piper-executable <path-to-piper.exe> --tts-piper-model-path <path-to-piper-model.onnx> --tts-piper-speaker 0
 ```
 
 Optional local API docs (debug only):
@@ -2039,7 +2044,8 @@ Accepted runtime design:
 
 * Router: FastAPI
 * Main engine: XTTS v2
-* Fallback engines: Piper, Silero (for `ru` service voice), Windows `System.Speech` on Windows hosts, plus a last-resort `silence_fallback`
+* Preferred normal live fallback chain: XTTS v2 -> Piper -> Windows `System.Speech` on Windows hosts -> `silence_fallback`
+* Service-voice chain for `ru`: Silero -> Piper -> standard fallbacks
 * Techniques: prewarm, queue, chunking, phrase cache, true streaming for `/tts_stream`
 * HTTP hardening: payload limits (`max_request_bytes/json_depth/string/array/object`) + sanitized internal errors
 * Optional auth hardening: `--service-token` or `ATM10_SERVICE_TOKEN` -> require `X-ATM10-Token`
@@ -2072,11 +2078,24 @@ $env:SILERO_SAMPLE_RATE="24000"
 $env:SILERO_SPEAKER="xenia"
 ```
 
+Equivalent explicit CLI wiring for the managed/local `Piper` path:
+
+```powershell
+python scripts/tts_runtime_service.py --host 127.0.0.1 --port 8780 --runs-dir runs\tts-runtime --tts-piper-executable <path-to-piper.exe> --tts-piper-model-path <path-to-piper-model.onnx> --tts-piper-speaker 0
+```
+
+Explicit fallback/debug launch without `Piper`:
+
+```powershell
+python scripts/tts_runtime_service.py --host 127.0.0.1 --port 8780 --runs-dir runs\tts-runtime
+```
+
 Security policy for Silero source:
 
 * Default mode expects local source (`SILERO_REPO_OR_DIR` as local path) and keeps remote hub disabled.
 * Remote hub source requires explicit opt-in (`SILERO_ALLOW_REMOTE_HUB=true`) and pinned revision (`SILERO_REPO_REF` or `owner/repo:ref` in `SILERO_REPO_OR_DIR`).
 * If secure Silero configuration is missing, `tts_runtime_service` still starts, but the `ru` service-voice fallback stays disabled until Silero is configured correctly.
+* When `Piper` is configured successfully, `/health` reports it as the preferred live TTS engine and startup prewarm should mark `piper.ok=true`.
 * If `XTTS`, `Piper`, and `Silero` are unavailable, `/tts` and `/tts_stream` first try the Windows `System.Speech` fallback on Windows hosts and only then fall back to `silence_fallback`; callers should treat `silence_fallback` as degraded response quality rather than spoken-quality success.
 
 Example TTS request:
@@ -2100,6 +2119,23 @@ Expected result:
 * `runs/<timestamp>-tts-runtime-bench/` is created.
 * Inside there are `benchmark_plan.json`, `per_sample_results.jsonl`, `summary.json`, and `service_sla_summary.json`.
 * `service_sla_summary.json` uses `service_sla_summary_v1` and publishes `voice_tts` baseline metrics including `non_empty_audio_rate`, `chunk_count_mean`, and `cache_hit_rate`.
+
+### Pilot OpenVINO device benchmark
+
+```powershell
+cd <repo-root>
+.\.venv\Scripts\Activate.ps1
+python scripts/benchmark_pilot_openvino_devices.py --runs-dir runs\pilot-openvino-device-bench
+python scripts/benchmark_pilot_openvino_devices.py --runs-dir runs\pilot-openvino-device-bench --image-path <path-to-atm10-screenshot.png>
+```
+
+Expected result:
+
+* `runs\<timestamp>-pilot-openvino-device-bench\` is created.
+* Inside there are `run.json`, `benchmark_plan.json`, `per_case_results.jsonl`, `summary.json`, and `summary.md`.
+* The benchmark measures active-stack `vision` (`Qwen2.5-VL-7B`) and `grounded_reply` (`Qwen3-8B`) devices separately, plus aggregate `vision + grounded_reply` wall time.
+* Unsupported devices are recorded as normal failed rows; the benchmark does not abort the whole run.
+* `summary.json` publishes per-stage `recommended_device`, but it does not mutate runtime defaults automatically.
 
 Streaming behavior:
 

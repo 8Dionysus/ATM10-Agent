@@ -735,6 +735,31 @@ def test_build_operator_product_snapshot_includes_pilot_runtime_context(
         "load_operator_policy_surface_context",
         lambda _runs_dir: _clean_policy_surface_context(),
     )
+    monkeypatch.setattr(
+        operator_snapshot,
+        "fetch_service_health",
+        lambda *, service_name, service_url, timeout_sec, service_token=None: (
+            {
+                "service_name": service_name,
+                "configured": service_name == "tts_runtime_service",
+                "status": "ok" if service_name == "tts_runtime_service" else "not_configured",
+                "url": service_url,
+                "health_path": "/health",
+                "payload": (
+                    {
+                        "status": "ok",
+                        "preferred_tts_engine": "piper",
+                        "piper_available": True,
+                        "piper_prewarm_ok": True,
+                        "tts_degraded_reason": None,
+                    }
+                    if service_name == "tts_runtime_service"
+                    else None
+                ),
+                "error": None,
+            }
+        ),
+    )
     operator_runs_dir = tmp_path / "operator-runs"
     pilot_runs_dir = tmp_path / "pilot-runtime"
     _write_pilot_runtime_status(pilot_runs_dir)
@@ -754,6 +779,7 @@ def test_build_operator_product_snapshot_includes_pilot_runtime_context(
             "supported_operations": ["health"],
             "supported_profiles": ["baseline_first", "combo_a"],
         },
+        tts_service_url="http://127.0.0.1:8780",
     )
 
     pilot_runtime = payload["operator_context"]["pilot_runtime"]
@@ -772,6 +798,14 @@ def test_build_operator_product_snapshot_includes_pilot_runtime_context(
     assert pilot_runtime["pilot_hybrid_timeout_sec"] == 1.5
     assert pilot_runtime["provider_init"]["vlm"]["status"] == "ok"
     assert pilot_runtime["provider_init"]["vlm"]["warmup"]["ok"] is True
+    assert pilot_runtime["preferred_tts_engine"] == "piper"
+    assert pilot_runtime["active_tts_engine_last_turn"] == "windows_sapi_fallback"
+    assert pilot_runtime["piper_available"] is True
+    assert pilot_runtime["piper_prewarm_ok"] is True
+    assert (
+        pilot_runtime["tts_degraded_reason"]
+        == "last_turn_used_windows_sapi_fallback_instead_of_piper"
+    )
     assert pilot_runtime["last_turn_id"] == "20260322_120501-pilot-turn"
     assert pilot_runtime["paths"]["pilot_runs_dir"] == str(pilot_runs_dir)
     assert pilot_readiness["readiness_status"] == "attention"
@@ -784,6 +818,13 @@ def test_build_operator_product_snapshot_includes_pilot_runtime_context(
     assert last_turn_summary["vision_provider"] == "openvino_genai_vlm_v1"
     assert last_turn_summary["grounded_reply_provider"] == "openvino_genai_grounded_reply_v1"
     assert last_turn_summary["tts_engine"] == "windows_sapi_fallback"
+    assert last_turn_summary["preferred_tts_engine"] == "piper"
+    assert last_turn_summary["piper_available"] is True
+    assert last_turn_summary["piper_prewarm_ok"] is True
+    assert (
+        last_turn_summary["tts_degraded_reason"]
+        == "last_turn_used_windows_sapi_fallback_instead_of_piper"
+    )
     assert last_turn_summary["session_atm10_probable"] is True
     assert last_turn_summary["session_foreground"] is True
     assert last_turn_summary["hud_state_status"] == "partial"

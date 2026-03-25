@@ -434,10 +434,42 @@ def _build_xtts_engine() -> CallbackTTSEngine:
     return CallbackTTSEngine(name="xtts_v2", synthesize_fn=_synthesize, prewarm_fn=_prewarm)
 
 
-def _build_piper_engine() -> CallbackTTSEngine:
-    piper_executable = os.getenv("PIPER_EXECUTABLE", "piper")
-    piper_model_path = os.getenv("PIPER_MODEL_PATH")
-    default_speaker = os.getenv("PIPER_SPEAKER")
+def _resolve_piper_config(
+    *,
+    piper_executable: str | None = None,
+    piper_model_path: str | None = None,
+    piper_speaker: str | None = None,
+) -> dict[str, str | None]:
+    effective_executable = str(piper_executable or os.getenv("PIPER_EXECUTABLE", "piper")).strip() or "piper"
+    model_path_value = piper_model_path
+    if model_path_value is None:
+        model_path_value = os.getenv("PIPER_MODEL_PATH")
+    speaker_value = piper_speaker
+    if speaker_value is None:
+        speaker_value = os.getenv("PIPER_SPEAKER")
+    normalized_model_path = str(model_path_value).strip() if model_path_value is not None else ""
+    normalized_speaker = str(speaker_value).strip() if speaker_value is not None else ""
+    return {
+        "executable": effective_executable,
+        "model_path": normalized_model_path or None,
+        "speaker": normalized_speaker or None,
+    }
+
+
+def _build_piper_engine(
+    *,
+    piper_executable: str | None = None,
+    piper_model_path: str | None = None,
+    piper_speaker: str | None = None,
+) -> CallbackTTSEngine:
+    resolved_piper = _resolve_piper_config(
+        piper_executable=piper_executable,
+        piper_model_path=piper_model_path,
+        piper_speaker=piper_speaker,
+    )
+    piper_executable = str(resolved_piper["executable"])
+    piper_model_path = resolved_piper["model_path"]
+    default_speaker = resolved_piper["speaker"]
 
     if not piper_model_path:
         return _disabled_engine("piper", "PIPER_MODEL_PATH is not set.")
@@ -537,9 +569,26 @@ def _build_silero_engine() -> CallbackTTSEngine:
     return CallbackTTSEngine(name="silero_ru_service", synthesize_fn=_synthesize, prewarm_fn=_prewarm)
 
 
-def _build_default_service(*, cache_items: int, chunk_chars: int, queue_size: int) -> TTSRuntimeService:
+def _build_default_service(
+    *,
+    cache_items: int,
+    chunk_chars: int,
+    queue_size: int,
+    piper_executable: str | None = None,
+    piper_model_path: str | None = None,
+    piper_speaker: str | None = None,
+) -> TTSRuntimeService:
     xtts = _build_xtts_engine()
-    piper = _build_piper_engine()
+    resolved_piper = _resolve_piper_config(
+        piper_executable=piper_executable,
+        piper_model_path=piper_model_path,
+        piper_speaker=piper_speaker,
+    )
+    piper = _build_piper_engine(
+        piper_executable=str(resolved_piper["executable"]),
+        piper_model_path=resolved_piper["model_path"],
+        piper_speaker=resolved_piper["speaker"],
+    )
     try:
         silero = _build_silero_engine()
     except TTSRuntimeError as exc:
@@ -555,6 +604,9 @@ def _build_default_service(*, cache_items: int, chunk_chars: int, queue_size: in
         max_chunk_chars=chunk_chars,
         queue_size=queue_size,
         cache=PhraseCache(max_items=cache_items),
+        effective_config={
+            "piper": dict(resolved_piper),
+        },
     )
 
 
@@ -830,6 +882,24 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--chunk-chars", type=int, default=220, help="Chunk size for long text (default: 220).")
     parser.add_argument("--cache-items", type=int, default=512, help="Phrase cache max entries (default: 512).")
     parser.add_argument(
+        "--tts-piper-executable",
+        type=str,
+        default=None,
+        help="Optional Piper executable override. Falls back to PIPER_EXECUTABLE or 'piper'.",
+    )
+    parser.add_argument(
+        "--tts-piper-model-path",
+        type=str,
+        default=None,
+        help="Optional Piper model path override. Falls back to PIPER_MODEL_PATH.",
+    )
+    parser.add_argument(
+        "--tts-piper-speaker",
+        type=str,
+        default=None,
+        help="Optional Piper speaker override. Falls back to PIPER_SPEAKER.",
+    )
+    parser.add_argument(
         "--max-request-bytes",
         type=int,
         default=TTS_HTTP_DEFAULT_MAX_REQUEST_BODY_BYTES,
@@ -899,6 +969,9 @@ def main(argv: list[str] | None = None) -> int:
         cache_items=args.cache_items,
         chunk_chars=args.chunk_chars,
         queue_size=args.queue_size,
+        piper_executable=args.tts_piper_executable,
+        piper_model_path=args.tts_piper_model_path,
+        piper_speaker=args.tts_piper_speaker,
     )
     http_policy = TTSHTTPPolicy(
         max_request_body_bytes=args.max_request_bytes,
@@ -918,6 +991,11 @@ def main(argv: list[str] | None = None) -> int:
     now = datetime.now(timezone.utc)
     run_dir = _create_run_dir(args.runs_dir, now=now)
     run_json_path = run_dir / "run.json"
+    resolved_piper = _resolve_piper_config(
+        piper_executable=args.tts_piper_executable,
+        piper_model_path=args.tts_piper_model_path,
+        piper_speaker=args.tts_piper_speaker,
+    )
     run_payload: dict[str, Any] = {
         "timestamp_utc": now.astimezone(timezone.utc).isoformat(),
         "mode": "tts_runtime_service",
@@ -931,6 +1009,14 @@ def main(argv: list[str] | None = None) -> int:
             "auth": {
                 "enabled": bool(service_token),
                 "header": _SERVICE_TOKEN_HEADER,
+            },
+            "tts": {
+                "preferred_tts_engine": "piper" if resolved_piper["model_path"] else "windows_sapi_fallback",
+                "piper": {
+                    "executable": resolved_piper["executable"],
+                    "model_path": resolved_piper["model_path"],
+                    "speaker": resolved_piper["speaker"],
+                },
             },
         },
         "paths": {

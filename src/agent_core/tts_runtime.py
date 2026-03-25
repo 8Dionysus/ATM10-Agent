@@ -8,7 +8,7 @@ import wave
 from collections import OrderedDict
 from concurrent.futures import Future
 from dataclasses import dataclass
-from typing import Any, Callable, Iterator
+from typing import Any, Callable, Iterator, Mapping
 
 import numpy as np
 
@@ -151,6 +151,7 @@ class TTSRuntimeService:
         max_chunk_chars: int = 220,
         queue_size: int = 128,
         cache: PhraseCache | None = None,
+        effective_config: Mapping[str, Any] | None = None,
     ) -> None:
         self.xtts_engine = xtts_engine
         self.piper_engine = piper_engine
@@ -164,6 +165,7 @@ class TTSRuntimeService:
         self.fallback_engines = combined_fallbacks
         self.max_chunk_chars = max(20, int(max_chunk_chars))
         self.cache = cache or PhraseCache(max_items=512)
+        self._effective_config = dict(effective_config or {})
 
         self._queue: queue.Queue[tuple[TTSRequest, Future[dict[str, Any]]] | None] = queue.Queue(maxsize=queue_size)
         self._worker: threading.Thread | None = None
@@ -290,14 +292,55 @@ class TTSRuntimeService:
         self._queue.put((request, future))
         return future
 
+    def _piper_diagnostics(self, prewarm: Mapping[str, Mapping[str, Any]]) -> dict[str, Any]:
+        piper_config = self._effective_config.get("piper")
+        piper_config = piper_config if isinstance(piper_config, Mapping) else {}
+        piper_model_path = piper_config.get("model_path")
+        piper_configured = (
+            isinstance(piper_model_path, str) and bool(piper_model_path.strip())
+        )
+        piper_prewarm = prewarm.get("piper")
+        piper_prewarm = piper_prewarm if isinstance(piper_prewarm, Mapping) else {}
+        piper_prewarm_ok = piper_prewarm.get("ok")
+        if not isinstance(piper_prewarm_ok, bool):
+            piper_prewarm_ok = None
+        piper_error = str(piper_prewarm.get("error", "")).strip() or None
+        preferred_tts_engine = "piper" if piper_configured else "windows_sapi_fallback"
+        tts_degraded_reason: str | None = None
+        if piper_configured:
+            if piper_prewarm_ok is False and piper_error:
+                tts_degraded_reason = piper_error
+            elif piper_prewarm_ok is False:
+                tts_degraded_reason = "piper_prewarm_failed"
+            elif piper_prewarm_ok is None:
+                tts_degraded_reason = "piper_prewarm_not_run"
+        elif self.fallback_engines:
+            tts_degraded_reason = "piper_not_configured"
+        return {
+            "preferred_tts_engine": preferred_tts_engine,
+            "piper_available": piper_configured,
+            "piper_prewarm_ok": piper_prewarm_ok,
+            "tts_degraded_reason": tts_degraded_reason,
+            "engines": {
+                "piper": {
+                    "configured": piper_configured,
+                    "ok": piper_prewarm_ok,
+                    "error": piper_error,
+                }
+            },
+            "effective_config": dict(self._effective_config),
+        }
+
     def health(self) -> dict[str, Any]:
         with self._lock:
             worker_alive = self._worker is not None and self._worker.is_alive()
             prewarm = dict(self._prewarm_status)
+        piper_diagnostics = self._piper_diagnostics(prewarm)
         return {
             "status": "ok",
             "worker_alive": worker_alive,
             "queue_size": self._queue.qsize(),
             "cache_items": self.cache.size(),
             "prewarm": prewarm,
+            **piper_diagnostics,
         }

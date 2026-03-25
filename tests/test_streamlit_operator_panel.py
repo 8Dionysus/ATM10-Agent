@@ -625,6 +625,11 @@ def test_render_stack_health_tab_renders_pilot_runtime_section(
                     "asr_max_new_tokens": 64,
                     "vlm_provider": "openvino",
                     "text_provider": "openvino",
+                    "preferred_tts_engine": "piper",
+                    "active_tts_engine_last_turn": "windows_sapi_fallback",
+                    "piper_available": True,
+                    "piper_prewarm_ok": True,
+                    "tts_degraded_reason": "last_turn_used_windows_sapi_fallback_instead_of_piper",
                     "pilot_vlm_max_new_tokens": 64,
                     "pilot_text_max_new_tokens": 96,
                     "pilot_hybrid_timeout_sec": 1.5,
@@ -649,6 +654,10 @@ def test_render_stack_health_tab_renders_pilot_runtime_section(
                     "vision_provider": "openvino_genai_vlm_v1",
                     "grounded_reply_provider": "openvino_genai_grounded_reply_v1",
                     "tts_engine": "windows_sapi_fallback",
+                    "preferred_tts_engine": "piper",
+                    "piper_available": True,
+                    "piper_prewarm_ok": True,
+                    "tts_degraded_reason": "last_turn_used_windows_sapi_fallback_instead_of_piper",
                     "session_window_found": True,
                     "session_atm10_probable": True,
                     "session_foreground": True,
@@ -704,6 +713,9 @@ def test_render_stack_health_tab_renders_pilot_runtime_section(
     assert pilot_table[0]["asr_max_new_tokens"] == 64
     assert pilot_table[0]["vlm_provider"] == "openvino"
     assert pilot_table[0]["text_provider"] == "openvino"
+    assert pilot_table[0]["preferred_tts_engine"] == "piper"
+    assert pilot_table[0]["active_tts_engine_last_turn"] == "windows_sapi_fallback"
+    assert pilot_table[0]["piper_available"] is True
     evidence_table = next(
         item
         for item in fake_st.dataframes
@@ -743,6 +755,8 @@ def test_render_stack_health_tab_renders_pilot_runtime_section(
     assert last_turn_table[0]["transcript_quality"] == "low_signal"
     assert last_turn_table[0]["vision_provider"] == "openvino_genai_vlm_v1"
     assert last_turn_table[0]["tts_engine"] == "windows_sapi_fallback"
+    assert last_turn_table[0]["preferred_tts_engine"] == "piper"
+    assert last_turn_table[0]["piper_prewarm_ok"] is True
 
 
 def test_render_pilot_readiness_section_ready(monkeypatch: pytest.MonkeyPatch) -> None:

@@ -107,6 +107,9 @@ def test_parse_args_uses_qwen2_5_vl_7b_default_model_dir() -> None:
     assert args.pilot_gateway_topk == 3
     assert args.pilot_gateway_candidate_k == 6
     assert args.pilot_max_entities_per_doc == 32
+    assert args.tts_piper_executable is None
+    assert args.tts_piper_model_path is None
+    assert args.tts_piper_speaker is None
 
 
 def test_parse_args_keeps_explicit_child_run_dir_overrides(tmp_path: Path) -> None:
@@ -195,8 +198,33 @@ def test_build_startup_plan_manages_opt_in_runtimes() -> None:
     assert "64" in managed["voice_runtime_service"]["command"]
     assert "--asr-warmup-request" in managed["voice_runtime_service"]["command"]
     assert "--asr-warmup-language" in managed["voice_runtime_service"]["command"]
+    assert "--tts-piper-model-path" not in managed["tts_runtime_service"]["command"]
     assert "--voice-service-url" in plan["gateway"]["command"]
     assert "--tts-service-url" in plan["gateway"]["command"]
+
+
+def test_build_startup_plan_passes_explicit_tts_piper_flags() -> None:
+    args = start_operator_product.parse_args(
+        [
+            "--start-tts-runtime",
+            "--tts-piper-executable",
+            "C:/Tools/piper/piper.exe",
+            "--tts-piper-model-path",
+            "models/piper/ru.onnx",
+            "--tts-piper-speaker",
+            "0",
+        ]
+    )
+
+    plan = start_operator_product.build_startup_plan(args)
+    command = plan["managed_processes"]["tts_runtime_service"]["command"]
+
+    assert "--tts-piper-executable" in command
+    assert "C:/Tools/piper/piper.exe" in command
+    assert "--tts-piper-model-path" in command
+    assert "models/piper/ru.onnx" in command
+    assert "--tts-piper-speaker" in command
+    assert "0" in command
 
 
 def test_build_startup_plan_manages_opt_in_pilot_runtime() -> None:

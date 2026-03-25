@@ -144,21 +144,28 @@ def build_startup_plan(args: argparse.Namespace) -> dict[str, Any]:
         }
 
     if args.start_tts_runtime:
+        tts_runtime_command = [
+            sys.executable,
+            "scripts/tts_runtime_service.py",
+            "--host",
+            "127.0.0.1",
+            "--port",
+            str(args.tts_runtime_port),
+            "--runs-dir",
+            str(args.tts_runtime_runs_dir),
+        ]
+        if args.tts_piper_executable is not None:
+            tts_runtime_command.extend(["--tts-piper-executable", str(args.tts_piper_executable)])
+        if args.tts_piper_model_path is not None:
+            tts_runtime_command.extend(["--tts-piper-model-path", str(args.tts_piper_model_path)])
+        if args.tts_piper_speaker is not None:
+            tts_runtime_command.extend(["--tts-piper-speaker", str(args.tts_piper_speaker)])
         tts_runtime_url = f"http://127.0.0.1:{args.tts_runtime_port}"
         managed_processes["tts_runtime_service"] = {
             "managed": True,
             "url": tts_runtime_url,
             "runs_dir": str(args.tts_runtime_runs_dir),
-            "command": [
-                sys.executable,
-                "scripts/tts_runtime_service.py",
-                "--host",
-                "127.0.0.1",
-                "--port",
-                str(args.tts_runtime_port),
-                "--runs-dir",
-                str(args.tts_runtime_runs_dir),
-            ],
+            "command": tts_runtime_command,
         }
     else:
         managed_processes["tts_runtime_service"] = {
@@ -767,6 +774,24 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         type=Path,
         default=None,
         help="Managed TTS runtime runs directory (default: <runs-dir>/tts-runtime).",
+    )
+    parser.add_argument(
+        "--tts-piper-executable",
+        type=str,
+        default=None,
+        help="Optional Piper executable override forwarded to managed tts_runtime_service.",
+    )
+    parser.add_argument(
+        "--tts-piper-model-path",
+        type=str,
+        default=None,
+        help="Optional Piper model path forwarded to managed tts_runtime_service.",
+    )
+    parser.add_argument(
+        "--tts-piper-speaker",
+        type=str,
+        default=None,
+        help="Optional Piper speaker override forwarded to managed tts_runtime_service.",
     )
     parser.add_argument(
         "--start-pilot-runtime",
