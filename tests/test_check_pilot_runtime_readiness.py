@@ -371,6 +371,22 @@ def test_check_pilot_runtime_readiness_blocks_on_error_turn(tmp_path: Path) -> N
     assert "pilot_turn_error" in summary["blocking_reason_codes"]
 
 
+def test_check_pilot_runtime_readiness_blocks_when_pilot_runtime_status_is_error(tmp_path: Path) -> None:
+    now = datetime(2026, 3, 23, 18, 0, 0, tzinfo=timezone.utc)
+    runs_dir = tmp_path / "runs"
+    pilot_runs_dir = runs_dir / "pilot-runtime"
+    turn_json_path = pilot_runs_dir / "20260323_175500-pilot-runtime" / "turns" / "20260323_175600-pilot-turn" / "pilot_turn.json"
+    _write_operator_startup_run(runs_dir, pilot_runs_dir, timestamp=now - timedelta(minutes=10))
+    _write_pilot_turn(turn_json_path, timestamp=now - timedelta(minutes=4), status="ok")
+    _write_pilot_runtime_status(pilot_runs_dir, turn_json_path, timestamp=now - timedelta(minutes=3), status="error")
+
+    result = readiness.run_check_pilot_runtime_readiness(runs_dir=runs_dir, now=now)
+
+    summary = result["summary_payload"]
+    assert summary["readiness_status"] == "blocked"
+    assert "pilot_session_error" in summary["blocking_reason_codes"]
+
+
 def test_check_pilot_runtime_readiness_blocks_when_turn_is_not_completed(tmp_path: Path) -> None:
     now = datetime(2026, 3, 23, 18, 0, 0, tzinfo=timezone.utc)
     runs_dir = tmp_path / "runs"

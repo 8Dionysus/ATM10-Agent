@@ -249,6 +249,10 @@ def _reason_to_next_step(reason_code: str) -> tuple[str, str]:
             "relaunch_pilot_runtime",
             "Relaunch the pilot runtime to keep the live session available after the last good turn.",
         ),
+        "pilot_session_error": (
+            "repair_and_relaunch_pilot_runtime",
+            "Repair the pilot runtime failure and relaunch it before trusting the last good turn as live readiness evidence.",
+        ),
     }
     return mapping.get(
         reason_code,
@@ -663,6 +667,8 @@ def run_check_pilot_runtime_readiness(
         )
         if turn_is_good and (startup_status == "stopped" or pilot_status_state == "stopped"):
             reason_codes.append("pilot_session_stopped")
+        if turn_is_good and (startup_status == "error" or pilot_status_state == "error"):
+            reason_codes.append("pilot_session_error")
 
         deduped_reason_codes = []
         seen_reason_codes: set[str] = set()
@@ -694,6 +700,7 @@ def run_check_pilot_runtime_readiness(
             "pilot_turn_error",
             "pilot_turn_not_completed",
             "hybrid_profile_not_combo_a",
+            "pilot_session_error",
         }
         readiness_status = "ready"
         if any(reason_code in blocked_reason_codes for reason_code in reason_codes):
