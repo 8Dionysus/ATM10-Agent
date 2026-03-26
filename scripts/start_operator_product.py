@@ -34,6 +34,7 @@ DEFAULT_LIVE_PILOT_GATEWAY_TOPK = 3
 DEFAULT_LIVE_PILOT_GATEWAY_CANDIDATE_K = 6
 DEFAULT_LIVE_PILOT_MAX_ENTITIES_PER_DOC = 32
 DEFAULT_LIVE_PILOT_INPUT_DEVICE_INDEX = 1
+UNCONFIGURED_PILOT_RUNTIME_URL_SENTINEL = "disabled"
 
 
 def _utc_now() -> str:
@@ -178,6 +179,8 @@ def build_startup_plan(args: argparse.Namespace) -> dict[str, Any]:
         }
 
     if args.start_pilot_runtime:
+        pilot_voice_runtime_url = voice_runtime_url if voice_runtime_url else UNCONFIGURED_PILOT_RUNTIME_URL_SENTINEL
+        pilot_tts_runtime_url = tts_runtime_url if tts_runtime_url else UNCONFIGURED_PILOT_RUNTIME_URL_SENTINEL
         pilot_command = [
             sys.executable,
             "scripts/pilot_runtime_loop.py",
@@ -215,6 +218,10 @@ def build_startup_plan(args: argparse.Namespace) -> dict[str, Any]:
             str(args.voice_asr_language),
             "--asr-max-new-tokens",
             str(args.voice_asr_max_new_tokens),
+            "--voice-runtime-url",
+            pilot_voice_runtime_url,
+            "--tts-runtime-url",
+            pilot_tts_runtime_url,
         ]
         if args.voice_asr_warmup_request:
             pilot_command.append("--asr-warmup-request")
@@ -222,10 +229,6 @@ def build_startup_plan(args: argparse.Namespace) -> dict[str, Any]:
             pilot_command.extend(["--asr-warmup-language", str(args.voice_asr_warmup_language)])
         if args.pilot_input_device_index is not None:
             pilot_command.extend(["--input-device-index", str(args.pilot_input_device_index)])
-        if voice_runtime_url:
-            pilot_command.extend(["--voice-runtime-url", voice_runtime_url])
-        if tts_runtime_url:
-            pilot_command.extend(["--tts-runtime-url", tts_runtime_url])
         if args.capture_monitor is not None:
             pilot_command.extend(["--capture-monitor", str(args.capture_monitor)])
         if args.capture_region is not None:
@@ -1339,6 +1342,24 @@ def main(argv: list[str] | None = None) -> int:
                     message="streamlit process exited unexpectedly",
                 )
                 raise RuntimeError("streamlit process exited unexpectedly")
+            pilot_runtime_process = process_map.get("pilot_runtime")
+            if pilot_runtime_process is not None and pilot_runtime_process.poll() is not None:
+                _update_session_entry(
+                    run_payload,
+                    "pilot_runtime",
+                    status="error",
+                    error="pilot runtime process exited unexpectedly",
+                    finished_at_utc=_utc_now(),
+                    last_event="unexpected_exit",
+                )
+                _append_startup_checkpoint(
+                    run_payload,
+                    stage="watchdog",
+                    status="error",
+                    service_name="pilot_runtime",
+                    message="pilot runtime process exited unexpectedly",
+                )
+                raise RuntimeError("pilot runtime process exited unexpectedly")
             time.sleep(1.0)
     except KeyboardInterrupt:
         final_status = "stopped"

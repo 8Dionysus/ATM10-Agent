@@ -294,6 +294,24 @@ def test_build_startup_plan_manages_opt_in_pilot_runtime() -> None:
     assert plan["artifact_roots"]["pilot_runtime_runs_dir"] == str(Path("runs") / "pilot-runtime")
 
 
+def test_build_startup_plan_explicitly_disables_unconfigured_pilot_runtime_services() -> None:
+    args = start_operator_product.parse_args(
+        [
+            "--start-pilot-runtime",
+            "--capture-monitor",
+            "0",
+        ]
+    )
+
+    plan = start_operator_product.build_startup_plan(args)
+    pilot_command = plan["managed_processes"]["pilot_runtime"]["command"]
+
+    assert "--voice-runtime-url" in pilot_command
+    assert pilot_command[pilot_command.index("--voice-runtime-url") + 1] == "disabled"
+    assert "--tts-runtime-url" in pilot_command
+    assert pilot_command[pilot_command.index("--tts-runtime-url") + 1] == "disabled"
+
+
 def test_build_startup_plan_uses_openvino_pilot_providers_by_default() -> None:
     args = start_operator_product.parse_args(
         [
@@ -612,6 +630,86 @@ def test_start_operator_product_marks_streamlit_probe_failure(
     assert run_payload["session_state"]["streamlit"]["last_probe"]["status"] == "error"
     assert run_payload["session_state"]["streamlit"]["last_event"] == "probe_error"
     assert "streamlit startup timeout" in run_payload["session_state"]["streamlit"]["error"]
+
+
+def test_start_operator_product_marks_pilot_runtime_watchdog_failure(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    class _StableProcess:
+        _next_pid = 9000
+
+        def __init__(self) -> None:
+            type(self)._next_pid += 1
+            self.pid = type(self)._next_pid
+            self.returncode = None
+
+        def poll(self):
+            return self.returncode
+
+        def terminate(self):
+            return None
+
+        def wait(self, timeout: float | None = None):
+            self.returncode = 0
+            return 0
+
+        def kill(self):
+            self.returncode = 1
+            return None
+
+    class _PilotExitedProcess(_StableProcess):
+        def poll(self):
+            return 23
+
+    def _fake_launch_process(command: list[str], log_path: Path):
+        log_path.parent.mkdir(parents=True, exist_ok=True)
+        log_path.write_text("", encoding="utf-8")
+        if any("pilot_runtime_loop.py" in part for part in command):
+            return _PilotExitedProcess()
+        return _StableProcess()
+
+    monkeypatch.setattr(start_operator_product, "_launch_process", _fake_launch_process)
+    monkeypatch.setattr(
+        start_operator_product,
+        "_wait_for_gateway_operator_snapshot",
+        lambda gateway_url, timeout_sec: ({"status": "ok", "checked_at_utc": "2026-03-21T12:00:00+00:00"}, None),
+    )
+    monkeypatch.setattr(
+        start_operator_product,
+        "_wait_for_streamlit_ready",
+        lambda streamlit_url, timeout_sec, process=None: ({"status": "ok", "url": streamlit_url.rstrip('/') + "/"}, None),
+    )
+    monkeypatch.setattr(
+        start_operator_product,
+        "_wait_for_pilot_runtime_ready",
+        lambda pilot_runs_dir, timeout_sec, process=None, min_timestamp_utc=None: (
+            {"schema_version": "pilot_runtime_status_v1", "status": "running", "state": "idle"},
+            None,
+        ),
+    )
+
+    exit_code = start_operator_product.main(
+        [
+            "--runs-dir",
+            str(tmp_path / "runs"),
+            "--gateway-runs-dir",
+            str(tmp_path / "gateway"),
+            "--panel-runs-dir",
+            str(tmp_path / "panel"),
+            "--start-pilot-runtime",
+            "--capture-monitor",
+            "0",
+        ]
+    )
+
+    assert exit_code == 2
+    run_dirs = sorted((tmp_path / "runs").glob("*-start-operator-product*"))
+    assert run_dirs
+    run_payload = json.loads((run_dirs[0] / "run.json").read_text(encoding="utf-8"))
+    assert run_payload["status"] == "error"
+    assert run_payload["session_state"]["pilot_runtime"]["status"] == "error"
+    assert run_payload["session_state"]["pilot_runtime"]["last_event"] == "unexpected_exit"
+    assert "pilot runtime process exited unexpectedly" in run_payload["session_state"]["pilot_runtime"]["error"]
 
 
 def test_start_operator_product_print_plan_json(capsys) -> None:

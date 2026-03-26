@@ -73,6 +73,7 @@ DEFAULT_PILOT_GATEWAY_CANDIDATE_K = 6
 DEFAULT_PILOT_MAX_ENTITIES_PER_DOC = 32
 DEFAULT_PILOT_HYBRID_TIMEOUT_SEC = 1.0
 DEFAULT_PILOT_TESSERACT_BIN = "tesseract"
+_OPTIONAL_SERVICE_URL_SENTINELS = {"", "none", "null", "disabled", "off"}
 _MICROPHONE_POSITIVE_HINTS = (
     "microphone",
     "mic",
@@ -238,6 +239,15 @@ def _auth_headers(service_token: str | None) -> dict[str, str]:
     if isinstance(service_token, str) and service_token.strip():
         headers[SERVICE_TOKEN_HEADER] = service_token.strip()
     return headers
+
+
+def _optional_service_url(raw_value: str | None) -> str | None:
+    if raw_value is None:
+        return None
+    normalized = str(raw_value).strip()
+    if normalized.lower() in _OPTIONAL_SERVICE_URL_SENTINELS:
+        return None
+    return normalized
 
 
 def _request_json(
@@ -2310,6 +2320,7 @@ def run_pilot_runtime_loop(
                     }
                     run_payload["error"] = None
                     _write_json(run_json_path, run_payload)
+                    turn_status = str(turn_payload.get("status", "")).strip().lower()
                     status_handle.transition(
                         state="idle",
                         degraded_services=sorted(
@@ -2319,7 +2330,7 @@ def run_pilot_runtime_loop(
                         ),
                         last_error=turn_payload.get("error"),
                         last_turn_payload=turn_payload,
-                        status="degraded" if turn_payload.get("status") == "degraded" else "running",
+                        status="degraded" if turn_status in {"degraded", "error"} else "running",
                     )
                     _emit_turn_console_summary(turn_payload)
                 except Exception as exc:
@@ -2355,8 +2366,18 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Local pilot runtime loop: push-to-talk -> ASR -> vision -> hybrid -> reply -> TTS.")
     parser.add_argument("--runs-dir", type=Path, default=Path("runs") / "pilot-runtime", help="Pilot runtime artifact root.")
     parser.add_argument("--gateway-url", type=str, default=DEFAULT_GATEWAY_URL, help="Gateway base URL.")
-    parser.add_argument("--voice-runtime-url", type=str, default=DEFAULT_VOICE_RUNTIME_URL, help="Voice runtime base URL.")
-    parser.add_argument("--tts-runtime-url", type=str, default=DEFAULT_TTS_RUNTIME_URL, help="TTS runtime base URL.")
+    parser.add_argument(
+        "--voice-runtime-url",
+        type=_optional_service_url,
+        default=DEFAULT_VOICE_RUNTIME_URL,
+        help="Voice runtime base URL. Use 'disabled' to force the runtime into an unconfigured state.",
+    )
+    parser.add_argument(
+        "--tts-runtime-url",
+        type=_optional_service_url,
+        default=DEFAULT_TTS_RUNTIME_URL,
+        help="TTS runtime base URL. Use 'disabled' to force the runtime into an unconfigured state.",
+    )
     parser.add_argument("--pilot-hotkey", type=str, default=DEFAULT_PILOT_HOTKEY, help="Push-to-talk hotkey (Fx only).")
     parser.add_argument("--capture-monitor", type=int, default=None, help="Windows monitor index for live capture.")
     parser.add_argument(

@@ -119,6 +119,20 @@ def test_parse_args_uses_gpu_defaults_for_live_openvino_models() -> None:
     assert args.pilot_text_device == "GPU"
     assert args.pilot_vlm_max_new_tokens == 64
     assert args.pilot_text_max_new_tokens == 64
+
+
+def test_parse_args_accepts_disabled_runtime_urls() -> None:
+    args = pilot_runtime.parse_args(
+        [
+            "--voice-runtime-url",
+            "disabled",
+            "--tts-runtime-url",
+            "off",
+        ]
+    )
+
+    assert args.voice_runtime_url is None
+    assert args.tts_runtime_url is None
     assert args.pilot_hybrid_timeout_sec == 1.0
 
 
@@ -1034,6 +1048,111 @@ def test_run_pilot_runtime_loop_marks_error_when_hotkey_init_fails(
     assert latest_status_payload["provider_init"]["vlm"]["status"] == "ok"
     assert latest_status_payload["provider_init"]["text"]["status"] == "ok"
     assert latest_status_payload["paths"]["run_dir"] == str(result["run_dir"])
+
+
+def test_run_pilot_runtime_loop_marks_error_turn_as_degraded(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    transition_calls: list[dict[str, Any]] = []
+
+    def _fake_build_provider(**kwargs: Any) -> Any:
+        if kwargs.get("provider_kind") == "vlm":
+            return DeterministicStubVLM()
+        return DeterministicGroundedReplyStub()
+
+    class _FakeStatusHandle:
+        def __init__(self, **kwargs: Any) -> None:
+            self.state = "idle"
+            self.status = "running"
+            self.degraded_services = list(kwargs.get("degraded_services", []))
+            self.last_error = None
+
+        def publish(self) -> None:
+            return None
+
+        def transition(self, **kwargs: Any) -> None:
+            self.state = str(kwargs.get("state", self.state))
+            self.status = str(kwargs.get("status", self.status))
+            self.degraded_services = list(kwargs.get("degraded_services", self.degraded_services))
+            self.last_error = kwargs.get("last_error", self.last_error)
+            transition_calls.append(
+                {
+                    "state": self.state,
+                    "status": self.status,
+                    "degraded_services": list(self.degraded_services),
+                    "last_error": self.last_error,
+                }
+            )
+
+    class _FakeHotkey:
+        def __init__(self, hotkey: str) -> None:
+            _ = hotkey
+            self._events = iter(["down", "up", KeyboardInterrupt()])
+
+        def poll_transition(self) -> str | None:
+            event = next(self._events)
+            if isinstance(event, BaseException):
+                raise event
+            return event
+
+    class _FakeRecorder:
+        def __init__(self, sample_rate: int, preferred_input_device_index: int | None) -> None:
+            _ = sample_rate, preferred_input_device_index
+
+        def start(self) -> None:
+            return None
+
+        def stop_to_wav(self, output_path: Path) -> dict[str, Any]:
+            return _write_audio_fixture(output_path)
+
+        def discard(self) -> None:
+            return None
+
+    def _fake_run_pilot_turn(**kwargs: Any) -> dict[str, Any]:
+        runtime_run_dir = kwargs["runtime_run_dir"]
+        turn_dir = runtime_run_dir / "turns" / "20260323_210001-pilot-turn"
+        turn_dir.mkdir(parents=True, exist_ok=True)
+        turn_json_path = turn_dir / "pilot_turn.json"
+        turn_json_path.write_text("{}", encoding="utf-8")
+        return {
+            "turn_payload": {
+                "turn_id": turn_dir.name,
+                "status": "error",
+                "error": "turn failed",
+                "degraded_services": ["gateway"],
+                "paths": {"turn_json": str(turn_json_path)},
+            }
+        }
+
+    monkeypatch.setattr(pilot_runtime, "_build_provider", _fake_build_provider)
+    monkeypatch.setattr(pilot_runtime, "PilotRuntimeStatusHandle", _FakeStatusHandle)
+    monkeypatch.setattr(pilot_runtime, "PollingHotkey", _FakeHotkey)
+    monkeypatch.setattr(pilot_runtime, "PushToTalkRecorder", _FakeRecorder)
+    monkeypatch.setattr(pilot_runtime, "run_pilot_turn", _fake_run_pilot_turn)
+
+    result = pilot_runtime.run_pilot_runtime_loop(
+        runs_dir=tmp_path / "pilot-runtime",
+        gateway_url="http://127.0.0.1:8770",
+        voice_runtime_url="http://127.0.0.1:8765",
+        tts_runtime_url="http://127.0.0.1:8780",
+        hotkey="F8",
+        capture_monitor=None,
+        capture_region=None,
+        hud_hook_json=None,
+        tesseract_bin="tesseract",
+        pilot_vlm_model_dir=tmp_path / "models" / "vlm",
+        pilot_text_model_dir=tmp_path / "models" / "text",
+        pilot_vlm_device="CPU",
+        pilot_text_device="CPU",
+        playback_enabled=False,
+        now=datetime(2026, 3, 23, 21, 0, 0, tzinfo=timezone.utc),
+    )
+
+    assert result["ok"] is True
+    assert any(call["status"] == "degraded" for call in transition_calls)
+    degraded_call = next(call for call in transition_calls if call["status"] == "degraded")
+    assert degraded_call["last_error"] == "turn failed"
+    assert "gateway" in degraded_call["degraded_services"]
 
 
 def test_run_pilot_runtime_loop_records_openvino_warmup_rollup(
