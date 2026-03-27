@@ -1,0 +1,37 @@
+{
+  "schema_version": "gateway_operator_return_event_v1",
+  "event_id": "return-2b0f8d1a71ef",
+  "timestamp_utc": "2026-03-26T18:40:00+00:00",
+  "status": "open",
+  "surface": "gateway",
+  "reason_code": "gateway_snapshot_not_ready",
+  "severity": "attention",
+  "return_mode": "reprobe",
+  "operator_visible": true,
+  "anchor_refs": [
+    {
+      "artifact_kind": "startup_run",
+      "label": "latest startup run",
+      "ref": "runs/20260326_184000-start-operator-product/run.json",
+      "ref_type": "path",
+      "required": true
+    },
+    {
+      "artifact_kind": "startup_plan",
+      "label": "resolved startup plan",
+      "ref": "runs/20260326_184000-start-operator-product/startup_plan.json",
+      "ref_type": "path",
+      "required": true
+    }
+  ],
+  "recommended_safe_actions": [
+    "gateway_http_core",
+    "gateway_local_core"
+  ],
+  "triage_hint": "Re-probe the gateway operator snapshot and inspect the latest startup artifacts before continuing.",
+  "loop_count": 1,
+  "safe_stop_after": 2,
+  "details": {
+    "probe_error": "gateway operator snapshot not ready"
+  }
+}

@@ -1,0 +1,77 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "operator_return_reason_catalog_v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "generated_at_utc",
+    "safe_stop_after_default",
+    "allowed_safe_actions",
+    "reasons"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "operator_return_reason_catalog_v1"
+    },
+    "generated_at_utc": {
+      "type": "string",
+      "minLength": 1
+    },
+    "safe_stop_after_default": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "allowed_safe_actions": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "reasons": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "reason_code",
+          "surface",
+          "default_return_mode",
+          "default_severity",
+          "recommended_safe_actions",
+          "triage_hint"
+        ],
+        "properties": {
+          "reason_code": {
+            "type": "string",
+            "minLength": 1
+          },
+          "surface": {
+            "type": "string",
+            "minLength": 1
+          },
+          "default_return_mode": {
+            "type": "string",
+            "minLength": 1
+          },
+          "default_severity": {
+            "type": "string",
+            "enum": ["attention", "degraded", "critical"]
+          },
+          "recommended_safe_actions": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "triage_hint": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    }
+  }
+}

@@ -45,6 +45,15 @@ from src.agent_core.live_hud_state import (  # noqa: E402
 )
 from src.agent_core.vlm_openvino import DEFAULT_OPENVINO_VLM_MODEL_DIR, OpenVINOVLMClient  # noqa: E402
 from src.agent_core.vlm_stub import DeterministicStubVLM  # noqa: E402
+from scripts.operator_return_recovery import (  # noqa: E402
+    SAFE_STOP_AFTER_DEFAULT,
+    advance_return_loop_state,
+    append_return_event,
+    build_return_event,
+    compose_anchor_ref,
+    reset_return_loop_state,
+    return_paths,
+)
 
 PILOT_RUNTIME_SCHEMA = "pilot_runtime_v1"
 PILOT_RUNTIME_STATUS_SCHEMA = "pilot_runtime_status_v1"
@@ -1114,6 +1123,8 @@ def _status_payload(
     provider_init: Mapping[str, Any] | None,
     degraded_services: list[str],
     last_turn_payload: Mapping[str, Any] | None = None,
+    last_return_event: Mapping[str, Any] | None = None,
+    return_loop_state: Mapping[str, Any] | None = None,
     last_error: str | None = None,
     status: str = "running",
 ) -> dict[str, Any]:
@@ -1159,6 +1170,8 @@ def _status_payload(
         },
         "provider_init": dict(provider_init or {}),
         "degraded_services": degraded_services,
+        "last_return_event": dict(last_return_event or {}) if isinstance(last_return_event, Mapping) else None,
+        "return_loop_state": dict(return_loop_state or {}) if isinstance(return_loop_state, Mapping) else None,
         "last_error": last_error,
         "last_turn_id": last_turn_id,
         "last_turn_started_at_utc": last_turn_started_at_utc,
@@ -1225,6 +1238,8 @@ class PilotRuntimeStatusHandle:
     provider_init: dict[str, Any] | None = None
     state: str = "idle"
     last_turn_payload: dict[str, Any] | None = None
+    last_return_event: dict[str, Any] | None = None
+    return_loop_state: dict[str, Any] | None = None
     last_error: str | None = None
     degraded_services: list[str] | None = None
     status: str = "running"
@@ -1254,6 +1269,8 @@ class PilotRuntimeStatusHandle:
             provider_init=dict(self.provider_init or {}),
             degraded_services=list(self.degraded_services or []),
             last_turn_payload=self.last_turn_payload,
+            last_return_event=self.last_return_event,
+            return_loop_state=self.return_loop_state,
             last_error=self.last_error,
             status=self.status,
         )
@@ -1271,6 +1288,8 @@ class PilotRuntimeStatusHandle:
         degraded_services: list[str] | None = None,
         last_error: str | None = None,
         last_turn_payload: dict[str, Any] | None = None,
+        last_return_event: dict[str, Any] | None = None,
+        return_loop_state: dict[str, Any] | None = None,
         status: str | None = None,
     ) -> dict[str, Any]:
         self.state = state
@@ -1279,9 +1298,130 @@ class PilotRuntimeStatusHandle:
         self.last_error = last_error
         if last_turn_payload is not None:
             self.last_turn_payload = last_turn_payload
+        if last_return_event is not None:
+            self.last_return_event = dict(last_return_event)
+        if return_loop_state is not None:
+            self.return_loop_state = dict(return_loop_state)
         if status is not None:
             self.status = status
         return self.publish()
+
+
+def _pilot_return_anchor_refs(
+    *,
+    runs_dir: Path,
+    turn_payload: Mapping[str, Any],
+) -> list[dict[str, Any]]:
+    paths_payload = turn_payload.get("paths")
+    paths_payload = paths_payload if isinstance(paths_payload, Mapping) else {}
+    refs = [
+        compose_anchor_ref(
+            artifact_kind="pilot_runtime_status",
+            ref=str(pilot_runtime_latest_status_path(runs_dir)),
+            label="pilot runtime latest status",
+        ),
+        compose_anchor_ref(
+            artifact_kind="pilot_turn",
+            ref=str(paths_payload.get("turn_json", "")).strip(),
+            label="latest pilot turn",
+        ),
+    ]
+    canonical_root = Path(runs_dir).parent
+    canonical_refs = [
+        (
+            "gateway_http_combo_a_smoke",
+            canonical_root / "ci-smoke-gateway-http-combo-a" / "gateway_http_smoke_summary.json",
+            "gateway HTTP Combo A smoke",
+        ),
+        (
+            "cross_service_suite_combo_a_smoke",
+            canonical_root / "nightly-combo-a-cross-service-suite" / "cross_service_benchmark_suite.json",
+            "cross-service Combo A suite",
+        ),
+        (
+            "combo_a_operating_cycle",
+            canonical_root / "nightly-combo-a-operating-cycle" / "operating_cycle_summary.json",
+            "Combo A operating cycle",
+        ),
+    ]
+    for artifact_kind, path, label in canonical_refs:
+        if path.exists():
+            refs.append(
+                compose_anchor_ref(
+                    artifact_kind=artifact_kind,
+                    ref=str(path),
+                    label=label,
+                    required=False,
+                )
+            )
+    return refs
+
+
+def _pilot_return_reason_code(turn_payload: Mapping[str, Any]) -> str | None:
+    degraded_flags = {
+        str(item).strip()
+        for item in turn_payload.get("degraded_flags", [])
+        if str(item).strip()
+    }
+    transcript_quality = turn_payload.get("transcript_quality")
+    transcript_quality = transcript_quality if isinstance(transcript_quality, Mapping) else {}
+    transcript_quality_status = str(transcript_quality.get("status", "")).strip().lower()
+    grounding_flags = {
+        "retrieval_only_fallback",
+        "hybrid_degraded",
+        "hybrid_query_failed",
+        "hybrid_fast_fail",
+        "grounded_reply_failed",
+        "grounded_reply_unavailable",
+        "grounded_reply_answer_fallback",
+    }
+    if degraded_flags & grounding_flags:
+        return "pilot_grounding_degraded"
+    if transcript_quality_status == "low_signal" and (
+        "transcript_low_signal" in degraded_flags
+        or "hybrid_skipped_low_signal" in degraded_flags
+        or "transcript_empty" in degraded_flags
+    ):
+        return "pilot_transcript_low_signal"
+    return None
+
+
+def _maybe_emit_pilot_return_event(
+    *,
+    runs_dir: Path,
+    turn_payload: Mapping[str, Any],
+    loop_state: Mapping[str, Any] | None,
+) -> tuple[dict[str, Any], dict[str, Any] | None]:
+    reason_code = _pilot_return_reason_code(turn_payload)
+    if reason_code is None:
+        return reset_return_loop_state(suppress_first_occurrence=True), None
+    next_loop_state, should_emit, emitted_count, event_status = advance_return_loop_state(
+        loop_state,
+        reason_code=reason_code,
+        suppress_first_occurrence=True,
+        safe_stop_after=SAFE_STOP_AFTER_DEFAULT,
+    )
+    if not should_emit:
+        return next_loop_state, None
+    transcript_quality = turn_payload.get("transcript_quality")
+    transcript_quality = transcript_quality if isinstance(transcript_quality, Mapping) else {}
+    event_payload = build_return_event(
+        reason_code=reason_code,
+        anchor_refs=_pilot_return_anchor_refs(runs_dir=runs_dir, turn_payload=turn_payload),
+        status=event_status,
+        loop_count=emitted_count,
+        safe_stop_after=SAFE_STOP_AFTER_DEFAULT,
+        details={
+            "turn_id": turn_payload.get("turn_id"),
+            "reply_mode": turn_payload.get("reply_mode"),
+            "degraded_flags": [
+                str(item) for item in turn_payload.get("degraded_flags", []) if str(item).strip()
+            ],
+            "transcript_quality_status": transcript_quality.get("status"),
+        },
+    )
+    append_return_event(runs_dir, event_payload)
+    return next_loop_state, event_payload
 
 
 class PollingHotkey:
@@ -2098,6 +2238,7 @@ def run_pilot_runtime_loop(
             "run_json": str(run_json_path),
             "status_json": str(runtime_run_dir / "pilot_runtime_status.json"),
             "latest_status_json": str(latest_status_path),
+            **return_paths(runs_dir),
         },
         "config": {
             "gateway_url": gateway_url,
@@ -2131,6 +2272,8 @@ def run_pilot_runtime_loop(
         },
         "provider_init": {},
         "last_turn": None,
+        "last_return_event": None,
+        "return_loop_state": reset_return_loop_state(suppress_first_occurrence=True),
         "error": None,
     }
     _write_json(run_json_path, run_payload)
@@ -2251,6 +2394,8 @@ def run_pilot_runtime_loop(
         pilot_hybrid_timeout_sec=pilot_hybrid_timeout_sec,
         provider_init=dict(run_payload["provider_init"]),
         degraded_services=sorted(dict.fromkeys(degraded_services)),
+        last_return_event=None,
+        return_loop_state=dict(run_payload["return_loop_state"]),
     )
     recorder: PushToTalkRecorder | None = None
     active_recording = False
@@ -2318,6 +2463,14 @@ def run_pilot_runtime_loop(
                         "status": turn_payload.get("status"),
                         "turn_json": turn_payload.get("paths", {}).get("turn_json"),
                     }
+                    return_loop_state, return_event = _maybe_emit_pilot_return_event(
+                        runs_dir=runs_dir,
+                        turn_payload=turn_payload,
+                        loop_state=run_payload.get("return_loop_state"),
+                    )
+                    run_payload["return_loop_state"] = return_loop_state
+                    if return_event is not None:
+                        run_payload["last_return_event"] = return_event
                     run_payload["error"] = None
                     _write_json(run_json_path, run_payload)
                     turn_status = str(turn_payload.get("status", "")).strip().lower()
@@ -2330,6 +2483,12 @@ def run_pilot_runtime_loop(
                         ),
                         last_error=turn_payload.get("error"),
                         last_turn_payload=turn_payload,
+                        last_return_event=(
+                            return_event
+                            if return_event is not None
+                            else getattr(status_handle, "last_return_event", None)
+                        ),
+                        return_loop_state=return_loop_state,
                         status="degraded" if turn_status in {"degraded", "error"} else "running",
                     )
                     _emit_turn_console_summary(turn_payload)

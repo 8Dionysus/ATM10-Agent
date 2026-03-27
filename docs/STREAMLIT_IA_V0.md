@@ -58,10 +58,12 @@ Required widgets:
 * Service status card (`gateway transport`)
 * HTTP endpoint card (`GET /healthz`)
 * Quick diagnostics table for the gateway policy snapshot
+* Optional `Return / Recovery` block when explicit `operator_context.returning` exists
 
 Inputs:
 
 * `GET /healthz` from the gateway URL
+* Additive `GET /v1/operator/snapshot` recovery surface when the gateway operator snapshot is available
 
 Displayed fields:
 
@@ -80,6 +82,7 @@ Artifact link rules:
 
 * No artifact links are required for the health transport check.
 * If the request fails, show a troubleshooting hint for `docs/RUNBOOK.md`.
+* If `Return / Recovery` is present, anchor links must come only from explicit `operator_context.returning.latest_event.anchor_refs`.
 
 Refresh policy:
 
@@ -171,6 +174,7 @@ Required widgets:
   * `Gateway local smoke core`
   * `Gateway local smoke automation`
 * Optional `runs_dir override` input
+* Optional recommended/preselected action posture from explicit return evidence
 * `Execute safe action` button
 * Result panel (`exit_code`, `status`, `summary_json`, `run_dir`)
 
@@ -187,6 +191,7 @@ Displayed fields:
 * Exit code
 * Parsed summary status (`ok|error`)
 * Artifact paths
+* Optional recommended action label / hint
 
 Artifact link rules:
 
@@ -281,6 +286,8 @@ Flow C (safe action rerun)
 * Every action must be traceable through artifacts in `runs/...`.
 * The UI must not hide the launch command; the operator must see the exact command string.
 * Any ambiguity is treated as `deny by default`.
+* `Return / Recovery` stays inside `Stack Health`; no fifth tab is introduced.
+* The panel may preselect an existing smoke action from explicit return evidence, but must not execute it automatically.
 
 ## M8.1 handoff checklist
 

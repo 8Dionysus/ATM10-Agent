@@ -41,6 +41,7 @@ Build a local-first game companion for ATM10 with a production-ready operator lo
 * M8.0-M8.1: Streamlit IA spec and operator panel baseline with smoke coverage.
 * M8.2: Observer pilot runtime slice (`F8` hotkey, local screen grounding/reply stack, additive operator snapshot and Streamlit surfaces).
 * M8.3: Observer pilot acceptance/readiness layer (`pilot_runtime_readiness_v1`, additive operator snapshot + Streamlit surfaces, manual live-acceptance contract).
+* M8.4: Operator recurrence recovery surface (`operator_context.returning`, bounded launcher/pilot return artifacts, gateway-safe-action recommendation posture, `Return / Recovery` inside the existing 4-tab IA).
 
 ## Active Public Themes
 
@@ -66,6 +67,7 @@ Definition of Done:
 
 * Streamlit remains a stable operator surface for health, run exploration, metrics, and smoke-only safe actions.
 * Gateway governance summaries remain machine-readable and publication-safe for nightly/operator workflows.
+* Operator recurrence recovery stays additive through existing snapshot/gateway/Streamlit seams without creating a new endpoint, a fifth tab, or auto-executed actions.
 * Operator flows stay reproducible on Windows 11 + PowerShell 7.
 
 ### G3 — Automation Safe Loop
@@ -108,6 +110,7 @@ Definition of Done:
 
 * Tighten `gateway_sla_summary_v1` from the signal-only baseline toward a managed stricter policy using accumulated history.
 * Extend Streamlit operator UX with the next operator scenarios on top of the existing metrics/history/audit foundations.
+* Harden recurrence recovery reason coverage around launcher and observer pilot evidence without widening the smoke-only action set.
 
 ### 30-60 days
 

@@ -1,0 +1,77 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "gateway_operator_return_summary_v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "status",
+    "open_event_count",
+    "recommended_safe_actions",
+    "recent_reason_codes",
+    "next_step_code",
+    "next_step",
+    "paths",
+    "warnings"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "gateway_operator_return_summary_v1"
+    },
+    "status": {
+      "type": "string",
+      "enum": ["attention", "degraded", "safe_stop"]
+    },
+    "open_event_count": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "latest_event": {
+      "type": ["object", "null"]
+    },
+    "recommended_safe_actions": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "recent_reason_codes": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "next_step_code": {
+      "type": "string",
+      "minLength": 1
+    },
+    "next_step": {
+      "type": "string",
+      "minLength": 1
+    },
+    "paths": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "latest_return_event_json",
+        "return_events_jsonl"
+      ],
+      "properties": {
+        "latest_return_event_json": {
+          "type": ["string", "null"]
+        },
+        "return_events_jsonl": {
+          "type": ["string", "null"]
+        }
+      }
+    },
+    "warnings": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  }
+}

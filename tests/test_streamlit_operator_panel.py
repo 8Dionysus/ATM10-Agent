@@ -48,6 +48,9 @@ class _FakeStreamlit:
         self.warnings: list[str] = []
         self.captions: list[str] = []
         self.json_payloads: list[object] = []
+        self.selectbox_calls: list[dict[str, object]] = []
+        self.checkbox_calls: list[str] = []
+        self.button_calls: list[dict[str, object]] = []
 
     def subheader(self, value: str) -> None:
         self.subheaders.append(value)
@@ -75,6 +78,24 @@ class _FakeStreamlit:
 
     def write(self, value: object) -> None:
         self.infos.append(str(value))
+
+    def selectbox(self, label: str, options: list[str], index: int = 0) -> str:
+        self.selectbox_calls.append(
+            {
+                "label": label,
+                "options": list(options),
+                "index": index,
+            }
+        )
+        return options[index]
+
+    def checkbox(self, label: str) -> bool:
+        self.checkbox_calls.append(label)
+        return False
+
+    def button(self, label: str, disabled: bool = False) -> bool:
+        self.button_calls.append({"label": label, "disabled": disabled})
+        return False
 
 
 def test_canonical_summary_sources_returns_expected_paths(tmp_path: Path) -> None:
@@ -487,6 +508,7 @@ def test_safe_actions_tab_source_uses_gateway_and_not_local_subprocess() -> None
     assert "run_gateway_safe_action(" in source_text
     assert "Safe Actions require a reachable gateway operator API." in source_text
     assert "Operator triage" in source_text
+    assert "Return / Recovery" in source_text
     assert "Pilot runtime" in source_text
     assert "Combo A Promotion" in source_text
     assert "Current Policy" in source_text
@@ -570,6 +592,85 @@ def test_render_stack_health_tab_renders_snapshot_driven_operator_triage(
     assert triage_table[0]["attention_service_count"] == 1
     assert any("Resolve the remediation backlog" in item for item in fake_st.infos)
     assert any("Run safe action gateway_sla_operating_cycle_smoke" in item for item in fake_st.infos)
+
+
+def test_render_stack_health_tab_renders_return_recovery_section(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    fake_st = _FakeStreamlit()
+    monkeypatch.setattr(panel, "st", fake_st)
+    monkeypatch.setattr(panel, "_render_combo_a_promotion_section", lambda *args, **kwargs: None)
+    monkeypatch.setattr(panel, "_render_operator_startup_section", lambda *args, **kwargs: None)
+    monkeypatch.setattr(panel, "_render_snapshot_warnings", lambda *args, **kwargs: None)
+
+    panel._render_stack_health_tab(
+        health_payload={"status": "ok"},
+        health_error=None,
+        operator_snapshot_payload={
+            "schema_version": "gateway_operator_status_v1",
+            "status": "ok",
+            "stack_services": {},
+            "operator_context": {
+                "triage": {
+                    "overall_state": "attention",
+                    "primary_surface": "startup",
+                    "primary_code": "launch_operator_product",
+                    "primary_message": "Launch the operator surface.",
+                    "next_step_code": "launch_operator_product",
+                    "next_step": "Launch the operator surface.",
+                    "attention_services": [],
+                },
+                "returning": {
+                    "schema_version": "gateway_operator_return_summary_v1",
+                    "status": "degraded",
+                    "open_event_count": 1,
+                    "latest_event": {
+                        "reason_code": "gateway_snapshot_not_ready",
+                        "surface": "gateway",
+                        "severity": "attention",
+                        "return_mode": "reprobe",
+                        "loop_count": 1,
+                        "triage_hint": "Re-probe the gateway operator snapshot.",
+                        "anchor_refs": [
+                            {
+                                "artifact_kind": "startup_run",
+                                "label": "latest startup run",
+                                "ref_type": "path",
+                                "required": True,
+                                "ref": "runs/20260322_120000-start-operator-product/run.json",
+                            }
+                        ],
+                    },
+                    "recommended_safe_actions": ["gateway_http_core"],
+                    "next_step_code": "run_safe_action",
+                    "next_step": "Run safe action gateway_http_core from the gateway operator surface.",
+                    "paths": {
+                        "latest_return_event_json": "runs/return/latest_return_event.json",
+                        "return_events_jsonl": "runs/return/return_events.jsonl",
+                    },
+                },
+                "profiles": {"combo_a": {}},
+            },
+            "warnings": {"service_probes": [], "combo_a_policy_surface": []},
+        },
+        operator_snapshot_error=None,
+        operator_startup_payload=None,
+        operator_startup_warnings=[],
+    )
+
+    assert "Return / Recovery" in fake_st.subheaders
+    recovery_table = next(
+        item
+        for item in fake_st.dataframes
+        if isinstance(item, list)
+        and item
+        and isinstance(item[0], dict)
+        and item[0].get("reason_code") == "gateway_snapshot_not_ready"
+    )
+    assert recovery_table[0]["status"] == "degraded"
+    assert recovery_table[0]["open_event_count"] == 1
+    assert any("Re-probe the gateway operator snapshot." in item for item in fake_st.infos)
+    assert any("Run safe action gateway_http_core" in item for item in fake_st.infos)
 
 
 def test_render_stack_health_tab_does_not_synthesize_operator_triage_without_snapshot_field(
@@ -757,6 +858,54 @@ def test_render_stack_health_tab_renders_pilot_runtime_section(
     assert last_turn_table[0]["tts_engine"] == "windows_sapi_fallback"
     assert last_turn_table[0]["preferred_tts_engine"] == "piper"
     assert last_turn_table[0]["piper_prewarm_ok"] is True
+
+
+def test_render_safe_actions_tab_uses_recommended_action_preselect_without_auto_run(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    fake_st = _FakeStreamlit()
+    monkeypatch.setattr(panel, "st", fake_st)
+    monkeypatch.setattr(
+        panel,
+        "fetch_gateway_safe_actions",
+        lambda gateway_url, gateway_timeout_sec, history_limit=10: (
+            {
+                "schema_version": "gateway_operator_safe_actions_v1",
+                "status": "ok",
+                "catalog": [
+                    {
+                        "action_key": "gateway_local_core",
+                        "label": "Gateway local smoke core",
+                    },
+                    {
+                        "action_key": "gateway_http_core",
+                        "label": "Gateway HTTP smoke core",
+                    },
+                ],
+                "recent_runs": [],
+                "recommended_action_key": "gateway_http_core",
+                "recommended_action_keys": ["gateway_http_core"],
+            },
+            None,
+        ),
+    )
+
+    panel._render_safe_actions_tab(
+        gateway_url="http://127.0.0.1:8770",
+        gateway_timeout_sec=0.5,
+    )
+
+    assert fake_st.selectbox_calls
+    selectbox_call = fake_st.selectbox_calls[0]
+    assert selectbox_call["label"] == "Safe action"
+    assert selectbox_call["options"] == [
+        "Gateway local smoke core",
+        "Gateway HTTP smoke core",
+    ]
+    assert selectbox_call["index"] == 1
+    assert any("Recommended safe action: Gateway HTTP smoke core" in item for item in fake_st.infos)
+    assert fake_st.button_calls[0]["label"] == "Execute safe action"
+    assert fake_st.button_calls[0]["disabled"] is True
 
 
 def test_render_pilot_readiness_section_ready(monkeypatch: pytest.MonkeyPatch) -> None:

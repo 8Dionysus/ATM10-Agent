@@ -255,6 +255,8 @@ def _write_operator_startup_run(
     gateway_probe_status: str = "ok",
     gateway_probe_error: str | None = None,
     pilot_runtime_runs_dir: Path | None = None,
+    last_return_event: dict[str, object] | None = None,
+    return_loop_state: dict[str, object] | None = None,
 ) -> Path:
     run_dir = operator_runs_dir / run_name
     run_dir.mkdir(parents=True, exist_ok=True)
@@ -282,6 +284,8 @@ def _write_operator_startup_run(
                 "gateway_log": str(run_dir / "gateway.log"),
                 "streamlit_log": str(run_dir / "streamlit.log"),
                 "pilot_runtime_log": str(run_dir / "pilot_runtime.log"),
+                "latest_return_event_json": str(run_dir / "return" / "latest_return_event.json"),
+                "return_events_jsonl": str(run_dir / "return" / "return_events.jsonl"),
             },
             "session_state": {
                 "gateway": {
@@ -329,12 +333,27 @@ def _write_operator_startup_run(
                 "status": checkpoint_status,
                 "message": checkpoint_message,
             },
+            "last_return_event": last_return_event,
+            "return_loop_state": return_loop_state,
         },
     )
+    if last_return_event is not None:
+        return_dir = run_dir / "return"
+        return_dir.mkdir(parents=True, exist_ok=True)
+        _write_json(return_dir / "latest_return_event.json", last_return_event)
+        (return_dir / "return_events.jsonl").write_text(
+            json.dumps(last_return_event, ensure_ascii=False) + "\n",
+            encoding="utf-8",
+        )
     return run_json_path
 
 
-def _write_pilot_runtime_status(pilot_runs_dir: Path) -> None:
+def _write_pilot_runtime_status(
+    pilot_runs_dir: Path,
+    *,
+    last_return_event: dict[str, object] | None = None,
+    return_loop_state: dict[str, object] | None = None,
+) -> None:
     pilot_runs_dir.mkdir(parents=True, exist_ok=True)
     turn_dir = pilot_runs_dir / "20260322_120500-pilot-runtime" / "turns" / "20260322_120501-pilot-turn"
     turn_dir.mkdir(parents=True, exist_ok=True)
@@ -471,6 +490,8 @@ def _write_pilot_runtime_status(pilot_runs_dir: Path) -> None:
             "last_turn_started_at_utc": "2026-03-22T12:05:01+00:00",
             "last_turn_completed_at_utc": "2026-03-22T12:05:03+00:00",
             "degraded_services": ["gateway"],
+            "last_return_event": last_return_event,
+            "return_loop_state": return_loop_state,
             "last_error": None,
             "latency_summary": {"total_sec": 2.1},
             "paths": {
@@ -478,9 +499,19 @@ def _write_pilot_runtime_status(pilot_runs_dir: Path) -> None:
                 "status_json": str(pilot_runs_dir / "20260322_120500-pilot-runtime" / "pilot_runtime_status.json"),
                 "latest_status_json": str(pilot_runs_dir / "pilot_runtime_status_latest.json"),
                 "last_turn_json": str(turn_json),
+                "latest_return_event_json": str(pilot_runs_dir / "return" / "latest_return_event.json"),
+                "return_events_jsonl": str(pilot_runs_dir / "return" / "return_events.jsonl"),
             },
         },
     )
+    if last_return_event is not None:
+        return_dir = pilot_runs_dir / "return"
+        return_dir.mkdir(parents=True, exist_ok=True)
+        _write_json(return_dir / "latest_return_event.json", last_return_event)
+        (return_dir / "return_events.jsonl").write_text(
+            json.dumps(last_return_event, ensure_ascii=False) + "\n",
+            encoding="utf-8",
+        )
 
 
 def _write_pilot_runtime_readiness_summary(
@@ -674,6 +705,7 @@ def test_build_operator_product_snapshot_includes_startup_diagnostics_healthy(
     assert startup["status"] == "running"
     assert startup["diagnostics"]["overall_state"] == "healthy"
     assert startup["diagnostics"]["primary_issue"] is None
+    assert payload["operator_context"]["returning"] is None
     assert triage["overall_state"] == "healthy"
     assert triage["primary_surface"] == "none"
     assert triage["primary_code"] == "none"
@@ -832,6 +864,80 @@ def test_build_operator_product_snapshot_includes_pilot_runtime_context(
     assert "Quest book is the next step" in last_turn_summary["answer_preview"]
     assert payload["warnings"]["pilot_runtime"] == []
     assert payload["warnings"]["pilot_readiness"] == []
+
+
+def test_build_operator_product_snapshot_includes_returning_surface(
+    tmp_path: Path, monkeypatch
+) -> None:
+    runs_dir = tmp_path / "runs"
+    _write_clean_operating_cycle_summary(runs_dir)
+    monkeypatch.setattr(
+        operator_snapshot,
+        "load_operator_policy_surface_context",
+        lambda _runs_dir: _clean_policy_surface_context(),
+    )
+    operator_runs_dir = tmp_path / "operator-runs"
+    startup_return_event = {
+        "schema_version": "gateway_operator_return_event_v1",
+        "event_id": "return-abc123",
+        "timestamp_utc": "2026-03-22T12:00:30+00:00",
+        "status": "open",
+        "surface": "gateway",
+        "reason_code": "gateway_snapshot_not_ready",
+        "severity": "attention",
+        "return_mode": "reprobe",
+        "operator_visible": True,
+        "anchor_refs": [
+            {
+                "artifact_kind": "startup_run",
+                "label": "latest startup run",
+                "ref_type": "path",
+                "required": True,
+                "ref": str(operator_runs_dir / "20260322_120000-start-operator-product" / "run.json"),
+            }
+        ],
+        "recommended_safe_actions": ["gateway_http_core"],
+        "triage_hint": "Re-probe the gateway operator snapshot and inspect the latest startup artifacts.",
+        "loop_count": 1,
+        "safe_stop_after": 2,
+        "details": {"probe_error": "gateway operator snapshot not ready"},
+    }
+    _write_operator_startup_run(
+        operator_runs_dir,
+        status="error",
+        checkpoint_status="error",
+        checkpoint_message="gateway operator snapshot not ready",
+        gateway_probe_status="error",
+        gateway_probe_error="gateway operator snapshot not ready",
+        last_return_event=startup_return_event,
+        return_loop_state={
+            "last_reason_code": "gateway_snapshot_not_ready",
+            "occurrence_count": 1,
+            "emitted_count": 1,
+            "safe_stop_after": 2,
+            "suppress_first_occurrence": False,
+        },
+    )
+
+    payload = operator_snapshot.build_operator_product_snapshot(
+        runs_dir=runs_dir,
+        operator_runs_dir=operator_runs_dir,
+        gateway_health={
+            "status": "ok",
+            "supported_operations": ["health"],
+            "supported_profiles": ["baseline_first", "combo_a"],
+        },
+    )
+
+    returning = payload["operator_context"]["returning"]
+    assert returning is not None
+    assert returning["schema_version"] == "gateway_operator_return_summary_v1"
+    assert returning["status"] == "attention"
+    assert returning["open_event_count"] == 1
+    assert returning["latest_event"]["reason_code"] == "gateway_snapshot_not_ready"
+    assert returning["recommended_safe_actions"] == ["gateway_http_core"]
+    assert returning["next_step_code"] == "run_safe_action"
+    assert returning["paths"]["latest_return_event_json"].endswith("latest_return_event.json")
 
 
 def test_build_operator_product_snapshot_tolerates_invalid_pilot_readiness_summary(
