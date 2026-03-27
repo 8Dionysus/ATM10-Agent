@@ -16,6 +16,7 @@ from src.agent_core.combo_a_profile import (
     probe_neo4j_service,
     probe_qdrant_service,
 )
+from scripts.operator_return_recovery import load_returning_surface
 
 GATEWAY_OPERATOR_STATUS_SCHEMA = "gateway_operator_status_v1"
 GATEWAY_OPERATOR_RUNS_SCHEMA = "gateway_operator_runs_v1"
@@ -808,6 +809,8 @@ def load_latest_operator_startup_status(
             "child_processes": child_processes,
             "checkpoint_count": len(checkpoints),
             "last_checkpoint": payload.get("last_checkpoint"),
+            "last_return_event": payload.get("last_return_event"),
+            "return_loop_state": payload.get("return_loop_state"),
             "paths": {
                 "run_dir": str(run_dir),
                 "run_json": str(run_json_path),
@@ -817,6 +820,8 @@ def load_latest_operator_startup_status(
                 "voice_runtime_service_log": paths_payload.get("voice_runtime_service_log"),
                 "tts_runtime_service_log": paths_payload.get("tts_runtime_service_log"),
                 "pilot_runtime_log": paths_payload.get("pilot_runtime_log"),
+                "latest_return_event_json": paths_payload.get("latest_return_event_json"),
+                "return_events_jsonl": paths_payload.get("return_events_jsonl"),
             },
         }
         summary["diagnostics"] = _build_startup_diagnostics(summary)
@@ -1168,6 +1173,16 @@ def _build_pilot_runtime_summary(
             dict(pilot_status.get("provider_init", {}))
             if isinstance(pilot_status.get("provider_init"), Mapping)
             else {}
+        ),
+        "last_return_event": (
+            dict(pilot_status.get("last_return_event", {}))
+            if isinstance(pilot_status.get("last_return_event"), Mapping)
+            else None
+        ),
+        "return_loop_state": (
+            dict(pilot_status.get("return_loop_state", {}))
+            if isinstance(pilot_status.get("return_loop_state"), Mapping)
+            else None
         ),
         "latency_summary": pilot_status.get("latency_summary"),
         "paths": {
@@ -2352,6 +2367,10 @@ def build_operator_product_snapshot(
         combo_a_readiness=combo_a_readiness,
         combo_a_operating_cycle_snapshot=combo_a_operating_cycle_snapshot,
     )
+    returning_summary = load_returning_surface(
+        operator_runs_dir=effective_operator_runs_dir,
+        pilot_runs_dir=pilot_runs_dir,
+    )
     stack_services = {
         "gateway_v1_http_service": {
             "service_name": "gateway_v1_http_service",
@@ -2387,6 +2406,7 @@ def build_operator_product_snapshot(
                 "pilot_runtime_runs_dir": str(pilot_runs_dir),
             },
             "startup": startup_snapshot,
+            "returning": returning_summary,
             "pilot_runtime": pilot_runtime_summary,
             "pilot_readiness": pilot_readiness_snapshot,
             "last_turn_summary": last_turn_summary,

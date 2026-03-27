@@ -9,6 +9,12 @@ from typing import Any
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
+from scripts.operator_return_recovery import (
+    ALLOWED_RETURN_SAFE_ACTIONS,
+    load_returning_surface,
+    recommended_safe_actions_for_reason,
+)
+
 GATEWAY_OPERATOR_SAFE_ACTIONS_SCHEMA = "gateway_operator_safe_actions_v1"
 GATEWAY_OPERATOR_SAFE_ACTION_RUN_SCHEMA = "gateway_operator_safe_action_run_v1"
 
@@ -117,6 +123,10 @@ def safe_action_catalog() -> list[dict[str, Any]]:
         }
         for action_key, config in SAFE_ACTIONS.items()
     ]
+
+
+def recommended_safe_actions(reason_code: str) -> list[str]:
+    return recommended_safe_actions_for_reason(reason_code)
 
 
 def safe_actions_audit_log_path(runs_dir: Path) -> Path:
@@ -306,11 +316,32 @@ def run_safe_action(action_key: str, runs_dir: Path, *, timeout_sec: float = 300
     }
 
 
-def build_safe_actions_overview(runs_dir: Path, *, history_limit: int = 10) -> dict[str, Any]:
+def build_safe_actions_overview(
+    runs_dir: Path,
+    *,
+    history_limit: int = 10,
+    operator_runs_dir: Path | None = None,
+) -> dict[str, Any]:
+    returning_summary = (
+        load_returning_surface(operator_runs_dir=Path(operator_runs_dir))
+        if operator_runs_dir is not None
+        else None
+    )
+    recommended_action_keys = (
+        [
+            action_key
+            for action_key in returning_summary.get("recommended_safe_actions", [])
+            if action_key in ALLOWED_RETURN_SAFE_ACTIONS and action_key in SAFE_ACTIONS
+        ]
+        if isinstance(returning_summary, dict)
+        else []
+    )
     return {
         "schema_version": GATEWAY_OPERATOR_SAFE_ACTIONS_SCHEMA,
         "checked_at_utc": _utc_now(),
         "status": "ok",
         "catalog": safe_action_catalog(),
         "recent_runs": load_safe_action_audit(runs_dir, limit=history_limit),
+        "recommended_action_key": recommended_action_keys[0] if recommended_action_keys else None,
+        "recommended_action_keys": recommended_action_keys,
     }

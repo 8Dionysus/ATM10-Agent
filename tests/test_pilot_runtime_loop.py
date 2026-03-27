@@ -48,6 +48,11 @@ def _write_image_fixture(path: Path) -> None:
     image.save(path)
 
 
+def _write_json(path: Path, payload: dict[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+
+
 def _fake_session_probe(
     *,
     capture_target_kind: str,
@@ -193,6 +198,87 @@ def test_prepare_asr_audio_input_boosts_quiet_waveform(tmp_path: Path) -> None:
     assert prepared["signal"]["asr_input"]["peak_abs"] > prepared["signal"]["raw"]["peak_abs"]
     assert prepared["asr_preprocess"]["mode"] == "normalized_gain"
     assert prepared["asr_preprocess"]["gain_applied"] > 1.0
+
+
+def test_maybe_emit_pilot_return_event_requires_repeat(tmp_path: Path) -> None:
+    runs_dir = tmp_path / "pilot-runtime"
+    _write_json(
+        runs_dir / "pilot_runtime_status_latest.json",
+        {
+            "schema_version": "pilot_runtime_status_v1",
+            "status": "running",
+            "paths": {"latest_status_json": str(runs_dir / "pilot_runtime_status_latest.json")},
+        },
+    )
+    turn_json = runs_dir / "turns" / "20260322_120501-pilot-turn" / "pilot_turn.json"
+    _write_json(turn_json, {"schema_version": "pilot_turn_v1"})
+    turn_payload = {
+        "status": "degraded",
+        "degraded_flags": ["retrieval_only_fallback"],
+        "transcript_quality": {"status": "ok"},
+        "paths": {"turn_json": str(turn_json)},
+    }
+
+    loop_state, return_event = pilot_runtime._maybe_emit_pilot_return_event(
+        runs_dir=runs_dir,
+        turn_payload=turn_payload,
+        loop_state=pilot_runtime.reset_return_loop_state(suppress_first_occurrence=True),
+    )
+
+    assert return_event is None
+    assert loop_state["last_reason_code"] == "pilot_grounding_degraded"
+    assert loop_state["occurrence_count"] == 1
+    assert loop_state["emitted_count"] == 0
+    assert not (runs_dir / "return" / "latest_return_event.json").exists()
+
+
+def test_maybe_emit_pilot_return_event_reaches_safe_stop_after_repeat(tmp_path: Path) -> None:
+    runs_dir = tmp_path / "pilot-runtime"
+    _write_json(
+        runs_dir / "pilot_runtime_status_latest.json",
+        {
+            "schema_version": "pilot_runtime_status_v1",
+            "status": "running",
+            "paths": {"latest_status_json": str(runs_dir / "pilot_runtime_status_latest.json")},
+        },
+    )
+    turn_json = runs_dir / "turns" / "20260322_120501-pilot-turn" / "pilot_turn.json"
+    _write_json(turn_json, {"schema_version": "pilot_turn_v1"})
+    turn_payload = {
+        "status": "degraded",
+        "degraded_flags": ["retrieval_only_fallback"],
+        "transcript_quality": {"status": "ok"},
+        "paths": {"turn_json": str(turn_json)},
+    }
+
+    loop_state = pilot_runtime.reset_return_loop_state(suppress_first_occurrence=True)
+    loop_state, first_event = pilot_runtime._maybe_emit_pilot_return_event(
+        runs_dir=runs_dir,
+        turn_payload=turn_payload,
+        loop_state=loop_state,
+    )
+    loop_state, second_event = pilot_runtime._maybe_emit_pilot_return_event(
+        runs_dir=runs_dir,
+        turn_payload=turn_payload,
+        loop_state=loop_state,
+    )
+    loop_state, third_event = pilot_runtime._maybe_emit_pilot_return_event(
+        runs_dir=runs_dir,
+        turn_payload=turn_payload,
+        loop_state=loop_state,
+    )
+
+    assert first_event is None
+    assert second_event is not None
+    assert second_event["status"] == "open"
+    assert second_event["reason_code"] == "pilot_grounding_degraded"
+    assert third_event is not None
+    assert third_event["status"] == "safe_stop"
+    assert third_event["loop_count"] == 2
+    assert loop_state["emitted_count"] == 2
+    assert Path(runs_dir / "return" / "latest_return_event.json").is_file()
+    log_lines = (runs_dir / "return" / "return_events.jsonl").read_text(encoding="utf-8").splitlines()
+    assert len(log_lines) == 2
 
 
 def test_run_pilot_turn_with_injected_locals_writes_contract(tmp_path: Path) -> None:

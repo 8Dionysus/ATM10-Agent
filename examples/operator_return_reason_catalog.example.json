@@ -1,0 +1,121 @@
+{
+  "schema_version": "operator_return_reason_catalog_v1",
+  "generated_at_utc": "2026-03-26T18:40:00+00:00",
+  "safe_stop_after_default": 2,
+  "allowed_safe_actions": [
+    "gateway_local_core",
+    "gateway_http_core",
+    "gateway_http_combo_a",
+    "cross_service_suite_smoke",
+    "cross_service_suite_combo_a_smoke",
+    "gateway_sla_operating_cycle_smoke",
+    "combo_a_operating_cycle_smoke"
+  ],
+  "reasons": [
+    {
+      "reason_code": "combo_a_not_ready",
+      "surface": "combo_a",
+      "default_return_mode": "rerun_smoke",
+      "default_severity": "attention",
+      "recommended_safe_actions": [
+        "gateway_http_combo_a",
+        "combo_a_operating_cycle_smoke"
+      ],
+      "triage_hint": "Refresh Combo A evidence with the existing smoke-only operator actions."
+    },
+    {
+      "reason_code": "gateway_snapshot_not_ready",
+      "surface": "gateway",
+      "default_return_mode": "reprobe",
+      "default_severity": "attention",
+      "recommended_safe_actions": [
+        "gateway_http_core",
+        "gateway_local_core"
+      ],
+      "triage_hint": "Re-probe the gateway operator snapshot and inspect the latest startup and gateway artifacts."
+    },
+    {
+      "reason_code": "pilot_grounding_degraded",
+      "surface": "pilot_runtime",
+      "default_return_mode": "reground",
+      "default_severity": "degraded",
+      "recommended_safe_actions": [
+        "gateway_http_combo_a",
+        "cross_service_suite_combo_a_smoke"
+      ],
+      "triage_hint": "Reground the pilot against the latest pilot turn and Combo A smoke evidence before trusting the next reply."
+    },
+    {
+      "reason_code": "pilot_runtime_exited",
+      "surface": "pilot_runtime",
+      "default_return_mode": "safe_stop",
+      "default_severity": "critical",
+      "recommended_safe_actions": [
+        "gateway_http_combo_a",
+        "cross_service_suite_combo_a_smoke"
+      ],
+      "triage_hint": "The managed pilot runtime exited unexpectedly. Stop and reground from the latest pilot artifacts."
+    },
+    {
+      "reason_code": "pilot_runtime_not_ready",
+      "surface": "pilot_runtime",
+      "default_return_mode": "restart_surface",
+      "default_severity": "degraded",
+      "recommended_safe_actions": [
+        "gateway_http_combo_a",
+        "cross_service_suite_combo_a_smoke"
+      ],
+      "triage_hint": "Restart the pilot runtime surface and verify the latest pilot runtime status before resuming."
+    },
+    {
+      "reason_code": "pilot_transcript_low_signal",
+      "surface": "last_turn",
+      "default_return_mode": "reground",
+      "default_severity": "attention",
+      "recommended_safe_actions": [
+        "cross_service_suite_combo_a_smoke"
+      ],
+      "triage_hint": "Use the latest pilot turn and smoke evidence to recover from low-signal pilot grounding."
+    },
+    {
+      "reason_code": "safe_action_repeat_failure",
+      "surface": "safe_actions",
+      "default_return_mode": "reroute_operator",
+      "default_severity": "critical",
+      "recommended_safe_actions": [
+        "gateway_sla_operating_cycle_smoke"
+      ],
+      "triage_hint": "Stop repeating the same safe action and reroute the operator through the governance surface."
+    },
+    {
+      "reason_code": "service_probe_attention",
+      "surface": "services",
+      "default_return_mode": "reprobe",
+      "default_severity": "attention",
+      "recommended_safe_actions": [
+        "gateway_http_core"
+      ],
+      "triage_hint": "Re-probe the affected runtime service and inspect the managed service log before continuing."
+    },
+    {
+      "reason_code": "startup_checkpoint_failed",
+      "surface": "startup",
+      "default_return_mode": "restart_surface",
+      "default_severity": "degraded",
+      "recommended_safe_actions": [
+        "gateway_http_core"
+      ],
+      "triage_hint": "Review the latest startup checkpoint and restart the operator surface from the launcher."
+    },
+    {
+      "reason_code": "streamlit_surface_unavailable",
+      "surface": "streamlit",
+      "default_return_mode": "restart_surface",
+      "default_severity": "attention",
+      "recommended_safe_actions": [
+        "gateway_http_core"
+      ],
+      "triage_hint": "Restart the Streamlit operator surface and inspect the launcher logs before resuming."
+    }
+  ]
+}

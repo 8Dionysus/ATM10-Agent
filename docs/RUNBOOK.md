@@ -314,6 +314,28 @@ Operator diagnostics surface (additive, schema-compatible):
 * `operator_context.triage.primary_surface` uses deterministic precedence: `startup > services > governance > combo_a > none`
 * `operator_context.triage.primary_message` is the first short-form issue from the winning surface, while `next_step_code` / `next_step` stay additive UI-safe hints
 
+### Operator recurrence recovery surface
+
+`ATM10-Agent` additively publishes operator-facing recurrence recovery without creating a new endpoint or a fifth Streamlit tab.
+
+Recovery contract:
+
+* `operator_context.returning` appears only when explicit launcher or pilot return evidence exists
+* launcher writes `runs/<timestamp>-start-operator-product/return/latest_return_event.json`
+* launcher appends `runs/<timestamp>-start-operator-product/return/return_events.jsonl`
+* pilot writes `runs/pilot-runtime/return/latest_return_event.json`
+* pilot appends `runs/pilot-runtime/return/return_events.jsonl`
+* `GET /v1/operator/safe-actions` additively returns `recommended_action_key` and `recommended_action_keys`
+* Streamlit renders `Return / Recovery` inside `Stack Health`
+
+Guardrails:
+
+* recurrence is doctrine; `return_*` is the concrete operator-visible recovery surface
+* no new operator endpoint is added
+* no safe action auto-executes from recommendation
+* the safe-action recommendation set is limited to already-existing smoke-only actions
+* `operator_context.triage` remains the compact overview; `operator_context.returning` is a dedicated sibling surface
+
 ### Gateway request over HTTP
 
 ```powershell
@@ -411,6 +433,8 @@ Expected result:
 * If `pilot_runtime` is enabled, the launcher also writes `artifact_roots.pilot_runtime_runs_dir` and the pilot process publishes `pilot_runtime_status_latest.json` under that root.
 * The operator surface can read the latest launcher artifact back through the gateway/panel as startup-session context, including additive `combo_a` readiness/probe state for `qdrant` and `neo4j`, plus additive `pilot_runtime` / `last_turn_summary` / `pilot_readiness` blocks when pilot artifacts exist.
 * When `pilot_runtime` is enabled, operator surfaces also surface ATM10 session evidence (`window_found`, `atm10_probable`, `foreground`) and live HUD summary fields from the last turn.
+* When startup loses footing, launcher additively publishes `last_return_event`, `return_loop_state`, and `return/latest_return_event.json` / `return/return_events.jsonl` under the launcher run dir.
+* When observer pilot loses footing repeatedly, pilot additively publishes the same `return/*` artifact family under the pilot runs root, but only for recurring, anchorable, operator-visible conditions.
 
 Notes:
 
@@ -426,6 +450,7 @@ Notes:
 * `--pilot-vlm-provider stub --pilot-text-provider stub` remains available as a deterministic diagnostics-only override when you want to validate the observer loop without waiting on local OpenVINO model load.
 * Current pilot defaults: `models\qwen2.5-vl-7b-instruct-int4-ov` on `GPU` for vision, `models\qwen3-8b-int4-cw-ov` on `GPU` for grounded reply, one-sentence player-facing replies, Russian-by-default answer language policy, and opportunistic hybrid fast-fail when grounding is unavailable or too slow.
 * Operator snapshot and Streamlit `Pilot runtime` surfaces show active `vlm_provider`, `text_provider`, `asr_language`, `asr_max_new_tokens`, provider warmup rollups, `preferred_tts_engine`, `active_tts_engine_last_turn`, `piper_available`, `piper_prewarm_ok`, `tts_degraded_reason`, plus last-turn `vision_provider`, `grounded_reply_provider`, `tts_engine`, `answer_language`, `transcript_quality`, and `reply_mode`.
+* Operator snapshot and Streamlit `Stack Health` surfaces additively publish `operator_context.returning` / `Return / Recovery` when explicit recovery evidence exists.
 
 ## M8.pilot: Observer pilot runtime
 
@@ -1716,6 +1741,7 @@ Regression smoke-check:
 
 * `scripts/streamlit_operator_panel_smoke.py` validates the mobile policy contract and baseline viewport.
 * If the mobile baseline (`viewport > breakpoint` or `landscape`) is violated, smoke returns `status=error`, `exit_code=2`.
+* `Return / Recovery` remains inside `Stack Health`; the 4-tab IA is unchanged.
 
 ## Local OpenVINO stack (task-first)
 

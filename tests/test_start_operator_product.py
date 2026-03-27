@@ -11,6 +11,38 @@ import pytest
 import scripts.start_operator_product as start_operator_product
 
 
+def test_emit_startup_return_event_writes_contract_artifacts(tmp_path: Path) -> None:
+    run_dir = tmp_path / "20260322_120000-start-operator-product"
+    run_dir.mkdir(parents=True, exist_ok=True)
+    run_payload = {
+        "return_loop_state": start_operator_product.reset_return_loop_state(
+            suppress_first_occurrence=False
+        ),
+        "last_return_event": None,
+    }
+
+    event_payload = start_operator_product._emit_startup_return_event(
+        run_payload=run_payload,
+        run_dir=run_dir,
+        reason_code="startup_checkpoint_failed",
+        anchor_refs=[
+            start_operator_product.compose_anchor_ref(
+                artifact_kind="startup_run",
+                label="latest startup run",
+                ref=str(run_dir / "run.json"),
+            )
+        ],
+        details={"error": "checkpoint failed"},
+    )
+
+    assert event_payload["schema_version"] == "gateway_operator_return_event_v1"
+    assert event_payload["reason_code"] == "startup_checkpoint_failed"
+    assert run_payload["last_return_event"]["reason_code"] == "startup_checkpoint_failed"
+    assert run_payload["return_loop_state"]["last_reason_code"] == "startup_checkpoint_failed"
+    assert (run_dir / "return" / "latest_return_event.json").is_file()
+    assert (run_dir / "return" / "return_events.jsonl").is_file()
+
+
 def test_wait_for_pilot_runtime_ready_rejects_stale_status_payload(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -509,6 +541,80 @@ def test_start_operator_product_smoke_managed_pilot_runtime_path(
     run_payload = json.loads((run_dirs[0] / "run.json").read_text(encoding="utf-8"))
     assert run_payload["managed_processes"]["pilot_runtime"]["managed"] is True
     assert run_payload["session_state"]["pilot_runtime"]["last_probe"]["status"] == "ok"
+
+
+def test_start_operator_product_emits_return_event_when_pilot_runtime_is_not_ready(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    launched_commands: list[list[str]] = []
+
+    class _FakeProcess:
+        _next_pid = 8500
+
+        def __init__(self) -> None:
+            type(self)._next_pid += 1
+            self.pid = type(self)._next_pid
+
+        def poll(self):
+            return None
+
+        def terminate(self):
+            return None
+
+        def wait(self, timeout: float | None = None):
+            return 0
+
+        def kill(self):
+            return None
+
+    def _fake_launch_process(command: list[str], log_path: Path):
+        launched_commands.append(list(command))
+        log_path.parent.mkdir(parents=True, exist_ok=True)
+        log_path.write_text("", encoding="utf-8")
+        return _FakeProcess()
+
+    monkeypatch.setattr(start_operator_product, "_launch_process", _fake_launch_process)
+    monkeypatch.setattr(
+        start_operator_product,
+        "_wait_for_gateway_operator_snapshot",
+        lambda gateway_url, timeout_sec: (
+            {"status": "ok", "checked_at_utc": "2026-03-21T12:00:00+00:00"},
+            None,
+        ),
+    )
+    monkeypatch.setattr(
+        start_operator_product,
+        "_wait_for_pilot_runtime_ready",
+        lambda pilot_runs_dir, timeout_sec, process=None, min_timestamp_utc=None: (
+            None,
+            "pilot runtime status probe failed",
+        ),
+    )
+
+    exit_code = start_operator_product.main(
+        [
+            "--runs-dir",
+            str(tmp_path / "runs"),
+            "--gateway-runs-dir",
+            str(tmp_path / "gateway"),
+            "--panel-runs-dir",
+            str(tmp_path / "panel"),
+            "--start-pilot-runtime",
+            "--capture-monitor",
+            "0",
+        ]
+    )
+
+    assert exit_code == 2
+    assert any("scripts/pilot_runtime_loop.py" in command for command in launched_commands)
+    run_dirs = sorted((tmp_path / "runs").glob("*-start-operator-product*"))
+    assert run_dirs
+    run_payload = json.loads((run_dirs[0] / "run.json").read_text(encoding="utf-8"))
+    assert run_payload["status"] == "error"
+    assert run_payload["last_return_event"]["reason_code"] == "pilot_runtime_not_ready"
+    assert run_payload["return_loop_state"]["last_reason_code"] == "pilot_runtime_not_ready"
+    assert Path(run_payload["paths"]["latest_return_event_json"]).is_file()
+    assert Path(run_payload["paths"]["return_events_jsonl"]).is_file()
 
 
 def test_start_operator_product_marks_never_launched_streamlit_not_started(

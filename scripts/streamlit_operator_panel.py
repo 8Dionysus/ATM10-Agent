@@ -976,6 +976,67 @@ def _render_operator_triage_section(triage: dict[str, Any] | None) -> None:
         st.dataframe([{"attention_services": ", ".join(attention_services)}], width="stretch")
 
 
+def _render_return_recovery_section(returning: dict[str, Any] | None) -> None:
+    if not isinstance(returning, dict):
+        return
+
+    latest_event = returning.get("latest_event")
+    latest_event = latest_event if isinstance(latest_event, dict) else {}
+    recommended_safe_actions = returning.get("recommended_safe_actions")
+    recommended_safe_actions = (
+        [str(item) for item in recommended_safe_actions if str(item).strip()]
+        if isinstance(recommended_safe_actions, list)
+        else []
+    )
+    st.subheader("Return / Recovery")
+    st.dataframe(
+        [
+            {
+                "status": returning.get("status"),
+                "open_event_count": returning.get("open_event_count"),
+                "surface": latest_event.get("surface"),
+                "reason_code": latest_event.get("reason_code"),
+                "severity": latest_event.get("severity"),
+                "return_mode": latest_event.get("return_mode"),
+                "loop_count": latest_event.get("loop_count"),
+            }
+        ],
+        width="stretch",
+    )
+    recovery_hint = str(latest_event.get("triage_hint", "")).strip()
+    if recovery_hint:
+        st.caption("Recovery hint")
+        st.info(recovery_hint)
+    next_step = str(returning.get("next_step", "")).strip()
+    if next_step:
+        st.caption("Next recovery step")
+        st.info(next_step)
+    if recommended_safe_actions:
+        st.caption("Recommended safe actions")
+        st.dataframe(
+            [{"recommended_safe_actions": ", ".join(recommended_safe_actions)}],
+            width="stretch",
+        )
+    anchor_refs = latest_event.get("anchor_refs")
+    anchor_refs = anchor_refs if isinstance(anchor_refs, list) else []
+    anchor_rows = [
+        {
+            "artifact_kind": item.get("artifact_kind"),
+            "label": item.get("label"),
+            "ref_type": item.get("ref_type"),
+            "required": item.get("required"),
+            "ref": item.get("ref"),
+        }
+        for item in anchor_refs
+        if isinstance(item, dict)
+    ]
+    if anchor_rows:
+        st.caption("Recovery anchors")
+        st.dataframe(anchor_rows, width="stretch")
+    st.caption("Recovery artifacts")
+    st.json(returning.get("paths"))
+
+
 def _render_operator_startup_section(snapshot: dict[str, Any] | None, warnings: list[str]) -> None:
     _render_snapshot_warnings(
         "Some operator startup artifacts were skipped due to parse/contract issues",
@@ -1778,6 +1839,9 @@ def _render_stack_health_tab(
         triage = _nested_get(operator_snapshot_payload, "operator_context", "triage")
         triage = triage if isinstance(triage, dict) else None
         _render_operator_triage_section(triage)
+        returning = _nested_get(operator_snapshot_payload, "operator_context", "returning")
+        returning = returning if isinstance(returning, dict) else None
+        _render_return_recovery_section(returning)
         stack_services = operator_snapshot_payload.get("stack_services")
         stack_services = stack_services if isinstance(stack_services, dict) else {}
         service_rows: list[dict[str, Any]] = []
@@ -2120,12 +2184,37 @@ def _render_safe_actions_tab(*, gateway_url: str, gateway_timeout_sec: float) ->
         st.info("not available yet")
         return
 
-    action_labels = {
-        str(item.get("label") or item.get("action_key")): str(item.get("action_key"))
+    action_items = [
+        item
         for item in catalog
         if isinstance(item, dict) and str(item.get("action_key", "")).strip()
+    ]
+    action_labels = {
+        str(item.get("label") or item.get("action_key")): str(item.get("action_key"))
+        for item in action_items
     }
-    selected_label = st.selectbox("Safe action", list(action_labels.keys()))
+    label_options = list(action_labels.keys())
+    recommended_action_key = (
+        str(safe_actions_payload.get("recommended_action_key", "")).strip()
+        if isinstance(safe_actions_payload, dict)
+        else ""
+    )
+    recommended_label = next(
+        (
+            str(item.get("label") or item.get("action_key"))
+            for item in action_items
+            if str(item.get("action_key", "")).strip() == recommended_action_key
+        ),
+        None,
+    )
+    if recommended_label is not None:
+        st.caption("Recommended next action")
+        st.info(f"Recommended safe action: {recommended_label}")
+    selected_label = st.selectbox(
+        "Safe action",
+        label_options,
+        index=(label_options.index(recommended_label) if recommended_label in label_options else 0),
+    )
     confirm = st.checkbox("I understand this stays smoke-only and goes through the gateway.")
     if st.button("Execute safe action", disabled=not confirm):
         selected_key = action_labels[selected_label]

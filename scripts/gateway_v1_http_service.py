@@ -459,7 +459,11 @@ def create_app(
                     "error": "unauthorized",
                 },
             )
-        return build_safe_actions_overview(runs_dir=runs_dir, history_limit=history_limit)
+        return build_safe_actions_overview(
+            runs_dir=runs_dir,
+            history_limit=history_limit,
+            operator_runs_dir=effective_operator_runs_dir,
+        )
 
     @app.post("/v1/operator/safe-actions/run")
     async def _operator_safe_action_run(request: FastAPIRequest) -> Any:

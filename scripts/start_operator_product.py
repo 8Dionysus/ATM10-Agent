@@ -7,7 +7,7 @@ import sys
 import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, Mapping
 from urllib import error as url_error
 from urllib import request
 
@@ -20,6 +20,15 @@ from src.agent_core.combo_a_profile import (
     DEFAULT_COMBO_A_NEO4J_URL,
     DEFAULT_COMBO_A_NEO4J_USER,
     DEFAULT_COMBO_A_QDRANT_URL,
+)
+from scripts.operator_return_recovery import (
+    SAFE_STOP_AFTER_DEFAULT,
+    advance_return_loop_state,
+    append_return_event,
+    build_return_event,
+    compose_anchor_ref,
+    reset_return_loop_state,
+    return_paths,
 )
 
 SCHEMA_VERSION = "operator_product_startup_v1"
@@ -433,6 +442,95 @@ def _append_startup_checkpoint(
     }
     run_payload.setdefault("startup_checkpoints", []).append(checkpoint)
     run_payload["last_checkpoint"] = checkpoint
+
+
+def _startup_anchor_refs(
+    run_payload: Mapping[str, Any],
+    run_dir: Path,
+    *,
+    include_streamlit_log: bool = False,
+    include_pilot_log: bool = False,
+) -> list[dict[str, Any]]:
+    paths_payload = run_payload.get("paths")
+    paths_payload = paths_payload if isinstance(paths_payload, Mapping) else {}
+    anchors = [
+        compose_anchor_ref(
+            artifact_kind="operator_startup_run",
+            ref=str(run_dir / "run.json"),
+            label="operator startup run",
+        ),
+        compose_anchor_ref(
+            artifact_kind="startup_plan",
+            ref=str(run_dir / "startup_plan.json"),
+            label="startup plan",
+        ),
+        compose_anchor_ref(
+            artifact_kind="startup_checkpoint",
+            ref=str(run_dir / "run.json"),
+            label="last checkpoint",
+        ),
+    ]
+    gateway_log = str(paths_payload.get("gateway_log", "")).strip()
+    if gateway_log:
+        anchors.append(
+            compose_anchor_ref(
+                artifact_kind="gateway_log",
+                ref=gateway_log,
+                label="gateway log",
+                required=False,
+            )
+        )
+    if include_streamlit_log:
+        streamlit_log = str(paths_payload.get("streamlit_log", "")).strip()
+        if streamlit_log:
+            anchors.append(
+                compose_anchor_ref(
+                    artifact_kind="streamlit_log",
+                    ref=streamlit_log,
+                    label="streamlit log",
+                    required=False,
+                )
+            )
+    if include_pilot_log:
+        pilot_log = str(paths_payload.get("pilot_runtime_log", "")).strip()
+        if pilot_log:
+            anchors.append(
+                compose_anchor_ref(
+                    artifact_kind="pilot_runtime_log",
+                    ref=pilot_log,
+                    label="pilot runtime log",
+                    required=False,
+                )
+            )
+    return anchors
+
+
+def _emit_startup_return_event(
+    *,
+    run_payload: dict[str, Any],
+    run_dir: Path,
+    reason_code: str,
+    anchor_refs: list[dict[str, Any]],
+    details: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    loop_state, _should_emit, emitted_count, event_status = advance_return_loop_state(
+        run_payload.get("return_loop_state"),
+        reason_code=reason_code,
+        suppress_first_occurrence=False,
+        safe_stop_after=SAFE_STOP_AFTER_DEFAULT,
+    )
+    run_payload["return_loop_state"] = loop_state
+    event_payload = build_return_event(
+        reason_code=reason_code,
+        anchor_refs=anchor_refs,
+        status=event_status,
+        loop_count=emitted_count,
+        safe_stop_after=SAFE_STOP_AFTER_DEFAULT,
+        details=details,
+    )
+    append_return_event(run_dir, event_payload)
+    run_payload["last_return_event"] = event_payload
+    return event_payload
 
 
 def _update_child_process_state(
@@ -992,6 +1090,7 @@ def main(argv: list[str] | None = None) -> int:
             "startup_plan_json": str(startup_plan_json_path),
             "gateway_log": str(run_dir / "gateway.log"),
             "streamlit_log": str(run_dir / "streamlit.log"),
+            **return_paths(run_dir),
         },
         "commands": {
             "gateway": list(plan["gateway"]["command"]),
@@ -1000,6 +1099,8 @@ def main(argv: list[str] | None = None) -> int:
         "session_state": _build_initial_session_state(plan, run_dir),
         "startup_checkpoints": [],
         "last_checkpoint": None,
+        "last_return_event": None,
+        "return_loop_state": reset_return_loop_state(suppress_first_occurrence=False),
         "child_processes": {},
     }
     for service_name, service_plan in plan["managed_processes"].items():
@@ -1067,6 +1168,17 @@ def main(argv: list[str] | None = None) -> int:
                     message="managed runtime health probe failed",
                     details={"error": health_error},
                 )
+                _emit_startup_return_event(
+                    run_payload=run_payload,
+                    run_dir=run_dir,
+                    reason_code="service_probe_attention",
+                    anchor_refs=_startup_anchor_refs(run_payload, run_dir),
+                    details={
+                        "service_name": service_name,
+                        "probe_error": health_error,
+                    },
+                )
+                _write_json(run_json_path, run_payload)
                 raise RuntimeError(
                     f"{service_name} did not become ready within startup timeout: {health_error}"
                 )
@@ -1128,6 +1240,14 @@ def main(argv: list[str] | None = None) -> int:
                 message="gateway operator snapshot probe failed",
                 details={"error": gateway_error},
             )
+            _emit_startup_return_event(
+                run_payload=run_payload,
+                run_dir=run_dir,
+                reason_code="gateway_snapshot_not_ready",
+                anchor_refs=_startup_anchor_refs(run_payload, run_dir),
+                details={"probe_error": gateway_error},
+            )
+            _write_json(run_json_path, run_payload)
             raise RuntimeError(
                 "Gateway operator snapshot did not become ready within startup timeout: "
                 f"{gateway_error}"
@@ -1214,6 +1334,14 @@ def main(argv: list[str] | None = None) -> int:
                     message="pilot runtime status probe failed",
                     details={"error": pilot_status_error},
                 )
+                _emit_startup_return_event(
+                    run_payload=run_payload,
+                    run_dir=run_dir,
+                    reason_code="pilot_runtime_not_ready",
+                    anchor_refs=_startup_anchor_refs(run_payload, run_dir, include_pilot_log=True),
+                    details={"probe_error": pilot_status_error},
+                )
+                _write_json(run_json_path, run_payload)
                 raise RuntimeError(
                     f"pilot_runtime did not become ready within startup timeout: {pilot_status_error}"
                 )
@@ -1276,6 +1404,13 @@ def main(argv: list[str] | None = None) -> int:
                 service_name="streamlit",
                 message="streamlit readiness probe failed",
                 details={"error": streamlit_error},
+            )
+            _emit_startup_return_event(
+                run_payload=run_payload,
+                run_dir=run_dir,
+                reason_code="streamlit_surface_unavailable",
+                anchor_refs=_startup_anchor_refs(run_payload, run_dir, include_streamlit_log=True),
+                details={"probe_error": streamlit_error},
             )
             _write_json(run_json_path, run_payload)
             raise RuntimeError(
@@ -1359,6 +1494,14 @@ def main(argv: list[str] | None = None) -> int:
                     service_name="pilot_runtime",
                     message="pilot runtime process exited unexpectedly",
                 )
+                _emit_startup_return_event(
+                    run_payload=run_payload,
+                    run_dir=run_dir,
+                    reason_code="pilot_runtime_exited",
+                    anchor_refs=_startup_anchor_refs(run_payload, run_dir, include_pilot_log=True),
+                    details={"service_name": "pilot_runtime"},
+                )
+                _write_json(run_json_path, run_payload)
                 raise RuntimeError("pilot runtime process exited unexpectedly")
             time.sleep(1.0)
     except KeyboardInterrupt:
@@ -1381,6 +1524,19 @@ def main(argv: list[str] | None = None) -> int:
             message="operator product startup/runtime failed",
             details={"error": str(exc)},
         )
+        if not isinstance(run_payload.get("last_return_event"), dict):
+            _emit_startup_return_event(
+                run_payload=run_payload,
+                run_dir=run_dir,
+                reason_code="startup_checkpoint_failed",
+                anchor_refs=_startup_anchor_refs(
+                    run_payload,
+                    run_dir,
+                    include_streamlit_log=True,
+                    include_pilot_log=True,
+                ),
+                details={"error": str(exc)},
+            )
     finally:
         if streamlit_process is not None:
             _terminate_process(streamlit_process)

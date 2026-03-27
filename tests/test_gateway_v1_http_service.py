@@ -263,6 +263,56 @@ def test_gateway_v1_http_service_operator_snapshot_reads_latest_startup_artifact
     )
 
 
+def test_gateway_v1_http_service_operator_snapshot_includes_returning_surface(tmp_path: Path) -> None:
+    _write_operating_cycle_summary(tmp_path / "gateway-runs")
+    operator_runs_dir = tmp_path / "operator-runs"
+    startup_run_dir = operator_runs_dir / "20260322_120000-start-operator-product"
+    startup_run_dir.mkdir(parents=True, exist_ok=True)
+    run_json_path = startup_run_dir / "run.json"
+    run_json_path.write_text(
+        json.dumps(
+            {
+                "schema_version": "operator_product_startup_v1",
+                "mode": "start_operator_product",
+                "status": "error",
+                "timestamp_utc": "2026-03-22T12:00:00+00:00",
+                "last_return_event": {
+                    "schema_version": "gateway_operator_return_event_v1",
+                    "event_id": "return-abc123",
+                    "timestamp_utc": "2026-03-22T12:00:30+00:00",
+                    "status": "open",
+                    "surface": "gateway",
+                    "reason_code": "gateway_snapshot_not_ready",
+                    "severity": "attention",
+                    "return_mode": "reprobe",
+                    "operator_visible": True,
+                    "anchor_refs": [],
+                    "recommended_safe_actions": ["gateway_http_core"],
+                    "triage_hint": "Re-probe the gateway operator snapshot.",
+                    "loop_count": 1,
+                    "safe_stop_after": 2,
+                    "details": {},
+                },
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+
+    app = gateway_http.create_app(
+        runs_dir=tmp_path / "gateway-runs",
+        operator_runs_dir=operator_runs_dir,
+    )
+    with TestClient(app) as client:
+        response = client.get("/v1/operator/snapshot")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["operator_context"]["returning"]["schema_version"] == "gateway_operator_return_summary_v1"
+    assert payload["operator_context"]["returning"]["latest_event"]["reason_code"] == "gateway_snapshot_not_ready"
+    assert payload["operator_context"]["returning"]["recommended_safe_actions"] == ["gateway_http_core"]
+
+
 def test_gateway_v1_http_service_operator_runs_returns_schema(tmp_path: Path) -> None:
     app = gateway_http.create_app(runs_dir=tmp_path / "runs")
     with TestClient(app) as client:
@@ -313,6 +363,51 @@ def test_gateway_v1_http_service_safe_actions_overview_returns_schema(tmp_path: 
     action_keys = {item["action_key"] for item in payload["catalog"]}
     assert "combo_a_operating_cycle_smoke" in action_keys
     assert "gateway_sla_operating_cycle_smoke" in action_keys
+
+
+def test_gateway_v1_http_service_safe_actions_overview_includes_recommended_action(tmp_path: Path) -> None:
+    operator_runs_dir = tmp_path / "operator-runs"
+    startup_run_dir = operator_runs_dir / "20260322_120000-start-operator-product"
+    startup_run_dir.mkdir(parents=True, exist_ok=True)
+    (startup_run_dir / "run.json").write_text(
+        json.dumps(
+            {
+                "schema_version": "operator_product_startup_v1",
+                "mode": "start_operator_product",
+                "last_return_event": {
+                    "schema_version": "gateway_operator_return_event_v1",
+                    "event_id": "return-abc123",
+                    "timestamp_utc": "2026-03-22T12:00:30+00:00",
+                    "status": "open",
+                    "surface": "gateway",
+                    "reason_code": "gateway_snapshot_not_ready",
+                    "severity": "attention",
+                    "return_mode": "reprobe",
+                    "operator_visible": True,
+                    "anchor_refs": [],
+                    "recommended_safe_actions": ["gateway_http_core"],
+                    "triage_hint": "Re-probe the gateway operator snapshot.",
+                    "loop_count": 1,
+                    "safe_stop_after": 2,
+                    "details": {},
+                },
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+
+    app = gateway_http.create_app(
+        runs_dir=tmp_path / "runs",
+        operator_runs_dir=operator_runs_dir,
+    )
+    with TestClient(app) as client:
+        response = client.get("/v1/operator/safe-actions")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["recommended_action_key"] == "gateway_http_core"
+    assert payload["recommended_action_keys"] == ["gateway_http_core"]
 
 
 def test_gateway_v1_http_service_safe_action_run_happy_path(

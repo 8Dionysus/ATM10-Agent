@@ -46,6 +46,12 @@ def test_streamlit_ia_doc_lists_required_ui_zones() -> None:
         assert zone in text, f"Missing required UI zone: {zone}"
 
 
+def test_streamlit_ia_doc_mentions_return_recovery_without_adding_tab() -> None:
+    text = _read_doc()
+    assert "Return / Recovery" in text
+    assert "no fifth tab is introduced" in text
+
+
 def test_streamlit_ia_doc_lists_canonical_sources() -> None:
     text = _read_doc()
     required_sources = [

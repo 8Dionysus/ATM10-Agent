@@ -1,0 +1,114 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "gateway_operator_return_event_v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "event_id",
+    "timestamp_utc",
+    "status",
+    "surface",
+    "reason_code",
+    "severity",
+    "return_mode",
+    "operator_visible",
+    "anchor_refs",
+    "loop_count",
+    "safe_stop_after",
+    "details"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "gateway_operator_return_event_v1"
+    },
+    "event_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "timestamp_utc": {
+      "type": "string",
+      "minLength": 1
+    },
+    "status": {
+      "type": "string",
+      "enum": ["open", "safe_stop"]
+    },
+    "surface": {
+      "type": "string",
+      "minLength": 1
+    },
+    "reason_code": {
+      "type": "string",
+      "minLength": 1
+    },
+    "severity": {
+      "type": "string",
+      "enum": ["attention", "degraded", "critical"]
+    },
+    "return_mode": {
+      "type": "string",
+      "enum": [
+        "reprobe",
+        "reground",
+        "restart_surface",
+        "rerun_smoke",
+        "reroute_operator",
+        "safe_stop"
+      ]
+    },
+    "operator_visible": {
+      "type": "boolean"
+    },
+    "anchor_refs": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["artifact_kind", "ref", "ref_type", "required"],
+        "properties": {
+          "artifact_kind": {
+            "type": "string",
+            "minLength": 1
+          },
+          "label": {
+            "type": "string",
+            "minLength": 1
+          },
+          "ref": {
+            "type": "string",
+            "minLength": 1
+          },
+          "ref_type": {
+            "type": "string",
+            "enum": ["path"]
+          },
+          "required": {
+            "type": "boolean"
+          }
+        }
+      }
+    },
+    "recommended_safe_actions": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "triage_hint": {
+      "type": ["string", "null"]
+    },
+    "loop_count": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "safe_stop_after": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "details": {
+      "type": "object"
+    }
+  }
+}
