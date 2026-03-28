@@ -103,6 +103,11 @@ def test_build_piper_engine_prefers_inprocess_voice_when_available(monkeypatch: 
 
     monkeypatch.setattr(tts_runtime_service, "_load_piper_python_voice", lambda: _FakePiperVoice)
     monkeypatch.setattr(
+        tts_runtime_service,
+        "_build_piper_python_synthesis_config",
+        lambda selected_speaker: type("SynConfig", (), {"speaker_id": int(selected_speaker)})(),
+    )
+    monkeypatch.setattr(
         tts_runtime_service.subprocess,
         "run",
         lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("subprocess fallback should not run")),
