@@ -142,6 +142,7 @@ def test_parse_args_uses_qwen2_5_vl_7b_default_model_dir() -> None:
     assert args.tts_piper_executable is None
     assert args.tts_piper_model_path is None
     assert args.tts_piper_speaker is None
+    assert args.startup_timeout_sec == 120.0
 
 
 def test_parse_args_keeps_explicit_child_run_dir_overrides(tmp_path: Path) -> None:

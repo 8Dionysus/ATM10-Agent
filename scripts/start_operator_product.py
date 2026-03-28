@@ -805,7 +805,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument(
         "--startup-timeout-sec",
         type=float,
-        default=20.0,
+        default=120.0,
         help="Timeout waiting for managed services, gateway, and Streamlit to become ready.",
     )
     parser.add_argument(
