@@ -1621,6 +1621,9 @@ def run_pilot_turn(
     asr_func: Callable[..., dict[str, Any]] = call_voice_asr,
     hybrid_query_func: Callable[..., dict[str, Any]] = call_gateway_hybrid_query,
     tts_func: Callable[..., dict[str, Any]] = synthesize_with_tts_runtime,
+    pre_captured_screenshot_path: Path | None = None,
+    pre_captured_capture_payload: Mapping[str, Any] | None = None,
+    pre_captured_capture_error: str | None = None,
     now: datetime | None = None,
     status_callback: Callable[..., Any] | None = None,
 ) -> dict[str, Any]:
@@ -1724,22 +1727,44 @@ def run_pilot_turn(
 
         screenshot_path = Path(base_payload["paths"]["screenshot_png"])
         capture_payload: dict[str, Any] | None = None
-        try:
-            capture_payload = capture_func(
-                output_path=screenshot_path,
-                monitor_index=capture_monitor,
-                region=capture_region,
-            )
+        prefetched_payload = (
+            dict(pre_captured_capture_payload)
+            if isinstance(pre_captured_capture_payload, Mapping)
+            else None
+        )
+        prefetched_path = Path(pre_captured_screenshot_path) if pre_captured_screenshot_path is not None else None
+        if (
+            prefetched_payload is not None
+            and prefetched_path is not None
+            and prefetched_path.is_file()
+        ):
+            shutil.copyfile(prefetched_path, screenshot_path)
+            prefetched_payload["screenshot_path"] = str(screenshot_path)
+            prefetched_payload["capture_source"] = "hotkey_down_prefetch"
             base_payload["capture"] = {
                 **base_payload["capture"],
-                **capture_payload,
+                **prefetched_payload,
                 "error": None,
             }
-        except Exception as exc:
-            stage_errors["capture"] = str(exc)
-            degraded_flags.append("capture_failed")
-            degraded_flags.append("vision_unavailable")
-            base_payload["capture"]["error"] = str(exc)
+        else:
+            if isinstance(pre_captured_capture_error, str) and pre_captured_capture_error.strip():
+                base_payload["capture"]["prefetch_error"] = pre_captured_capture_error.strip()
+            try:
+                capture_payload = capture_func(
+                    output_path=screenshot_path,
+                    monitor_index=capture_monitor,
+                    region=capture_region,
+                )
+                base_payload["capture"] = {
+                    **base_payload["capture"],
+                    **capture_payload,
+                    "error": None,
+                }
+            except Exception as exc:
+                stage_errors["capture"] = str(exc)
+                degraded_flags.append("capture_failed")
+                degraded_flags.append("vision_unavailable")
+                base_payload["capture"]["error"] = str(exc)
 
         base_payload["latency"]["capture_sec"] = round(perf_counter() - stage_started, 6)
 
@@ -2399,6 +2424,9 @@ def run_pilot_runtime_loop(
     )
     recorder: PushToTalkRecorder | None = None
     active_recording = False
+    prefetched_capture_path: Path | None = None
+    prefetched_capture_payload: dict[str, Any] | None = None
+    prefetched_capture_error: str | None = None
 
     try:
         hotkey_watcher = PollingHotkey(hotkey)
@@ -2412,6 +2440,20 @@ def run_pilot_runtime_loop(
         while True:
             transition = hotkey_watcher.poll_transition()
             if transition == "down" and not active_recording:
+                prefetched_capture_path = None
+                prefetched_capture_payload = None
+                prefetched_capture_error = None
+                try:
+                    prefetch_path = runtime_run_dir / "tmp" / "hotkey_down_capture.png"
+                    prefetch_payload = capture_screen_image(
+                        output_path=prefetch_path,
+                        monitor_index=capture_monitor,
+                        region=capture_region,
+                    )
+                    prefetched_capture_path = prefetch_path
+                    prefetched_capture_payload = dict(prefetch_payload)
+                except Exception as exc:
+                    prefetched_capture_error = str(exc)
                 try:
                     recorder.start()
                     active_recording = True
@@ -2451,12 +2493,18 @@ def run_pilot_runtime_loop(
                         tesseract_bin=tesseract_bin,
                         service_token=service_token,
                         playback_enabled=playback_enabled,
+                        pre_captured_screenshot_path=prefetched_capture_path,
+                        pre_captured_capture_payload=prefetched_capture_payload,
+                        pre_captured_capture_error=prefetched_capture_error,
                         status_callback=lambda **kwargs: status_handle.transition(
                             state=str(kwargs.get("state", status_handle.state)),
                             degraded_services=status_handle.degraded_services,
                             last_error=status_handle.last_error,
                         ),
                     )
+                    prefetched_capture_path = None
+                    prefetched_capture_payload = None
+                    prefetched_capture_error = None
                     turn_payload = turn_result["turn_payload"]
                     run_payload["last_turn"] = {
                         "turn_id": turn_payload.get("turn_id"),

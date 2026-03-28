@@ -200,6 +200,111 @@ def test_prepare_asr_audio_input_boosts_quiet_waveform(tmp_path: Path) -> None:
     assert prepared["asr_preprocess"]["gain_applied"] > 1.0
 
 
+def test_run_pilot_turn_uses_hotkey_down_prefetched_capture(tmp_path: Path) -> None:
+    runtime_run_dir = tmp_path / "pilot-runtime"
+    runtime_run_dir.mkdir(parents=True, exist_ok=True)
+    audio_path = tmp_path / "audio.wav"
+    audio_meta = _write_audio_fixture(audio_path)
+
+    prefetched_image = tmp_path / "prefetched_menu.png"
+    Image.new("RGB", (320, 180), color=(210, 230, 255)).save(prefetched_image)
+    prefetched_capture_payload = {
+        "capture_mode": "monitor",
+        "monitor_index": 0,
+        "region": None,
+        "bbox": [0, 0, 320, 180],
+        "width": 320,
+        "height": 180,
+        "screenshot_path": str(prefetched_image),
+    }
+
+    def _capture_should_not_run(*_args: Any, **_kwargs: Any) -> dict[str, Any]:
+        raise AssertionError("capture_func should not run when hotkey-down prefetch is provided")
+
+    def _fake_asr(
+        *,
+        voice_runtime_url: str,
+        audio_path: Path,
+        language: str | None = None,
+        service_token: str | None = None,
+    ) -> dict[str, Any]:
+        _ = voice_runtime_url, audio_path, language, service_token
+        return {"text": "What should I do next?", "language": "en"}
+
+    def _fake_hybrid(
+        *,
+        gateway_url: str,
+        query: str,
+        timeout_sec: float = 0.0,
+        topk: int = 0,
+        candidate_k: int = 0,
+        max_entities_per_doc: int = 0,
+        service_token: str | None = None,
+    ) -> dict[str, Any]:
+        _ = gateway_url, query, timeout_sec, topk, candidate_k, max_entities_per_doc, service_token
+        return {
+            "response_payload": {"status": "ok"},
+            "result_payload": {"planner_status": "hybrid_merged", "degraded": False},
+            "hybrid_results_payload": {"planner_status": "hybrid_merged", "degraded": False, "warnings": [], "merged_results": []},
+            "hybrid_results_json": None,
+            "hybrid_run_dir": None,
+        }
+
+    def _fake_tts(
+        *,
+        tts_runtime_url: str,
+        text: str,
+        language: str | None = None,
+        turn_dir: Path,
+        service_token: str | None = None,
+        playback_enabled: bool = True,
+    ) -> dict[str, Any]:
+        _ = tts_runtime_url, text, language, turn_dir, service_token, playback_enabled
+        return {
+            "status": "ok",
+            "mode": "stub",
+            "streaming_mode": "fixture",
+            "fallback_used": False,
+            "fallback_reason": None,
+            "chunk_count": 1,
+            "events_count": 1,
+            "audio_out_wav": None,
+            "stream_events_jsonl": None,
+            "playback_error": None,
+            "completed_event": {"event": "completed"},
+        }
+
+    result = pilot_runtime.run_pilot_turn(
+        runtime_run_dir=runtime_run_dir,
+        audio_input_path=audio_path,
+        audio_input_meta=audio_meta,
+        hotkey="F8",
+        capture_monitor=0,
+        capture_region=None,
+        gateway_url="http://fixture.gateway",
+        voice_runtime_url="http://fixture.voice",
+        tts_runtime_url="http://fixture.tts",
+        vlm_client=DeterministicStubVLM(),
+        grounded_reply_client=DeterministicGroundedReplyStub(),
+        playback_enabled=False,
+        capture_func=_capture_should_not_run,
+        session_probe_func=_fake_session_probe,
+        live_hud_state_func=_fake_live_hud_state,
+        asr_func=_fake_asr,
+        hybrid_query_func=_fake_hybrid,
+        tts_func=_fake_tts,
+        pre_captured_screenshot_path=prefetched_image,
+        pre_captured_capture_payload=prefetched_capture_payload,
+        expected_asr_language="en",
+        now=datetime(2026, 3, 28, 2, 0, 0, tzinfo=timezone.utc),
+    )
+
+    payload = result["turn_payload"]
+    screenshot_path = Path(payload["paths"]["screenshot_png"])
+    assert payload["capture"]["capture_source"] == "hotkey_down_prefetch"
+    assert screenshot_path.read_bytes() == prefetched_image.read_bytes()
+
+
 def test_maybe_emit_pilot_return_event_requires_repeat(tmp_path: Path) -> None:
     runs_dir = tmp_path / "pilot-runtime"
     _write_json(
