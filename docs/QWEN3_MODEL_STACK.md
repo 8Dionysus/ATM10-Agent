@@ -1,8 +1,28 @@
-# Model Stack (OpenVINO-first)
+# Model Stack and Host Runtime Profiles (OpenVINO-first)
 
-Current as of: 2026-03-23
+Current as of: 2026-03-28
 
-This file keeps the historical path `docs/QWEN3_MODEL_STACK.md` for continuity, but the active local stack is now task-first rather than Qwen3-only.
+This file keeps the historical path `docs/QWEN3_MODEL_STACK.md` for continuity, but it now records the machine-specific runtime policy for `ATM10-Agent`, not only a Qwen3-only stack snapshot.
+
+## Architecture posture
+
+- `ATM10-Agent` is a local-first ATM10 companion with active operator-facing entrypoints and an internal agent stack built on top of perception, memory, routing, evals, dry-run automation, and artifacted worker-style processes.
+- Runtime backend choice is a host-profile decision. A host profile selects the inference/runtime path for one machine; it does not redefine the repo architecture.
+- The current baseline is the validated Intel/OpenVINO host path on this repo machine. Future `NVIDIA`/`Ollama` or other paths should land as explicit additive host profiles with their own measurements, evals, and promotion criteria.
+
+## Canonical current host profile
+
+- Host profile id: `ov_intel_core_ultra_local`
+- Status: current validated repo-host baseline
+- Runtime family: `OpenVINO-first`
+- Placement policy: explicit per-stage `CPU/GPU/NPU` placement with artifacted measurement; use multi-accelerator parallelism where it helps instead of silently swapping the entire stack
+- Promotion rule: this profile remains canonical until another host profile is explicitly documented, evaluated, and promoted
+
+## Future host profiles (additive)
+
+- Expected examples: `ollama_nvidia_local`, `cuda_native_local`, or another explicit machine-specific path
+- New host profiles must document their own runtime assumptions, model choices, eval posture, and operator/pilot launch notes
+- Adding a future host profile does not silently rewrite `ov_intel_core_ultra_local`; the current baseline remains the default until public docs and validation say otherwise
 
 ## Active target stack
 
@@ -12,7 +32,7 @@ This file keeps the historical path `docs/QWEN3_MODEL_STACK.md` for continuity, 
 4. Voice IN (active runtime): `Whisper v3 Turbo (OpenVINO GenAI)`
 5. Voice OUT (active runtime): `tts_runtime_service`
 
-Rule: prefer the strongest locally supported OpenVINO path per task. `Qwen3` remains the default text/retrieval family, but the active pilot vision path is allowed to use `Qwen2.5-VL` when current OpenVINO VLM runtime support is better.
+Rule: prefer the strongest locally supported OpenVINO path per task on `ov_intel_core_ultra_local`. `Qwen3` remains the default text/retrieval family, but the active pilot vision path is allowed to use `Qwen2.5-VL` when current OpenVINO VLM runtime support is better.
 
 ## Pilot runtime defaults
 
@@ -62,6 +82,8 @@ Rule: prefer the strongest locally supported OpenVINO path per task. `Qwen3` rem
 
 ## Runtime policy
 
-* Default runtime for the active local stack in this project: OpenVINO (`CPU|GPU|NPU`).
+* Default runtime for the active repo-host stack in this project: OpenVINO (`CPU|GPU|NPU`).
+* Device placement is stage-specific and may exploit multiple accelerators in parallel when the repo host supports it.
 * Pilot/Gateway surfaces stay local-first and artifacted under `runs/...`.
+* Future non-OpenVINO paths must arrive as explicit host profiles instead of silent backend swaps.
 * The OpenAI-compatible adapter remains in the repo as an optional gateway layer; it does not replace the local OpenVINO stack as the pilot baseline.

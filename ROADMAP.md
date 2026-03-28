@@ -9,24 +9,26 @@ This document is the public planning surface of the repository. It describes dir
 Selected strategic baseline:
 
 * Production baseline: **Combo A**.
-* Frontend path: **Streamlit** operator panel + CLI fallback.
-* Backend path: FastAPI gateway + workers + Qdrant + Neo4j + file artifacts (`runs/...`).
-* Runtime policy: `OpenVINO-first` with `CPU/GPU/NPU` fallback.
+* Operator surface: **Streamlit** operator panel + CLI fallback.
+* Agent-core path: FastAPI gateway + workers + Qdrant + Neo4j + file artifacts (`runs/...`).
+* Runtime policy: current validated repo-host baseline is `OpenVINO-first` on this Intel machine, with explicit `CPU/GPU/NPU` placement and additive future host profiles for other hardware.
 * Model policy: pragmatic hybrid by task:
   * text/retrieval/rerank: Qwen3 stack,
   * vision active pilot path: Qwen2.5-VL-7B,
   * ASR active path: Whisper GenAI,
   * archived paths remain recoverable via explicit opt-in.
+* Architecture posture: `ATM10-Agent` remains a companion with active operator interaction; current operator surfaces are the public entrypoint, while memory, evals, routing, and bounded worker/sub-agent roles stay under the hood inside the same local runtime boundary.
 
 ## North Star
 
-Build a local-first game companion for ATM10 with a production-ready operator loop:
+Build a local-first ATM10 companion with a production-ready operator loop and an internal agent stack:
 
 * Phase A: vision loop (screenshot -> VLM interface -> structured output + artifacts).
 * Phase B: memory (retrieval + KAG + citations + guardrails).
 * Phase C: voice (active ASR path + resilient TTS service/fallback).
 * Phase D: operator control plane (Streamlit) on top of a unified local API.
 * Automation: safe assistive path, dry-run by default, no real input events by default.
+* Agent stack under the hood: memory, routing, evals, and bounded worker/sub-agent roles should remain explicit internal layers rather than being reduced to a UI-only shell.
 
 ## Completed Foundations
 
@@ -117,18 +119,20 @@ Definition of Done:
 * Use `pilot_runtime_readiness_v1` to harden real manual acceptance cycles for the observer pilot runtime.
 * Evaluate when `combo_a` can move from additive parity profile to the operational default without weakening governance.
 * Extend operator UX around pilot-specific troubleshooting and optional overlay/hotkey ergonomics.
+* Fix the current Intel/OpenVINO host profile as the documented baseline while defining how future machine-specific runtime paths are introduced and validated.
 
 ### 60-90 days
 
 * Evaluate moving some automation from dry-run to supervised mode after security gates are in place.
 * Revisit archived R&D paths using the re-open criteria from `docs/ARCHIVED_TRACKS.md`.
 * Continue tightening operator guidance and release criteria around the live observer loop.
+* Pull compatible memory/evals/routing techniques from sibling repos into `ATM10-Agent` without breaking the single-repo local agent boundary or the validated `OpenVINO-first` host baseline.
 
 ## Constraints and High-Level Risks
 
 * Windows 11 + PowerShell 7 is the first-class environment.
 * Reproducibility beats convenience: small diffs, runnable commands, and test coverage stay mandatory.
-* Runtime remains `OpenVINO-first`; dependency and infrastructure sprawl stay constrained.
+* Runtime remains `OpenVINO-first` on the current repo host until another host profile is explicitly validated and promoted; dependency and infrastructure sprawl stay constrained.
 * Security posture remains conservative: dry-run by default, bounded payloads, sanitized errors, and minimal trusted surfaces.
 * Risk of scope creep remains real; roadmap progress depends on milestone gates and disciplined prioritization.
 

@@ -101,6 +101,8 @@ def test_build_startup_plan_uses_primary_operator_profile_defaults() -> None:
 
     assert plan["schema_version"] == "operator_product_startup_v1"
     assert plan["profile"] == "operator_product_core"
+    assert plan["host_profile"]["id"] == "ov_intel_core_ultra_local"
+    assert plan["host_profile"]["runtime_family"] == "openvino_first"
     assert plan["artifact_roots"]["operator_runs_dir"] == str(Path("runs"))
     assert plan["gateway"]["url"] == "http://127.0.0.1:8770"
     assert plan["streamlit"]["url"] == "http://127.0.0.1:8501"
@@ -125,6 +127,8 @@ def test_parse_args_derives_child_run_dirs_from_base_runs_dir(tmp_path: Path) ->
 
 def test_parse_args_uses_qwen2_5_vl_7b_default_model_dir() -> None:
     args = start_operator_product.parse_args([])
+    assert args.host_profile == "ov_intel_core_ultra_local"
+    assert args.host_profile_config["id"] == "ov_intel_core_ultra_local"
     assert args.pilot_vlm_model_dir == Path("models") / "qwen2.5-vl-7b-instruct-int4-ov"
     assert args.pilot_vlm_device == "GPU"
     assert args.pilot_text_device == "GPU"
@@ -290,6 +294,8 @@ def test_build_startup_plan_manages_opt_in_pilot_runtime() -> None:
     assert pilot_plan["managed"] is True
     assert pilot_plan["configured"] is True
     assert "scripts/pilot_runtime_loop.py" in pilot_plan["command"]
+    assert "--host-profile" in pilot_plan["command"]
+    assert pilot_plan["command"][pilot_plan["command"].index("--host-profile") + 1] == "ov_intel_core_ultra_local"
     assert "--pilot-hotkey" in pilot_plan["command"]
     assert "F9" in pilot_plan["command"]
     assert "--capture-monitor" in pilot_plan["command"]
@@ -540,6 +546,7 @@ def test_start_operator_product_smoke_managed_pilot_runtime_path(
     run_dirs = sorted((tmp_path / "runs").glob("*-start-operator-product*"))
     assert run_dirs
     run_payload = json.loads((run_dirs[0] / "run.json").read_text(encoding="utf-8"))
+    assert run_payload["host_profile"]["id"] == "ov_intel_core_ultra_local"
     assert run_payload["managed_processes"]["pilot_runtime"]["managed"] is True
     assert run_payload["session_state"]["pilot_runtime"]["last_probe"]["status"] == "ok"
 

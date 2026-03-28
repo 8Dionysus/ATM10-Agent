@@ -792,6 +792,7 @@ def load_latest_operator_startup_status(
             "schema_version": "operator_product_startup_status_v1",
             "status": payload.get("status"),
             "profile": payload.get("profile"),
+            "host_profile": payload.get("host_profile"),
             "timestamp_utc": payload.get("timestamp_utc"),
             "started_at_utc": payload.get("started_at_utc"),
             "stopped_at_utc": payload.get("stopped_at_utc"),
@@ -1129,6 +1130,7 @@ def _build_pilot_runtime_summary(
         return {
             "status": "not_available",
             "state": "not_available",
+            "host_profile": None,
             "last_turn_id": None,
             "degraded_services": [],
             "last_error": None,
@@ -1149,6 +1151,11 @@ def _build_pilot_runtime_summary(
     return {
         "status": pilot_status.get("status"),
         "state": pilot_status.get("state"),
+        "host_profile": (
+            dict(pilot_status.get("host_profile", {}))
+            if isinstance(pilot_status.get("host_profile"), Mapping)
+            else None
+        ),
         "last_turn_id": pilot_status.get("last_turn_id"),
         "last_turn_started_at_utc": pilot_status.get("last_turn_started_at_utc"),
         "last_turn_completed_at_utc": pilot_status.get("last_turn_completed_at_utc"),

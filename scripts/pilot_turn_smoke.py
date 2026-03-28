@@ -15,6 +15,7 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from src.agent_core.grounded_reply_openvino import DeterministicGroundedReplyStub
+from src.agent_core.host_profiles import host_profile_payload
 from src.agent_core.io_voice import write_wav_pcm16
 from src.agent_core.vlm_stub import DeterministicStubVLM
 from scripts.pilot_runtime_loop import (
@@ -272,6 +273,7 @@ def run_pilot_turn_smoke(
     status_handle = PilotRuntimeStatusHandle(
         runtime_run_dir=runtime_run_dir,
         latest_status_path=latest_status_path,
+        host_profile=host_profile_payload("ov_intel_core_ultra_local"),
         hotkey="F8",
         gateway_url="http://fixture.gateway",
         voice_runtime_url="http://fixture.voice",
