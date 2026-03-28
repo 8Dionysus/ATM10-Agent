@@ -353,6 +353,9 @@ def test_run_pilot_turn_uses_hotkey_down_prefetched_capture(tmp_path: Path) -> N
     screenshot_path = Path(payload["paths"]["screenshot_png"])
     assert payload["capture"]["capture_source"] == "hotkey_down_prefetch"
     assert screenshot_path.read_bytes() == prefetched_image.read_bytes()
+    assert payload["vision"]["provider"] == "deterministic_stub_v1"
+    assert payload["vision"]["summary"] == "Stub analysis: no real vision model invoked."
+    assert payload["capture"]["bbox"] == [0, 0, 320, 180]
 
 
 def test_maybe_emit_pilot_return_event_requires_repeat(tmp_path: Path) -> None:

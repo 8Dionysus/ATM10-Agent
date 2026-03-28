@@ -1825,9 +1825,10 @@ def run_pilot_turn(
             shutil.copyfile(prefetched_path, screenshot_path)
             prefetched_payload["screenshot_path"] = str(screenshot_path)
             prefetched_payload["capture_source"] = "hotkey_down_prefetch"
+            capture_payload = dict(prefetched_payload)
             base_payload["capture"] = {
                 **base_payload["capture"],
-                **prefetched_payload,
+                **capture_payload,
                 "error": None,
             }
         else:
