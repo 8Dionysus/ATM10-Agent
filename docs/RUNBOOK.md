@@ -491,6 +491,32 @@ Expected result:
 * Degraded services and turn errors are carried into both status and turn artifacts; the runtime does not silently fall back to uncited guesses.
 * When `combo_a` retrieval/KAG backends are unavailable, the hybrid stage stays machine-readable with degraded fallback (`retrieval_only_fallback`, `kag_only_fallback`, or `grounding_unavailable`) instead of failing the entire turn transport.
 
+## M8.preflight: Pilot live stack pre-check
+
+Run this before launching ATM10 when you want to catch broken live stack state early (services, providers, and microphone ASR path):
+
+```powershell
+cd <repo-root>
+.\.venv\Scripts\Activate.ps1
+python scripts/check_pilot_live_preflight.py --runs-dir runs --summary-json runs\pilot-live-preflight\summary.json --summary-md runs\pilot-live-preflight\summary.md --mic-probe-seconds 2.0
+```
+
+Fast infra-only variant (skips microphone capture/ASR probe):
+
+```powershell
+python scripts/check_pilot_live_preflight.py --runs-dir runs --summary-json runs\pilot-live-preflight\summary.json --summary-md runs\pilot-live-preflight\summary.md --skip-mic-probe
+```
+
+Preflight contract (`pilot_live_preflight_v1`):
+
+* `schema_version = pilot_live_preflight_v1`
+* `status = ok`
+* `readiness_status = ready|attention|blocked`
+* `next_step_code`
+* `blocking_reason_codes`, `attention_reason_codes`
+* `checks.pilot_runtime_status|gateway_health|voice_health|tts_health|provider_vlm|provider_text|microphone_probe`
+* `resolved_urls.gateway_url|voice_runtime_url|tts_runtime_url`
+
 ## M8.post: Observer pilot readiness summary
 
 Pilot readiness helper:

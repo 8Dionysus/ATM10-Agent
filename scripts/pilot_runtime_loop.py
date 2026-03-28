@@ -463,6 +463,31 @@ def _prepare_asr_audio_input(
     }
 
 
+def _write_silence_fallback_audio(
+    *,
+    output_path: Path,
+    sample_rate: int,
+    duration_sec: float = 0.45,
+    capture_error: str | None = None,
+    input_device_index: int | None = None,
+    input_device_name: str | None = None,
+) -> dict[str, Any]:
+    safe_duration_sec = max(0.2, float(duration_sec))
+    sample_count = max(1, int(float(sample_rate) * safe_duration_sec))
+    waveform = np.zeros(sample_count, dtype=np.float32)
+    write_wav_pcm16(path=output_path, waveform=waveform, sample_rate=sample_rate)
+    return {
+        "mode": "push_to_talk_silence_fallback",
+        "input_device_index": input_device_index,
+        "input_device_name": input_device_name,
+        "sample_rate": int(sample_rate),
+        "duration_sec": round(sample_count / float(sample_rate), 6),
+        "num_samples": int(sample_count),
+        "audio_path": str(output_path),
+        "capture_error": capture_error,
+    }
+
+
 def _evaluate_transcript_quality(
     *,
     transcript: str,
@@ -2529,7 +2554,24 @@ def run_pilot_runtime_loop(
             elif transition == "up" and active_recording:
                 active_recording = False
                 try:
-                    audio_meta = recorder.stop_to_wav(output_path=temp_audio_path)
+                    fallback_capture_error: str | None = None
+                    try:
+                        audio_meta = recorder.stop_to_wav(output_path=temp_audio_path)
+                    except Exception as exc:
+                        fallback_capture_error = str(exc)
+                        if "No audio frames were captured during push-to-talk." not in fallback_capture_error:
+                            raise
+                        audio_meta = _write_silence_fallback_audio(
+                            output_path=temp_audio_path,
+                            sample_rate=sample_rate,
+                            capture_error=fallback_capture_error,
+                            input_device_index=(
+                                int(getattr(recorder, "_input_device_index", input_device_index))
+                                if getattr(recorder, "_input_device_index", None) is not None
+                                else input_device_index
+                            ),
+                            input_device_name=getattr(recorder, "_input_device_name", None),
+                        )
                     status_handle.transition(state="thinking", last_error=None)
                     turn_result = run_pilot_turn(
                         runtime_run_dir=runtime_run_dir,
@@ -2585,10 +2627,18 @@ def run_pilot_runtime_loop(
                         state="idle",
                         degraded_services=sorted(
                             dict.fromkeys(
-                                [*(status_handle.degraded_services or []), *turn_payload.get("degraded_services", [])]
+                                [
+                                    *(status_handle.degraded_services or []),
+                                    *turn_payload.get("degraded_services", []),
+                                    *(
+                                        ["voice_runtime_service"]
+                                        if fallback_capture_error is not None and fallback_capture_error.strip()
+                                        else []
+                                    ),
+                                ]
                             )
                         ),
-                        last_error=turn_payload.get("error"),
+                        last_error=turn_payload.get("error") or fallback_capture_error,
                         last_turn_payload=turn_payload,
                         last_return_event=(
                             return_event

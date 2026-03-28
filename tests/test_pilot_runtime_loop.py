@@ -230,6 +230,26 @@ def test_prepare_asr_audio_input_boosts_quiet_waveform(tmp_path: Path) -> None:
     assert prepared["asr_preprocess"]["gain_applied"] > 1.0
 
 
+def test_write_silence_fallback_audio_creates_short_wav(tmp_path: Path) -> None:
+    audio_path = tmp_path / "silence.wav"
+
+    payload = pilot_runtime._write_silence_fallback_audio(
+        output_path=audio_path,
+        sample_rate=16000,
+        duration_sec=0.3,
+        capture_error="No audio frames were captured during push-to-talk.",
+        input_device_index=1,
+        input_device_name="Mic Array",
+    )
+
+    assert audio_path.is_file()
+    assert payload["mode"] == "push_to_talk_silence_fallback"
+    assert payload["input_device_index"] == 1
+    assert payload["input_device_name"] == "Mic Array"
+    assert payload["sample_rate"] == 16000
+    assert payload["num_samples"] >= int(16000 * 0.2)
+
+
 def test_run_pilot_turn_uses_hotkey_down_prefetched_capture(tmp_path: Path) -> None:
     runtime_run_dir = tmp_path / "pilot-runtime"
     runtime_run_dir.mkdir(parents=True, exist_ok=True)
@@ -1374,6 +1394,106 @@ def test_run_pilot_runtime_loop_marks_error_turn_as_degraded(
     degraded_call = next(call for call in transition_calls if call["status"] == "degraded")
     assert degraded_call["last_error"] == "turn failed"
     assert "gateway" in degraded_call["degraded_services"]
+
+
+def test_run_pilot_runtime_loop_uses_silence_fallback_when_no_audio_frames(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    captured_audio_meta: dict[str, Any] = {}
+
+    def _fake_build_provider(**kwargs: Any) -> Any:
+        if kwargs.get("provider_kind") == "vlm":
+            return DeterministicStubVLM()
+        return DeterministicGroundedReplyStub()
+
+    class _FakeStatusHandle:
+        def __init__(self, **kwargs: Any) -> None:
+            self.state = "idle"
+            self.status = "running"
+            self.degraded_services = list(kwargs.get("degraded_services", []))
+            self.last_error = None
+
+        def publish(self) -> None:
+            return None
+
+        def transition(self, **kwargs: Any) -> None:
+            self.state = str(kwargs.get("state", self.state))
+            self.status = str(kwargs.get("status", self.status))
+            self.degraded_services = list(kwargs.get("degraded_services", self.degraded_services))
+            self.last_error = kwargs.get("last_error", self.last_error)
+
+    class _FakeHotkey:
+        def __init__(self, hotkey: str) -> None:
+            _ = hotkey
+            self._events = iter(["down", "up", KeyboardInterrupt()])
+
+        def poll_transition(self) -> str | None:
+            event = next(self._events)
+            if isinstance(event, BaseException):
+                raise event
+            return event
+
+    class _FakeRecorder:
+        def __init__(self, sample_rate: int, preferred_input_device_index: int | None) -> None:
+            _ = sample_rate, preferred_input_device_index
+            self._input_device_index = 1
+            self._input_device_name = "Mic Array"
+
+        def start(self) -> None:
+            return None
+
+        def stop_to_wav(self, output_path: Path) -> dict[str, Any]:
+            _ = output_path
+            raise RuntimeError("No audio frames were captured during push-to-talk.")
+
+        def discard(self) -> None:
+            return None
+
+    def _fake_run_pilot_turn(**kwargs: Any) -> dict[str, Any]:
+        runtime_run_dir = kwargs["runtime_run_dir"]
+        captured_audio_meta.update(dict(kwargs["audio_input_meta"]))
+        turn_dir = runtime_run_dir / "turns" / "20260323_220001-pilot-turn"
+        turn_dir.mkdir(parents=True, exist_ok=True)
+        turn_json_path = turn_dir / "pilot_turn.json"
+        turn_json_path.write_text("{}", encoding="utf-8")
+        return {
+            "turn_payload": {
+                "turn_id": turn_dir.name,
+                "status": "ok",
+                "error": None,
+                "degraded_services": [],
+                "paths": {"turn_json": str(turn_json_path)},
+            }
+        }
+
+    monkeypatch.setattr(pilot_runtime, "_build_provider", _fake_build_provider)
+    monkeypatch.setattr(pilot_runtime, "PilotRuntimeStatusHandle", _FakeStatusHandle)
+    monkeypatch.setattr(pilot_runtime, "PollingHotkey", _FakeHotkey)
+    monkeypatch.setattr(pilot_runtime, "PushToTalkRecorder", _FakeRecorder)
+    monkeypatch.setattr(pilot_runtime, "run_pilot_turn", _fake_run_pilot_turn)
+
+    result = pilot_runtime.run_pilot_runtime_loop(
+        runs_dir=tmp_path / "pilot-runtime",
+        gateway_url="http://127.0.0.1:8770",
+        voice_runtime_url="http://127.0.0.1:8765",
+        tts_runtime_url="http://127.0.0.1:8780",
+        hotkey="F8",
+        capture_monitor=None,
+        capture_region=None,
+        hud_hook_json=None,
+        tesseract_bin="tesseract",
+        pilot_vlm_model_dir=tmp_path / "models" / "vlm",
+        pilot_text_model_dir=tmp_path / "models" / "text",
+        pilot_vlm_device="CPU",
+        pilot_text_device="CPU",
+        playback_enabled=False,
+        now=datetime(2026, 3, 23, 22, 0, 0, tzinfo=timezone.utc),
+    )
+
+    assert result["ok"] is True
+    assert captured_audio_meta["mode"] == "push_to_talk_silence_fallback"
+    assert "capture_error" in captured_audio_meta
+    assert Path(captured_audio_meta["audio_path"]).is_file()
 
 
 def test_run_pilot_runtime_loop_records_openvino_warmup_rollup(
