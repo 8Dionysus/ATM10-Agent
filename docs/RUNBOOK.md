@@ -1447,18 +1447,8 @@ Operator usage:
 
 ## M8.0: Streamlit IA spec (decision-complete, no implementation)
 
-At step `M8.0` we fix the IA specification without adding Streamlit runtime code.
-
-Source of truth:
-
-* `docs/STREAMLIT_IA_V0.md`
-
-Expected result:
-
-* The document contains 4 UI zones (`Stack Health`, `Run Explorer`, `Latest Metrics`, `Safe Actions`).
-* Canonical data sources (CI smoke summaries) and field mapping are fixed.
-* Safe action guardrails and handoff contract for `M8.1` have been fixed.
-* The dock is protected by the `tests/test_streamlit_ia_doc.py` regression test.
+The design-spec source of truth for `M8.0` is `docs/STREAMLIT_IA_V0.md`.
+This RUNBOOK keeps only active runnable surfaces; use the IA doc for the 4-zone spec, field mapping, safe-action guardrails, and `M8.1` handoff contract.
 
 ## M8.1: Streamlit operator panel v0 + no-crash smoke
 
@@ -1789,59 +1779,14 @@ Active stack:
 * `Qwen3-Reranker-0.6B`
 * `Whisper v3 Turbo (OpenVINO GenAI runtime path for ASR)`
 
-Deactivated:
-
-* `Qwen3-TTS-12Hz-0.6B-CustomVoice` (archived; do not use in production runbook).
-* `Qwen3-ASR-0.6B` (archived; reversible via explicit opt-in flags).
-* `Qwen3-VL-4B-Instruct` custom OpenVINO export (archived for the active pilot path; current OpenVINO GenAI VLM runtime does not accept the `qwen3_vl` model type used by that export).
-
-Detailed matrix: `docs/QWEN3_MODEL_STACK.md`.
+Detailed host-profile and model-stack reference: `docs/QWEN3_MODEL_STACK.md`.
+Archived and recoverable voice/model commands: `docs/ARCHIVED_TRACKS.md`.
 
 Pilot runtime defaults:
 
 * Vision: `models\qwen2.5-vl-7b-instruct-int4-ov` on `GPU`
 * Grounded reply: `models\qwen3-8b-int4-cw-ov` on `GPU`
 * ASR: `models\whisper-large-v3-turbo-ov` on `NPU`
-
-### Qwen3-ASR self-conversion (archived reference, keep for future restore)
-
-```powershell
-# Dry-run
-python scripts/export_qwen3_openvino.py --preset qwen3-asr-0.6b
-
-# Real export
-python scripts/export_qwen3_openvino.py --preset qwen3-asr-0.6b --execute
-
-# Dry-run custom exporter
-python -m scripts.export_qwen3_custom_openvino --preset qwen3-asr-0.6b
-
-# Real custom export
-python -m scripts.export_qwen3_custom_openvino --preset qwen3-asr-0.6b --execute
-```
-
-Note: `--execute` requires installed export toolchain (`transformers`, `optimum`, `optimum-intel`);
-in a runtime-only environment, dry-run may return `support_probe.status=import_error`.
-
-### Voice support probe + matrix
-
-```powershell
-# Probe current env
-python scripts/probe_qwen3_voice_support.py
-
-# Matrix dry-run / execute
-python scripts/qwen3_voice_probe_matrix.py
-python scripts/qwen3_voice_probe_matrix.py --execute
-```
-
-Expected result:
-
-* `runs/<timestamp>-qwen3-voice-probe/` is created.
-* We check `qwen3_asr` only for upstream-monitoring archived path.
-
-### Isolated upstream experiment
-
-`qwen3-tts` experimental `.venv-exp` environment has been removed from the active path.
-If you need to check the upstream again, create a new isolated environment manually.
 
 ### Model cache cleanup (disk pressure)
 
@@ -1943,22 +1888,7 @@ python -m pip install -r requirements.txt
 ```
 
 Note: `qwen-tts` and `qwen-asr` are removed from the active stack.
-Rollback to archived `qwen-asr` is only allowed temporarily and with explicit opt-in flags.
-
-### ASR demo (archived qwen3-asr path)
-
-```powershell
-# File -> text
-python scripts/asr_demo.py --allow-archived-qwen-asr --audio-in "<path-to-sample.wav>"
-
-# Microphone -> text (5s)
-python scripts/asr_demo.py --allow-archived-qwen-asr --record-seconds 5
-```
-
-Expected result:
-
-* `runs/<timestamp>-asr-demo/` is created.
-* Inside there are `run.json` and `transcription.json`.
+Archived `qwen-asr` recovery and benchmark commands live in `docs/ARCHIVED_TRACKS.md`.
 
 ### ASR demo (OpenVINO GenAI + Whisper v3 Turbo, NPU path)
 
@@ -2049,12 +1979,6 @@ python scripts/voice_runtime_client.py --service-url http://127.0.0.1:8765 asr -
 Note: `--asr-warmup-request` makes one ASR inference at the start (by default on the generated silence WAV, or through `--asr-warmup-audio`) and reduces the cold-start impact in the game loop.
 While warmup is running, `/health` may be temporarily unavailable; this is normal for the startup phase.
 
-### Optional rollback: archived qwen_asr service profile
-
-```powershell
-python scripts/voice_runtime_service.py --host 127.0.0.1 --port 8765 --asr-backend qwen_asr --allow-archived-qwen-asr --asr-model Qwen/Qwen3-ASR-0.6B
-```
-
 ### ASR backend benchmark (active default = `whisper_genai`)
 
 ```powershell
@@ -2070,13 +1994,6 @@ python scripts/benchmark_asr_backends.py `
   --whisper-model-dir models\whisper-large-v3-turbo-ov `
   --whisper-device NPU
 
-# Optional archived backend compare
-python scripts/benchmark_asr_backends.py `
-  --inputs runs\20260222_151611-voice-client\input_recorded.wav `
-  --backends whisper_genai `
-  --include-archived-qwen-asr `
-  --whisper-model-dir models\whisper-large-v3-turbo-ov `
-  --whisper-device NPU
 ```
 
 Expected result:
@@ -2205,10 +2122,7 @@ Streaming behavior:
 * `/tts` remains non-streaming and uses the same request/response contract.
 * Internal 500 responses are always sanitized; details are written locally in `runs/<timestamp>-tts-service/service_errors.jsonl`.
 
-### Voice latency benchmark (historical)
-
-Historical artifacts of `Qwen3-TTS` are left for reference in `runs/*qwen3-tts*`.
-For production game-loop this path is deactivated.
+Archived and historical `Qwen3-TTS` references live in `docs/ARCHIVED_TRACKS.md`.
 
 ## M1: Phase A smoke
 

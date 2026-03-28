@@ -87,3 +87,41 @@ def test_public_automation_rollout_records_are_documented() -> None:
 
     assert "## M6.19 rollout records" in runbook_text
     assert "public intent -> plan -> dry-run chain" in runbook_text
+
+
+def test_public_surface_cleanup_boundaries_are_enforced() -> None:
+    readme_text = Path("README.md").read_text(encoding="utf-8")
+    runbook_text = Path("docs/RUNBOOK.md").read_text(encoding="utf-8")
+    archived_text = Path("docs/ARCHIVED_TRACKS.md").read_text(encoding="utf-8")
+    source_of_truth_text = Path("docs/SOURCE_OF_TRUTH.md").read_text(encoding="utf-8")
+    gitignore_text = Path(".gitignore").read_text(encoding="utf-8")
+
+    assert not Path("docs/reviews/2026-03-21-publication-surface").exists()
+    assert ".codex/config.toml" in gitignore_text
+
+    for heading in (
+        "## Quickstart",
+        "## Common launch paths",
+        "## Dependency profiles",
+        "## Repo map",
+    ):
+        assert heading not in readme_text
+
+    for removed_section in (
+        "### Qwen3-ASR self-conversion (archived reference, keep for future restore)",
+        "### Voice support probe + matrix",
+        "### ASR demo (archived qwen3-asr path)",
+        "### Optional rollback: archived qwen_asr service profile",
+        "### Voice latency benchmark (historical)",
+    ):
+        assert removed_section not in runbook_text
+
+    assert "archived, recoverable, and historical command references" in archived_text
+    assert "python scripts/export_qwen3_openvino.py --preset qwen3-asr-0.6b" in archived_text
+    assert "python scripts/asr_demo.py --allow-archived-qwen-asr --audio-in" in archived_text
+    assert "python scripts/probe_qwen3_voice_support.py" in archived_text
+    assert "runs/*qwen3-tts*" in archived_text
+
+    assert "Link-first and non-operational." in source_of_truth_text
+    assert "Active runnable commands and operational paths only." in source_of_truth_text
+    assert "review snapshots, and proposed-doc drafts" in source_of_truth_text

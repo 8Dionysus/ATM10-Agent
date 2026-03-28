@@ -15,6 +15,7 @@ docs/RELEASE_WAVE6_PR_BODY.md
 docs/RELEASE_WAVE6_PR_COMMENT.md
 .codex/logs/
 .codex/.codex/logs/
+.codex/config.toml
 __pycache__/
 .venv/
 *.pyc
