@@ -394,30 +394,30 @@ Canonical local operator launch path:
 ```powershell
 cd <repo-root>
 .\.venv\Scripts\Activate.ps1
-python scripts/start_operator_product.py --runs-dir runs
+python scripts/start_operator_product.py --runs-dir runs --host-profile ov_intel_core_ultra_local
 ```
 
 Optional runtime health wiring through the gateway operator snapshot:
 
 ```powershell
-python scripts/start_operator_product.py --runs-dir runs --voice-runtime-url http://127.0.0.1:8765 --tts-runtime-url http://127.0.0.1:8780 --qdrant-url http://127.0.0.1:6333 --neo4j-url http://127.0.0.1:7474 --neo4j-database neo4j --neo4j-user neo4j
+python scripts/start_operator_product.py --runs-dir runs --host-profile ov_intel_core_ultra_local --voice-runtime-url http://127.0.0.1:8765 --tts-runtime-url http://127.0.0.1:8780 --qdrant-url http://127.0.0.1:6333 --neo4j-url http://127.0.0.1:7474 --neo4j-database neo4j --neo4j-user neo4j
 ```
 
 Optional managed local runtimes (launcher starts `voice_runtime_service` / `tts_runtime_service` / `pilot_runtime` itself):
 
 ```powershell
-python scripts/start_operator_product.py --runs-dir runs --start-voice-runtime --start-tts-runtime
-python scripts/start_operator_product.py --runs-dir runs --start-voice-runtime --start-tts-runtime --start-pilot-runtime --capture-monitor 0
-python scripts/start_operator_product.py --runs-dir runs --start-voice-runtime --start-tts-runtime --start-pilot-runtime --capture-region 0,0,1920,1080
-python scripts/start_operator_product.py --runs-dir runs --start-voice-runtime --start-tts-runtime --tts-piper-executable <path-to-piper.exe> --tts-piper-model-path <path-to-piper-model.onnx> --tts-piper-speaker 0 --start-pilot-runtime --capture-monitor 0
-python scripts/start_operator_product.py --runs-dir runs --start-voice-runtime --start-tts-runtime --start-pilot-runtime --capture-monitor 0 --pilot-hud-hook-json <path-to-hud-hook.json> --pilot-tesseract-bin <path-to-tesseract.exe>
-python scripts/start_operator_product.py --runs-dir runs --start-voice-runtime --start-tts-runtime --start-pilot-runtime --capture-monitor 0
+python scripts/start_operator_product.py --runs-dir runs --host-profile ov_intel_core_ultra_local --start-voice-runtime --start-tts-runtime
+python scripts/start_operator_product.py --runs-dir runs --host-profile ov_intel_core_ultra_local --start-voice-runtime --start-tts-runtime --start-pilot-runtime --capture-monitor 0
+python scripts/start_operator_product.py --runs-dir runs --host-profile ov_intel_core_ultra_local --start-voice-runtime --start-tts-runtime --start-pilot-runtime --capture-region 0,0,1920,1080
+python scripts/start_operator_product.py --runs-dir runs --host-profile ov_intel_core_ultra_local --start-voice-runtime --start-tts-runtime --tts-piper-executable <path-to-piper.exe> --tts-piper-model-path <path-to-piper-model.onnx> --tts-piper-speaker 0 --start-pilot-runtime --capture-monitor 0
+python scripts/start_operator_product.py --runs-dir runs --host-profile ov_intel_core_ultra_local --start-voice-runtime --start-tts-runtime --start-pilot-runtime --capture-monitor 0 --pilot-hud-hook-json <path-to-hud-hook.json> --pilot-tesseract-bin <path-to-tesseract.exe>
+python scripts/start_operator_product.py --runs-dir runs --host-profile ov_intel_core_ultra_local --start-voice-runtime --start-tts-runtime --start-pilot-runtime --capture-monitor 0
 # optional explicit microphone override
-python scripts/start_operator_product.py --runs-dir runs --start-voice-runtime --start-tts-runtime --start-pilot-runtime --capture-monitor 0 --pilot-input-device-index 1
+python scripts/start_operator_product.py --runs-dir runs --host-profile ov_intel_core_ultra_local --start-voice-runtime --start-tts-runtime --start-pilot-runtime --capture-monitor 0 --pilot-input-device-index 1
 # explicit audible fallback / debug launch without Piper
-python scripts/start_operator_product.py --runs-dir runs --start-voice-runtime --start-tts-runtime --start-pilot-runtime --capture-monitor 0
+python scripts/start_operator_product.py --runs-dir runs --host-profile ov_intel_core_ultra_local --start-voice-runtime --start-tts-runtime --start-pilot-runtime --capture-monitor 0
 # debugging-only provider override
-python scripts/start_operator_product.py --runs-dir runs --start-pilot-runtime --capture-monitor 0 --pilot-vlm-provider stub --pilot-text-provider stub
+python scripts/start_operator_product.py --runs-dir runs --host-profile ov_intel_core_ultra_local --start-pilot-runtime --capture-monitor 0 --pilot-vlm-provider stub --pilot-text-provider stub
 ```
 
 Expected result:
@@ -440,6 +440,7 @@ Notes:
 
 * This is the primary operator product startup path.
 * Manual per-service commands remain valid for recovery or focused debugging.
+* `--host-profile` is the explicit machine/runtime selector for launcher and pilot defaults. `ov_intel_core_ultra_local` is the current validated repo-host baseline.
 * The pilot runtime is local-only and does not open a new HTTP port.
 * Live pilot grounding requires either `--capture-monitor <index>` or `--capture-region x,y,w,h`.
 * Normal live pilot startup should use the default `OpenVINO` providers; do not pass `--pilot-vlm-provider stub --pilot-text-provider stub` unless you are explicitly debugging provider startup.
@@ -449,7 +450,7 @@ Notes:
 * The canonical managed live profile currently pins push-to-talk capture to `--pilot-input-device-index 1`; override it only if the Windows default resolves to the wrong source on your machine.
 * `--pilot-vlm-provider stub --pilot-text-provider stub` remains available as a deterministic diagnostics-only override when you want to validate the observer loop without waiting on local OpenVINO model load.
 * Current pilot defaults: `models\qwen2.5-vl-7b-instruct-int4-ov` on `GPU` for vision, `models\qwen3-8b-int4-cw-ov` on `GPU` for grounded reply, one-sentence player-facing replies, Russian-by-default answer language policy, and opportunistic hybrid fast-fail when grounding is unavailable or too slow.
-* Operator snapshot and Streamlit `Pilot runtime` surfaces show active `vlm_provider`, `text_provider`, `asr_language`, `asr_max_new_tokens`, provider warmup rollups, `preferred_tts_engine`, `active_tts_engine_last_turn`, `piper_available`, `piper_prewarm_ok`, `tts_degraded_reason`, plus last-turn `vision_provider`, `grounded_reply_provider`, `tts_engine`, `answer_language`, `transcript_quality`, and `reply_mode`.
+* Operator snapshot and Streamlit `Pilot runtime` surfaces show active `host_profile`, `vlm_provider`, `text_provider`, `asr_language`, `asr_max_new_tokens`, provider warmup rollups, `preferred_tts_engine`, `active_tts_engine_last_turn`, `piper_available`, `piper_prewarm_ok`, `tts_degraded_reason`, plus last-turn `vision_provider`, `grounded_reply_provider`, `tts_engine`, `answer_language`, `transcript_quality`, and `reply_mode`.
 * Operator snapshot and Streamlit `Stack Health` surfaces additively publish `operator_context.returning` / `Return / Recovery` when explicit recovery evidence exists.
 
 ## M8.pilot: Observer pilot runtime
@@ -467,9 +468,9 @@ Standalone local runtime loop:
 ```powershell
 cd <repo-root>
 .\.venv\Scripts\Activate.ps1
-python scripts/pilot_runtime_loop.py --runs-dir runs\pilot-runtime --gateway-url http://127.0.0.1:8770 --voice-runtime-url http://127.0.0.1:8765 --tts-runtime-url http://127.0.0.1:8780 --capture-monitor 0
-python scripts/pilot_runtime_loop.py --runs-dir runs\pilot-runtime --gateway-url http://127.0.0.1:8770 --voice-runtime-url http://127.0.0.1:8765 --tts-runtime-url http://127.0.0.1:8780 --capture-monitor 0 --hud-hook-json <path-to-hud-hook.json> --tesseract-bin <path-to-tesseract.exe>
-python scripts/pilot_runtime_loop.py --runs-dir runs\pilot-runtime --gateway-url http://127.0.0.1:8770 --voice-runtime-url http://127.0.0.1:8765 --tts-runtime-url http://127.0.0.1:8780 --capture-monitor 0 --asr-language ru --asr-max-new-tokens 64 --asr-warmup-request --pilot-vlm-max-new-tokens 64 --pilot-text-max-new-tokens 64 --pilot-hybrid-timeout-sec 1.0
+python scripts/pilot_runtime_loop.py --runs-dir runs\pilot-runtime --host-profile ov_intel_core_ultra_local --gateway-url http://127.0.0.1:8770 --voice-runtime-url http://127.0.0.1:8765 --tts-runtime-url http://127.0.0.1:8780 --capture-monitor 0
+python scripts/pilot_runtime_loop.py --runs-dir runs\pilot-runtime --host-profile ov_intel_core_ultra_local --gateway-url http://127.0.0.1:8770 --voice-runtime-url http://127.0.0.1:8765 --tts-runtime-url http://127.0.0.1:8780 --capture-monitor 0 --hud-hook-json <path-to-hud-hook.json> --tesseract-bin <path-to-tesseract.exe>
+python scripts/pilot_runtime_loop.py --runs-dir runs\pilot-runtime --host-profile ov_intel_core_ultra_local --gateway-url http://127.0.0.1:8770 --voice-runtime-url http://127.0.0.1:8765 --tts-runtime-url http://127.0.0.1:8780 --capture-monitor 0 --asr-language ru --asr-max-new-tokens 64 --asr-warmup-request --pilot-vlm-max-new-tokens 64 --pilot-text-max-new-tokens 64 --pilot-hybrid-timeout-sec 1.0
 ```
 
 Expected result:
@@ -491,6 +492,41 @@ Expected result:
 * Degraded services and turn errors are carried into both status and turn artifacts; the runtime does not silently fall back to uncited guesses.
 * When `combo_a` retrieval/KAG backends are unavailable, the hybrid stage stays machine-readable with degraded fallback (`retrieval_only_fallback`, `kag_only_fallback`, or `grounding_unavailable`) instead of failing the entire turn transport.
 
+Current live-debug reopen checklist:
+
+* Keep ATM10 in windowed or borderless mode when validating live capture; the earlier invisible fullscreen path was not a reliable capture target.
+* Start from the current Intel baseline: `python scripts/start_operator_product.py --runs-dir runs --host-profile ov_intel_core_ultra_local --start-voice-runtime --start-tts-runtime --start-pilot-runtime --capture-monitor 0`.
+* Complete one live `F8` push-to-talk turn before changing routing or reply policy again.
+* Inspect the latest `turns/<timestamp>-pilot-turn/pilot_turn.json` first: `audio.capture_diagnostics`, `audio.capture_error`, `latency.asr_sec|vision_sec|grounded_reply_sec|tts_sec|total_sec`, `capture.capture_backend|capture.capture_source`, `vision.source`, and `reply_mode`.
+* Current acceptance blockers are unchanged: end-to-end latency is still above target, and some turns still report `No audio frames were captured during push-to-talk.` despite normal operator push-to-talk behavior.
+* Reopen latency or ASR work from recorder/runtime evidence first; do not add new phrase-specific routing shortcuts until the current live artifact evidence is explained.
+
+## M8.preflight: Pilot live stack pre-check
+
+Run this before launching ATM10 when you want to catch broken live stack state early (services, providers, and microphone ASR path):
+
+```powershell
+cd <repo-root>
+.\.venv\Scripts\Activate.ps1
+python scripts/check_pilot_live_preflight.py --runs-dir runs --summary-json runs\pilot-live-preflight\summary.json --summary-md runs\pilot-live-preflight\summary.md --mic-probe-seconds 2.0
+```
+
+Fast infra-only variant (skips microphone capture/ASR probe):
+
+```powershell
+python scripts/check_pilot_live_preflight.py --runs-dir runs --summary-json runs\pilot-live-preflight\summary.json --summary-md runs\pilot-live-preflight\summary.md --skip-mic-probe
+```
+
+Preflight contract (`pilot_live_preflight_v1`):
+
+* `schema_version = pilot_live_preflight_v1`
+* `status = ok`
+* `readiness_status = ready|attention|blocked`
+* `next_step_code`
+* `blocking_reason_codes`, `attention_reason_codes`
+* `checks.pilot_runtime_status|gateway_health|voice_health|tts_health|provider_vlm|provider_text|microphone_probe`
+* `resolved_urls.gateway_url|voice_runtime_url|tts_runtime_url`
+
 ## M8.post: Observer pilot readiness summary
 
 Pilot readiness helper:
@@ -506,7 +542,7 @@ Manual live-acceptance flow:
 ```powershell
 cd <repo-root>
 .\.venv\Scripts\Activate.ps1
-python scripts/start_operator_product.py --runs-dir runs --start-voice-runtime --start-tts-runtime --start-pilot-runtime --capture-monitor 0
+python scripts/start_operator_product.py --runs-dir runs --host-profile ov_intel_core_ultra_local --start-voice-runtime --start-tts-runtime --start-pilot-runtime --capture-monitor 0
 # complete one live F8 push-to-talk turn
 python scripts/check_pilot_runtime_readiness.py --runs-dir runs --summary-json runs\pilot-runtime-readiness\readiness_summary.json --summary-md runs\pilot-runtime-readiness\summary.md
 ```

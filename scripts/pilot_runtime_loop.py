@@ -8,7 +8,9 @@ import re
 import shutil
 import sys
 import time
+import threading
 import wave
+from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from io import BytesIO
@@ -25,13 +27,19 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from src.agent_core.grounded_reply_openvino import (  # noqa: E402
-    DEFAULT_GROUNDED_REPLY_MODEL_DIR,
     DeterministicGroundedReplyStub,
     OpenVINOGroundedReplyClient,
     sanitize_grounded_reply_answer_text,
 )
+from src.agent_core.host_profiles import (  # noqa: E402
+    DEFAULT_HOST_PROFILE_ID,
+    get_host_profile,
+    host_profile_payload,
+    list_host_profile_ids,
+)
 from src.agent_core.atm10_session_probe import (  # noqa: E402
     ATM10_SESSION_PROBE_SCHEMA,
+    find_best_atm10_window,
     probe_atm10_session,
 )
 from src.agent_core.io_voice import (  # noqa: E402
@@ -43,7 +51,7 @@ from src.agent_core.live_hud_state import (  # noqa: E402
     LIVE_HUD_STATE_SCHEMA,
     build_live_hud_state,
 )
-from src.agent_core.vlm_openvino import DEFAULT_OPENVINO_VLM_MODEL_DIR, OpenVINOVLMClient  # noqa: E402
+from src.agent_core.vlm_openvino import OpenVINOVLMClient, sanitize_vlm_summary_text  # noqa: E402
 from src.agent_core.vlm_stub import DeterministicStubVLM  # noqa: E402
 from scripts.operator_return_recovery import (  # noqa: E402
     SAFE_STOP_AFTER_DEFAULT,
@@ -66,21 +74,27 @@ DEFAULT_TTS_RUNTIME_URL = "http://127.0.0.1:8780"
 DEFAULT_PILOT_HOTKEY = "F8"
 DEFAULT_POLL_INTERVAL_SEC = 0.05
 DEFAULT_PILOT_SAMPLE_RATE = 16000
+DEFAULT_HOST_PROFILE = get_host_profile(DEFAULT_HOST_PROFILE_ID)
 DEFAULT_PILOT_VLM_PROMPT = (
     "Return only JSON with keys summary (string) and next_steps (array of short strings). "
+    "Describe only concrete visible scene and UI state from the screenshot. "
+    "Prefer menu state, visible buttons, biome or structures, and readable labels over generic game identification. "
+    "Do not answer only that this is Minecraft or ATM10 unless that text itself is the key visible detail. "
     "Keep summary to one short sentence under 140 characters. "
+    "Default summary language is Russian unless English is explicitly requested. "
     "Leave next_steps empty unless one immediate ATM10 action is obvious."
 )
-DEFAULT_PILOT_VLM_MAX_NEW_TOKENS = 64
-DEFAULT_PILOT_TEXT_MAX_NEW_TOKENS = 64
-DEFAULT_PILOT_VLM_DEVICE = "GPU"
-DEFAULT_PILOT_TEXT_DEVICE = "GPU"
-DEFAULT_PILOT_ASR_LANGUAGE = "ru"
-DEFAULT_PILOT_ASR_MAX_NEW_TOKENS = 64
-DEFAULT_PILOT_GATEWAY_TOPK = 3
-DEFAULT_PILOT_GATEWAY_CANDIDATE_K = 6
-DEFAULT_PILOT_MAX_ENTITIES_PER_DOC = 32
-DEFAULT_PILOT_HYBRID_TIMEOUT_SEC = 1.0
+DEFAULT_PILOT_VLM_MAX_NEW_TOKENS = DEFAULT_HOST_PROFILE.pilot_vlm_max_new_tokens
+DEFAULT_PILOT_TEXT_MAX_NEW_TOKENS = DEFAULT_HOST_PROFILE.pilot_text_max_new_tokens
+DEFAULT_PILOT_VLM_DEVICE = DEFAULT_HOST_PROFILE.pilot_vlm_device
+DEFAULT_PILOT_TEXT_DEVICE = DEFAULT_HOST_PROFILE.pilot_text_device
+DEFAULT_PILOT_VISION_MAX_EDGE = 1280
+DEFAULT_PILOT_ASR_LANGUAGE = DEFAULT_HOST_PROFILE.voice_asr_language
+DEFAULT_PILOT_ASR_MAX_NEW_TOKENS = DEFAULT_HOST_PROFILE.voice_asr_max_new_tokens
+DEFAULT_PILOT_GATEWAY_TOPK = DEFAULT_HOST_PROFILE.pilot_gateway_topk
+DEFAULT_PILOT_GATEWAY_CANDIDATE_K = DEFAULT_HOST_PROFILE.pilot_gateway_candidate_k
+DEFAULT_PILOT_MAX_ENTITIES_PER_DOC = DEFAULT_HOST_PROFILE.pilot_max_entities_per_doc
+DEFAULT_PILOT_HYBRID_TIMEOUT_SEC = DEFAULT_HOST_PROFILE.pilot_hybrid_timeout_sec
 DEFAULT_PILOT_TESSERACT_BIN = "tesseract"
 _OPTIONAL_SERVICE_URL_SENTINELS = {"", "none", "null", "disabled", "off"}
 _MICROPHONE_POSITIVE_HINTS = (
@@ -115,11 +129,111 @@ _LOW_SIGNAL_ASCII_FILLERS = (
 _LOW_SIGNAL_RUSSIAN_FILLERS = (
     "продолжение следует",
 )
+_VISUAL_OBSERVATION_REQUEST_HINTS = (
+    "что ты видишь",
+    "что сейчас видишь",
+    "что видишь сейчас",
+    "что на экране",
+    "что ты видишь на экране",
+    "сейчас что-то видишь",
+    "видишь что-нибудь",
+    "видишь что нибудь",
+    "что-нибудь видишь",
+    "что нибудь видишь",
+    "видно что",
+    "опиши экран",
+    "опиши что видишь",
+    "что видно",
+    "видишь пейзаж",
+    "what do you see",
+    "what do you see on the screen",
+    "what's on the screen",
+    "what is on the screen",
+    "describe the screen",
+    "describe what you see",
+)
+_VISUAL_OBSERVATION_VERB_HINTS = (
+    "видишь",
+    "видно",
+    "на экране",
+    "экран",
+    "what do you see",
+    "see",
+    "screen",
+)
+_VISUAL_OBSERVATION_QUERY_HINTS = (
+    "что",
+    "что-то",
+    "что то",
+    "что-нибудь",
+    "что нибудь",
+    "what",
+    "anything",
+    "something",
+)
+_SHORT_SCREEN_GROUNDED_REQUEST_HINTS = (
+    "на экране",
+    "экран",
+    "сейчас",
+    "тут",
+    "здесь",
+    "меню",
+    "окно",
+    "видишь",
+    "видно",
+    "screen",
+    "menu",
+)
+_SHORT_SCREEN_GROUNDED_QUERY_PREFIXES = (
+    "что",
+    "где",
+    "какой",
+    "какая",
+    "какое",
+    "это",
+    "эта",
+    "этот",
+    "есть",
+    "видишь",
+    "видно",
+    "what",
+    "where",
+    "which",
+    "is",
+)
+_SHORT_SCREEN_GROUNDED_BLOCKER_TOKENS = {
+    "как",
+    "почему",
+    "зачем",
+    "рецепт",
+    "recipe",
+    "craft",
+    "quest",
+    "квест",
+}
+_SHORT_SCREEN_GROUNDED_BLOCKER_PHRASES = (
+    "что делать",
+    "что мне делать",
+    "подскажи как",
+    "где взять",
+    "где найти",
+    "как сделать",
+    "как открыть",
+    "как пройти",
+)
 _LOW_SIGNAL_PEAK_THRESHOLD = 0.01
 _LOW_SIGNAL_RMS_THRESHOLD = 0.003
 _LOW_SIGNAL_NONTRIVIAL_ABS_THRESHOLD = 0.02
 _ASR_NORMALIZATION_TARGET_PEAK = 0.25
 _ASR_NORMALIZATION_MAX_GAIN = 64.0
+_LOW_SIGNAL_MIN_AUDIO_SEC = 0.12
+_PREFETCH_VISION_COMPARE_EDGE = 48
+_PREFETCH_VISION_REUSE_MAX_MEAN_ABS_DIFF = 0.015
+_DXCAM_BACKEND = "dxgi"
+_DXCAM_OUTPUT_COLOR = "BGRA"
+_DXCAM_PROCESSOR_BACKEND = "numpy"
+_DXCAM_CAMERA_CACHE: dict[tuple[int, str], Any] = {}
+_DXCAM_CAMERA_LOCK = threading.Lock()
 
 
 def _utc_now() -> str:
@@ -135,6 +249,19 @@ def _append_jsonl(path: Path, payload: Mapping[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("a", encoding="utf-8") as handle:
         handle.write(json.dumps(payload, ensure_ascii=False) + "\n")
+
+
+def _normalize_host_profile_payload(host_profile: Mapping[str, Any] | None) -> dict[str, Any] | None:
+    if not isinstance(host_profile, Mapping):
+        return None
+    return dict(host_profile)
+
+
+def _resolve_runtime_host_profile_payload(host_profile: Mapping[str, Any] | None) -> dict[str, Any]:
+    normalized = _normalize_host_profile_payload(host_profile)
+    if normalized is not None:
+        return normalized
+    return host_profile_payload(DEFAULT_HOST_PROFILE_ID)
 
 
 def _load_json_object(path: Path) -> tuple[dict[str, Any] | None, str | None]:
@@ -212,13 +339,35 @@ def capture_target_kind(
 ) -> str:
     if isinstance(capture_payload, Mapping):
         capture_mode = str(capture_payload.get("capture_mode", "")).strip().lower()
-        if capture_mode in {"monitor", "region", "desktop"}:
+        if capture_mode in {"monitor", "region", "desktop", "window"}:
             return capture_mode
     if capture_region is not None:
         return "region"
     if capture_monitor is not None:
         return "monitor"
     return "desktop"
+
+
+def _normalize_window_bounds(
+    window_bounds: Mapping[str, Any] | Sequence[int] | None,
+) -> list[int] | None:
+    if isinstance(window_bounds, Mapping):
+        try:
+            left = int(window_bounds.get("left"))
+            top = int(window_bounds.get("top"))
+            right = int(window_bounds.get("right"))
+            bottom = int(window_bounds.get("bottom"))
+        except Exception:
+            return None
+        return [left, top, right, bottom]
+    if isinstance(window_bounds, Sequence) and not isinstance(window_bounds, (str, bytes, bytearray)):
+        if len(window_bounds) != 4:
+            return None
+        try:
+            return [int(item) for item in window_bounds]
+        except Exception:
+            return None
+    return None
 
 
 def normalize_pilot_hotkey(raw_value: str) -> str:
@@ -370,8 +519,49 @@ def _infer_reply_language(*, transcript: str, transcript_language: str | None = 
     return "ru"
 
 
+def _build_pilot_vlm_prompt(*, preferred_language: str | None) -> str:
+    normalized_language = str(preferred_language or "").strip().lower()
+    if normalized_language.startswith("en"):
+        language_instruction = "Write summary in English."
+    else:
+        language_instruction = "Write summary in Russian."
+    return f"{DEFAULT_PILOT_VLM_PROMPT} {language_instruction}"
+
+
 def _normalize_text_whitespace(text: str) -> str:
     return " ".join(str(text or "").replace("\r", " ").replace("\n", " ").split())
+
+
+def _looks_like_visual_observation_request(transcript: str) -> bool:
+    normalized = _normalize_text_whitespace(transcript).lower()
+    if not normalized:
+        return False
+    if any(hint in normalized for hint in _VISUAL_OBSERVATION_REQUEST_HINTS):
+        return True
+    simplified = normalized.replace("-", " ")
+    has_visual_marker = any(hint in simplified for hint in _VISUAL_OBSERVATION_VERB_HINTS)
+    has_query_marker = any(hint in simplified for hint in _VISUAL_OBSERVATION_QUERY_HINTS)
+    return has_visual_marker and has_query_marker
+
+
+def _looks_like_short_screen_grounded_request(transcript: str) -> bool:
+    normalized = _normalize_text_whitespace(transcript).lower()
+    if not normalized or _looks_like_visual_observation_request(normalized):
+        return False
+    simplified = normalized.replace("-", " ")
+    tokens = re.findall(r"[0-9A-Za-zА-Яа-яЁё]+", simplified)
+    if not tokens or len(tokens) > 8 or len(simplified) > 72:
+        return False
+    lowered_tokens = {token.lower() for token in tokens}
+    if lowered_tokens & _SHORT_SCREEN_GROUNDED_BLOCKER_TOKENS:
+        return False
+    if any(phrase in simplified for phrase in _SHORT_SCREEN_GROUNDED_BLOCKER_PHRASES):
+        return False
+    if not any(hint in simplified for hint in _SHORT_SCREEN_GROUNDED_REQUEST_HINTS):
+        return False
+    return "?" in transcript or len(tokens) <= 4 or any(
+        simplified.startswith(prefix) for prefix in _SHORT_SCREEN_GROUNDED_QUERY_PREFIXES
+    )
 
 
 def _load_wav_path_mono(path: Path) -> tuple[np.ndarray, int]:
@@ -463,6 +653,248 @@ def _prepare_asr_audio_input(
     }
 
 
+def _run_asr_stage(
+    *,
+    voice_runtime_url: str | None,
+    asr_audio_path: Path,
+    expected_asr_language: str | None,
+    service_token: str | None,
+    asr_func: Callable[..., dict[str, Any]],
+) -> dict[str, Any]:
+    stage_started = perf_counter()
+    transcript = ""
+    language = ""
+    error: str | None = None
+    degraded_flags: list[str] = []
+    if voice_runtime_url is None:
+        error = "voice runtime URL is not configured"
+        degraded_flags.append("voice_runtime_unconfigured")
+    else:
+        try:
+            asr_payload = asr_func(
+                voice_runtime_url=voice_runtime_url,
+                audio_path=asr_audio_path,
+                language=expected_asr_language,
+                service_token=service_token,
+            )
+            transcript = str(asr_payload.get("text", "")).strip()
+            language = str(asr_payload.get("language", "")).strip()
+        except Exception as exc:
+            error = str(exc)
+            degraded_flags.append("asr_failed")
+    return {
+        "transcript": transcript,
+        "language": language,
+        "error": error,
+        "degraded_flags": degraded_flags,
+        "latency_sec": round(perf_counter() - stage_started, 6),
+    }
+
+
+def _run_vision_stage(
+    *,
+    screenshot_path: Path,
+    capture_payload: Mapping[str, Any] | None,
+    vision_input_path: Path,
+    preferred_language: str | None,
+    vlm_client: Any,
+) -> dict[str, Any]:
+    stage_started = perf_counter()
+    input_image_payload: dict[str, Any] | None = None
+    visual_summary = ""
+    vision_payload: dict[str, Any] | None = None
+    error: str | None = None
+    degraded_flags: list[str] = []
+    vision_image_path = screenshot_path
+
+    if capture_payload is not None and vlm_client is not None:
+        try:
+            input_image_payload = prepare_vision_input_image(
+                source_path=screenshot_path,
+                output_path=vision_input_path,
+            )
+            vision_image_path = Path(str(input_image_payload.get("image_path", screenshot_path)))
+        except Exception as exc:
+            input_image_payload = {
+                "image_path": str(screenshot_path),
+                "source_path": str(screenshot_path),
+                "width": capture_payload.get("width"),
+                "height": capture_payload.get("height"),
+                "raw_width": capture_payload.get("raw_width", capture_payload.get("width")),
+                "raw_height": capture_payload.get("raw_height", capture_payload.get("height")),
+                "resized_from": None,
+                "max_edge": DEFAULT_PILOT_VISION_MAX_EDGE,
+                "error": str(exc),
+            }
+        try:
+            vision_payload = vlm_client.analyze_image(
+                image_path=vision_image_path,
+                prompt=_build_pilot_vlm_prompt(preferred_language=preferred_language),
+            )
+            visual_summary = sanitize_vlm_summary_text(str(vision_payload.get("summary", "")))
+            vision_payload["summary"] = visual_summary
+        except Exception as exc:
+            error = str(exc)
+            degraded_flags.append("vlm_failed")
+    elif capture_payload is not None:
+        error = "local vision provider is unavailable"
+        degraded_flags.append("vision_unavailable")
+
+    return {
+        "input_image": input_image_payload,
+        "vision_payload": vision_payload,
+        "visual_summary": visual_summary,
+        "error": error,
+        "degraded_flags": degraded_flags,
+        "latency_sec": round(perf_counter() - stage_started, 6),
+        "source": "live_capture_v1",
+    }
+
+
+def _compare_capture_frames(
+    *,
+    reference_path: Path,
+    candidate_path: Path,
+    compare_edge: int = _PREFETCH_VISION_COMPARE_EDGE,
+    max_mean_abs_diff: float = _PREFETCH_VISION_REUSE_MAX_MEAN_ABS_DIFF,
+) -> dict[str, Any]:
+    if reference_path.read_bytes() == candidate_path.read_bytes():
+        return {
+            "status": "ok",
+            "mode": "byte_identical",
+            "compare_edge": 0,
+            "mean_abs_diff": 0.0,
+            "max_mean_abs_diff": float(max_mean_abs_diff),
+            "reusable": True,
+        }
+    try:
+        from PIL import Image
+    except Exception as exc:  # pragma: no cover - dependency presence
+        raise RuntimeError("Pillow is required to compare prefetched capture frames.") from exc
+
+    safe_edge = max(8, int(compare_edge))
+    with Image.open(reference_path) as ref_image:
+        ref_array = np.asarray(
+            ref_image.convert("L").resize((safe_edge, safe_edge), getattr(Image, "Resampling", Image).BILINEAR),
+            dtype=np.float32,
+        )
+    with Image.open(candidate_path) as candidate_image:
+        candidate_array = np.asarray(
+            candidate_image.convert("L").resize((safe_edge, safe_edge), getattr(Image, "Resampling", Image).BILINEAR),
+            dtype=np.float32,
+        )
+    mean_abs_diff = float(np.mean(np.abs(ref_array - candidate_array)) / 255.0)
+    return {
+        "status": "ok",
+        "mode": "grayscale_mean_abs_diff",
+        "compare_edge": safe_edge,
+        "mean_abs_diff": round(mean_abs_diff, 6),
+        "max_mean_abs_diff": float(max_mean_abs_diff),
+        "reusable": mean_abs_diff <= float(max_mean_abs_diff),
+    }
+
+
+def _resolve_prefetched_vision_result(
+    *,
+    prefetched_future: Future[dict[str, Any]],
+    screenshot_path: Path,
+    capture_payload: Mapping[str, Any] | None,
+    vision_input_path: Path,
+    preferred_language: str | None,
+    vlm_client: Any,
+) -> dict[str, Any]:
+    stage_started = perf_counter()
+
+    def _fallback_live(prefetch_error: str) -> dict[str, Any]:
+        live_result = _run_vision_stage(
+            screenshot_path=screenshot_path,
+            capture_payload=capture_payload,
+            vision_input_path=vision_input_path,
+            preferred_language=preferred_language,
+            vlm_client=vlm_client,
+        )
+        live_result["degraded_flags"] = list(
+            sorted(dict.fromkeys([*live_result.get("degraded_flags", []), "prefetched_vision_failed"]))
+        )
+        live_result["prefetch_error"] = prefetch_error
+        return live_result
+
+    try:
+        prefetched_result = prefetched_future.result()
+    except Exception as exc:
+        return _fallback_live(str(exc))
+
+    if not isinstance(prefetched_result, Mapping):
+        return _fallback_live("prefetched vision result is not a mapping")
+
+    capture_mapping = capture_payload if isinstance(capture_payload, Mapping) else {}
+    input_image_payload: dict[str, Any] | None = None
+    if capture_payload is not None:
+        try:
+            input_image_payload = prepare_vision_input_image(
+                source_path=screenshot_path,
+                output_path=vision_input_path,
+            )
+        except Exception as exc:
+            input_image_payload = {
+                "image_path": str(screenshot_path),
+                "source_path": str(screenshot_path),
+                "width": capture_mapping.get("width"),
+                "height": capture_mapping.get("height"),
+                "raw_width": capture_mapping.get("raw_width", capture_mapping.get("width")),
+                "raw_height": capture_mapping.get("raw_height", capture_mapping.get("height")),
+                "resized_from": None,
+                "max_edge": DEFAULT_PILOT_VISION_MAX_EDGE,
+                "error": str(exc),
+            }
+
+    vision_payload = prefetched_result.get("vision_payload")
+    vision_payload = dict(vision_payload) if isinstance(vision_payload, Mapping) else None
+    if isinstance(vision_payload, dict):
+        vision_payload["summary"] = sanitize_vlm_summary_text(str(vision_payload.get("summary", "")))
+        vision_payload["source"] = "prefetched_reuse_v1"
+
+    degraded_flags = [
+        str(item) for item in prefetched_result.get("degraded_flags", []) if str(item).strip()
+    ]
+    return {
+        "input_image": input_image_payload,
+        "vision_payload": vision_payload,
+        "visual_summary": sanitize_vlm_summary_text(str(prefetched_result.get("visual_summary", ""))),
+        "error": None if prefetched_result.get("error") is None else str(prefetched_result.get("error")),
+        "degraded_flags": degraded_flags,
+        "latency_sec": round(perf_counter() - stage_started, 6),
+        "source": "prefetched_reuse_v1",
+    }
+
+
+def _write_silence_fallback_audio(
+    *,
+    output_path: Path,
+    sample_rate: int,
+    duration_sec: float = 0.45,
+    capture_error: str | None = None,
+    input_device_index: int | None = None,
+    input_device_name: str | None = None,
+    capture_diagnostics: Mapping[str, Any] | None = None,
+) -> dict[str, Any]:
+    safe_duration_sec = max(0.2, float(duration_sec))
+    sample_count = max(1, int(float(sample_rate) * safe_duration_sec))
+    waveform = np.zeros(sample_count, dtype=np.float32)
+    write_wav_pcm16(path=output_path, waveform=waveform, sample_rate=sample_rate)
+    return {
+        "mode": "push_to_talk_silence_fallback",
+        "input_device_index": input_device_index,
+        "input_device_name": input_device_name,
+        "sample_rate": int(sample_rate),
+        "duration_sec": round(sample_count / float(sample_rate), 6),
+        "num_samples": int(sample_count),
+        "audio_path": str(output_path),
+        "capture_error": capture_error,
+        "capture_diagnostics": dict(capture_diagnostics) if isinstance(capture_diagnostics, Mapping) else None,
+    }
+
+
 def _evaluate_transcript_quality(
     *,
     transcript: str,
@@ -525,6 +957,28 @@ def _evaluate_transcript_quality(
     }
 
 
+def _is_audio_signal_too_short_for_asr(audio_signal: Mapping[str, Any] | None) -> bool:
+    signal_mapping = audio_signal if isinstance(audio_signal, Mapping) else {}
+    raw_signal = signal_mapping.get("raw")
+    raw_signal = raw_signal if isinstance(raw_signal, Mapping) else signal_mapping
+    sample_rate = int(raw_signal.get("sample_rate", 0) or 0)
+    num_samples = int(raw_signal.get("num_samples", 0) or 0)
+    duration_sec = float(raw_signal.get("duration_sec", 0.0) or 0.0)
+    if sample_rate > 0 and num_samples > 0:
+        return num_samples < int(sample_rate * _LOW_SIGNAL_MIN_AUDIO_SEC)
+    return duration_sec > 0.0 and duration_sec < _LOW_SIGNAL_MIN_AUDIO_SEC
+
+
+def build_low_signal_retry_answer(*, preferred_language: str | None = None) -> str:
+    normalized_language = _infer_reply_language(
+        transcript="",
+        transcript_language=preferred_language,
+    )
+    if normalized_language == "en":
+        return "I didn't catch that, hold F8 while speaking and repeat briefly."
+    return "Не расслышал, удерживай F8 пока говоришь и повтори коротко."
+
+
 def _compose_local_context_summary(
     *,
     visual_summary: str,
@@ -573,6 +1027,24 @@ def _finalize_spoken_answer_text(answer_text: str) -> tuple[str, list[str]]:
     return f"{truncated}...", list(dict.fromkeys([*flags, "spoken_answer_truncated"]))
 
 
+def _compact_direct_observation_text(text: str, *, max_chars: int = 96) -> str:
+    normalized = _normalize_text_whitespace(sanitize_vlm_summary_text(text))
+    if not normalized:
+        return ""
+    for marker in ("; HUD:", "; HUD tags:", "; Window:", " HUD:", " HUD tags:", " Window:"):
+        if marker in normalized:
+            normalized = normalized.split(marker, 1)[0].rstrip(" ;,")
+    sentence_match = re.split(r"(?<=[.!?])\s+", normalized, maxsplit=1)
+    if sentence_match:
+        normalized = sentence_match[0].strip()
+    if len(normalized) <= max_chars:
+        return normalized
+    truncated = normalized[: max_chars - 3].rstrip()
+    if " " in truncated:
+        truncated = truncated.rsplit(" ", 1)[0]
+    return f"{truncated.rstrip(' ,;:.!?')}..."
+
+
 def _play_waveform_if_enabled(
     *,
     waveform: np.ndarray,
@@ -593,6 +1065,27 @@ def _degraded_prefix(degraded_flags: list[str]) -> str:
     if not normalized:
         return ""
     return f"Pilot degraded mode ({', '.join(sorted(dict.fromkeys(normalized)))}). "
+
+
+def build_visual_observation_answer(
+    *,
+    visual_summary: str | None,
+    preferred_language: str | None = None,
+) -> str:
+    normalized_visual_summary = _compact_direct_observation_text(str(visual_summary or ""))
+    if not normalized_visual_summary:
+        return ""
+    normalized_language = _infer_reply_language(
+        transcript="",
+        transcript_language=preferred_language,
+    )
+    if normalized_language == "ru" and _contains_cyrillic(normalized_visual_summary):
+        return normalized_visual_summary
+    if normalized_language == "en" and not _contains_cyrillic(normalized_visual_summary):
+        return normalized_visual_summary
+    if normalized_language == "ru":
+        return f"На экране: {normalized_visual_summary}"
+    return f"On screen: {normalized_visual_summary}"
 
 
 def build_fallback_answer(
@@ -757,31 +1250,316 @@ def _resolve_capture_bbox(
     return monitors[monitor_index]
 
 
-def capture_screen_image(
+def _dxcam_monitor_target(
     *,
-    output_path: Path,
-    monitor_index: int | None = None,
-    region: tuple[int, int, int, int] | None = None,
-) -> dict[str, Any]:
-    if sys.platform != "win32":
-        raise RuntimeError("live screen capture is currently implemented for Windows only.")
+    monitor_index: int | None,
+    region: tuple[int, int, int, int] | None,
+) -> tuple[int, tuple[int, int, int, int], tuple[int, int, int, int]]:
+    monitors = enumerate_display_monitors()
+    capture_bbox = _resolve_capture_bbox(monitor_index=monitor_index, region=region)
+    if capture_bbox is None:
+        raise RuntimeError("DXcam capture requires an explicit monitor or region.")
+    if monitor_index is not None:
+        if monitor_index < 0 or monitor_index >= len(monitors):
+            raise ValueError(f"capture monitor index {monitor_index} is out of range for {len(monitors)} monitor(s).")
+        monitor_bbox = monitors[monitor_index]
+        monitor_left, monitor_top, monitor_right, monitor_bottom = monitor_bbox
+        capture_left, capture_top, capture_right, capture_bottom = capture_bbox
+        if not (
+            capture_left >= monitor_left
+            and capture_top >= monitor_top
+            and capture_right <= monitor_right
+            and capture_bottom <= monitor_bottom
+        ):
+            raise RuntimeError("capture target must fit inside the selected monitor for DXcam capture.")
+        return monitor_index, monitor_bbox, capture_bbox
+    left, top, right, bottom = capture_bbox
+    for output_index, monitor_bbox in enumerate(monitors):
+        monitor_left, monitor_top, monitor_right, monitor_bottom = monitor_bbox
+        if (
+            left >= monitor_left
+            and top >= monitor_top
+            and right <= monitor_right
+            and bottom <= monitor_bottom
+        ):
+            return output_index, monitor_bbox, capture_bbox
+    raise RuntimeError("capture region must fit inside one monitor for DXcam capture.")
+
+
+def _get_dxcam_camera(*, output_idx: int) -> Any:
+    cache_key = (int(output_idx), _DXCAM_BACKEND)
+    with _DXCAM_CAMERA_LOCK:
+        camera = _DXCAM_CAMERA_CACHE.get(cache_key)
+        if camera is not None:
+            return camera
+        try:
+            import dxcam
+        except Exception as exc:  # pragma: no cover - dependency presence
+            raise RuntimeError("DXcam is required for low-latency monitor capture.") from exc
+        camera = dxcam.create(
+            output_idx=int(output_idx),
+            output_color=_DXCAM_OUTPUT_COLOR,
+            processor_backend=_DXCAM_PROCESSOR_BACKEND,
+            backend=_DXCAM_BACKEND,
+            max_buffer_len=1,
+        )
+        if camera is None:
+            raise RuntimeError(f"DXcam could not create a capture device for monitor {output_idx}.")
+        _DXCAM_CAMERA_CACHE[cache_key] = camera
+        return camera
+
+
+def _capture_with_dxcam(
+    *,
+    monitor_index: int | None,
+    region: tuple[int, int, int, int] | None,
+) -> tuple[Any, dict[str, Any]]:
+    try:
+        from PIL import Image
+    except Exception as exc:  # pragma: no cover - dependency presence
+        raise RuntimeError("Pillow is required to serialize DXcam captures.") from exc
+
+    output_index, monitor_bbox, capture_bbox = _dxcam_monitor_target(
+        monitor_index=monitor_index,
+        region=region,
+    )
+    monitor_left, monitor_top, monitor_right, monitor_bottom = monitor_bbox
+    logical_monitor_width = int(monitor_right - monitor_left)
+    logical_monitor_height = int(monitor_bottom - monitor_top)
+    if logical_monitor_width <= 0 or logical_monitor_height <= 0:
+        raise RuntimeError("capture monitor has invalid logical bounds.")
+
+    camera = _get_dxcam_camera(output_idx=output_index)
+    native_width = int(getattr(camera, "width", 0) or 0)
+    native_height = int(getattr(camera, "height", 0) or 0)
+    if native_width <= 0 or native_height <= 0:
+        raise RuntimeError("DXcam reported invalid native monitor dimensions.")
+
+    native_region: tuple[int, int, int, int] | None = None
+    expected_width = logical_monitor_width
+    expected_height = logical_monitor_height
+    if region is not None:
+        capture_left, capture_top, capture_right, capture_bottom = capture_bbox
+        rel_left = capture_left - monitor_left
+        rel_top = capture_top - monitor_top
+        rel_right = capture_right - monitor_left
+        rel_bottom = capture_bottom - monitor_top
+        scale_x = native_width / float(logical_monitor_width)
+        scale_y = native_height / float(logical_monitor_height)
+        native_left = max(0, min(native_width, int(np.floor(rel_left * scale_x))))
+        native_top = max(0, min(native_height, int(np.floor(rel_top * scale_y))))
+        native_right = max(native_left + 1, min(native_width, int(np.ceil(rel_right * scale_x))))
+        native_bottom = max(native_top + 1, min(native_height, int(np.ceil(rel_bottom * scale_y))))
+        native_region = (native_left, native_top, native_right, native_bottom)
+        expected_width = int(capture_right - capture_left)
+        expected_height = int(capture_bottom - capture_top)
+
+    frame = camera.grab(region=native_region, new_frame_only=False)
+    if frame is None:
+        raise RuntimeError("DXcam returned no frame.")
+    if getattr(frame, "ndim", 0) != 3 or int(frame.shape[2]) < 3:
+        raise RuntimeError("DXcam returned an unexpected frame shape.")
+
+    rgb_frame = np.ascontiguousarray(frame[:, :, [2, 1, 0]])
+    image = Image.fromarray(rgb_frame, mode="RGB")
+    capture_mode = "region" if region is not None else "monitor"
+    return image, {
+        "capture_mode": capture_mode,
+        "capture_backend": f"dxcam_{_DXCAM_BACKEND}",
+        "monitor_index": monitor_index,
+        "resolved_monitor_index": int(output_index),
+        "region": format_capture_region(region),
+        "bbox": list(capture_bbox),
+        "expected_width": int(expected_width),
+        "expected_height": int(expected_height),
+        "native_region": list(native_region) if native_region is not None else None,
+        "native_width": native_width,
+        "native_height": native_height,
+    }
+
+
+def _capture_with_pillow(
+    *,
+    monitor_index: int | None,
+    region: tuple[int, int, int, int] | None,
+    window_handle: int | None,
+    window_title: str | None,
+    window_bounds: Mapping[str, Any] | Sequence[int] | None,
+) -> tuple[Any, dict[str, Any]]:
     try:
         from PIL import ImageGrab
     except Exception as exc:  # pragma: no cover - dependency presence
         raise RuntimeError("Pillow ImageGrab is required for live screen capture.") from exc
 
+    normalized_window_bounds = _normalize_window_bounds(window_bounds)
+    use_window_capture = window_handle is not None and region is None
+    if use_window_capture:
+        bbox = tuple(normalized_window_bounds) if normalized_window_bounds is not None else None
+        image = ImageGrab.grab(window=int(window_handle))
+        return image, {
+            "capture_mode": "window",
+            "capture_backend": "pillow_imagegrab_window",
+            "monitor_index": monitor_index,
+            "resolved_monitor_index": monitor_index,
+            "region": format_capture_region(region),
+            "bbox": list(bbox) if bbox is not None else None,
+            "window_handle": int(window_handle),
+            "window_title": str(window_title).strip() if window_title is not None else None,
+            "window_bounds": normalized_window_bounds,
+        }
+
     bbox = _resolve_capture_bbox(monitor_index=monitor_index, region=region)
     image = ImageGrab.grab(bbox=bbox, all_screens=True)
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    image.save(output_path)
-    return {
-        "capture_mode": "region" if region is not None else ("monitor" if monitor_index is not None else "desktop"),
+    capture_mode = "region" if region is not None else ("monitor" if monitor_index is not None else "desktop")
+    return image, {
+        "capture_mode": capture_mode,
+        "capture_backend": "pillow_imagegrab_desktop",
         "monitor_index": monitor_index,
+        "resolved_monitor_index": monitor_index,
         "region": format_capture_region(region),
         "bbox": list(bbox) if bbox is not None else None,
+        "window_handle": None,
+        "window_title": None,
+        "window_bounds": None,
+    }
+
+
+def capture_screen_image(
+    *,
+    output_path: Path,
+    monitor_index: int | None = None,
+    region: tuple[int, int, int, int] | None = None,
+    window_handle: int | None = None,
+    window_title: str | None = None,
+    window_bounds: Mapping[str, Any] | Sequence[int] | None = None,
+) -> dict[str, Any]:
+    if sys.platform != "win32":
+        raise RuntimeError("live screen capture is currently implemented for Windows only.")
+    try:
+        from PIL import Image
+    except Exception as exc:  # pragma: no cover - dependency presence
+        raise RuntimeError("Pillow is required for live screen capture.") from exc
+
+    normalized_window_bounds = _normalize_window_bounds(window_bounds)
+    use_window_capture = window_handle is not None and region is None
+    backend_errors: list[dict[str, str]] = []
+
+    image: Any
+    payload: dict[str, Any]
+    if use_window_capture:
+        image, payload = _capture_with_pillow(
+            monitor_index=monitor_index,
+            region=region,
+            window_handle=window_handle,
+            window_title=window_title,
+            window_bounds=window_bounds,
+        )
+    elif monitor_index is not None or region is not None:
+        try:
+            image, payload = _capture_with_dxcam(
+                monitor_index=monitor_index,
+                region=region,
+            )
+        except Exception as exc:
+            backend_errors.append({"backend": f"dxcam_{_DXCAM_BACKEND}", "error": str(exc)})
+            image, payload = _capture_with_pillow(
+                monitor_index=monitor_index,
+                region=region,
+                window_handle=None,
+                window_title=None,
+                window_bounds=None,
+            )
+    else:
+        image, payload = _capture_with_pillow(
+            monitor_index=monitor_index,
+            region=region,
+            window_handle=None,
+            window_title=None,
+            window_bounds=None,
+        )
+
+    raw_width = int(image.width)
+    raw_height = int(image.height)
+    resized_from: list[int] | None = None
+    expected_width = None
+    expected_height = None
+    if use_window_capture and normalized_window_bounds is not None:
+        expected_width = max(0, int(normalized_window_bounds[2]) - int(normalized_window_bounds[0]))
+        expected_height = max(0, int(normalized_window_bounds[3]) - int(normalized_window_bounds[1]))
+    elif payload.get("expected_width") is not None and payload.get("expected_height") is not None:
+        expected_width = max(0, int(payload["expected_width"]))
+        expected_height = max(0, int(payload["expected_height"]))
+    if (
+        expected_width is not None
+        and expected_height is not None
+        and expected_width > 0
+        and expected_height > 0
+        and (raw_width != expected_width or raw_height != expected_height)
+    ):
+        resampling = getattr(Image, "Resampling", Image).LANCZOS
+        image = image.resize((expected_width, expected_height), resampling)
+        resized_from = [raw_width, raw_height]
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    image.save(output_path)
+    response_payload = {
+        **payload,
         "width": int(image.width),
         "height": int(image.height),
+        "raw_width": raw_width,
+        "raw_height": raw_height,
+        "resized_from": resized_from,
         "screenshot_path": str(output_path),
+    }
+    response_payload.pop("expected_width", None)
+    response_payload.pop("expected_height", None)
+    if backend_errors:
+        response_payload["backend_errors"] = backend_errors
+    return response_payload
+
+
+def prepare_vision_input_image(
+    *,
+    source_path: Path,
+    output_path: Path,
+    max_edge: int = DEFAULT_PILOT_VISION_MAX_EDGE,
+) -> dict[str, Any]:
+    if max_edge <= 0:
+        raise ValueError("vision max_edge must be positive")
+    try:
+        from PIL import Image
+    except Exception as exc:  # pragma: no cover - dependency presence
+        raise RuntimeError("Pillow is required to prepare vision input images.") from exc
+
+    with Image.open(source_path) as opened_image:
+        raw_width = int(opened_image.width)
+        raw_height = int(opened_image.height)
+        prepared_image = opened_image.copy()
+
+    resized_from: list[int] | None = None
+    if max(raw_width, raw_height) > int(max_edge):
+        scale = float(max_edge) / float(max(raw_width, raw_height))
+        target_width = max(1, int(round(raw_width * scale)))
+        target_height = max(1, int(round(raw_height * scale)))
+        if target_width != raw_width or target_height != raw_height:
+            resampling = getattr(Image, "Resampling", Image).LANCZOS
+            prepared_image = prepared_image.resize((target_width, target_height), resampling)
+            resized_from = [raw_width, raw_height]
+
+    prepared_path = source_path
+    if resized_from is not None:
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        prepared_image.save(output_path)
+        prepared_path = output_path
+
+    return {
+        "image_path": str(prepared_path),
+        "source_path": str(source_path),
+        "width": int(prepared_image.width),
+        "height": int(prepared_image.height),
+        "raw_width": raw_width,
+        "raw_height": raw_height,
+        "resized_from": resized_from,
+        "max_edge": int(max_edge),
     }
 
 
@@ -1064,7 +1842,7 @@ def _warmup_vlm_provider(
     started = perf_counter()
     result = vlm_client.analyze_image(
         image_path=warmup_image_path,
-        prompt=DEFAULT_PILOT_VLM_PROMPT,
+        prompt=_build_pilot_vlm_prompt(preferred_language="ru"),
     )
     latency_sec = round(perf_counter() - started, 6)
     return {
@@ -1102,6 +1880,7 @@ def _status_payload(
     *,
     runtime_run_dir: Path,
     latest_status_path: Path,
+    host_profile: Mapping[str, Any] | None,
     state: str,
     hotkey: str,
     gateway_url: str | None,
@@ -1143,6 +1922,7 @@ def _status_payload(
         paths_payload = last_turn_payload.get("paths")
         paths_payload = paths_payload if isinstance(paths_payload, Mapping) else {}
         last_turn_json = paths_payload.get("turn_json")
+    normalized_host_profile = _normalize_host_profile_payload(host_profile)
 
     return {
         "schema_version": PILOT_RUNTIME_STATUS_SCHEMA,
@@ -1150,7 +1930,9 @@ def _status_payload(
         "status": status,
         "state": state,
         "hotkey": hotkey,
+        "host_profile": normalized_host_profile,
         "effective_config": {
+            "host_profile_id": normalized_host_profile.get("id") if isinstance(normalized_host_profile, Mapping) else None,
             "gateway_url": gateway_url,
             "voice_runtime_url": voice_runtime_url,
             "tts_runtime_url": tts_runtime_url,
@@ -1218,6 +2000,7 @@ def load_latest_pilot_runtime_status(runs_dir: Path) -> tuple[dict[str, Any] | N
 class PilotRuntimeStatusHandle:
     runtime_run_dir: Path
     latest_status_path: Path
+    host_profile: dict[str, Any] | None
     hotkey: str
     gateway_url: str | None
     voice_runtime_url: str | None
@@ -1248,6 +2031,7 @@ class PilotRuntimeStatusHandle:
         payload = _status_payload(
             runtime_run_dir=self.runtime_run_dir,
             latest_status_path=self.latest_status_path,
+            host_profile=self.host_profile,
             state=self.state,
             hotkey=self.hotkey,
             gateway_url=self.gateway_url,
@@ -1454,9 +2238,19 @@ class PushToTalkRecorder:
         self._preferred_input_device_index = preferred_input_device_index
         self._input_device_index: int | None = None
         self._input_device_name: str | None = None
+        self._input_device_channels: int = 1
+        self._record_channels: int = 1
+        self._selected_channel_index: int | None = None
+        self._selected_channel_rms: float | None = None
+        self._captured_channel_rms: list[float] = []
         self._chunks: list[np.ndarray] = []
         self._stream: Any = None
         self._started_at = 0.0
+        self._callback_count = 0
+        self._callback_frames = 0
+        self._overflow_count = 0
+        self._first_callback_at: float | None = None
+        self._last_callback_at: float | None = None
 
     def _resolve_sd(self) -> Any:
         try:
@@ -1534,17 +2328,39 @@ class PushToTalkRecorder:
 
         self._input_device_index = int(input_index)
         self._input_device_name = str(devices[self._input_device_index].get("name", f"device_{input_index}"))
+        max_input_channels = int(devices[self._input_device_index].get("max_input_channels", 0) or 0)
+        self._input_device_channels = max(1, max_input_channels)
+        self._record_channels = max(1, min(self._input_device_channels, 4))
+        self._selected_channel_index = None
+        self._selected_channel_rms = None
+        self._captured_channel_rms = []
         self._chunks = []
+        self._callback_count = 0
+        self._callback_frames = 0
+        self._overflow_count = 0
+        self._first_callback_at = None
+        self._last_callback_at = None
 
         def _callback(indata: Any, frames: int, _time_info: Any, status: Any) -> None:
-            _ = frames
+            callback_now = perf_counter()
             if getattr(status, "input_overflow", False):
+                self._overflow_count += 1
                 return
-            self._chunks.append(np.asarray(indata, dtype=np.float32).reshape(-1))
+            chunk = np.asarray(indata, dtype=np.float32)
+            if chunk.ndim == 1:
+                chunk = chunk.reshape(-1, 1)
+            elif chunk.ndim != 2:
+                chunk = chunk.reshape(chunk.shape[0], -1)
+            if self._first_callback_at is None:
+                self._first_callback_at = callback_now
+            self._last_callback_at = callback_now
+            self._callback_count += 1
+            self._callback_frames += int(chunk.shape[0] if chunk.ndim >= 1 else frames)
+            self._chunks.append(np.array(chunk, dtype=np.float32, copy=True))
 
         self._stream = sd.InputStream(
             samplerate=self._sample_rate,
-            channels=1,
+            channels=self._record_channels,
             dtype="float32",
             device=self._input_device_index,
             callback=_callback,
@@ -1554,8 +2370,56 @@ class PushToTalkRecorder:
         return {
             "input_device_index": self._input_device_index,
             "input_device_name": self._input_device_name,
+            "input_device_channels": self._input_device_channels,
+            "record_channels": self._record_channels,
             "sample_rate": self._sample_rate,
             "started_at_utc": _utc_now(),
+        }
+
+    def capture_diagnostics(self, *, duration_sec: float, total_frames: int) -> dict[str, Any]:
+        first_callback_offset_sec = (
+            round(self._first_callback_at - self._started_at, 6)
+            if self._first_callback_at is not None and self._started_at > 0.0
+            else None
+        )
+        last_callback_offset_sec = (
+            round(self._last_callback_at - self._started_at, 6)
+            if self._last_callback_at is not None and self._started_at > 0.0
+            else None
+        )
+        return {
+            "callback_count": int(self._callback_count),
+            "callback_frames": int(self._callback_frames),
+            "total_frames": int(total_frames),
+            "overflow_count": int(self._overflow_count),
+            "first_callback_offset_sec": first_callback_offset_sec,
+            "last_callback_offset_sec": last_callback_offset_sec,
+            "duration_sec": round(float(duration_sec), 6),
+        }
+
+    @staticmethod
+    def _collapse_to_mono(waveform: np.ndarray) -> tuple[np.ndarray, dict[str, Any]]:
+        samples = np.asarray(waveform, dtype=np.float32)
+        if samples.ndim == 1:
+            samples = samples.reshape(-1, 1)
+        elif samples.ndim != 2:
+            samples = samples.reshape(samples.shape[0], -1)
+        if samples.shape[0] == 0:
+            return np.zeros(0, dtype=np.float32), {
+                "channels": int(samples.shape[1]) if samples.ndim == 2 else 0,
+                "selected_channel_index": None,
+                "selected_channel_rms": None,
+                "channel_rms": [],
+            }
+
+        channel_rms = np.sqrt(np.mean(np.square(samples), axis=0, dtype=np.float64))
+        selected_channel_index = int(np.argmax(channel_rms))
+        mono = np.asarray(samples[:, selected_channel_index], dtype=np.float32).reshape(-1)
+        return mono, {
+            "channels": int(samples.shape[1]),
+            "selected_channel_index": selected_channel_index,
+            "selected_channel_rms": float(channel_rms[selected_channel_index]),
+            "channel_rms": [float(value) for value in channel_rms.tolist()],
         }
 
     def stop_to_wav(self, *, output_path: Path) -> dict[str, Any]:
@@ -1566,20 +2430,38 @@ class PushToTalkRecorder:
             self._stream.close()
         finally:
             self._stream = None
-        waveform = np.concatenate(self._chunks) if self._chunks else np.zeros(0, dtype=np.float32)
+        waveform = (
+            np.concatenate(self._chunks, axis=0)
+            if self._chunks
+            else np.zeros((0, max(1, int(self._record_channels))), dtype=np.float32)
+        )
         self._chunks = []
         duration_sec = perf_counter() - self._started_at
-        if waveform.size == 0:
+        mono_waveform, channel_meta = self._collapse_to_mono(waveform)
+        capture_diagnostics = self.capture_diagnostics(
+            duration_sec=duration_sec,
+            total_frames=int(waveform.shape[0]),
+        )
+        if mono_waveform.size == 0:
             raise RuntimeError("No audio frames were captured during push-to-talk.")
-        write_wav_pcm16(path=output_path, waveform=waveform, sample_rate=self._sample_rate)
+        self._selected_channel_index = channel_meta["selected_channel_index"]
+        self._selected_channel_rms = channel_meta["selected_channel_rms"]
+        self._captured_channel_rms = list(channel_meta["channel_rms"])
+        write_wav_pcm16(path=output_path, waveform=mono_waveform, sample_rate=self._sample_rate)
         return {
             "mode": "push_to_talk_recorded_microphone",
             "input_device_index": self._input_device_index,
             "input_device_name": self._input_device_name,
+            "input_device_channels": self._input_device_channels,
+            "record_channels": self._record_channels,
+            "selected_channel_index": self._selected_channel_index,
+            "selected_channel_rms": self._selected_channel_rms,
+            "channel_rms": self._captured_channel_rms,
             "sample_rate": self._sample_rate,
             "duration_sec": float(duration_sec),
-            "num_samples": int(waveform.shape[0]),
+            "num_samples": int(mono_waveform.shape[0]),
             "audio_path": str(output_path),
+            "capture_diagnostics": capture_diagnostics,
         }
 
     def discard(self) -> None:
@@ -1591,6 +2473,14 @@ class PushToTalkRecorder:
         finally:
             self._stream = None
             self._chunks = []
+            self._selected_channel_index = None
+            self._selected_channel_rms = None
+            self._captured_channel_rms = []
+            self._callback_count = 0
+            self._callback_frames = 0
+            self._overflow_count = 0
+            self._first_callback_at = None
+            self._last_callback_at = None
 
 
 def run_pilot_turn(
@@ -1621,6 +2511,10 @@ def run_pilot_turn(
     asr_func: Callable[..., dict[str, Any]] = call_voice_asr,
     hybrid_query_func: Callable[..., dict[str, Any]] = call_gateway_hybrid_query,
     tts_func: Callable[..., dict[str, Any]] = synthesize_with_tts_runtime,
+    pre_captured_screenshot_path: Path | None = None,
+    pre_captured_capture_payload: Mapping[str, Any] | None = None,
+    pre_captured_capture_error: str | None = None,
+    pre_captured_vision_future: Future[dict[str, Any]] | None = None,
     now: datetime | None = None,
     status_callback: Callable[..., Any] | None = None,
 ) -> dict[str, Any]:
@@ -1649,6 +2543,11 @@ def run_pilot_turn(
             "monitor_index": capture_monitor,
             "region": format_capture_region(capture_region),
             "screenshot_path": None,
+            "capture_backend": None,
+            "window_handle": None,
+            "window_title": None,
+            "window_bounds": None,
+            "prefetched_frame_match": None,
             "error": None,
         },
         "session": {
@@ -1682,7 +2581,7 @@ def run_pilot_turn(
             "has_player_state": False,
             "reason_codes": [],
         },
-        "vision": {"summary": None, "next_steps": [], "error": None},
+        "vision": {"summary": None, "next_steps": [], "input_image": None, "error": None},
         "hybrid": {"planner_status": None, "degraded": None, "warnings": [], "citations": [], "error": None},
         "grounded_reply": {"answer_text": None, "cited_entities": [], "answer_language": None, "error": None},
         "tts": {"status": "not_started", "error": None},
@@ -1705,6 +2604,7 @@ def run_pilot_turn(
             "audio_input_wav": str(copied_audio_path),
             "audio_asr_wav": str(copied_audio_path),
             "screenshot_png": str(turn_dir / "screenshot.png"),
+            "vision_input_png": str(turn_dir / "vision_input.png"),
             "session_probe_json": str(turn_dir / "session_probe.json"),
             "live_hud_state_json": str(turn_dir / "live_hud_state.json"),
             "tts_audio_wav": str(turn_dir / "tts_audio_out.wav"),
@@ -1724,22 +2624,94 @@ def run_pilot_turn(
 
         screenshot_path = Path(base_payload["paths"]["screenshot_png"])
         capture_payload: dict[str, Any] | None = None
-        try:
-            capture_payload = capture_func(
-                output_path=screenshot_path,
-                monitor_index=capture_monitor,
-                region=capture_region,
+        capture_attempt_errors: list[dict[str, str]] = []
+        prefetched_payload = (
+            dict(pre_captured_capture_payload)
+            if isinstance(pre_captured_capture_payload, Mapping)
+            else None
+        )
+        prefetched_path = Path(pre_captured_screenshot_path) if pre_captured_screenshot_path is not None else None
+        if isinstance(pre_captured_capture_error, str) and pre_captured_capture_error.strip():
+            base_payload["capture"]["prefetch_error"] = pre_captured_capture_error.strip()
+        if prefetched_path is not None and prefetched_path.is_file():
+            base_payload["capture"]["prefetched_screenshot_path"] = str(prefetched_path)
+        window_capture_candidate: dict[str, Any] | None = None
+        if capture_region is None:
+            try:
+                candidate = find_best_atm10_window()
+            except Exception as exc:
+                base_payload["capture"]["window_candidate_error"] = str(exc)
+            else:
+                if isinstance(candidate, Mapping) and bool(candidate.get("foreground")):
+                    window_capture_candidate = dict(candidate)
+                elif isinstance(candidate, Mapping):
+                    base_payload["capture"]["window_candidate_skipped"] = "atm10_window_not_foreground"
+        capture_attempts: list[dict[str, Any]] = [{"attempt_name": "desktop", "kwargs": {}}]
+        if window_capture_candidate is not None:
+            capture_attempts.append(
+                {
+                    "attempt_name": "atm10_window",
+                    "kwargs": {
+                        "window_handle": int(window_capture_candidate.get("hwnd", 0)),
+                        "window_title": str(window_capture_candidate.get("window_title", "")).strip() or None,
+                        "window_bounds": window_capture_candidate.get("window_bounds"),
+                    },
+                }
             )
-            base_payload["capture"] = {
-                **base_payload["capture"],
-                **capture_payload,
-                "error": None,
-            }
-        except Exception as exc:
-            stage_errors["capture"] = str(exc)
-            degraded_flags.append("capture_failed")
-            degraded_flags.append("vision_unavailable")
-            base_payload["capture"]["error"] = str(exc)
+
+        last_capture_error: Exception | None = None
+        for attempt in capture_attempts:
+            attempt_name = str(attempt.get("attempt_name", "capture")).strip() or "capture"
+            attempt_kwargs = attempt.get("kwargs")
+            attempt_kwargs = dict(attempt_kwargs) if isinstance(attempt_kwargs, Mapping) else {}
+            try:
+                capture_payload = capture_func(
+                    output_path=screenshot_path,
+                    monitor_index=capture_monitor,
+                    region=capture_region,
+                    **attempt_kwargs,
+                )
+                capture_payload = dict(capture_payload)
+                capture_payload["capture_source"] = "hotkey_up_capture"
+                if capture_attempt_errors:
+                    capture_payload["attempt_errors"] = list(capture_attempt_errors)
+                base_payload["capture"] = {
+                    **base_payload["capture"],
+                    **capture_payload,
+                    "error": None,
+                }
+                break
+            except Exception as exc:
+                last_capture_error = exc
+                capture_attempt_errors.append({"attempt": attempt_name, "error": str(exc)})
+        if capture_payload is None:
+            if (
+                prefetched_payload is not None
+                and prefetched_path is not None
+                and prefetched_path.is_file()
+            ):
+                shutil.copyfile(prefetched_path, screenshot_path)
+                prefetched_payload["screenshot_path"] = str(screenshot_path)
+                prefetched_payload["capture_source"] = "hotkey_down_prefetch_fallback"
+                prefetched_payload["prefetch_fallback_reason"] = (
+                    str(last_capture_error) if last_capture_error is not None else "live capture failed"
+                )
+                capture_payload = dict(prefetched_payload)
+                if capture_attempt_errors:
+                    capture_payload["attempt_errors"] = list(capture_attempt_errors)
+                base_payload["capture"] = {
+                    **base_payload["capture"],
+                    **capture_payload,
+                    "error": None,
+                }
+            else:
+                error_text = str(last_capture_error) if last_capture_error is not None else "live capture failed"
+                stage_errors["capture"] = error_text
+                degraded_flags.append("capture_failed")
+                degraded_flags.append("vision_unavailable")
+                base_payload["capture"]["error"] = error_text
+                if capture_attempt_errors:
+                    base_payload["capture"]["attempt_errors"] = list(capture_attempt_errors)
 
         base_payload["latency"]["capture_sec"] = round(perf_counter() - stage_started, 6)
 
@@ -1825,7 +2797,7 @@ def run_pilot_turn(
             _write_json(live_hud_state_path, error_payload)
         base_payload["latency"]["hud_state_sec"] = round(perf_counter() - stage_started, 6)
 
-        stage_started = perf_counter()
+        asr_stage_started = perf_counter()
         asr_audio_path = copied_audio_path
         try:
             prepared_audio = _prepare_asr_audio_input(audio_path=copied_audio_path, turn_dir=turn_dir)
@@ -1848,63 +2820,174 @@ def run_pilot_turn(
                 "error": str(exc),
             }
 
-        transcript = ""
-        language = ""
-        if voice_runtime_url is None:
-            stage_errors["asr"] = "voice runtime URL is not configured"
-            degraded_flags.append("voice_runtime_unconfigured")
-        else:
-            try:
-                asr_payload = asr_func(
-                    voice_runtime_url=voice_runtime_url,
-                    audio_path=asr_audio_path,
-                    language=expected_asr_language,
-                    service_token=service_token,
-                )
-                transcript = str(asr_payload.get("text", "")).strip()
-                language = str(asr_payload.get("language", "")).strip()
-            except Exception as exc:
-                stage_errors["asr"] = str(exc)
-                degraded_flags.append("asr_failed")
-        transcript_quality = _evaluate_transcript_quality(
-            transcript=transcript,
-            transcript_language=language,
-            expected_language=expected_asr_language,
-            audio_signal=base_payload["audio"].get("signal"),
+        provisional_vision_language = _infer_reply_language(
+            transcript="",
+            transcript_language=expected_asr_language,
         )
-        if transcript_quality["status"] != "ok":
+        vision_input_path = Path(base_payload["paths"]["vision_input_png"])
+        short_audio_for_asr = _is_audio_signal_too_short_for_asr(base_payload["audio"].get("signal"))
+        reuse_prefetched_vision = False
+        if (
+            not short_audio_for_asr
+            and
+            pre_captured_vision_future is not None
+            and prefetched_path is not None
+            and prefetched_path.is_file()
+            and capture_payload is not None
+            and screenshot_path.is_file()
+        ):
+            try:
+                if str(base_payload["capture"].get("capture_source", "")).strip() == "hotkey_down_prefetch_fallback":
+                    base_payload["capture"]["prefetched_frame_match"] = {
+                        "status": "ok",
+                        "mode": "prefetch_capture_fallback",
+                        "compare_edge": 0,
+                        "mean_abs_diff": 0.0,
+                        "max_mean_abs_diff": float(_PREFETCH_VISION_REUSE_MAX_MEAN_ABS_DIFF),
+                        "reusable": True,
+                    }
+                else:
+                    base_payload["capture"]["prefetched_frame_match"] = _compare_capture_frames(
+                        reference_path=prefetched_path,
+                        candidate_path=screenshot_path,
+                    )
+                reuse_prefetched_vision = bool(base_payload["capture"]["prefetched_frame_match"].get("reusable"))
+            except Exception as exc:
+                base_payload["capture"]["prefetched_frame_match_error"] = str(exc)
+        live_vision_executor: ThreadPoolExecutor | None = None
+        live_vision_future: Future[dict[str, Any]] | None = None
+        if not short_audio_for_asr and not reuse_prefetched_vision:
+            live_vision_executor = ThreadPoolExecutor(max_workers=1)
+            live_vision_future = live_vision_executor.submit(
+                _run_vision_stage,
+                screenshot_path=screenshot_path,
+                capture_payload=capture_payload,
+                vision_input_path=vision_input_path,
+                preferred_language=provisional_vision_language,
+                vlm_client=vlm_client,
+            )
+        if short_audio_for_asr:
+            transcript = ""
+            language = ""
+            transcript_quality = {
+                "status": "low_signal",
+                "reason_codes": ["audio_too_short", "audio_signal_low", "empty"],
+                "expected_language": str(expected_asr_language or "").strip().lower() or None,
+                "detected_language": None,
+                "audio_signal_status": str(base_payload["audio"].get("signal", {}).get("raw", {}).get("status", "")).strip().lower() or None,
+                "transcript_used": False,
+            }
             degraded_flags.append("transcript_low_signal")
-        if "empty" in transcript_quality["reason_codes"]:
             degraded_flags.append("transcript_empty")
+            base_payload["latency"]["asr_sec"] = 0.0
+        else:
+            asr_result = _run_asr_stage(
+                voice_runtime_url=voice_runtime_url,
+                asr_audio_path=asr_audio_path,
+                expected_asr_language=expected_asr_language,
+                service_token=service_token,
+                asr_func=asr_func,
+            )
+            transcript = str(asr_result.get("transcript", "")).strip()
+            language = str(asr_result.get("language", "")).strip()
+            if asr_result.get("error"):
+                stage_errors["asr"] = str(asr_result["error"])
+            degraded_flags.extend([str(item) for item in asr_result.get("degraded_flags", []) if str(item).strip()])
+
+            transcript_quality = _evaluate_transcript_quality(
+                transcript=transcript,
+                transcript_language=language,
+                expected_language=expected_asr_language,
+                audio_signal=base_payload["audio"].get("signal"),
+            )
+            if transcript_quality["status"] != "ok":
+                degraded_flags.append("transcript_low_signal")
+            if "empty" in transcript_quality["reason_codes"]:
+                degraded_flags.append("transcript_empty")
+            base_payload["latency"]["asr_sec"] = round(perf_counter() - asr_stage_started, 6)
+
         base_payload["request"]["transcript"] = transcript
         base_payload["request"]["language"] = language
         base_payload["transcript_quality"] = transcript_quality
-        base_payload["latency"]["asr_sec"] = round(perf_counter() - stage_started, 6)
 
-        stage_started = perf_counter()
         transcript_for_answer = transcript if bool(base_payload["transcript_quality"].get("transcript_used")) else ""
-        visual_summary = ""
-        vision_payload: dict[str, Any] | None = None
-        if capture_payload is not None and vlm_client is not None:
+        preferred_language_hint = language if transcript_for_answer else (expected_asr_language or language)
+        preferred_reply_language = _infer_reply_language(
+            transcript=transcript_for_answer,
+            transcript_language=preferred_language_hint,
+        )
+        visual_observation_request = bool(transcript_for_answer) and _looks_like_visual_observation_request(
+            transcript_for_answer
+        )
+        short_screen_grounded_request = bool(transcript_for_answer) and _looks_like_short_screen_grounded_request(
+            transcript_for_answer
+        )
+
+        if short_audio_for_asr:
+            vision_result = {
+                "input_image": None,
+                "vision_payload": None,
+                "visual_summary": "",
+                "error": None,
+                "degraded_flags": [],
+                "latency_sec": 0.0,
+                "source": "skipped_low_signal_v1",
+            }
+        elif reuse_prefetched_vision and pre_captured_vision_future is not None:
+            vision_result = _resolve_prefetched_vision_result(
+                prefetched_future=pre_captured_vision_future,
+                screenshot_path=screenshot_path,
+                capture_payload=capture_payload,
+                vision_input_path=vision_input_path,
+                preferred_language=provisional_vision_language,
+                vlm_client=vlm_client,
+            )
+        elif live_vision_future is not None:
             try:
-                vision_payload = vlm_client.analyze_image(
-                    image_path=screenshot_path,
-                    prompt=DEFAULT_PILOT_VLM_PROMPT,
-                )
-                visual_summary = str(vision_payload.get("summary", "")).strip()
-                base_payload["vision"] = {
-                    **(vision_payload if isinstance(vision_payload, dict) else {}),
-                    "error": None,
-                }
+                vision_result = live_vision_future.result()
             except Exception as exc:
-                stage_errors["vision"] = str(exc)
-                degraded_flags.append("vlm_failed")
-                base_payload["vision"]["error"] = str(exc)
-        elif capture_payload is not None:
-            stage_errors["vision"] = "local vision provider is unavailable"
-            degraded_flags.append("vision_unavailable")
-            base_payload["vision"]["error"] = stage_errors["vision"]
-        base_payload["latency"]["vision_sec"] = round(perf_counter() - stage_started, 6)
+                vision_result = {
+                    "input_image": None,
+                    "vision_payload": None,
+                    "visual_summary": "",
+                    "error": str(exc),
+                    "degraded_flags": ["vlm_failed"],
+                    "latency_sec": 0.0,
+                    "source": "live_capture_v1",
+                }
+        else:
+            vision_result = _run_vision_stage(
+                screenshot_path=screenshot_path,
+                capture_payload=capture_payload,
+                vision_input_path=vision_input_path,
+                preferred_language=provisional_vision_language,
+                vlm_client=vlm_client,
+            )
+        if live_vision_executor is not None:
+            live_vision_executor.shutdown(wait=True)
+
+        visual_summary = str(vision_result.get("visual_summary", "")).strip()
+        vision_payload = vision_result.get("vision_payload")
+        input_image_payload = vision_result.get("input_image")
+        vision_source = str(vision_result.get("source", "")).strip() or None
+        if isinstance(input_image_payload, Mapping):
+            base_payload["vision"]["input_image"] = dict(input_image_payload)
+        if vision_result.get("error"):
+            stage_errors["vision"] = str(vision_result["error"])
+            base_payload["vision"]["error"] = str(vision_result["error"])
+            if vision_source:
+                base_payload["vision"]["source"] = vision_source
+        elif isinstance(vision_payload, dict):
+            base_payload["vision"] = {
+                **base_payload["vision"],
+                **vision_payload,
+                **({"source": vision_source} if vision_source else {}),
+                "error": None,
+            }
+        elif vision_source:
+            base_payload["vision"]["source"] = vision_source
+        degraded_flags.extend([str(item) for item in vision_result.get("degraded_flags", []) if str(item).strip()])
+        base_payload["latency"]["vision_sec"] = float(vision_result.get("latency_sec", 0.0) or 0.0)
 
         stage_started = perf_counter()
         local_context_summary = _compose_local_context_summary(
@@ -1913,9 +2996,12 @@ def run_pilot_turn(
             hud_payload=base_payload.get("hud_state"),
         )
         gateway_result: dict[str, Any] | None = None
+        hybrid_summary: dict[str, Any]
+        citations: list[dict[str, Any]]
         if gateway_url is None:
             stage_errors["hybrid"] = "gateway URL is not configured"
             degraded_flags.append("hybrid_unconfigured")
+            hybrid_summary, citations = _summarize_hybrid_payload(None)
         elif not transcript_for_answer:
             if str(base_payload["transcript_quality"].get("status", "")).strip() == "low_signal":
                 stage_errors["hybrid"] = "hybrid_query skipped because transcript is low-signal"
@@ -1923,6 +3009,27 @@ def run_pilot_turn(
             else:
                 stage_errors["hybrid"] = "hybrid_query skipped because transcript is empty"
                 degraded_flags.append("hybrid_skipped_no_transcript")
+            hybrid_summary, citations = _summarize_hybrid_payload(None)
+        elif visual_observation_request:
+            hybrid_summary = {
+                "planner_status": "skipped_visual_observation",
+                "degraded": False,
+                "warnings": ["visual_observation_request"],
+                "results_count": 0,
+                "retrieval_results_count": 0,
+                "kag_results_count": 0,
+            }
+            citations = []
+        elif short_screen_grounded_request and bool(local_context_summary or visual_summary):
+            hybrid_summary = {
+                "planner_status": "skipped_screen_grounded",
+                "degraded": False,
+                "warnings": ["screen_grounded_request"],
+                "results_count": 0,
+                "retrieval_results_count": 0,
+                "kag_results_count": 0,
+            }
+            citations = []
         else:
             try:
                 gateway_result = hybrid_query_func(
@@ -1938,12 +3045,12 @@ def run_pilot_turn(
                 stage_errors["hybrid"] = str(exc)
                 degraded_flags.append("hybrid_query_failed")
                 degraded_flags.append("hybrid_fast_fail")
-        hybrid_summary, citations = _summarize_hybrid_payload(gateway_result)
-        if bool(hybrid_summary.get("degraded")):
-            degraded_flags.append("hybrid_degraded")
-            degraded_flags.append("hybrid_fast_fail")
-        if str(hybrid_summary.get("planner_status", "")).strip() == "retrieval_only_fallback":
-            degraded_flags.append("retrieval_only_fallback")
+            hybrid_summary, citations = _summarize_hybrid_payload(gateway_result)
+            if bool(hybrid_summary.get("degraded")):
+                degraded_flags.append("hybrid_degraded")
+                degraded_flags.append("hybrid_fast_fail")
+            if str(hybrid_summary.get("planner_status", "")).strip() == "retrieval_only_fallback":
+                degraded_flags.append("retrieval_only_fallback")
         base_payload["hybrid"] = {
             **hybrid_summary,
             "citations": citations,
@@ -1953,11 +3060,6 @@ def run_pilot_turn(
 
         stage_started = perf_counter()
         grounded_reply_payload: dict[str, Any] | None = None
-        preferred_language_hint = language if transcript_for_answer else (expected_asr_language or language)
-        preferred_reply_language = _infer_reply_language(
-            transcript=transcript_for_answer,
-            transcript_language=preferred_language_hint,
-        )
         reply_mode = "normal_local"
         skip_grounded_reply_for_low_signal = str(base_payload["transcript_quality"].get("status", "")).strip() == "low_signal"
         if not transcript_for_answer:
@@ -1965,16 +3067,11 @@ def run_pilot_turn(
         if skip_grounded_reply_for_low_signal:
             degraded_flags.append("grounded_reply_skipped_low_signal")
             grounded_reply_payload = {
-                "provider": "visual_only_fallback_v1",
+                "provider": "low_signal_retry_v1",
                 "model": "fallback",
                 "device": "local",
                 "prompt": "",
-                "answer_text": build_fallback_answer(
-                    transcript="",
-                    visual_summary=local_context_summary or visual_summary,
-                    citations=citations,
-                    degraded_flags=list(sorted(dict.fromkeys(degraded_flags))),
-                    stage_errors=stage_errors,
+                "answer_text": build_low_signal_retry_answer(
                     preferred_language=preferred_reply_language,
                 ),
                 "cited_entities": [],
@@ -1982,6 +3079,39 @@ def run_pilot_turn(
                 "answer_language": preferred_reply_language,
                 "raw_response_text": "",
             }
+            reply_mode = "low_signal_retry"
+        elif visual_observation_request and bool(local_context_summary or visual_summary):
+            grounded_reply_payload = {
+                "provider": "visual_observation_direct_v1",
+                "model": "fallback",
+                "device": "local",
+                "prompt": "",
+                "answer_text": build_visual_observation_answer(
+                    visual_summary=visual_summary or local_context_summary,
+                    preferred_language=preferred_reply_language,
+                ),
+                "cited_entities": [],
+                "degraded_flags": [],
+                "answer_language": preferred_reply_language,
+                "raw_response_text": "",
+            }
+            reply_mode = "visual_observation_direct"
+        elif short_screen_grounded_request and bool(local_context_summary or visual_summary):
+            grounded_reply_payload = {
+                "provider": "screen_grounded_direct_v1",
+                "model": "fallback",
+                "device": "local",
+                "prompt": "",
+                "answer_text": build_visual_observation_answer(
+                    visual_summary=local_context_summary or visual_summary,
+                    preferred_language=preferred_reply_language,
+                ),
+                "cited_entities": [],
+                "degraded_flags": [],
+                "answer_language": preferred_reply_language,
+                "raw_response_text": "",
+            }
+            reply_mode = "screen_grounded_direct"
         elif grounded_reply_client is not None:
             try:
                 grounded_reply_payload = grounded_reply_client.generate_reply(
@@ -2192,6 +3322,7 @@ def _build_provider(
 def run_pilot_runtime_loop(
     *,
     runs_dir: Path,
+    host_profile: Mapping[str, Any] | None = None,
     gateway_url: str | None,
     voice_runtime_url: str | None,
     tts_runtime_url: str | None,
@@ -2224,6 +3355,7 @@ def run_pilot_runtime_loop(
     now: datetime | None = None,
 ) -> dict[str, Any]:
     effective_now = now or datetime.now(timezone.utc)
+    resolved_host_profile = _resolve_runtime_host_profile_payload(host_profile)
     runtime_run_dir = _create_run_dir(runs_dir, effective_now)
     latest_status_path = pilot_runtime_latest_status_path(runs_dir)
     run_json_path = runtime_run_dir / "run.json"
@@ -2233,6 +3365,7 @@ def run_pilot_runtime_loop(
         "timestamp_utc": effective_now.astimezone(timezone.utc).isoformat(),
         "mode": "pilot_runtime_loop",
         "status": "running",
+        "host_profile": resolved_host_profile,
         "paths": {
             "run_dir": str(runtime_run_dir),
             "run_json": str(run_json_path),
@@ -2241,6 +3374,7 @@ def run_pilot_runtime_loop(
             **return_paths(runs_dir),
         },
         "config": {
+            "host_profile_id": resolved_host_profile.get("id"),
             "gateway_url": gateway_url,
             "voice_runtime_url": voice_runtime_url,
             "tts_runtime_url": tts_runtime_url,
@@ -2375,6 +3509,7 @@ def run_pilot_runtime_loop(
     status_handle = PilotRuntimeStatusHandle(
         runtime_run_dir=runtime_run_dir,
         latest_status_path=latest_status_path,
+        host_profile=resolved_host_profile,
         hotkey=hotkey,
         gateway_url=gateway_url,
         voice_runtime_url=voice_runtime_url,
@@ -2399,6 +3534,11 @@ def run_pilot_runtime_loop(
     )
     recorder: PushToTalkRecorder | None = None
     active_recording = False
+    prefetched_capture_path: Path | None = None
+    prefetched_capture_payload: dict[str, Any] | None = None
+    prefetched_capture_error: str | None = None
+    prefetched_vision_future: Future[dict[str, Any]] | None = None
+    vision_prefetch_executor = ThreadPoolExecutor(max_workers=1) if vlm_client is not None else None
 
     try:
         hotkey_watcher = PollingHotkey(hotkey)
@@ -2412,6 +3552,32 @@ def run_pilot_runtime_loop(
         while True:
             transition = hotkey_watcher.poll_transition()
             if transition == "down" and not active_recording:
+                prefetched_capture_path = None
+                prefetched_capture_payload = None
+                prefetched_capture_error = None
+                if prefetched_vision_future is not None and not prefetched_vision_future.done():
+                    prefetched_vision_future.cancel()
+                prefetched_vision_future = None
+                try:
+                    prefetch_path = runtime_run_dir / "tmp" / "hotkey_down_capture.png"
+                    prefetch_payload = capture_screen_image(
+                        output_path=prefetch_path,
+                        monitor_index=capture_monitor,
+                        region=capture_region,
+                    )
+                    prefetched_capture_path = prefetch_path
+                    prefetched_capture_payload = dict(prefetch_payload)
+                    if vision_prefetch_executor is not None and vlm_client is not None:
+                        prefetched_vision_future = vision_prefetch_executor.submit(
+                            _run_vision_stage,
+                            screenshot_path=prefetch_path,
+                            capture_payload=prefetched_capture_payload,
+                            vision_input_path=runtime_run_dir / "tmp" / "hotkey_down_vision_input.png",
+                            preferred_language=asr_language or asr_warmup_language or DEFAULT_PILOT_ASR_LANGUAGE,
+                            vlm_client=vlm_client,
+                        )
+                except Exception as exc:
+                    prefetched_capture_error = str(exc)
                 try:
                     recorder.start()
                     active_recording = True
@@ -2428,7 +3594,28 @@ def run_pilot_runtime_loop(
             elif transition == "up" and active_recording:
                 active_recording = False
                 try:
-                    audio_meta = recorder.stop_to_wav(output_path=temp_audio_path)
+                    fallback_capture_error: str | None = None
+                    try:
+                        audio_meta = recorder.stop_to_wav(output_path=temp_audio_path)
+                    except Exception as exc:
+                        fallback_capture_error = str(exc)
+                        if "No audio frames were captured during push-to-talk." not in fallback_capture_error:
+                            raise
+                        audio_meta = _write_silence_fallback_audio(
+                            output_path=temp_audio_path,
+                            sample_rate=sample_rate,
+                            capture_error=fallback_capture_error,
+                            input_device_index=(
+                                int(getattr(recorder, "_input_device_index", input_device_index))
+                                if getattr(recorder, "_input_device_index", None) is not None
+                                else input_device_index
+                            ),
+                            input_device_name=getattr(recorder, "_input_device_name", None),
+                            capture_diagnostics=recorder.capture_diagnostics(
+                                duration_sec=perf_counter() - getattr(recorder, "_started_at", perf_counter()),
+                                total_frames=0,
+                            ),
+                        )
                     status_handle.transition(state="thinking", last_error=None)
                     turn_result = run_pilot_turn(
                         runtime_run_dir=runtime_run_dir,
@@ -2451,12 +3638,20 @@ def run_pilot_runtime_loop(
                         tesseract_bin=tesseract_bin,
                         service_token=service_token,
                         playback_enabled=playback_enabled,
+                        pre_captured_screenshot_path=prefetched_capture_path,
+                        pre_captured_capture_payload=prefetched_capture_payload,
+                        pre_captured_capture_error=prefetched_capture_error,
+                        pre_captured_vision_future=prefetched_vision_future,
                         status_callback=lambda **kwargs: status_handle.transition(
                             state=str(kwargs.get("state", status_handle.state)),
                             degraded_services=status_handle.degraded_services,
                             last_error=status_handle.last_error,
                         ),
                     )
+                    prefetched_capture_path = None
+                    prefetched_capture_payload = None
+                    prefetched_capture_error = None
+                    prefetched_vision_future = None
                     turn_payload = turn_result["turn_payload"]
                     run_payload["last_turn"] = {
                         "turn_id": turn_payload.get("turn_id"),
@@ -2478,10 +3673,18 @@ def run_pilot_runtime_loop(
                         state="idle",
                         degraded_services=sorted(
                             dict.fromkeys(
-                                [*(status_handle.degraded_services or []), *turn_payload.get("degraded_services", [])]
+                                [
+                                    *(status_handle.degraded_services or []),
+                                    *turn_payload.get("degraded_services", []),
+                                    *(
+                                        ["voice_runtime_service"]
+                                        if fallback_capture_error is not None and fallback_capture_error.strip()
+                                        else []
+                                    ),
+                                ]
                             )
                         ),
-                        last_error=turn_payload.get("error"),
+                        last_error=turn_payload.get("error") or fallback_capture_error,
                         last_turn_payload=turn_payload,
                         last_return_event=(
                             return_event
@@ -2519,11 +3722,29 @@ def run_pilot_runtime_loop(
         _write_json(run_json_path, run_payload)
         status_handle.transition(state="idle", last_error=str(exc), status="error")
         return {"run_dir": runtime_run_dir, "run_payload": run_payload, "ok": False}
+    finally:
+        if vision_prefetch_executor is not None:
+            vision_prefetch_executor.shutdown(wait=False, cancel_futures=True)
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
+    pre_parser = argparse.ArgumentParser(add_help=False)
+    pre_parser.add_argument(
+        "--host-profile",
+        choices=list_host_profile_ids(),
+        default=DEFAULT_HOST_PROFILE_ID,
+    )
+    pre_args, _unknown = pre_parser.parse_known_args(argv)
+    selected_host_profile = host_profile_payload(str(pre_args.host_profile))
+    selected_defaults = dict(selected_host_profile.get("defaults") or {})
     parser = argparse.ArgumentParser(description="Local pilot runtime loop: push-to-talk -> ASR -> vision -> hybrid -> reply -> TTS.")
     parser.add_argument("--runs-dir", type=Path, default=Path("runs") / "pilot-runtime", help="Pilot runtime artifact root.")
+    parser.add_argument(
+        "--host-profile",
+        choices=list_host_profile_ids(),
+        default=str(selected_host_profile.get("id", DEFAULT_HOST_PROFILE_ID)),
+        help="Machine/runtime host profile used to resolve pilot/runtime defaults.",
+    )
     parser.add_argument("--gateway-url", type=str, default=DEFAULT_GATEWAY_URL, help="Gateway base URL.")
     parser.add_argument(
         "--voice-runtime-url",
@@ -2560,102 +3781,103 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument(
         "--pilot-vlm-model-dir",
         type=Path,
-        default=DEFAULT_OPENVINO_VLM_MODEL_DIR,
-        help=f"Local OpenVINO VLM model dir (default: {DEFAULT_OPENVINO_VLM_MODEL_DIR}).",
+        default=Path(str(selected_defaults.get("pilot_vlm_model_dir", DEFAULT_HOST_PROFILE.pilot_vlm_model_dir))),
+        help="Local VLM model dir.",
     )
     parser.add_argument(
         "--pilot-text-model-dir",
         type=Path,
-        default=DEFAULT_GROUNDED_REPLY_MODEL_DIR,
-        help=f"Local OpenVINO grounded reply model dir (default: {DEFAULT_GROUNDED_REPLY_MODEL_DIR}).",
+        default=Path(str(selected_defaults.get("pilot_text_model_dir", DEFAULT_HOST_PROFILE.pilot_text_model_dir))),
+        help="Local grounded reply model dir.",
     )
     parser.add_argument(
         "--pilot-vlm-device",
         type=str,
-        default=DEFAULT_PILOT_VLM_DEVICE,
-        help=f"OpenVINO device for pilot VLM (default: {DEFAULT_PILOT_VLM_DEVICE}).",
+        default=str(selected_defaults.get("pilot_vlm_device", DEFAULT_PILOT_VLM_DEVICE)),
+        help="OpenVINO device for pilot VLM.",
     )
     parser.add_argument(
         "--pilot-text-device",
         type=str,
-        default=DEFAULT_PILOT_TEXT_DEVICE,
-        help=f"OpenVINO device for grounded reply model (default: {DEFAULT_PILOT_TEXT_DEVICE}).",
+        default=str(selected_defaults.get("pilot_text_device", DEFAULT_PILOT_TEXT_DEVICE)),
+        help="OpenVINO device for grounded reply model.",
     )
     parser.add_argument(
         "--pilot-vlm-provider",
         choices=("openvino", "stub"),
-        default="openvino",
-        help="Pilot VLM provider (default: openvino; use stub only for diagnostics).",
+        default=str(selected_defaults.get("pilot_vlm_provider", "openvino")),
+        help="Pilot VLM provider (use stub only for diagnostics).",
     )
     parser.add_argument(
         "--pilot-text-provider",
         choices=("openvino", "stub"),
-        default="openvino",
-        help="Pilot grounded-reply provider (default: openvino; use stub only for diagnostics).",
+        default=str(selected_defaults.get("pilot_text_provider", "openvino")),
+        help="Pilot grounded-reply provider (use stub only for diagnostics).",
     )
     parser.add_argument(
         "--pilot-vlm-max-new-tokens",
         type=int,
-        default=DEFAULT_PILOT_VLM_MAX_NEW_TOKENS,
+        default=int(selected_defaults.get("pilot_vlm_max_new_tokens", DEFAULT_PILOT_VLM_MAX_NEW_TOKENS)),
         help="VLM token budget for live pilot turns.",
     )
     parser.add_argument(
         "--pilot-text-max-new-tokens",
         type=int,
-        default=DEFAULT_PILOT_TEXT_MAX_NEW_TOKENS,
+        default=int(selected_defaults.get("pilot_text_max_new_tokens", DEFAULT_PILOT_TEXT_MAX_NEW_TOKENS)),
         help="Grounded-reply token budget for live pilot turns.",
     )
     parser.add_argument(
         "--input-device-index",
         type=int,
-        default=None,
+        default=selected_defaults.get("pilot_input_device_index"),
         help="Optional explicit sounddevice input device index for push-to-talk capture.",
     )
     parser.add_argument(
         "--asr-language",
         type=str,
-        default=DEFAULT_PILOT_ASR_LANGUAGE,
-        help="Expected ASR language for live turns (default: ru).",
+        default=str(selected_defaults.get("voice_asr_language", DEFAULT_PILOT_ASR_LANGUAGE)),
+        help="Expected ASR language for live turns.",
     )
     parser.add_argument(
         "--asr-max-new-tokens",
         type=int,
-        default=DEFAULT_PILOT_ASR_MAX_NEW_TOKENS,
+        default=int(selected_defaults.get("voice_asr_max_new_tokens", DEFAULT_PILOT_ASR_MAX_NEW_TOKENS)),
         help="Observed ASR token budget for live turns.",
     )
     parser.add_argument(
         "--asr-warmup-request",
-        action="store_true",
+        action=argparse.BooleanOptionalAction,
+        default=bool(selected_defaults.get("voice_asr_warmup_request", False)),
         help="Record that managed ASR warmup is expected for this live profile.",
     )
     parser.add_argument(
         "--asr-warmup-language",
         type=str,
-        default=DEFAULT_PILOT_ASR_LANGUAGE,
+        default=str(selected_defaults.get("voice_asr_warmup_language", DEFAULT_PILOT_ASR_LANGUAGE)),
         help="Language hint used by managed ASR warmup.",
     )
     parser.add_argument(
         "--pilot-hybrid-timeout-sec",
         type=float,
-        default=DEFAULT_PILOT_HYBRID_TIMEOUT_SEC,
+        default=float(selected_defaults.get("pilot_hybrid_timeout_sec", DEFAULT_PILOT_HYBRID_TIMEOUT_SEC)),
         help="Pilot-side timeout for opportunistic hybrid queries.",
     )
     parser.add_argument(
         "--pilot-gateway-topk",
         type=int,
-        default=DEFAULT_PILOT_GATEWAY_TOPK,
+        default=int(selected_defaults.get("pilot_gateway_topk", DEFAULT_PILOT_GATEWAY_TOPK)),
         help="Pilot hybrid top-k budget.",
     )
     parser.add_argument(
         "--pilot-gateway-candidate-k",
         type=int,
-        default=DEFAULT_PILOT_GATEWAY_CANDIDATE_K,
+        default=int(selected_defaults.get("pilot_gateway_candidate_k", DEFAULT_PILOT_GATEWAY_CANDIDATE_K)),
         help="Pilot hybrid candidate-k budget.",
     )
     parser.add_argument(
         "--pilot-max-entities-per-doc",
         type=int,
-        default=DEFAULT_PILOT_MAX_ENTITIES_PER_DOC,
+        default=int(selected_defaults.get("pilot_max_entities_per_doc", DEFAULT_PILOT_MAX_ENTITIES_PER_DOC)),
         help="Pilot hybrid entity budget per document.",
     )
     parser.add_argument("--sample-rate", type=int, default=DEFAULT_PILOT_SAMPLE_RATE, help="Microphone sample rate.")
@@ -2676,7 +3898,9 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         default=None,
         help="Optional shared service token for gateway/voice/TTS requests.",
     )
-    return parser.parse_args(argv)
+    args = parser.parse_args(argv)
+    args.host_profile_config = host_profile_payload(str(args.host_profile))
+    return args
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -2690,6 +3914,7 @@ def main(argv: list[str] | None = None) -> int:
 
     result = run_pilot_runtime_loop(
         runs_dir=args.runs_dir,
+        host_profile=args.host_profile_config,
         gateway_url=args.gateway_url,
         voice_runtime_url=args.voice_runtime_url,
         tts_runtime_url=args.tts_runtime_url,

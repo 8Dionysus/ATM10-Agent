@@ -58,7 +58,7 @@ def _bbox_intersects(bounds_a: Sequence[int] | None, bounds_b: Sequence[int] | N
 
 def _capture_target_kind(capture_target_kind: str | None) -> str:
     normalized = str(capture_target_kind or "").strip().lower()
-    if normalized in {"monitor", "region", "desktop"}:
+    if normalized in {"monitor", "region", "desktop", "window"}:
         return normalized
     return "unknown"
 
@@ -202,6 +202,27 @@ def _enumerate_visible_windows() -> list[dict[str, Any]]:
     return windows
 
 
+def find_best_atm10_window() -> dict[str, Any] | None:
+    if sys.platform != "win32":
+        return None
+
+    foreground_hwnd = _foreground_window_handle()
+    candidates: list[dict[str, Any]] = []
+    for window in _enumerate_visible_windows():
+        candidate = dict(window)
+        candidate["foreground"] = int(candidate.get("hwnd", 0)) == foreground_hwnd
+        candidate["heuristic_score"] = _atm10_heuristic_score(
+            window_title=str(candidate.get("window_title", "")),
+            process_name=str(candidate.get("process_name", "")),
+        )
+        if int(candidate["heuristic_score"]) >= _ATM10_HEURISTIC_THRESHOLD:
+            candidates.append(candidate)
+
+    if not candidates:
+        return None
+    return sorted(candidates, key=_candidate_sort_key, reverse=True)[0]
+
+
 def probe_atm10_session(
     *,
     capture_target_kind: str,
@@ -224,19 +245,8 @@ def probe_atm10_session(
             capture_intersects_window=None,
         )
 
-    foreground_hwnd = _foreground_window_handle()
-    candidates: list[dict[str, Any]] = []
-    for window in _enumerate_visible_windows():
-        candidate = dict(window)
-        candidate["foreground"] = int(candidate.get("hwnd", 0)) == foreground_hwnd
-        candidate["heuristic_score"] = _atm10_heuristic_score(
-            window_title=str(candidate.get("window_title", "")),
-            process_name=str(candidate.get("process_name", "")),
-        )
-        if int(candidate["heuristic_score"]) >= _ATM10_HEURISTIC_THRESHOLD:
-            candidates.append(candidate)
-
-    if not candidates:
+    best_candidate = find_best_atm10_window()
+    if best_candidate is None:
         return _build_probe_payload(
             checked_at_utc=checked_at_utc,
             capture_target_kind=normalized_capture_target_kind,
@@ -247,8 +257,6 @@ def probe_atm10_session(
             atm10_probable=False,
             capture_intersects_window=None,
         )
-
-    best_candidate = sorted(candidates, key=_candidate_sort_key, reverse=True)[0]
     capture_intersects_window = _bbox_intersects(
         best_candidate.get("window_bounds"),
         normalized_capture_bbox,

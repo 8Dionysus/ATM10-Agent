@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 
 import scripts.operator_product_snapshot as operator_snapshot
+from src.agent_core.host_profiles import host_profile_payload
 
 
 def _write_json(path: Path, payload: dict) -> None:
@@ -270,6 +271,7 @@ def _write_operator_startup_run(
             "mode": "start_operator_product",
             "status": status,
             "profile": "operator_product_core",
+            "host_profile": host_profile_payload("ov_intel_core_ultra_local"),
             "timestamp_utc": "2026-03-22T12:00:00+00:00",
             "gateway_url": "http://127.0.0.1:8770",
             "streamlit_url": "http://127.0.0.1:8501",
@@ -471,7 +473,9 @@ def _write_pilot_runtime_status(
             "status": "running",
             "state": "idle",
             "hotkey": "F8",
+            "host_profile": host_profile_payload("ov_intel_core_ultra_local"),
             "effective_config": {
+                "host_profile_id": "ov_intel_core_ultra_local",
                 "input_device_index": 1,
                 "asr_language": "ru",
                 "asr_max_new_tokens": 64,
@@ -819,6 +823,7 @@ def test_build_operator_product_snapshot_includes_pilot_runtime_context(
     last_turn_summary = payload["operator_context"]["last_turn_summary"]
     assert pilot_runtime["status"] == "running"
     assert pilot_runtime["state"] == "idle"
+    assert pilot_runtime["host_profile"]["id"] == "ov_intel_core_ultra_local"
     assert pilot_runtime["hotkey"] == "F8"
     assert pilot_runtime["input_device_index"] == 1
     assert pilot_runtime["asr_language"] == "ru"
@@ -864,6 +869,7 @@ def test_build_operator_product_snapshot_includes_pilot_runtime_context(
     assert "Quest book is the next step" in last_turn_summary["answer_preview"]
     assert payload["warnings"]["pilot_runtime"] == []
     assert payload["warnings"]["pilot_readiness"] == []
+    assert payload["operator_context"]["startup"]["host_profile"]["id"] == "ov_intel_core_ultra_local"
 
 
 def test_build_operator_product_snapshot_includes_returning_surface(

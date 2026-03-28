@@ -82,8 +82,51 @@ def test_build_piper_engine_without_model_path_is_disabled(monkeypatch: pytest.M
         engine.synthesize(text="hello", language="en", speaker=None)
 
 
+def test_build_piper_engine_prefers_inprocess_voice_when_available(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("PIPER_MODEL_PATH", "models/piper/ru.onnx")
+    seen: dict[str, object] = {}
+
+    class _FakeVoice:
+        def synthesize_wav(self, text, wav_file, syn_config=None):
+            seen["text"] = text
+            seen["speaker_id"] = None if syn_config is None else getattr(syn_config, "speaker_id", None)
+            wav_file.setnchannels(1)
+            wav_file.setsampwidth(2)
+            wav_file.setframerate(22050)
+            wav_file.writeframes(b"\x00\x00" * 32)
+
+    class _FakePiperVoice:
+        @staticmethod
+        def load(model_path):
+            seen["model_path"] = model_path
+            return _FakeVoice()
+
+    monkeypatch.setattr(tts_runtime_service, "_load_piper_python_voice", lambda: _FakePiperVoice)
+    monkeypatch.setattr(
+        tts_runtime_service,
+        "_build_piper_python_synthesis_config",
+        lambda selected_speaker: type("SynConfig", (), {"speaker_id": int(selected_speaker)})(),
+    )
+    monkeypatch.setattr(
+        tts_runtime_service.subprocess,
+        "run",
+        lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("subprocess fallback should not run")),
+    )
+
+    engine = tts_runtime_service._build_piper_engine(piper_speaker="3")
+    engine.prewarm()
+    wav_bytes, sample_rate = engine.synthesize(text="hello", language="en", speaker=None)
+
+    assert sample_rate == 22050
+    assert wav_bytes.startswith(b"RIFF")
+    assert seen["model_path"] == "models/piper/ru.onnx"
+    assert seen["text"] == "hello"
+    assert seen["speaker_id"] == 3
+
+
 def test_build_piper_engine_invokes_subprocess(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     monkeypatch.setenv("PIPER_MODEL_PATH", "models/piper/en.onnx")
+    monkeypatch.setattr(tts_runtime_service, "_load_piper_python_voice", lambda: None)
 
     def _fake_run(command, input, capture_output, text, check, timeout):
         output_file = Path(command[command.index("--output_file") + 1])
@@ -348,6 +391,7 @@ def test_build_default_service_prefers_piper_before_fallbacks(monkeypatch: pytes
         "_synthesize_windows_sapi_wav",
         lambda **_kwargs: (b"RIFFfakewindows", 22050),
     )
+    monkeypatch.setattr(tts_runtime_service, "_load_piper_python_voice", lambda: None)
 
     def _fake_run(command, input, capture_output, text, check, timeout):
         output_file = Path(command[command.index("--output_file") + 1])

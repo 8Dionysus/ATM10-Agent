@@ -5,9 +5,11 @@
 [![KAG Neo4j Guardrail Nightly](https://github.com/8Dionysus/ATM10-Agent/actions/workflows/kag-neo4j-guardrail-nightly.yml/badge.svg)](https://github.com/8Dionysus/ATM10-Agent/actions/workflows/kag-neo4j-guardrail-nightly.yml)
 [![Security Nightly](https://github.com/8Dionysus/ATM10-Agent/actions/workflows/security-nightly.yml/badge.svg)](https://github.com/8Dionysus/ATM10-Agent/actions/workflows/security-nightly.yml)
 
-Local-first game companion for ATM10 on Windows 11 + PowerShell 7.
+Local-first ATM10 companion with an active operator loop and agent stack under the hood for Windows 11 + PowerShell 7.
 
-`ATM10-Agent` combines perception (screen/HUD), memory (RAG + KAG), safe automation (dry-run by default), voice, and a gateway-backed operator panel into one reproducible local stack.
+`ATM10-Agent` combines perception (screen/HUD), memory (RAG + KAG), safe automation (dry-run by default), voice, routing/evals, and gateway-backed operator surfaces into one reproducible local companion stack.
+
+The current canonical repo-host path is `OpenVINO-first` on this Intel `CPU/GPU/NPU` machine. Future host paths such as `NVIDIA`/`Ollama` stay additive and machine-specific rather than silently replacing the validated local baseline.
 
 ## What is working now
 
@@ -20,7 +22,7 @@ Local-first game companion for ATM10 on Windows 11 + PowerShell 7.
 - Gateway v1 local + HTTP paths, Streamlit operator panel, and the primary launcher `scripts/start_operator_product.py`
 - Operator startup/snapshot readiness for external `Qdrant` + `Neo4j`, plus profile-aware `combo_a` smoke/safe-action surfaces
 - Operator recurrence recovery surface: additive `gateway_operator_return_event_v1` / `gateway_operator_return_summary_v1`, launcher + pilot emitters, `operator_context.returning`, and recommendation-only safe-action posture inside the existing operator seams
-- Observer pilot runtime slice: local `F8` push-to-talk (`scripts/pilot_runtime_loop.py`) with Windows screen capture, `Whisper GenAI -> Qwen2.5-VL-7B -> hybrid_query(profile=combo_a) -> Qwen3-8B -> tts_runtime_service`, plus `pilot_runtime_status_v1` / `pilot_turn_v1` artifacts surfaced in the operator snapshot and Streamlit panel
+- Observer pilot runtime slice: local `F8` push-to-talk (`scripts/pilot_runtime_loop.py`) with `DXcam`-preferred Windows screen capture (`Pillow` fallback), parallel `Whisper GenAI (NPU) + Qwen2.5-VL-7B (GPU)` staging before optional `hybrid_query(profile=combo_a) -> Qwen3-8B -> tts_runtime_service`, plus `pilot_runtime_status_v1` / `pilot_turn_v1` artifacts surfaced in the operator snapshot and Streamlit panel, with `Piper` preferring the in-process Python runtime before subprocess fallback
 - Safe automation intent -> plan -> dry-run chain with public rollout records under `M6.19` for `open_quest_book`, `check_inventory_tool`, and `open_world_map`
 
 For the full current public snapshot, use `MANIFEST.md`. For runnable command depth, use `docs/RUNBOOK.md`. For the operator-facing recurrence landing, use `docs/RECURRENCE_OPERATOR_RECOVERY.md`.
@@ -59,10 +61,10 @@ Expected result:
 ```powershell
 cd <repo-root>
 .\.venv\Scripts\Activate.ps1
-python scripts/start_operator_product.py --runs-dir runs
+python scripts/start_operator_product.py --runs-dir runs --host-profile ov_intel_core_ultra_local
 ```
 
-This is the canonical local launch path for `gateway + Streamlit`.
+This is the canonical local launch path for `gateway + Streamlit` on the current `OpenVINO-first` host profile.
 
 Operator-facing recovery details for this launch path live in `docs/RECURRENCE_OPERATOR_RECOVERY.md`.
 
@@ -71,10 +73,10 @@ Observer pilot example:
 ```powershell
 cd <repo-root>
 .\.venv\Scripts\Activate.ps1
-python scripts/start_operator_product.py --runs-dir runs --start-voice-runtime --start-tts-runtime --start-pilot-runtime --capture-monitor 0
+python scripts/start_operator_product.py --runs-dir runs --host-profile ov_intel_core_ultra_local --start-voice-runtime --start-tts-runtime --start-pilot-runtime --capture-monitor 0
 ```
 
-For the local observer pilot, `--capture-monitor <index>` or `--capture-region x,y,w,h` is required for live screen grounding. The default pilot model stack is `Qwen2.5-VL-7B` on `GPU` plus `Qwen3-8B` on `NPU`.
+For the local observer pilot, `--capture-monitor <index>` or `--capture-region x,y,w,h` is required for live screen grounding. `--host-profile ov_intel_core_ultra_local` is the current explicit repo-host baseline, and the default pilot model stack on that host profile is `Qwen2.5-VL-7B` on `GPU` plus `Qwen3-8B` on `GPU`.
 
 ### Gateway local contract runner
 
@@ -169,7 +171,7 @@ Default dependency audit still inspects all declared requirement profiles for in
 - `docs/SOURCE_OF_TRUTH.md` - document roles and update rules
 - `docs/ARCHIVED_TRACKS.md` - recoverable paths and re-open criteria
 - `docs/RELEASE_WAVE6.md` - security hardening reference
-- `docs/QWEN3_MODEL_STACK.md` - local OpenVINO model-stack posture (file name retained for continuity)
+- `docs/QWEN3_MODEL_STACK.md` - machine-specific host/runtime policy and local model-stack posture (file name retained for continuity)
 
 ## License
 

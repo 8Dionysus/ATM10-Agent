@@ -47,6 +47,10 @@ This file defines the roles of the project's documents to remove duplication and
 * `docs/RUNBOOK.md`
   * Runnable commands, operational profiles, quickstart for launches.
 
+* `docs/QWEN3_MODEL_STACK.md`
+  * Machine-specific model/runtime posture and validated host profiles.
+  * Records the current `OpenVINO-first` repo-host baseline and additive future runtime-path rules.
+
 * `docs/ARCHIVED_TRACKS.md`
   * Archived/recoverable directions and re-open criteria.
 
@@ -61,6 +65,7 @@ This file defines the roles of the project's documents to remove duplication and
   * `MANIFEST.md`
   * `ROADMAP.md`
   * `docs/RUNBOOK.md`
+  * `docs/QWEN3_MODEL_STACK.md`
   * `docs/SOURCE_OF_TRUTH.md`
 * `docs/ECOSYSTEM_CONTEXT.md` is used only as a reference/context layer.
 * Local-only `TODO.md` / `PLANS.md` / `docs/DECISIONS.md` may guide maintainer workflow, but they do not replace public source-of-truth docs.
@@ -70,6 +75,7 @@ This file defines the roles of the project's documents to remove duplication and
 
 * If behavior/architecture changed -> update local `docs/DECISIONS.md` and any impacted public docs.
 * If commands/setup changed -> update `docs/RUNBOOK.md`.
+* If the machine/runtime baseline or host-profile policy changed -> update `docs/QWEN3_MODEL_STACK.md` and any impacted public docs.
 * If there is an important public status/result -> update `MANIFEST.md` and, if policy/direction changed, `ROADMAP.md`, `docs/RUNBOOK.md`, and/or `docs/SOURCE_OF_TRUTH.md`.
 * If there is local execution planning -> update local `TODO.md` / `PLANS.md`.
 * If there is detailed internal chronology or PR/release scratch material -> use ignored local-only surfaces (`docs/internal/**` by default; existing local `docs/SESSION_*.md` copies are allowed for continuity).

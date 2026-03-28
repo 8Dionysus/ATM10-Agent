@@ -21,6 +21,12 @@ from src.agent_core.combo_a_profile import (
     DEFAULT_COMBO_A_NEO4J_USER,
     DEFAULT_COMBO_A_QDRANT_URL,
 )
+from src.agent_core.host_profiles import (
+    DEFAULT_HOST_PROFILE_ID,
+    get_host_profile,
+    host_profile_payload,
+    list_host_profile_ids,
+)
 from scripts.operator_return_recovery import (
     SAFE_STOP_AFTER_DEFAULT,
     advance_return_loop_state,
@@ -32,17 +38,18 @@ from scripts.operator_return_recovery import (
 )
 
 SCHEMA_VERSION = "operator_product_startup_v1"
-DEFAULT_LIVE_ASR_LANGUAGE = "ru"
-DEFAULT_LIVE_ASR_MAX_NEW_TOKENS = 64
-DEFAULT_LIVE_PILOT_VLM_DEVICE = "GPU"
-DEFAULT_LIVE_PILOT_TEXT_DEVICE = "GPU"
-DEFAULT_LIVE_PILOT_VLM_MAX_NEW_TOKENS = 64
-DEFAULT_LIVE_PILOT_TEXT_MAX_NEW_TOKENS = 64
-DEFAULT_LIVE_PILOT_HYBRID_TIMEOUT_SEC = 1.0
-DEFAULT_LIVE_PILOT_GATEWAY_TOPK = 3
-DEFAULT_LIVE_PILOT_GATEWAY_CANDIDATE_K = 6
-DEFAULT_LIVE_PILOT_MAX_ENTITIES_PER_DOC = 32
-DEFAULT_LIVE_PILOT_INPUT_DEVICE_INDEX = 1
+DEFAULT_HOST_PROFILE = get_host_profile(DEFAULT_HOST_PROFILE_ID)
+DEFAULT_LIVE_ASR_LANGUAGE = DEFAULT_HOST_PROFILE.voice_asr_language
+DEFAULT_LIVE_ASR_MAX_NEW_TOKENS = DEFAULT_HOST_PROFILE.voice_asr_max_new_tokens
+DEFAULT_LIVE_PILOT_VLM_DEVICE = DEFAULT_HOST_PROFILE.pilot_vlm_device
+DEFAULT_LIVE_PILOT_TEXT_DEVICE = DEFAULT_HOST_PROFILE.pilot_text_device
+DEFAULT_LIVE_PILOT_VLM_MAX_NEW_TOKENS = DEFAULT_HOST_PROFILE.pilot_vlm_max_new_tokens
+DEFAULT_LIVE_PILOT_TEXT_MAX_NEW_TOKENS = DEFAULT_HOST_PROFILE.pilot_text_max_new_tokens
+DEFAULT_LIVE_PILOT_HYBRID_TIMEOUT_SEC = DEFAULT_HOST_PROFILE.pilot_hybrid_timeout_sec
+DEFAULT_LIVE_PILOT_GATEWAY_TOPK = DEFAULT_HOST_PROFILE.pilot_gateway_topk
+DEFAULT_LIVE_PILOT_GATEWAY_CANDIDATE_K = DEFAULT_HOST_PROFILE.pilot_gateway_candidate_k
+DEFAULT_LIVE_PILOT_MAX_ENTITIES_PER_DOC = DEFAULT_HOST_PROFILE.pilot_max_entities_per_doc
+DEFAULT_LIVE_PILOT_INPUT_DEVICE_INDEX = DEFAULT_HOST_PROFILE.pilot_input_device_index
 UNCONFIGURED_PILOT_RUNTIME_URL_SENTINEL = "disabled"
 
 
@@ -98,11 +105,23 @@ def _resolve_effective_runs_dirs(args: argparse.Namespace) -> argparse.Namespace
     return args
 
 
+def _resolve_requested_host_profile(argv: list[str] | None) -> dict[str, Any]:
+    pre_parser = argparse.ArgumentParser(add_help=False)
+    pre_parser.add_argument(
+        "--host-profile",
+        choices=list_host_profile_ids(),
+        default=DEFAULT_HOST_PROFILE_ID,
+    )
+    pre_args, _unknown = pre_parser.parse_known_args(argv)
+    return host_profile_payload(str(pre_args.host_profile))
+
+
 def build_startup_plan(args: argparse.Namespace) -> dict[str, Any]:
     gateway_url = f"http://{args.gateway_host}:{args.gateway_port}"
     streamlit_url = f"http://127.0.0.1:{args.streamlit_port}"
     voice_runtime_url = args.voice_runtime_url
     tts_runtime_url = args.tts_runtime_url
+    host_profile = dict(args.host_profile_config or {})
     managed_processes: dict[str, dict[str, Any]] = {}
     external_services = {
         "qdrant": {
@@ -195,6 +214,8 @@ def build_startup_plan(args: argparse.Namespace) -> dict[str, Any]:
             "scripts/pilot_runtime_loop.py",
             "--runs-dir",
             str(args.pilot_runtime_runs_dir),
+            "--host-profile",
+            str(args.host_profile),
             "--gateway-url",
             gateway_url,
             "--pilot-hotkey",
@@ -311,6 +332,7 @@ def build_startup_plan(args: argparse.Namespace) -> dict[str, Any]:
     return {
         "schema_version": SCHEMA_VERSION,
         "profile": "operator_product_core",
+        "host_profile": host_profile,
         "generated_at_utc": _utc_now(),
         "artifact_roots": {
             "operator_runs_dir": str(args.runs_dir),
@@ -779,8 +801,16 @@ def _terminate_process(process: subprocess.Popen[str], *, timeout_sec: float = 1
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
+    selected_host_profile = _resolve_requested_host_profile(argv)
+    selected_defaults = dict(selected_host_profile.get("defaults") or {})
     parser = argparse.ArgumentParser(description="Primary startup profile for the operator product core.")
     parser.add_argument("--runs-dir", type=Path, default=Path("runs"), help="Base runs directory.")
+    parser.add_argument(
+        "--host-profile",
+        choices=list_host_profile_ids(),
+        default=str(selected_host_profile.get("id", DEFAULT_HOST_PROFILE_ID)),
+        help="Machine/runtime host profile used to resolve pilot/runtime defaults.",
+    )
     parser.add_argument(
         "--gateway-runs-dir",
         type=Path,
@@ -805,7 +835,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument(
         "--startup-timeout-sec",
         type=float,
-        default=20.0,
+        default=120.0,
         help="Timeout waiting for managed services, gateway, and Streamlit to become ready.",
     )
     parser.add_argument(
@@ -834,26 +864,26 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument(
         "--voice-asr-language",
         type=str,
-        default=DEFAULT_LIVE_ASR_LANGUAGE,
-        help="Static language hint for managed live ASR (default: ru).",
+        default=str(selected_defaults.get("voice_asr_language", DEFAULT_LIVE_ASR_LANGUAGE)),
+        help="Static language hint for managed live ASR.",
     )
     parser.add_argument(
         "--voice-asr-max-new-tokens",
         type=int,
-        default=DEFAULT_LIVE_ASR_MAX_NEW_TOKENS,
+        default=int(selected_defaults.get("voice_asr_max_new_tokens", DEFAULT_LIVE_ASR_MAX_NEW_TOKENS)),
         help="ASR token budget for managed live voice runtime.",
     )
     parser.add_argument(
         "--voice-asr-warmup-request",
         action=argparse.BooleanOptionalAction,
-        default=True,
-        help="Run one managed ASR warmup request on startup (default: enabled).",
+        default=bool(selected_defaults.get("voice_asr_warmup_request", True)),
+        help="Run one managed ASR warmup request on startup.",
     )
     parser.add_argument(
         "--voice-asr-warmup-language",
         type=str,
-        default=DEFAULT_LIVE_ASR_LANGUAGE,
-        help="Language hint for the managed ASR warmup request (default: ru).",
+        default=str(selected_defaults.get("voice_asr_warmup_language", DEFAULT_LIVE_ASR_LANGUAGE)),
+        help="Language hint for the managed ASR warmup request.",
     )
     parser.add_argument(
         "--tts-runtime-url",
@@ -940,79 +970,79 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument(
         "--pilot-vlm-model-dir",
         type=Path,
-        default=Path("models") / "qwen2.5-vl-7b-instruct-int4-ov",
+        default=Path(str(selected_defaults.get("pilot_vlm_model_dir", DEFAULT_HOST_PROFILE.pilot_vlm_model_dir))),
         help="Pilot local VLM model dir.",
     )
     parser.add_argument(
         "--pilot-text-model-dir",
         type=Path,
-        default=Path("models") / "qwen3-8b-int4-cw-ov",
+        default=Path(str(selected_defaults.get("pilot_text_model_dir", DEFAULT_HOST_PROFILE.pilot_text_model_dir))),
         help="Pilot local grounded-reply model dir.",
     )
     parser.add_argument(
         "--pilot-vlm-device",
         type=str,
-        default=DEFAULT_LIVE_PILOT_VLM_DEVICE,
-        help=f"OpenVINO device for pilot VLM (default: {DEFAULT_LIVE_PILOT_VLM_DEVICE}).",
+        default=str(selected_defaults.get("pilot_vlm_device", DEFAULT_LIVE_PILOT_VLM_DEVICE)),
+        help="OpenVINO device for pilot VLM.",
     )
     parser.add_argument(
         "--pilot-text-device",
         type=str,
-        default=DEFAULT_LIVE_PILOT_TEXT_DEVICE,
-        help=f"OpenVINO device for pilot grounded-reply model (default: {DEFAULT_LIVE_PILOT_TEXT_DEVICE}).",
+        default=str(selected_defaults.get("pilot_text_device", DEFAULT_LIVE_PILOT_TEXT_DEVICE)),
+        help="OpenVINO device for pilot grounded-reply model.",
     )
     parser.add_argument(
         "--pilot-vlm-provider",
         choices=("openvino", "stub"),
-        default="openvino",
-        help="Pilot VLM provider passed to pilot_runtime_loop.py (default: openvino; use stub only for diagnostics).",
+        default=str(selected_defaults.get("pilot_vlm_provider", "openvino")),
+        help="Pilot VLM provider passed to pilot_runtime_loop.py (use stub only for diagnostics).",
     )
     parser.add_argument(
         "--pilot-text-provider",
         choices=("openvino", "stub"),
-        default="openvino",
-        help="Pilot grounded-reply provider passed to pilot_runtime_loop.py (default: openvino; use stub only for diagnostics).",
+        default=str(selected_defaults.get("pilot_text_provider", "openvino")),
+        help="Pilot grounded-reply provider passed to pilot_runtime_loop.py (use stub only for diagnostics).",
     )
     parser.add_argument(
         "--pilot-input-device-index",
         type=int,
-        default=DEFAULT_LIVE_PILOT_INPUT_DEVICE_INDEX,
-        help="Explicit sounddevice input device index passed to pilot_runtime_loop.py (default: 1).",
+        default=selected_defaults.get("pilot_input_device_index", DEFAULT_LIVE_PILOT_INPUT_DEVICE_INDEX),
+        help="Explicit sounddevice input device index passed to pilot_runtime_loop.py.",
     )
     parser.add_argument(
         "--pilot-vlm-max-new-tokens",
         type=int,
-        default=DEFAULT_LIVE_PILOT_VLM_MAX_NEW_TOKENS,
+        default=int(selected_defaults.get("pilot_vlm_max_new_tokens", DEFAULT_LIVE_PILOT_VLM_MAX_NEW_TOKENS)),
         help="VLM token budget for the managed pilot runtime.",
     )
     parser.add_argument(
         "--pilot-text-max-new-tokens",
         type=int,
-        default=DEFAULT_LIVE_PILOT_TEXT_MAX_NEW_TOKENS,
+        default=int(selected_defaults.get("pilot_text_max_new_tokens", DEFAULT_LIVE_PILOT_TEXT_MAX_NEW_TOKENS)),
         help="Grounded-reply token budget for the managed pilot runtime.",
     )
     parser.add_argument(
         "--pilot-hybrid-timeout-sec",
         type=float,
-        default=DEFAULT_LIVE_PILOT_HYBRID_TIMEOUT_SEC,
+        default=float(selected_defaults.get("pilot_hybrid_timeout_sec", DEFAULT_LIVE_PILOT_HYBRID_TIMEOUT_SEC)),
         help="Pilot-side timeout for opportunistic hybrid queries.",
     )
     parser.add_argument(
         "--pilot-gateway-topk",
         type=int,
-        default=DEFAULT_LIVE_PILOT_GATEWAY_TOPK,
+        default=int(selected_defaults.get("pilot_gateway_topk", DEFAULT_LIVE_PILOT_GATEWAY_TOPK)),
         help="Live pilot hybrid top-k budget.",
     )
     parser.add_argument(
         "--pilot-gateway-candidate-k",
         type=int,
-        default=DEFAULT_LIVE_PILOT_GATEWAY_CANDIDATE_K,
+        default=int(selected_defaults.get("pilot_gateway_candidate_k", DEFAULT_LIVE_PILOT_GATEWAY_CANDIDATE_K)),
         help="Live pilot hybrid candidate-k budget.",
     )
     parser.add_argument(
         "--pilot-max-entities-per-doc",
         type=int,
-        default=DEFAULT_LIVE_PILOT_MAX_ENTITIES_PER_DOC,
+        default=int(selected_defaults.get("pilot_max_entities_per_doc", DEFAULT_LIVE_PILOT_MAX_ENTITIES_PER_DOC)),
         help="Live pilot hybrid entity budget per document.",
     )
     parser.add_argument(
@@ -1049,6 +1079,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         parser.error("--start-voice-runtime cannot be combined with --voice-runtime-url.")
     if args.start_tts_runtime and args.tts_runtime_url:
         parser.error("--start-tts-runtime cannot be combined with --tts-runtime-url.")
+    args.host_profile_config = host_profile_payload(str(args.host_profile))
     return _resolve_effective_runs_dirs(args)
 
 
@@ -1070,6 +1101,7 @@ def main(argv: list[str] | None = None) -> int:
         "mode": "start_operator_product",
         "status": "starting",
         "profile": plan["profile"],
+        "host_profile": plan.get("host_profile"),
         "gateway_url": plan["gateway"]["url"],
         "streamlit_url": plan["streamlit"]["url"],
         "effective_urls": {
@@ -1112,7 +1144,7 @@ def main(argv: list[str] | None = None) -> int:
         stage="plan",
         status="ok",
         message="startup plan resolved",
-        details={"profile": plan["profile"]},
+        details={"profile": plan["profile"], "host_profile_id": plan.get("host_profile", {}).get("id")},
     )
     _write_json(run_json_path, run_payload)
 

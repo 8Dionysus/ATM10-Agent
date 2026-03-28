@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 from typing import Any
 
@@ -12,6 +13,7 @@ from src.agent_core.openvino_genai_compat import build_generation_config, explai
 from src.agent_core.vlm import VLMClient
 
 DEFAULT_OPENVINO_VLM_MODEL_DIR = Path("models") / "qwen2.5-vl-7b-instruct-int4-ov"
+_SUMMARY_FIELD_PATTERN = re.compile(r'"summary"\s*:\s*"((?:\\.|[^"\\])*)"', re.IGNORECASE | re.DOTALL)
 
 
 def _load_openvino_genai() -> Any:
@@ -58,15 +60,21 @@ def _read_image_tensor(image_path: Path) -> Any:
 
 
 def _parse_vlm_json(response_text: str) -> dict[str, Any]:
-    normalized_response = _strip_reasoning_markup(response_text)
+    normalized_response = _strip_markdown_fence(_strip_reasoning_markup(response_text))
     if not normalized_response.strip():
         return {"summary": "", "next_steps": []}
     try:
         payload = json.loads(_extract_json_candidate(normalized_response))
     except json.JSONDecodeError:
-        return {"summary": normalized_response.strip(), "next_steps": []}
+        extracted_summary = _extract_summary_field_candidate(normalized_response)
+        if extracted_summary is not None:
+            return {"summary": sanitize_vlm_summary_text(extracted_summary), "next_steps": []}
+        return {"summary": sanitize_vlm_summary_text(normalized_response), "next_steps": []}
     if not isinstance(payload, dict):
-        return {"summary": normalized_response.strip(), "next_steps": []}
+        extracted_summary = _extract_summary_field_candidate(normalized_response)
+        if extracted_summary is not None:
+            return {"summary": sanitize_vlm_summary_text(extracted_summary), "next_steps": []}
+        return {"summary": sanitize_vlm_summary_text(normalized_response), "next_steps": []}
     summary = payload.get("summary", "")
     next_steps = payload.get("next_steps", [])
     if not isinstance(summary, str):
@@ -74,7 +82,7 @@ def _parse_vlm_json(response_text: str) -> dict[str, Any]:
     if not isinstance(next_steps, list):
         next_steps = []
     return {
-        "summary": summary,
+        "summary": sanitize_vlm_summary_text(summary),
         "next_steps": [str(item) for item in next_steps if str(item).strip()],
     }
 
@@ -89,12 +97,44 @@ def _strip_reasoning_markup(response_text: str) -> str:
     return normalized
 
 
+def _strip_markdown_fence(response_text: str) -> str:
+    normalized = str(response_text or "").strip()
+    normalized = re.sub(r"^\s*```(?:json)?\s*", "", normalized, flags=re.IGNORECASE)
+    normalized = re.sub(r"\s*```\s*$", "", normalized)
+    return normalized.strip()
+
+
 def _extract_json_candidate(response_text: str) -> str:
     start_index = response_text.find("{")
     end_index = response_text.rfind("}")
     if start_index >= 0 and end_index > start_index:
         return response_text[start_index : end_index + 1]
     return response_text
+
+
+def _extract_summary_field_candidate(response_text: str) -> str | None:
+    match = _SUMMARY_FIELD_PATTERN.search(str(response_text or ""))
+    if match is None:
+        return None
+    encoded_value = match.group(1)
+    try:
+        return str(json.loads(f'"{encoded_value}"'))
+    except json.JSONDecodeError:
+        return encoded_value.replace("\\n", " ").replace("\\r", " ").replace("\\t", " ").replace('\\"', '"')
+
+
+def sanitize_vlm_summary_text(summary_text: str) -> str:
+    normalized = _strip_markdown_fence(_strip_reasoning_markup(summary_text))
+    extracted_summary = _extract_summary_field_candidate(normalized)
+    if extracted_summary is not None:
+        normalized = extracted_summary
+    normalized = " ".join(str(normalized or "").replace("\r", " ").replace("\n", " ").split())
+    if normalized.lower().startswith("summary:"):
+        normalized = normalized.split(":", 1)[1].strip()
+    normalized = normalized.strip("`{}[]\"' ")
+    normalized = re.sub(r"!{2,}", "!", normalized)
+    normalized = re.sub(r"\?{2,}", "?", normalized)
+    return normalized.strip()
 
 
 class OpenVINOVLMClient(VLMClient):
