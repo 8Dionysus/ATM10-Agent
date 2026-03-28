@@ -171,6 +171,36 @@ def test_push_to_talk_recorder_uses_explicit_input_device_index() -> None:
     assert selected == 1
 
 
+def test_push_to_talk_recorder_collapse_to_mono_selects_strongest_channel() -> None:
+    waveform = np.array(
+        [
+            [0.0001, 0.20],
+            [0.0002, -0.25],
+            [0.0001, 0.30],
+            [0.0002, -0.35],
+        ],
+        dtype=np.float32,
+    )
+
+    mono, meta = pilot_runtime.PushToTalkRecorder._collapse_to_mono(waveform)
+
+    assert meta["channels"] == 2
+    assert meta["selected_channel_index"] == 1
+    assert meta["selected_channel_rms"] is not None
+    assert len(meta["channel_rms"]) == 2
+    assert np.allclose(mono, waveform[:, 1])
+
+
+def test_push_to_talk_recorder_collapse_to_mono_handles_empty_waveform() -> None:
+    mono, meta = pilot_runtime.PushToTalkRecorder._collapse_to_mono(np.zeros((0, 2), dtype=np.float32))
+
+    assert mono.size == 0
+    assert meta["channels"] == 2
+    assert meta["selected_channel_index"] is None
+    assert meta["selected_channel_rms"] is None
+    assert meta["channel_rms"] == []
+
+
 def test_write_warmup_image_creates_valid_png(tmp_path: Path) -> None:
     warmup_path = pilot_runtime._write_warmup_image(tmp_path / "pilot_vlm_warmup.png")
 

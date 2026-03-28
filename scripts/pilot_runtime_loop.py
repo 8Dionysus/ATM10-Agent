@@ -1454,6 +1454,11 @@ class PushToTalkRecorder:
         self._preferred_input_device_index = preferred_input_device_index
         self._input_device_index: int | None = None
         self._input_device_name: str | None = None
+        self._input_device_channels: int = 1
+        self._record_channels: int = 1
+        self._selected_channel_index: int | None = None
+        self._selected_channel_rms: float | None = None
+        self._captured_channel_rms: list[float] = []
         self._chunks: list[np.ndarray] = []
         self._stream: Any = None
         self._started_at = 0.0
@@ -1534,17 +1539,28 @@ class PushToTalkRecorder:
 
         self._input_device_index = int(input_index)
         self._input_device_name = str(devices[self._input_device_index].get("name", f"device_{input_index}"))
+        max_input_channels = int(devices[self._input_device_index].get("max_input_channels", 0) or 0)
+        self._input_device_channels = max(1, max_input_channels)
+        self._record_channels = max(1, min(self._input_device_channels, 4))
+        self._selected_channel_index = None
+        self._selected_channel_rms = None
+        self._captured_channel_rms = []
         self._chunks = []
 
         def _callback(indata: Any, frames: int, _time_info: Any, status: Any) -> None:
             _ = frames
             if getattr(status, "input_overflow", False):
                 return
-            self._chunks.append(np.asarray(indata, dtype=np.float32).reshape(-1))
+            chunk = np.asarray(indata, dtype=np.float32)
+            if chunk.ndim == 1:
+                chunk = chunk.reshape(-1, 1)
+            elif chunk.ndim != 2:
+                chunk = chunk.reshape(chunk.shape[0], -1)
+            self._chunks.append(np.array(chunk, dtype=np.float32, copy=True))
 
         self._stream = sd.InputStream(
             samplerate=self._sample_rate,
-            channels=1,
+            channels=self._record_channels,
             dtype="float32",
             device=self._input_device_index,
             callback=_callback,
@@ -1554,8 +1570,35 @@ class PushToTalkRecorder:
         return {
             "input_device_index": self._input_device_index,
             "input_device_name": self._input_device_name,
+            "input_device_channels": self._input_device_channels,
+            "record_channels": self._record_channels,
             "sample_rate": self._sample_rate,
             "started_at_utc": _utc_now(),
+        }
+
+    @staticmethod
+    def _collapse_to_mono(waveform: np.ndarray) -> tuple[np.ndarray, dict[str, Any]]:
+        samples = np.asarray(waveform, dtype=np.float32)
+        if samples.ndim == 1:
+            samples = samples.reshape(-1, 1)
+        elif samples.ndim != 2:
+            samples = samples.reshape(samples.shape[0], -1)
+        if samples.shape[0] == 0:
+            return np.zeros(0, dtype=np.float32), {
+                "channels": int(samples.shape[1]) if samples.ndim == 2 else 0,
+                "selected_channel_index": None,
+                "selected_channel_rms": None,
+                "channel_rms": [],
+            }
+
+        channel_rms = np.sqrt(np.mean(np.square(samples), axis=0, dtype=np.float64))
+        selected_channel_index = int(np.argmax(channel_rms))
+        mono = np.asarray(samples[:, selected_channel_index], dtype=np.float32).reshape(-1)
+        return mono, {
+            "channels": int(samples.shape[1]),
+            "selected_channel_index": selected_channel_index,
+            "selected_channel_rms": float(channel_rms[selected_channel_index]),
+            "channel_rms": [float(value) for value in channel_rms.tolist()],
         }
 
     def stop_to_wav(self, *, output_path: Path) -> dict[str, Any]:
@@ -1566,19 +1609,32 @@ class PushToTalkRecorder:
             self._stream.close()
         finally:
             self._stream = None
-        waveform = np.concatenate(self._chunks) if self._chunks else np.zeros(0, dtype=np.float32)
+        waveform = (
+            np.concatenate(self._chunks, axis=0)
+            if self._chunks
+            else np.zeros((0, max(1, int(self._record_channels))), dtype=np.float32)
+        )
         self._chunks = []
         duration_sec = perf_counter() - self._started_at
-        if waveform.size == 0:
+        mono_waveform, channel_meta = self._collapse_to_mono(waveform)
+        if mono_waveform.size == 0:
             raise RuntimeError("No audio frames were captured during push-to-talk.")
-        write_wav_pcm16(path=output_path, waveform=waveform, sample_rate=self._sample_rate)
+        self._selected_channel_index = channel_meta["selected_channel_index"]
+        self._selected_channel_rms = channel_meta["selected_channel_rms"]
+        self._captured_channel_rms = list(channel_meta["channel_rms"])
+        write_wav_pcm16(path=output_path, waveform=mono_waveform, sample_rate=self._sample_rate)
         return {
             "mode": "push_to_talk_recorded_microphone",
             "input_device_index": self._input_device_index,
             "input_device_name": self._input_device_name,
+            "input_device_channels": self._input_device_channels,
+            "record_channels": self._record_channels,
+            "selected_channel_index": self._selected_channel_index,
+            "selected_channel_rms": self._selected_channel_rms,
+            "channel_rms": self._captured_channel_rms,
             "sample_rate": self._sample_rate,
             "duration_sec": float(duration_sec),
-            "num_samples": int(waveform.shape[0]),
+            "num_samples": int(mono_waveform.shape[0]),
             "audio_path": str(output_path),
         }
 
@@ -1591,6 +1647,9 @@ class PushToTalkRecorder:
         finally:
             self._stream = None
             self._chunks = []
+            self._selected_channel_index = None
+            self._selected_channel_rms = None
+            self._captured_channel_rms = []
 
 
 def run_pilot_turn(
