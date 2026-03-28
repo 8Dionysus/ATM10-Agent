@@ -456,6 +456,48 @@ def _resolve_piper_config(
     }
 
 
+def _load_piper_python_voice() -> Any | None:
+    try:
+        from piper import PiperVoice
+    except Exception:
+        return None
+    return PiperVoice
+
+
+def _build_piper_python_synthesis_config(selected_speaker: str | None) -> Any | None:
+    normalized_speaker = str(selected_speaker or "").strip()
+    if not normalized_speaker:
+        return None
+    try:
+        from piper.config import SynthesisConfig
+    except Exception as exc:
+        raise TTSRuntimeError("Piper Python synthesis config is unavailable.") from exc
+    try:
+        speaker_id = int(normalized_speaker)
+    except ValueError as exc:
+        raise TTSRuntimeError(
+            f"Piper speaker must be numeric for the Python runtime: {normalized_speaker}"
+        ) from exc
+    return SynthesisConfig(speaker_id=speaker_id)
+
+
+def _synthesize_with_loaded_piper_voice(
+    *,
+    voice: Any,
+    text: str,
+    selected_speaker: str | None,
+) -> tuple[bytes, int]:
+    buffer = io.BytesIO()
+    with wave.open(buffer, "wb") as wav_file:
+        synth_config = _build_piper_python_synthesis_config(selected_speaker)
+        voice.synthesize_wav(text, wav_file, syn_config=synth_config)
+    wav_bytes = buffer.getvalue()
+    if not wav_bytes:
+        raise TTSRuntimeError("Piper Python synthesis produced empty audio.")
+    sample_rate = _sample_rate_from_wav_bytes(wav_bytes)
+    return wav_bytes, sample_rate
+
+
 def _build_piper_engine(
     *,
     piper_executable: str | None = None,
@@ -474,7 +516,28 @@ def _build_piper_engine(
     if not piper_model_path:
         return _disabled_engine("piper", "PIPER_MODEL_PATH is not set.")
 
-    def _synthesize(text: str, _language: str, speaker: str | None) -> tuple[bytes, int]:
+    state: dict[str, Any] = {"voice": None, "backend": None}
+    lock = threading.RLock()
+
+    def _load_voice() -> tuple[Any | None, str]:
+        with lock:
+            if state["backend"] == "python":
+                return state["voice"], "python"
+            if state["backend"] == "subprocess":
+                return None, "subprocess"
+
+            piper_voice_cls = _load_piper_python_voice()
+            if piper_voice_cls is not None:
+                try:
+                    state["voice"] = piper_voice_cls.load(str(piper_model_path))
+                    state["backend"] = "python"
+                    return state["voice"], "python"
+                except Exception:
+                    state["voice"] = None
+            state["backend"] = "subprocess"
+            return None, "subprocess"
+
+    def _synthesize_via_subprocess(text: str, selected_speaker: str | None) -> tuple[bytes, int]:
         with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as temp_file:
             output_path = Path(temp_file.name)
         command = [
@@ -484,7 +547,6 @@ def _build_piper_engine(
             "--output_file",
             str(output_path),
         ]
-        selected_speaker = speaker or default_speaker
         if selected_speaker:
             command.extend(["--speaker", str(selected_speaker)])
         try:
@@ -507,7 +569,26 @@ def _build_piper_engine(
         finally:
             output_path.unlink(missing_ok=True)
 
-    return CallbackTTSEngine(name="piper", synthesize_fn=_synthesize)
+    def _prewarm() -> None:
+        voice, backend = _load_voice()
+        if backend == "python":
+            if voice is None:
+                raise TTSRuntimeError("Piper Python runtime did not load a voice.")
+            return
+        _synthesize_via_subprocess("ATM10 pilot runtime probe.", None)
+
+    def _synthesize(text: str, _language: str, speaker: str | None) -> tuple[bytes, int]:
+        selected_speaker = speaker or default_speaker
+        voice, backend = _load_voice()
+        if backend == "python" and voice is not None:
+            return _synthesize_with_loaded_piper_voice(
+                voice=voice,
+                text=text,
+                selected_speaker=selected_speaker,
+            )
+        return _synthesize_via_subprocess(text, selected_speaker)
+
+    return CallbackTTSEngine(name="piper", synthesize_fn=_synthesize, prewarm_fn=_prewarm)
 
 
 def _build_silero_engine() -> CallbackTTSEngine:
