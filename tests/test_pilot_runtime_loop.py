@@ -1003,6 +1003,120 @@ def test_run_pilot_turn_ignores_prefetched_vision_when_frame_differs(tmp_path: P
     assert payload["answer_text"] == "A dark cave wall with visible ore."
 
 
+def test_run_pilot_turn_cancels_unused_prefetched_vision_future(tmp_path: Path) -> None:
+    runtime_run_dir = tmp_path / "pilot-runtime"
+    runtime_run_dir.mkdir(parents=True, exist_ok=True)
+    audio_path = tmp_path / "audio.wav"
+    audio_meta = _write_audio_fixture(audio_path)
+
+    prefetched_image = tmp_path / "prefetched_menu.png"
+    live_image = tmp_path / "live_cave.png"
+    Image.new("RGB", (320, 180), color=(210, 230, 255)).save(prefetched_image)
+    Image.new("RGB", (320, 180), color=(20, 28, 40)).save(live_image)
+    prefetched_capture_payload = {
+        "capture_mode": "monitor",
+        "monitor_index": 0,
+        "region": None,
+        "bbox": [0, 0, 320, 180],
+        "width": 320,
+        "height": 180,
+        "screenshot_path": str(prefetched_image),
+    }
+    prefetched_vision_future: Future[dict[str, Any]] = Future()
+
+    class _LiveVisionClient:
+        def analyze_image(self, *, image_path: Path, prompt: str) -> dict[str, Any]:
+            _ = image_path, prompt
+            return {
+                "provider": "fixture_vlm_live",
+                "summary": "A dark cave wall with visible ore.",
+                "next_steps": [],
+            }
+
+    def _capture_live(*, output_path: Path, **_kwargs: Any) -> dict[str, Any]:
+        output_path.write_bytes(live_image.read_bytes())
+        return {
+            "capture_mode": "monitor",
+            "monitor_index": 0,
+            "region": None,
+            "bbox": [0, 0, 320, 180],
+            "width": 320,
+            "height": 180,
+            "screenshot_path": str(output_path),
+        }
+
+    def _fake_asr(
+        *,
+        voice_runtime_url: str,
+        audio_path: Path,
+        language: str | None = None,
+        service_token: str | None = None,
+    ) -> dict[str, Any]:
+        _ = voice_runtime_url, audio_path, language, service_token
+        return {"text": "What do you see on the screen?", "language": "en"}
+
+    def _failing_hybrid(**_kwargs: Any) -> dict[str, Any]:
+        raise AssertionError("hybrid should be skipped for direct visual observation requests")
+
+    def _failing_grounded_reply(**_kwargs: Any) -> dict[str, Any]:
+        raise AssertionError("grounded reply should be skipped for direct visual observation requests")
+
+    def _fake_tts(
+        *,
+        tts_runtime_url: str,
+        text: str,
+        language: str | None = None,
+        turn_dir: Path,
+        service_token: str | None = None,
+        playback_enabled: bool = True,
+    ) -> dict[str, Any]:
+        _ = tts_runtime_url, text, language, turn_dir, service_token, playback_enabled
+        return {
+            "status": "ok",
+            "mode": "stub",
+            "streaming_mode": "fixture",
+            "fallback_used": False,
+            "fallback_reason": None,
+            "chunk_count": 1,
+            "events_count": 1,
+            "audio_out_wav": None,
+            "stream_events_jsonl": None,
+            "playback_error": None,
+            "completed_event": {"event": "completed"},
+        }
+
+    result = pilot_runtime.run_pilot_turn(
+        runtime_run_dir=runtime_run_dir,
+        audio_input_path=audio_path,
+        audio_input_meta=audio_meta,
+        hotkey="F8",
+        capture_monitor=0,
+        capture_region=None,
+        gateway_url="http://fixture.gateway",
+        voice_runtime_url="http://fixture.voice",
+        tts_runtime_url="http://fixture.tts",
+        vlm_client=_LiveVisionClient(),
+        grounded_reply_client=type("UnusedReply", (), {"generate_reply": staticmethod(_failing_grounded_reply)})(),
+        playback_enabled=False,
+        capture_func=_capture_live,
+        session_probe_func=_fake_session_probe,
+        live_hud_state_func=_fake_live_hud_state,
+        asr_func=_fake_asr,
+        hybrid_query_func=_failing_hybrid,
+        tts_func=_fake_tts,
+        pre_captured_screenshot_path=prefetched_image,
+        pre_captured_capture_payload=prefetched_capture_payload,
+        pre_captured_vision_future=prefetched_vision_future,
+        expected_asr_language="en",
+        now=datetime(2026, 3, 28, 2, 3, 30, tzinfo=timezone.utc),
+    )
+
+    payload = result["turn_payload"]
+    assert payload["status"] == "ok"
+    assert payload["capture"]["prefetched_frame_match"]["reusable"] is False
+    assert prefetched_vision_future.cancelled() is True
+
+
 def test_run_pilot_turn_prefers_desktop_capture_backend_when_available(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

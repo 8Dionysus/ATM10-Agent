@@ -330,7 +330,7 @@ def _resolve_startup_return_surface(operator_runs_dir: Path) -> tuple[dict[str, 
             continue
         event_payload = run_payload.get("last_return_event")
         if not isinstance(event_payload, dict):
-            continue
+            return None, None
         paths_payload = return_paths(run_dir)
         return dict(event_payload), paths_payload
     return None, None
@@ -438,12 +438,12 @@ def build_return_summary(surfaces: Sequence[Mapping[str, Any]]) -> dict[str, Any
                 recommended_safe_actions.append(action_key)
 
     triage_hint = str(latest_event.get("triage_hint", "")).strip()
-    if recommended_safe_actions:
-        next_step_code = "run_safe_action"
-        next_step = triage_hint or f"Run safe action {recommended_safe_actions[0]} from the gateway operator surface."
-    elif latest_status == "safe_stop":
+    if latest_status == "safe_stop":
         next_step_code = "safe_stop"
         next_step = triage_hint or "Safe stop reached. Inspect the latest anchors before resuming."
+    elif recommended_safe_actions:
+        next_step_code = "run_safe_action"
+        next_step = triage_hint or f"Run safe action {recommended_safe_actions[0]} from the gateway operator surface."
     else:
         next_step_code = "inspect_anchor"
         next_step = triage_hint or "Inspect the latest recovery anchors before resuming."
