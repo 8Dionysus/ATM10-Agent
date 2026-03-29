@@ -35,9 +35,21 @@ def _utc_now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+def _json_ready(value: Any) -> Any:
+    if isinstance(value, Path):
+        return str(value)
+    if isinstance(value, Mapping):
+        return {str(key): _json_ready(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [_json_ready(item) for item in value]
+    if isinstance(value, tuple):
+        return [_json_ready(item) for item in value]
+    return value
+
+
 def _write_json(path: Path, payload: Mapping[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8")
+    path.write_text(json.dumps(_json_ready(payload), indent=2, ensure_ascii=False), encoding="utf-8")
 
 
 def _write_text(path: Path, text: str) -> None:
@@ -233,7 +245,7 @@ def _run_microphone_probe(
             "mic_probe_seconds": float(mic_probe_seconds),
             "start": start_meta,
             "audio": stop_meta,
-            "prepared_audio": prepared_audio,
+            "prepared_audio": _json_ready(prepared_audio),
             "asr": asr_payload,
             "transcript_quality": transcript_quality,
             "error": str(exc),

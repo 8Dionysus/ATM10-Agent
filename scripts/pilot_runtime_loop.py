@@ -868,6 +868,16 @@ def _resolve_prefetched_vision_result(
     }
 
 
+def _cancel_pending_future(future: Future[Any] | None) -> None:
+    if future is None:
+        return
+    try:
+        if not future.done():
+            future.cancel()
+    except Exception:
+        return
+
+
 def _write_silence_fallback_audio(
     *,
     output_path: Path,
@@ -2854,6 +2864,8 @@ def run_pilot_turn(
                 reuse_prefetched_vision = bool(base_payload["capture"]["prefetched_frame_match"].get("reusable"))
             except Exception as exc:
                 base_payload["capture"]["prefetched_frame_match_error"] = str(exc)
+        if pre_captured_vision_future is not None and (short_audio_for_asr or not reuse_prefetched_vision):
+            _cancel_pending_future(pre_captured_vision_future)
         live_vision_executor: ThreadPoolExecutor | None = None
         live_vision_future: Future[dict[str, Any]] | None = None
         if not short_audio_for_asr and not reuse_prefetched_vision:
@@ -3617,41 +3629,44 @@ def run_pilot_runtime_loop(
                             ),
                         )
                     status_handle.transition(state="thinking", last_error=None)
-                    turn_result = run_pilot_turn(
-                        runtime_run_dir=runtime_run_dir,
-                        audio_input_path=temp_audio_path,
-                        audio_input_meta=audio_meta,
-                        hotkey=hotkey,
-                        capture_monitor=capture_monitor,
-                        capture_region=capture_region,
-                        gateway_url=gateway_url,
-                        voice_runtime_url=voice_runtime_url,
-                        tts_runtime_url=tts_runtime_url,
-                        vlm_client=vlm_client,
-                        grounded_reply_client=grounded_reply_client,
-                        expected_asr_language=asr_language or asr_warmup_language or DEFAULT_PILOT_ASR_LANGUAGE,
-                        pilot_hybrid_timeout_sec=pilot_hybrid_timeout_sec,
-                        pilot_gateway_topk=pilot_gateway_topk,
-                        pilot_gateway_candidate_k=pilot_gateway_candidate_k,
-                        pilot_max_entities_per_doc=pilot_max_entities_per_doc,
-                        hud_hook_json=hud_hook_json,
-                        tesseract_bin=tesseract_bin,
-                        service_token=service_token,
-                        playback_enabled=playback_enabled,
-                        pre_captured_screenshot_path=prefetched_capture_path,
-                        pre_captured_capture_payload=prefetched_capture_payload,
-                        pre_captured_capture_error=prefetched_capture_error,
-                        pre_captured_vision_future=prefetched_vision_future,
-                        status_callback=lambda **kwargs: status_handle.transition(
-                            state=str(kwargs.get("state", status_handle.state)),
-                            degraded_services=status_handle.degraded_services,
-                            last_error=status_handle.last_error,
-                        ),
-                    )
-                    prefetched_capture_path = None
-                    prefetched_capture_payload = None
-                    prefetched_capture_error = None
-                    prefetched_vision_future = None
+                    try:
+                        turn_result = run_pilot_turn(
+                            runtime_run_dir=runtime_run_dir,
+                            audio_input_path=temp_audio_path,
+                            audio_input_meta=audio_meta,
+                            hotkey=hotkey,
+                            capture_monitor=capture_monitor,
+                            capture_region=capture_region,
+                            gateway_url=gateway_url,
+                            voice_runtime_url=voice_runtime_url,
+                            tts_runtime_url=tts_runtime_url,
+                            vlm_client=vlm_client,
+                            grounded_reply_client=grounded_reply_client,
+                            expected_asr_language=asr_language or asr_warmup_language or DEFAULT_PILOT_ASR_LANGUAGE,
+                            pilot_hybrid_timeout_sec=pilot_hybrid_timeout_sec,
+                            pilot_gateway_topk=pilot_gateway_topk,
+                            pilot_gateway_candidate_k=pilot_gateway_candidate_k,
+                            pilot_max_entities_per_doc=pilot_max_entities_per_doc,
+                            hud_hook_json=hud_hook_json,
+                            tesseract_bin=tesseract_bin,
+                            service_token=service_token,
+                            playback_enabled=playback_enabled,
+                            pre_captured_screenshot_path=prefetched_capture_path,
+                            pre_captured_capture_payload=prefetched_capture_payload,
+                            pre_captured_capture_error=prefetched_capture_error,
+                            pre_captured_vision_future=prefetched_vision_future,
+                            status_callback=lambda **kwargs: status_handle.transition(
+                                state=str(kwargs.get("state", status_handle.state)),
+                                degraded_services=status_handle.degraded_services,
+                                last_error=status_handle.last_error,
+                            ),
+                        )
+                    finally:
+                        _cancel_pending_future(prefetched_vision_future)
+                        prefetched_capture_path = None
+                        prefetched_capture_payload = None
+                        prefetched_capture_error = None
+                        prefetched_vision_future = None
                     turn_payload = turn_result["turn_payload"]
                     run_payload["last_turn"] = {
                         "turn_id": turn_payload.get("turn_id"),
