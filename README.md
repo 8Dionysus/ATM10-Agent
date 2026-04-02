@@ -19,6 +19,14 @@ Local-first ATM10 companion with an active operator loop and an internal agent s
 - document roles and public-surface boundaries: `docs/SOURCE_OF_TRUTH.md`
 - archived and recoverable reference tracks: `docs/ARCHIVED_TRACKS.md`
 
+## Route by need
+
+- operator command and recovery path: `docs/RUNBOOK.md` and `docs/RECURRENCE_OPERATOR_RECOVERY.md`
+- public status, milestones, and release contour: `MANIFEST.md`, `ROADMAP.md`, and `docs/RELEASE_WAVE6.md`
+- source-of-truth and ecosystem placement: `docs/SOURCE_OF_TRUTH.md` and `docs/ECOSYSTEM_CONTEXT.md`
+- validated host/model baseline and UI pilot surfaces: `docs/QWEN3_MODEL_STACK.md` and `docs/STREAMLIT_IA_V0.md`
+- operator return examples and archived reference tracks: `examples/gateway_operator_return_event.example.json`, `examples/gateway_operator_return_summary.example.json`, `examples/operator_return_reason_catalog.example.json`, and `docs/ARCHIVED_TRACKS.md`
+
 ## Current highlights
 
 - Gateway + Streamlit operator surfaces, pilot runtime, and the primary local launcher remain the active public operator entrypoints.
