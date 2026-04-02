@@ -7,28 +7,36 @@
 
 Local-first ATM10 companion with an active operator loop and an internal agent stack for Windows 11 + PowerShell 7.
 
-`ATM10-Agent` combines perception (screen/HUD), memory (RAG + KAG), safe automation (dry-run by default), voice, routing/evals, and gateway-backed operator surfaces into one reproducible local companion stack.
+`ATM10-Agent` combines perception (screen and HUD), memory (RAG + KAG), safe automation (dry-run by default), voice, routing and evals, and gateway-backed operator surfaces into one reproducible local companion stack.
 
-## Current Highlights
+## Start here
+
+- current public status and active capabilities: `MANIFEST.md`
+- direction, milestones, and risks: `ROADMAP.md`
+- active runnable commands and operator paths: `docs/RUNBOOK.md`
+- recurrence and operator recovery: `docs/RECURRENCE_OPERATOR_RECOVERY.md`
+- validated host and runtime baseline: `docs/QWEN3_MODEL_STACK.md`
+- document roles and public-surface boundaries: `docs/SOURCE_OF_TRUTH.md`
+- archived and recoverable reference tracks: `docs/ARCHIVED_TRACKS.md`
+
+## Current highlights
 
 - Gateway + Streamlit operator surfaces, pilot runtime, and the primary local launcher remain the active public operator entrypoints.
-- Retrieval, KAG, hybrid grounding, and cross-service benchmark/governance flows remain part of the current public stack.
+- Retrieval, KAG, hybrid grounding, and cross-service benchmark and governance flows remain part of the current public stack.
 - Safe automation remains dry-run by default, with public `M6.19` rollout records for `open_quest_book`, `check_inventory_tool`, and `open_world_map`.
-- The validated repo-host baseline is the Intel-machine `OpenVINO-first` path; future host profiles stay additive instead of silently replacing it.
+- The validated repo-host baseline is the Intel-machine `OpenVINO-first` path. Future host profiles stay additive instead of silently replacing it.
 
-## Canonical Docs
+## Public document topology
 
-- [`MANIFEST.md`](MANIFEST.md) - current public status and active capabilities
-- [`ROADMAP.md`](ROADMAP.md) - direction, milestones, horizons, and risks
-- [`docs/RUNBOOK.md`](docs/RUNBOOK.md) - active runnable commands and operational paths
-- [`docs/RECURRENCE_OPERATOR_RECOVERY.md`](docs/RECURRENCE_OPERATOR_RECOVERY.md) - operator-facing recurrence and recovery surface
-- [`docs/QWEN3_MODEL_STACK.md`](docs/QWEN3_MODEL_STACK.md) - host/runtime posture and validated model-stack baseline
-- [`docs/ARCHIVED_TRACKS.md`](docs/ARCHIVED_TRACKS.md) - archived, recoverable, and historical reference tracks
-- [`docs/SOURCE_OF_TRUTH.md`](docs/SOURCE_OF_TRUTH.md) - document roles and public-surface boundaries
+- `README.md` stays the short human entrypoint
+- `MANIFEST.md` carries current public status
+- `ROADMAP.md` carries direction and milestone posture
+- `docs/RUNBOOK.md` carries runnable commands and setup paths
+- `docs/SOURCE_OF_TRUTH.md` defines document roles and boundary discipline
 
-## Project Links
+## Project links
 
-- [`CONTRIBUTING.md`](CONTRIBUTING.md) - contribution guidance
-- [`SECURITY.md`](SECURITY.md) - private reporting and public-safe disclosure rules
-- [`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md) - community expectations
-- [`LICENSE`](LICENSE) - Apache License 2.0
+- `CONTRIBUTING.md`
+- `SECURITY.md`
+- `CODE_OF_CONDUCT.md`
+- `LICENSE`

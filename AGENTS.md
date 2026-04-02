@@ -1,19 +1,31 @@
 # AGENTS.md
 
-Guidance for coding agents and humans contributing to `atm10-agent`.
+Guidance for coding agents and humans contributing to `ATM10-Agent`.
 
 ## Purpose
 
-`atm10-agent` is a local-first ATM10 companion built around reproducible scripts, public-safe docs, artifacted runs, and regression coverage on Windows 11 + PowerShell 7.
+`ATM10-Agent` is a local-first ATM10 companion built around reproducible scripts, public-safe docs, artifacted runs, and regression coverage on Windows 11 + PowerShell 7.
 
-This repository owns:
+## Owns
+
+This repository is the source of truth for:
 
 - perception and HUD ingestion paths
-- retrieval and KAG paths
+- retrieval and KAG paths inside this project
 - gateway and operator-panel surfaces
 - safe automation intent -> plan -> dry-run flows
 - voice and service wrappers
-- public docs, workflow hardening, and tests
+- public project docs, workflow hardening, and tests
+
+## Does not own
+
+Do not treat this repository as the source of truth for:
+
+- global AoA technique, skill, eval, routing, memo, or playbook doctrine
+- sibling repo ownership boundaries
+- hidden infrastructure or secret-bearing operational lore
+
+This repo consumes neighboring AoA surfaces. It does not replace them.
 
 ## Read first
 
@@ -32,15 +44,15 @@ If the task touches archived or security-sensitive areas, also check:
 - `docs/RELEASE_WAVE6.md`
 - `docs/QWEN3_MODEL_STACK.md`
 
+If a deeper directory defines its own `AGENTS.md`, follow the nearest one.
+
 ## Core rule
 
-Prefer the smallest reviewable change that preserves reproducibility, safety posture, and public-doc hygiene.
+Prefer the smallest reviewable change that preserves reproducibility, safety posture, Windows 11 + PowerShell 7 operability, and public-doc hygiene.
 
-## Operating doctrine
+## Contribution doctrine
 
-Use this flow:
-
-`PLAN -> DIFF -> VERIFY -> REPORT`
+Use this flow: `PLAN -> DIFF -> VERIFY -> REPORT`
 
 ### PLAN
 
@@ -48,7 +60,7 @@ Before editing:
 
 - restate the task as a short executable plan
 - name the files you expect to touch
-- call out risks separately: Windows paths, dependency weight, service or auth changes, schema drift, artifact policy
+- call out risks separately: Windows paths, dependency weight, service or auth changes, schema drift, artifact policy, or automation safety posture
 
 ### DIFF
 
@@ -71,9 +83,7 @@ cd <repo-root>
 python -m pytest
 ```
 
-If you touch a runnable entrypoint, also run the nearest smoke path or add targeted tests.
-
-Examples:
+If you touch a runnable entrypoint, also run the nearest smoke path or add targeted tests. Examples include:
 
 ```powershell
 python scripts/phase_a_smoke.py
@@ -128,35 +138,14 @@ Do not:
 - run destructive commands or change host or system settings as part of normal repo work
 - silently route `Safe Actions` to real input events
 
-## Documentation rules
+## Documentation rule
 
 Follow `docs/SOURCE_OF_TRUTH.md`.
 
 In practice:
 
-- keep `README.md` as a short human entrypoint
-- put current public status in `MANIFEST.md`
-- put direction and milestone posture in `ROADMAP.md`
-- put runnable commands and setup changes in `docs/RUNBOOK.md`
+- keep `README.md` as the short human entrypoint
+- keep current public status in `MANIFEST.md`
+- keep direction and milestone posture in `ROADMAP.md`
+- keep runnable commands and setup changes in `docs/RUNBOOK.md`
 - reflect doc-role or boundary changes in `docs/SOURCE_OF_TRUTH.md`
-
-## Automation rule
-
-Every new automation `intent_type` should follow the existing public intent -> plan -> dry-run contract and checklist `M6.19`.
-
-Current public donor records already exist for:
-
-- `open_quest_book`
-- `check_inventory_tool`
-- `open_world_map`
-
-## Public hygiene
-
-Assume everything committed here is public and reusable by strangers.
-
-Write for portability:
-
-- use `<repo-root>` and `<path-to-...>` placeholders in docs
-- use generic loopback URLs in examples
-- prefer public-safe summaries over local run-history dumps
-- keep secrets and sensitive runtime details out of committed artifacts
