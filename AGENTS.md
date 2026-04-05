@@ -46,6 +46,10 @@ If the task touches archived or security-sensitive areas, also check:
 
 If a deeper directory defines its own `AGENTS.md`, follow the nearest one.
 
+## Audit contract
+
+For repository audits and GitHub review, read `AUDIT.md` after the core docs.
+
 ## Core rule
 
 Prefer the smallest reviewable change that preserves reproducibility, safety posture, Windows 11 + PowerShell 7 operability, and public-doc hygiene.
@@ -137,6 +141,25 @@ Do not:
 - hide semantic contract changes behind “docs-only” wording
 - run destructive commands or change host or system settings as part of normal repo work
 - silently route `Safe Actions` to real input events
+
+## Review guidelines
+
+For GitHub review in this repository, treat the following as P0:
+
+- committed secrets, tokens, or private logs
+- a change that makes real input events or destructive automation the default path
+- a change that silently routes a safe action to game-state-changing input
+
+Treat the following as P1:
+
+- weakening dry-run-by-default behavior
+- widening service exposure, auth posture, or network assumptions without explicit callout
+- changes to `requirements*.txt`, services, or ports made without the required ask-first posture
+- semantic contract changes in scripts, gateway, retrieval, KAG, voice, or automation flows without matching tests/docs updates
+- public docs leaking workstation-specific paths, internal hostnames, or sensitive runtime detail
+- claiming validation that was not actually run
+
+Ignore trivial wording nits unless the task explicitly asks for copyediting.
 
 ## Documentation rule
 
