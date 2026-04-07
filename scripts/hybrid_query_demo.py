@@ -49,6 +49,76 @@ def _write_json(path: Path, payload: Mapping[str, Any]) -> None:
     path.write_text(json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8")
 
 
+def _warning_messages(raw_warnings: Any) -> list[str]:
+    if not isinstance(raw_warnings, list):
+        return []
+    messages: list[str] = []
+    for value in raw_warnings:
+        message = str(value).strip()
+        if message:
+            messages.append(message)
+    return messages
+
+
+def _should_emit_stressor_receipt(results_payload: Mapping[str, Any]) -> bool:
+    planner_status = str(results_payload.get("planner_status", "")).strip()
+    return planner_status == "retrieval_only_fallback" and bool(results_payload.get("degraded"))
+
+
+def _infer_stressor_class(warnings: list[str]) -> str:
+    for warning in warnings:
+        if warning.startswith("kag stage fallback:"):
+            return "kag_stage_failed"
+    for warning in warnings:
+        if "no expansion results" in warning:
+            return "no_useful_expansion"
+    return "kag_stage_degraded"
+
+
+def _build_stressor_receipt(
+    *,
+    now: datetime,
+    profile: str,
+    run_dir: Path,
+    run_json_path: Path,
+    results_json_path: Path,
+    results_payload: Mapping[str, Any],
+) -> dict[str, Any]:
+    timestamp_utc = now.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    warnings = _warning_messages(results_payload.get("warnings"))
+    mode_after = str(results_payload.get("planner_status", "")).strip() or "unknown"
+    return {
+        "schema_version": "stressor_receipt_v1",
+        "receipt_id": f"atm10:hybrid-query:{timestamp_utc}:retrieval-only-fallback",
+        "timestamp_utc": timestamp_utc,
+        "repo": "ATM10-Agent",
+        "layer": "application",
+        "surface": "hybrid-query",
+        "trace_id": None,
+        "intent_id": None,
+        "stressor_class": _infer_stressor_class(warnings),
+        "severity": "medium",
+        "detected_by": "scripts.hybrid_query_demo.run_hybrid_query",
+        "bounded_scope": {
+            "kind": "run_dir",
+            "value": str(run_dir),
+            "notes": "hybrid query degraded but stayed bounded",
+        },
+        "mode_before": f"{profile}_hybrid",
+        "mode_after": mode_after,
+        "degraded": bool(results_payload.get("degraded")),
+        "fallback_taken": mode_after,
+        "mutation_blocked": True,
+        "evidence_refs": [
+            str(run_json_path),
+            str(results_json_path),
+        ],
+        "source_artifacts": [str(run_dir)],
+        "notes": "; ".join(warnings) if warnings else None,
+        "supersedes": [],
+    }
+
+
 def run_hybrid_query(
     *,
     query: str,
@@ -98,6 +168,7 @@ def run_hybrid_query(
     run_json_path = run_dir / "run.json"
     results_json_path = run_dir / "hybrid_query_results.json"
     graph_json_path = run_dir / "kag_graph.json"
+    stressor_receipt_path = run_dir / "stressor_receipt.json"
 
     run_payload: dict[str, Any] = {
         "timestamp_utc": now.astimezone(timezone.utc).isoformat(),
@@ -177,11 +248,30 @@ def run_hybrid_query(
                 "run_json": str(run_json_path),
                 "results_json": str(results_json_path),
                 "kag_graph_json": str(graph_json_path) if isinstance(graph_payload, dict) else None,
+                "stressor_receipt_json": None,
             },
+            "stressor_receipt_id": None,
         }
+        stressor_receipt_payload: dict[str, Any] | None = None
+        if _should_emit_stressor_receipt(results_out_payload):
+            stressor_receipt_payload = _build_stressor_receipt(
+                now=now,
+                profile=profile,
+                run_dir=run_dir,
+                run_json_path=run_json_path,
+                results_json_path=results_json_path,
+                results_payload=results_out_payload,
+            )
+            results_out_payload["paths"]["stressor_receipt_json"] = str(stressor_receipt_path)
+            results_out_payload["stressor_receipt_id"] = stressor_receipt_payload["receipt_id"]
         _write_json(results_json_path, results_out_payload)
+        if stressor_receipt_payload is not None:
+            _write_json(stressor_receipt_path, stressor_receipt_payload)
 
         run_payload["status"] = "ok"
+        run_payload["paths"]["stressor_receipt_json"] = (
+            str(stressor_receipt_path) if stressor_receipt_payload is not None else None
+        )
         run_payload["result"] = {
             "backend": "hybrid_combo_a" if profile == COMBO_A_PROFILE else "hybrid_baseline",
             "profile": profile,
@@ -193,6 +283,8 @@ def run_hybrid_query(
             "retrieval_results_count": int(results_out_payload["retrieval_results_count"]),
             "kag_results_count": int(results_out_payload["kag_results_count"]),
             "results_count": int(results_out_payload["results_count"]),
+            "stressor_receipt_id": results_out_payload["stressor_receipt_id"],
+            "stressor_receipt_json": results_out_payload["paths"]["stressor_receipt_json"],
         }
         _write_json(run_json_path, run_payload)
         return {

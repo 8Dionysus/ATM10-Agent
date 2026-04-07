@@ -1,6 +1,6 @@
 # MANIFEST.md
 
-Current as of: 2026-03-28
+Current as of: 2026-04-07
 
 ## Snapshot
 
@@ -21,6 +21,7 @@ Current as of: 2026-03-28
 - Phase B retrieval: `normalize -> retrieve -> eval` + profile layer `baseline|ov_production`.
 - KAG: file baseline + Neo4j (`build -> sync -> query -> eval`).
 - Hybrid planner: `scripts/hybrid_query_demo.py` + additive `hybrid_query` gateway flow with `baseline_first` default (`retrieval first -> file KAG expansion -> RRF merge`) and additive `combo_a` parity profile (`qdrant + neo4j`), with machine-readable degraded fallbacks (`retrieval_only_fallback|kag_only_fallback|grounding_unavailable`) instead of hard failure when grounding stages are unavailable.
+- Hybrid antifragility first wave: `scripts/hybrid_query_demo.py` now emits one source-owned `stressor_receipt_v1` for bounded `planner_status=retrieval_only_fallback`, while `schemas/adaptation_delta_v1.json` and `examples/` keep the reviewed-change companion surface explicit without auto-emitting deltas.
 - Cross-service SLA + benchmark suite: `scripts/cross_service_benchmark_suite.py` + normalized `service_sla_summary_v1` artifacts for `voice_asr`, `voice_tts`, `retrieval`, and `kag`, aggregated into `cross_service_benchmark_suite_v1`, with `baseline_first` default and additive `profile=combo_a` (`voice_runtime_service + tts_runtime_service + qdrant + neo4j`).
 - KAG nightly guardrail: `.github/workflows/kag-neo4j-guardrail-nightly.yml`.
 - Combo A live parity workflow: `.github/workflows/combo-a-profile-smoke.yml` (`workflow_dispatch` + nightly schedule, external `Qdrant`/`Neo4j`, live operator snapshot capture, combo_a gateway smoke, combo_a cross-service suite, combo_a nightly operating-cycle decision surface, promoted strict `fail_on_hold` only when eligible).
@@ -55,6 +56,7 @@ Current as of: 2026-03-28
 - Current public status: `MANIFEST.md`
 - Public roadmap: `ROADMAP.md`
 - Runnable commands: `docs/RUNBOOK.md`
+- Owner-local first-wave antifragility contract: `docs/ANTIFRAGILITY_FIRST_WAVE.md`
 - Machine/runtime host policy: `docs/QWEN3_MODEL_STACK.md`
 - Operator recurrence landing: `docs/RECURRENCE_OPERATOR_RECOVERY.md`
 - Doc roles/policy: `docs/SOURCE_OF_TRUTH.md`
