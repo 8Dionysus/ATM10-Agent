@@ -1,0 +1,150 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://aoa.local/ATM10-Agent/schemas/stressor_receipt_v1.json",
+  "title": "stressor_receipt_v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "receipt_id",
+    "timestamp_utc",
+    "repo",
+    "layer",
+    "surface",
+    "stressor_class",
+    "severity",
+    "detected_by",
+    "bounded_scope",
+    "mode_before",
+    "mode_after",
+    "degraded",
+    "fallback_taken",
+    "mutation_blocked",
+    "evidence_refs"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "stressor_receipt_v1"
+    },
+    "receipt_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "timestamp_utc": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "repo": {
+      "type": "string",
+      "minLength": 1
+    },
+    "layer": {
+      "type": "string",
+      "minLength": 1
+    },
+    "surface": {
+      "type": "string",
+      "minLength": 1
+    },
+    "trace_id": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "intent_id": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "stressor_class": {
+      "type": "string",
+      "minLength": 1
+    },
+    "severity": {
+      "enum": [
+        "low",
+        "medium",
+        "high",
+        "critical"
+      ]
+    },
+    "detected_by": {
+      "type": "string",
+      "minLength": 1
+    },
+    "bounded_scope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "value"
+      ],
+      "properties": {
+        "kind": {
+          "type": "string",
+          "minLength": 1
+        },
+        "value": {
+          "type": "string",
+          "minLength": 1
+        },
+        "notes": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "mode_before": {
+      "type": "string",
+      "minLength": 1
+    },
+    "mode_after": {
+      "type": "string",
+      "minLength": 1
+    },
+    "degraded": {
+      "type": "boolean"
+    },
+    "fallback_taken": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "mutation_blocked": {
+      "type": "boolean"
+    },
+    "evidence_refs": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "source_artifacts": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "notes": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "supersedes": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    }
+  }
+}

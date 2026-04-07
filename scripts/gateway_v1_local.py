@@ -506,6 +506,14 @@ def _run_hybrid_query(
         )
 
     results_payload = hybrid_result["results_payload"]
+    stressor_receipt_id_raw = results_payload.get("stressor_receipt_id")
+    stressor_receipt_id = None if stressor_receipt_id_raw is None else str(stressor_receipt_id_raw)
+    stressor_receipt_json = None
+    results_paths = results_payload.get("paths")
+    if isinstance(results_paths, Mapping):
+        stressor_receipt_json_raw = results_paths.get("stressor_receipt_json")
+        if stressor_receipt_json_raw is not None:
+            stressor_receipt_json = str(stressor_receipt_json_raw)
     return {
         "backend": "hybrid_combo_a" if profile == COMBO_A_PROFILE else "hybrid_baseline",
         "profile": profile,
@@ -519,6 +527,8 @@ def _run_hybrid_query(
         "degraded": bool(results_payload["degraded"]),
         "retrieval_backend": str(results_payload.get("retrieval_backend", retrieval_backend)),
         "kag_backend": str(results_payload.get("kag_backend", kag_backend)),
+        "stressor_receipt_id": stressor_receipt_id,
+        "stressor_receipt_json": stressor_receipt_json,
     }, child_runs
 
 

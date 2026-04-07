@@ -163,6 +163,7 @@ def test_capture_screen_image_uses_window_handle_when_available(tmp_path: Path, 
     from PIL import ImageGrab
 
     captured: dict[str, Any] = {}
+    monkeypatch.setattr(pilot_runtime.sys, "platform", "win32")
 
     def _fake_grab(
         bbox: tuple[int, int, int, int] | None = None,
@@ -215,6 +216,7 @@ def test_capture_screen_image_prefers_dxcam_monitor_capture_and_resizes_to_logic
 
     pilot_runtime._DXCAM_CAMERA_CACHE.clear()
     seen: dict[str, Any] = {}
+    monkeypatch.setattr(pilot_runtime.sys, "platform", "win32")
 
     class _FakeCamera:
         width = 2880
@@ -260,6 +262,7 @@ def test_capture_screen_image_scales_region_for_dxcam_capture(
 ) -> None:
     pilot_runtime._DXCAM_CAMERA_CACHE.clear()
     seen: dict[str, Any] = {}
+    monkeypatch.setattr(pilot_runtime.sys, "platform", "win32")
 
     class _FakeCamera:
         width = 1920
@@ -302,6 +305,7 @@ def test_capture_screen_image_falls_back_to_pillow_when_dxcam_fails(
 
     pilot_runtime._DXCAM_CAMERA_CACHE.clear()
     captured: dict[str, Any] = {}
+    monkeypatch.setattr(pilot_runtime.sys, "platform", "win32")
 
     def _failing_get_dxcam_camera(*, output_idx: int) -> Any:
         _ = output_idx

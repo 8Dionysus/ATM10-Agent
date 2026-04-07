@@ -42,6 +42,11 @@ This file defines the roles of the repository documents so the public surface st
   * Context-only reference about the repository's place in the broader AoA/ToS ecosystem.
   * Does not replace local repo rules, execution policy, or operating guidance.
 
+* `docs/ANTIFRAGILITY_FIRST_WAVE.md`
+  * Context-only owner-local contract for bounded degraded hybrid-query evidence.
+  * Defines the first-wave `stressor_receipt_v1` / `adaptation_delta_v1` posture and links to the repo-local schemas/examples.
+  * Does not replace `docs/RUNBOOK.md` as the active operational surface.
+
 * `TODO.md` (local-only, ignored)
   * Maintainer execution scratchpad.
   * Not part of the public repository contract.
@@ -79,6 +84,7 @@ This file defines the roles of the repository documents so the public surface st
   * `docs/SOURCE_OF_TRUTH.md`
 * `docs/RELEASE_WAVE6.md` is wave-scoped reference, not the repo-wide cadence surface.
 * `docs/ECOSYSTEM_CONTEXT.md` is reference-only.
+* `docs/ANTIFRAGILITY_FIRST_WAVE.md` is contract/reference-only.
 * Local-only planning, chronology, tool config, and scratch docs never define the public repo surface.
 
 ## Update Rules
@@ -90,6 +96,7 @@ This file defines the roles of the repository documents so the public surface st
 * If public release cadence, supported profiles, CI/test tiers, or the `ATM10-Agent` x `abyss-stack` boundary changed -> update `docs/PRODUCT_EDGE_POSTURE.md`.
 * If there is an important public status/result -> update `MANIFEST.md`, and `ROADMAP.md` if direction changed.
 * If a wave-scoped public hardening or release reference changed -> update the matching `docs/RELEASE_*.md` document.
+* If first-wave owner-local stressor or adaptation contract wording changes -> update `docs/ANTIFRAGILITY_FIRST_WAVE.md` and the linked `schemas/` + `examples/` surfaces.
 * If there is local execution planning -> update local `TODO.md` / `PLANS.md`.
 * If there is internal chronology, proposed-doc scratch, or review packaging -> use ignored local-only surfaces under `docs/internal/**`.
 * Keep `README.md` pointed at canonical docs instead of duplicating operational detail.

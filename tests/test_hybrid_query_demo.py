@@ -311,6 +311,117 @@ def test_hybrid_query_demo_writes_artifacts(tmp_path: Path) -> None:
     assert "merged_results" in results_payload
 
 
+def test_hybrid_query_demo_emits_stressor_receipt_for_retrieval_only_fallback(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def _fake_execute_hybrid_query(**kwargs) -> dict[str, object]:
+        return {
+            "schema_version": "hybrid_query_results_v1",
+            "planner_mode": "retrieval_first_kag_expansion",
+            "planner_status": "retrieval_only_fallback",
+            "degraded": True,
+            "warnings": ["kag stage fallback: neo4j timeout"],
+            "retrieval_backend": kwargs["retrieval_backend"],
+            "kag_backend": kwargs["kag_backend"],
+            "retrieval_results": [
+                {
+                    "id": "doc:steel_tools",
+                    "source": "ftbquests",
+                    "title": "Steel Tools",
+                    "citation": {"id": "doc:steel_tools", "source": "ftbquests", "path": "docs.jsonl"},
+                }
+            ],
+            "retrieval_results_count": 1,
+            "kag_results": [],
+            "kag_results_count": 0,
+            "merged_results": [
+                {
+                    "id": "doc:steel_tools",
+                    "planner_source": "retrieval_only",
+                }
+            ],
+            "results_count": 1,
+            "graph_payload": None,
+        }
+
+    monkeypatch.setattr(hybrid_query_demo, "execute_hybrid_query", _fake_execute_hybrid_query)
+
+    result = hybrid_query_demo.run_hybrid_query(
+        query="steel tools",
+        docs_path=_fixture_path("retrieval_docs_sample.jsonl"),
+        profile="combo_a",
+        retrieval_backend="qdrant",
+        kag_backend="neo4j",
+        neo4j_password="fixture-password",
+        neo4j_dataset_tag="atm10_combo_a_fixture",
+        runs_dir=tmp_path / "runs",
+        now=datetime(2026, 4, 7, 14, 12, 33, tzinfo=timezone.utc),
+    )
+
+    run_dir = result["run_dir"]
+    receipt_path = run_dir / "stressor_receipt.json"
+    run_payload = json.loads((run_dir / "run.json").read_text(encoding="utf-8"))
+    results_payload = json.loads((run_dir / "hybrid_query_results.json").read_text(encoding="utf-8"))
+    receipt_payload = json.loads(receipt_path.read_text(encoding="utf-8"))
+
+    assert result["ok"] is True
+    assert receipt_path.exists()
+    assert results_payload["paths"]["stressor_receipt_json"] == str(receipt_path)
+    assert results_payload["stressor_receipt_id"] == receipt_payload["receipt_id"]
+    assert run_payload["result"]["stressor_receipt_id"] == receipt_payload["receipt_id"]
+    assert run_payload["result"]["stressor_receipt_json"] == str(receipt_path)
+    assert receipt_payload["surface"] == "hybrid-query"
+    assert receipt_payload["mode_before"] == "combo_a_hybrid"
+    assert receipt_payload["mode_after"] == "retrieval_only_fallback"
+    assert receipt_payload["stressor_class"] == "kag_stage_failed"
+    assert receipt_payload["mutation_blocked"] is True
+    assert receipt_payload["trace_id"] is None
+    assert receipt_payload["intent_id"] is None
+
+
+def test_hybrid_query_demo_skips_stressor_receipt_for_healthy_run(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def _fake_execute_hybrid_query(**kwargs) -> dict[str, object]:
+        return {
+            "schema_version": "hybrid_query_results_v1",
+            "planner_mode": "retrieval_first_kag_expansion",
+            "planner_status": "hybrid_merged",
+            "degraded": False,
+            "warnings": [],
+            "retrieval_backend": kwargs["retrieval_backend"],
+            "kag_backend": kwargs["kag_backend"],
+            "retrieval_results": [],
+            "retrieval_results_count": 0,
+            "kag_results": [],
+            "kag_results_count": 0,
+            "merged_results": [],
+            "results_count": 0,
+            "graph_payload": None,
+        }
+
+    monkeypatch.setattr(hybrid_query_demo, "execute_hybrid_query", _fake_execute_hybrid_query)
+
+    result = hybrid_query_demo.run_hybrid_query(
+        query="steel tools",
+        docs_path=_fixture_path("retrieval_docs_sample.jsonl"),
+        runs_dir=tmp_path / "runs",
+        now=datetime(2026, 4, 7, 14, 13, 0, tzinfo=timezone.utc),
+    )
+
+    run_dir = result["run_dir"]
+    receipt_path = run_dir / "stressor_receipt.json"
+    run_payload = json.loads((run_dir / "run.json").read_text(encoding="utf-8"))
+    results_payload = json.loads((run_dir / "hybrid_query_results.json").read_text(encoding="utf-8"))
+
+    assert result["ok"] is True
+    assert not receipt_path.exists()
+    assert results_payload["paths"]["stressor_receipt_json"] is None
+    assert results_payload["stressor_receipt_id"] is None
+    assert run_payload["result"]["stressor_receipt_id"] is None
+    assert run_payload["result"]["stressor_receipt_json"] is None
+
+
 def test_hybrid_query_demo_cli_help_exits_zero(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(sys, "argv", ["hybrid_query_demo.py", "--help"])
     with pytest.raises(SystemExit) as exc:

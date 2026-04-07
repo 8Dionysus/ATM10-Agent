@@ -151,6 +151,7 @@ Expected result:
 * `response.json.schema_version = gateway_response_v1`.
 * `health.result.supported_operations` includes additive `hybrid_query`.
 * `health.result.supported_profiles` includes `baseline_first` and additive `combo_a`.
+* For `hybrid_query`, `response.result` can add `stressor_receipt_id` and `stressor_receipt_json` when the child hybrid run emits the first-wave bounded degraded receipt.
 * For `retrieval_query` + `reranker=qwen3` `payload.reranker_model` is limited by allowlist:
   * `Qwen/Qwen3-Reranker-0.6B`
   * `OpenVINO/Qwen3-Reranker-0.6B-fp16-ov`
@@ -170,6 +171,7 @@ Expected result:
 * Inside there are `run.json`, `hybrid_query_results.json`, and `kag_graph.json` when the KAG stage completes.
 * `hybrid_query_results.json` contains `planner_mode`, `planner_status`, `degraded`, `retrieval_results`, `kag_results`, `merged_results`, `warnings`, and `paths`.
 * If retrieval succeeds but the KAG stage fails or returns no expansion rows, the run still ends with `status=ok` and `planner_status=retrieval_only_fallback`.
+* When that bounded degraded path happens, the run also writes `stressor_receipt.json`, and both `run.json` and `hybrid_query_results.json` point to the emitted receipt instead of creating a second runtime-owned event elsewhere.
 
 Combo A profile example:
 

@@ -1,0 +1,25 @@
+{
+  "schema_version": "adaptation_delta_v1",
+  "delta_id": "atm10:hybrid-query:delta:2026-04-08T09:00:00Z:kag-retry-policy-v1",
+  "timestamp_utc": "2026-04-08T09:00:00Z",
+  "repo": "ATM10-Agent",
+  "surface": "hybrid-query",
+  "source_receipt_refs": [
+    "atm10:hybrid-query:2026-04-07T14:12:33Z:retrieval-only-fallback"
+  ],
+  "stressor_classes": [
+    "kag_stage_failed"
+  ],
+  "changed_surface": "config",
+  "change_ref": "docs/ANTIFRAGILITY_FIRST_WAVE.md#companion-delta-posture",
+  "expected_effect": "Reduce repeated KAG-stage failures and make degraded runs easier to classify and triage.",
+  "observed_effect_summary": null,
+  "status": "proposed",
+  "reviewer_posture": "author_reviewed",
+  "verification_refs": [
+    "future:aoa-evals:aoa-antifragility-posture"
+  ],
+  "rollback_ref": null,
+  "notes": "Wave 1 keeps this change proposal explicit and reviewable rather than auto-repairing.",
+  "supersedes": []
+}

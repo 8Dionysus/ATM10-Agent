@@ -387,6 +387,64 @@ def test_gateway_v1_local_hybrid_query_returns_ok_for_degraded_combo_a_result(
     assert response_payload["result"]["degraded"] is True
 
 
+def test_gateway_v1_local_hybrid_query_surfaces_stressor_receipt_pointers(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def _fake_run_hybrid_query(**kwargs) -> dict[str, object]:
+        run_dir = kwargs["runs_dir"] / "20260227_100332-hybrid-query"
+        run_dir.mkdir(parents=True, exist_ok=True)
+        receipt_path = run_dir / "stressor_receipt.json"
+        (run_dir / "run.json").write_text("{}", encoding="utf-8")
+        (run_dir / "hybrid_query_results.json").write_text("{}", encoding="utf-8")
+        receipt_path.write_text("{}", encoding="utf-8")
+        return {
+            "ok": True,
+            "run_dir": run_dir,
+            "run_payload": {"status": "ok"},
+            "results_payload": {
+                "schema_version": "hybrid_query_results_v1",
+                "query": kwargs["query"],
+                "planner_mode": "retrieval_first_kag_expansion",
+                "planner_status": "retrieval_only_fallback",
+                "degraded": True,
+                "retrieval_backend": kwargs["retrieval_backend"],
+                "kag_backend": kwargs["kag_backend"],
+                "retrieval_results_count": 1,
+                "kag_results_count": 0,
+                "results_count": 1,
+                "stressor_receipt_id": "atm10:hybrid-query:2026-02-27T10:03:32Z:retrieval-only-fallback",
+                "paths": {"stressor_receipt_json": str(receipt_path)},
+            },
+        }
+
+    monkeypatch.setattr(gateway, "run_hybrid_query", _fake_run_hybrid_query)
+
+    result = gateway.run_gateway_request(
+        request_payload={
+            "schema_version": "gateway_request_v1",
+            "operation": "hybrid_query",
+            "payload": {
+                "query": "steel tools",
+                "docs_path": str(_fixture_path("retrieval_docs_sample.jsonl")),
+                "topk": 5,
+                "candidate_k": 10,
+                "reranker": "none",
+            },
+        },
+        runs_dir=tmp_path / "runs",
+        now=datetime(2026, 2, 27, 10, 3, 32, tzinfo=timezone.utc),
+    )
+
+    response_payload = result["response_payload"]
+    assert result["ok"] is True
+    assert response_payload["status"] == "ok"
+    assert response_payload["result"]["planner_status"] == "retrieval_only_fallback"
+    assert response_payload["result"]["stressor_receipt_id"] == (
+        "atm10:hybrid-query:2026-02-27T10:03:32Z:retrieval-only-fallback"
+    )
+    assert response_payload["result"]["stressor_receipt_json"].endswith("stressor_receipt.json")
+
+
 def test_gateway_v1_local_automation_dry_run_ok(tmp_path: Path) -> None:
     result = gateway.run_gateway_request(
         request_payload={

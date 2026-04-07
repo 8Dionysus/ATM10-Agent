@@ -1,0 +1,32 @@
+{
+  "schema_version": "stressor_receipt_v1",
+  "receipt_id": "atm10:hybrid-query:2026-04-07T14:12:33Z:retrieval-only-fallback",
+  "timestamp_utc": "2026-04-07T14:12:33Z",
+  "repo": "ATM10-Agent",
+  "layer": "application",
+  "surface": "hybrid-query",
+  "trace_id": null,
+  "intent_id": null,
+  "stressor_class": "kag_stage_failed",
+  "severity": "medium",
+  "detected_by": "scripts.hybrid_query_demo.run_hybrid_query",
+  "bounded_scope": {
+    "kind": "run_dir",
+    "value": "runs/2026-04-07T14-12-33Z-hybrid-query",
+    "notes": "retrieval completed, KAG stage failed"
+  },
+  "mode_before": "combo_a_hybrid",
+  "mode_after": "retrieval_only_fallback",
+  "degraded": true,
+  "fallback_taken": "retrieval_only_fallback",
+  "mutation_blocked": true,
+  "evidence_refs": [
+    "runs/2026-04-07T14-12-33Z-hybrid-query/run.json",
+    "runs/2026-04-07T14-12-33Z-hybrid-query/hybrid_query_results.json"
+  ],
+  "source_artifacts": [
+    "runs/2026-04-07T14-12-33Z-hybrid-query"
+  ],
+  "notes": "Run ended status=ok with degraded planner_status and no unsafe widening.",
+  "supersedes": []
+}

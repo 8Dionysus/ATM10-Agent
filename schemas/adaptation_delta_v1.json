@@ -1,0 +1,130 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://aoa.local/ATM10-Agent/schemas/adaptation_delta_v1.json",
+  "title": "adaptation_delta_v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "delta_id",
+    "timestamp_utc",
+    "repo",
+    "surface",
+    "source_receipt_refs",
+    "stressor_classes",
+    "changed_surface",
+    "change_ref",
+    "expected_effect",
+    "status",
+    "reviewer_posture",
+    "verification_refs"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "adaptation_delta_v1"
+    },
+    "delta_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "timestamp_utc": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "repo": {
+      "type": "string",
+      "minLength": 1
+    },
+    "surface": {
+      "type": "string",
+      "minLength": 1
+    },
+    "source_receipt_refs": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "stressor_classes": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "changed_surface": {
+      "enum": [
+        "route",
+        "skill",
+        "eval",
+        "policy",
+        "config",
+        "prompt",
+        "code",
+        "operator_surface",
+        "docs",
+        "other"
+      ]
+    },
+    "change_ref": {
+      "type": "string",
+      "minLength": 1
+    },
+    "expected_effect": {
+      "type": "string",
+      "minLength": 1
+    },
+    "observed_effect_summary": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "status": {
+      "enum": [
+        "proposed",
+        "applied",
+        "verified",
+        "reverted"
+      ]
+    },
+    "reviewer_posture": {
+      "enum": [
+        "author_reviewed",
+        "operator_reviewed",
+        "ci_reviewed",
+        "mixed",
+        "unknown"
+      ]
+    },
+    "verification_refs": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "rollback_ref": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "notes": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "supersedes": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    }
+  }
+}
