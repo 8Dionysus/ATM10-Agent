@@ -17,6 +17,10 @@ This file defines the roles of the repository documents so the public surface st
   * Public direction, milestones, horizons, and high-level risks.
   * Public replacement for the old tracked `PLANS.md` role.
 
+* `docs/PRODUCT_EDGE_POSTURE.md`
+  * Public release cadence, supported profiles, CI/test tiers, and the explicit `ATM10-Agent` x `abyss-stack` contract.
+  * Short public boundary for product-edge support claims.
+
 * `docs/RUNBOOK.md`
   * Active runnable commands and operational paths only.
   * This is where current setup, launch, smoke, and troubleshooting commands live.
@@ -29,6 +33,10 @@ This file defines the roles of the repository documents so the public surface st
 * `docs/QWEN3_MODEL_STACK.md`
   * Machine-specific model/runtime posture and validated host profiles.
   * Records the current `OpenVINO-first` repo-host baseline and additive future runtime-path rules.
+
+* `docs/RELEASE_WAVE6.md`
+  * Scoped public engineering reference for one hardening/release wave.
+  * Not the repo-wide cadence or support-matrix surface.
 
 * `docs/ECOSYSTEM_CONTEXT.md`
   * Context-only reference about the repository's place in the broader AoA/ToS ecosystem.
@@ -64,10 +72,12 @@ This file defines the roles of the repository documents so the public surface st
 * For the public repo surface, priority belongs to:
   * `MANIFEST.md`
   * `ROADMAP.md`
+  * `docs/PRODUCT_EDGE_POSTURE.md`
   * `docs/RUNBOOK.md`
   * `docs/ARCHIVED_TRACKS.md`
   * `docs/QWEN3_MODEL_STACK.md`
   * `docs/SOURCE_OF_TRUTH.md`
+* `docs/RELEASE_WAVE6.md` is wave-scoped reference, not the repo-wide cadence surface.
 * `docs/ECOSYSTEM_CONTEXT.md` is reference-only.
 * Local-only planning, chronology, tool config, and scratch docs never define the public repo surface.
 
@@ -75,9 +85,11 @@ This file defines the roles of the repository documents so the public surface st
 
 * If behavior/architecture changed -> update any impacted canonical public docs, and local `docs/DECISIONS.md` when needed.
 * If active commands/setup changed -> update `docs/RUNBOOK.md`.
-* If an archived or recoverable command/reference changed -> update `docs/ARCHIVED_TRACKS.md`.
+* If archived or recoverable command/reference changed -> update `docs/ARCHIVED_TRACKS.md`.
 * If the machine/runtime baseline or host-profile policy changed -> update `docs/QWEN3_MODEL_STACK.md`.
+* If public release cadence, supported profiles, CI/test tiers, or the `ATM10-Agent` x `abyss-stack` boundary changed -> update `docs/PRODUCT_EDGE_POSTURE.md`.
 * If there is an important public status/result -> update `MANIFEST.md`, and `ROADMAP.md` if direction changed.
+* If a wave-scoped public hardening or release reference changed -> update the matching `docs/RELEASE_*.md` document.
 * If there is local execution planning -> update local `TODO.md` / `PLANS.md`.
 * If there is internal chronology, proposed-doc scratch, or review packaging -> use ignored local-only surfaces under `docs/internal/**`.
 * Keep `README.md` pointed at canonical docs instead of duplicating operational detail.
@@ -88,3 +100,4 @@ This file defines the roles of the repository documents so the public surface st
 * Do not mix active runbook content with archived or historical command references.
 * Do not keep tracked review snapshots, proposed-doc scratch copies, or tool-local config in the public tree.
 * Do not duplicate counters like `N passed` or long run-id lists across multiple public docs.
+* Do not spread release cadence, support-tier, or supported-profile claims across several public docs when `docs/PRODUCT_EDGE_POSTURE.md` already carries that contract.
