@@ -1,28 +1,38 @@
-## What Changed
-<!-- 1-3 short bullets. Keep it concrete; do not restate the whole diff. -->
-- ...
-
-## Why
-<!-- State the reason for the change, bug, gap, or opportunity. -->
-- ...
-
-## Validation
-<!-- List only checks that actually ran. If none, say Not run. -->
-- ...
-
-## Boundary / Direction Impact
-<!-- Optional.
-Use this section only when the change shifts a boundary, owner-fit, route, contract, provenance posture, proof semantics, runtime posture, or recurring composition logic.
-Allowed short answers:
-- None.
-- No boundary shift.
-- Exposed a new owner-fit: ...
-- Tightens/loosens the boundary between ... and ...
-- Changes the route from ... to ...
-Note runtime behavior changes, deploy posture, operator blast radius, local-vs-remote boundary shifts, or action-surface risk.
+## PLAN
+<!--
+- restate the task
+- list files touched or inspected
+- name the main risk: automation, dependency, service, docs, or security
 -->
 - ...
 
-## Risk / Follow-ups
-<!-- Note remaining risk, deliberate non-goals, or next follow-up work. -->
+## DIFF
+<!--
+- say what changed
+- say whether meaning changed or only docs/tests/metadata changed
+-->
+- ...
+
+## VERIFY
+<!--
+- `python -m pytest` status
+- smoke commands actually run
+- what was not run
+-->
+- ...
+
+## REPORT
+<!--
+- current behavior after the change
+- whether dry-run/default-local/public-safe posture changed
+- follow-up work still needed
+-->
+- ...
+
+## RESIDUAL RISK
+<!--
+- untested paths
+- external service assumptions
+- unresolved runtime caveats
+-->
 - ...
