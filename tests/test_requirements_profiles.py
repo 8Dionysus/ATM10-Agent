@@ -23,6 +23,9 @@ def _normalized_lines(path: Path) -> list[str]:
 def test_requirements_profile_files_exist() -> None:
     for name in (
         "requirements.txt",
+        "requirements-core.txt",
+        "requirements-win-edge.txt",
+        "requirements-linux-dev.txt",
         "requirements-dev.txt",
         "requirements-voice.txt",
         "requirements-llm.txt",
@@ -33,24 +36,37 @@ def test_requirements_profile_files_exist() -> None:
 
 
 def test_requirements_profile_include_chain() -> None:
+    default_lines = _normalized_lines(REPO_ROOT / "requirements.txt")
+    win_edge_lines = _normalized_lines(REPO_ROOT / "requirements-win-edge.txt")
+    linux_dev_lines = _normalized_lines(REPO_ROOT / "requirements-linux-dev.txt")
+    dev_lines = _normalized_lines(REPO_ROOT / "requirements-dev.txt")
     voice_lines = _normalized_lines(REPO_ROOT / "requirements-voice.txt")
     llm_lines = _normalized_lines(REPO_ROOT / "requirements-llm.txt")
     export_lines = _normalized_lines(REPO_ROOT / "requirements-export.txt")
 
-    assert voice_lines[0] == "-r requirements.txt"
-    assert llm_lines[0] == "-r requirements.txt"
+    assert default_lines[0] == "-r requirements-win-edge.txt"
+    assert win_edge_lines[0] == "-r requirements-core.txt"
+    assert linux_dev_lines[0] == "-r requirements-core.txt"
+    assert dev_lines[0] == "-r requirements.txt"
+    assert voice_lines[0] == "-r requirements-core.txt"
+    assert llm_lines[0] == "-r requirements-core.txt"
     assert export_lines[0] == "-r requirements.txt"
     assert "-r requirements-llm.txt" not in export_lines
 
 
 def test_requirements_profile_expected_packages_present() -> None:
-    base_lines = _normalized_lines(REPO_ROOT / "requirements.txt")
+    core_lines = _normalized_lines(REPO_ROOT / "requirements-core.txt")
+    win_edge_lines = _normalized_lines(REPO_ROOT / "requirements-win-edge.txt")
+    linux_dev_lines = _normalized_lines(REPO_ROOT / "requirements-linux-dev.txt")
     voice_lines = _normalized_lines(REPO_ROOT / "requirements-voice.txt")
     llm_lines = _normalized_lines(REPO_ROOT / "requirements-llm.txt")
     export_lines = _normalized_lines(REPO_ROOT / "requirements-export.txt")
     audit_lines = _normalized_lines(REPO_ROOT / "requirements-audit.txt")
 
-    assert any(line.startswith("numpy") for line in base_lines)
+    assert any(line.startswith("numpy") for line in core_lines)
+    assert any(line.startswith("dxcam") for line in win_edge_lines)
+    assert not any(line.startswith("dxcam") for line in core_lines)
+    assert any(line.startswith("mss") for line in linux_dev_lines)
     assert any(line.startswith("openvino-genai") for line in voice_lines)
     assert any(line.startswith("torch") for line in voice_lines)
     assert any(line.startswith("TTS") for line in voice_lines)
