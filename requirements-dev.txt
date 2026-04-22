@@ -1,2 +1,3 @@
+# Default development install preserves the current Windows product-edge dependency surface.
 -r requirements.txt
 pytest>=8.0.0,<9.0.0

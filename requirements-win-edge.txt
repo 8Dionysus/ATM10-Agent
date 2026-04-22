@@ -1,0 +1,4 @@
+# Windows product-edge capture/runtime extras.
+# Keeps the existing default Windows DXGI/DXcam path out of portable core.
+-r requirements-core.txt
+dxcam>=0.3.0,<1.0.0

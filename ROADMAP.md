@@ -12,6 +12,7 @@ Selected strategic baseline:
 * Operator surface: **Streamlit** operator panel + CLI fallback.
 * Agent-core path: FastAPI gateway + workers + Qdrant + Neo4j + file artifacts (`runs/...`).
 * Runtime policy: current validated repo-host baseline is `OpenVINO-first` on this Intel machine, with explicit `CPU/GPU/NPU` placement and additive future host profiles for other hardware.
+* Host-profile policy: Windows remains the first-class ATM10 product-edge path; `fedora_local_dev` is a preliminary Fedora-first development profile for portable-core and dev-companion stabilization, not a public product-edge support default.
 * Model policy: pragmatic hybrid by task:
   * text/retrieval/rerank: Qwen3 stack,
   * vision active pilot path: Qwen2.5-VL-7B,
@@ -70,7 +71,8 @@ Definition of Done:
 * Streamlit remains a stable operator surface for health, run exploration, metrics, and smoke-only safe actions.
 * Gateway governance summaries remain machine-readable and publication-safe for nightly/operator workflows.
 * Operator recurrence recovery stays additive through existing snapshot/gateway/Streamlit seams without creating a new endpoint, a fifth tab, or auto-executed actions.
-* Operator flows stay reproducible on Windows 11 + PowerShell 7.
+* Current product-edge operator flows stay reproducible on Windows 11 + PowerShell 7.
+* Future Fedora operator flows land as explicit host-profile/runbook paths instead of silently changing the Windows baseline.
 
 ### G3 — Automation Safe Loop
 
@@ -106,6 +108,18 @@ Definition of Done:
 * New smoke entrypoints publish machine-readable summaries.
 * CI, runbook, and decisions stay aligned.
 
+### G6 — Host Profile Portability and Fedora Dev Companion
+
+Goal:
+
+* Introduce `fedora_local_dev` as an additive development profile that stabilizes portable core and operator-companion surfaces in the maintainer's Fedora-first workspace.
+
+Definition of Done:
+
+* Dependencies are split so Windows-only capture/input packages do not live in the portable core.
+* Fedora dev-companion work can validate gateway/operator/dry-run surfaces without claiming full ATM10 Windows parity.
+* Windows product-edge behavior remains intact, explicit, and separately validated.
+
 ## Roadmap Horizons
 
 ### 0-30 days
@@ -113,6 +127,7 @@ Definition of Done:
 * Tighten `gateway_sla_summary_v1` from the signal-only baseline toward a managed stricter policy using accumulated history.
 * Extend Streamlit operator UX with the next operator scenarios on top of the existing metrics/history/audit foundations.
 * Harden recurrence recovery reason coverage around launcher and observer pilot evidence without widening the smoke-only action set.
+* Land first-wave Fedora host-profile policy docs and split dependency files so portable core is no longer coupled to Windows-only capture packages.
 
 ### 30-60 days
 
@@ -120,6 +135,7 @@ Definition of Done:
 * Evaluate when `combo_a` can move from additive parity profile to the operational default without weakening governance.
 * Extend operator UX around pilot-specific troubleshooting and optional overlay/hotkey ergonomics.
 * Fix the current Intel/OpenVINO host profile as the documented baseline while defining how future machine-specific runtime paths are introduced and validated.
+* Land the first runnable `fedora_local_dev` companion path with explicit capability limits, artifacted smoke evidence, and no Windows product-edge regression.
 
 ### 60-90 days
 
@@ -127,10 +143,12 @@ Definition of Done:
 * Revisit archived R&D paths using the re-open criteria from `docs/ARCHIVED_TRACKS.md`.
 * Continue tightening operator guidance and release criteria around the live observer loop.
 * Pull compatible memory/evals/routing techniques from sibling repos into `ATM10-Agent` without breaking the single-repo local agent boundary or the validated `OpenVINO-first` host baseline.
+* Evaluate whether Fedora companion-mode evidence is strong enough to promote from preliminary development profile to a named supported profile.
 
 ## Constraints and High-Level Risks
 
-* Windows 11 + PowerShell 7 is the first-class environment.
+* Windows 11 + PowerShell 7 remains the first-class ATM10 product-edge environment.
+* Fedora-first development is allowed as an explicit preliminary profile, but it is not a replacement support claim until docs, commands, and validation catch up.
 * Reproducibility beats convenience: small diffs, runnable commands, and test coverage stay mandatory.
 * Runtime remains `OpenVINO-first` on the current repo host until another host profile is explicitly validated and promoted; dependency and infrastructure sprawl stay constrained.
 * Security posture remains conservative: dry-run by default, bounded payloads, sanitized errors, and minimal trusted surfaces.

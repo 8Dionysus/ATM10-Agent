@@ -1,6 +1,6 @@
 # Model Stack and Host Runtime Profiles (OpenVINO-first)
 
-Current as of: 2026-03-28
+Current as of: 2026-04-21
 
 This file keeps the historical path `docs/QWEN3_MODEL_STACK.md` for continuity, but it now records the machine-specific runtime policy for `ATM10-Agent`, not only a Qwen3-only stack snapshot.
 
@@ -8,15 +8,27 @@ This file keeps the historical path `docs/QWEN3_MODEL_STACK.md` for continuity, 
 
 - `ATM10-Agent` is a local-first ATM10 companion with active operator-facing entrypoints and an internal agent stack built on top of perception, memory, routing, evals, dry-run automation, and artifacted worker-style processes.
 - Runtime backend choice is a host-profile decision. A host profile selects the inference/runtime path for one machine; it does not redefine the repo architecture.
-- The current baseline is the validated Intel/OpenVINO host path on this repo machine. Future `NVIDIA`/`Ollama` or other paths should land as explicit additive host profiles with their own measurements, evals, and promotion criteria.
+- The current product-edge baseline remains the validated Intel/OpenVINO host path on this repo machine.
+- Fedora-first development may be introduced only as an additive host profile for portable-core and dev-companion stabilization; it does not redefine Windows ATM10 product-edge support until promoted through evidence.
+- Future `NVIDIA`/`Ollama`, Fedora/Linux, or other paths should land as explicit additive host profiles with their own measurements, evals, and promotion criteria.
 
 ## Canonical current host profile
 
 - Host profile id: `ov_intel_core_ultra_local`
-- Status: current validated repo-host baseline
+- Status: current supported product-edge baseline
 - Runtime family: `OpenVINO-first`
 - Placement policy: explicit per-stage `CPU/GPU/NPU` placement with artifacted measurement; use multi-accelerator parallelism where it helps instead of silently swapping the entire stack
 - Promotion rule: this profile remains canonical until another host profile is explicitly documented, evaluated, and promoted
+
+
+## Development host profiles (additive, not promoted)
+
+- Candidate profile id: `fedora_local_dev`
+- Status: preliminary development profile; not the current supported product-edge baseline
+- Intent: stabilize portable core, operator-companion surfaces, and Fedora-first workspace ergonomics before making ATM10/Minecraft parity claims
+- Current first-wave scope: gateway/operator surfaces, memory/retrieval/KAG development, voice/runtime experiments, dry-run automation contracts, artifact generation, and manual or region-based capture experiments
+- Explicitly out of scope for the first-wave claim: Windows-style ATM10 window identity, DXGI capture, supervised input, or broad `abyss-stack` deployment parity
+- Promotion rule: `fedora_local_dev` becomes a public supported profile only after it has runnable commands, CI or smoke evidence, and matching updates in `docs/PRODUCT_EDGE_POSTURE.md`, `ROADMAP.md`, and `MANIFEST.md`
 
 ## Future host profiles (additive)
 
@@ -85,5 +97,6 @@ Rule: prefer the strongest locally supported OpenVINO path per task on `ov_intel
 * Default runtime for the active repo-host stack in this project: OpenVINO (`CPU|GPU|NPU`).
 * Device placement is stage-specific and may exploit multiple accelerators in parallel when the repo host supports it.
 * Pilot/Gateway surfaces stay local-first and artifacted under `runs/...`.
+* Host-edge dependencies and desktop-boundary adapters should stay separable from portable runtime surfaces; Windows-specific capture/input paths must not become portable-core assumptions.
 * Future non-OpenVINO paths must arrive as explicit host profiles instead of silent backend swaps.
 * The OpenAI-compatible adapter remains in the repo as an optional gateway layer; it does not replace the local OpenVINO stack as the pilot baseline.

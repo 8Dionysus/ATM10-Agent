@@ -18,7 +18,7 @@ This file defines the roles of the repository documents so the public surface st
   * Public replacement for the old tracked `PLANS.md` role.
 
 * `docs/PRODUCT_EDGE_POSTURE.md`
-  * Public release cadence, supported profiles, CI/test tiers, and the explicit `ATM10-Agent` x `abyss-stack` contract.
+  * Public release cadence, supported and preliminary profile claims, CI/test tiers, and the explicit `ATM10-Agent` x `abyss-stack` contract.
   * Short public boundary for product-edge support claims.
 
 * `docs/RUNBOOK.md`
@@ -31,7 +31,7 @@ This file defines the roles of the repository documents so the public surface st
   * Holds non-default rollback paths, blocked experiments, and restore guidance that should remain public-readable but not appear in the active runbook.
 
 * `docs/QWEN3_MODEL_STACK.md`
-  * Machine-specific model/runtime posture and validated host profiles.
+  * Machine-specific model/runtime posture plus validated and preliminary host profiles.
   * Records the current `OpenVINO-first` repo-host baseline and additive future runtime-path rules.
 
 * `docs/RELEASE_WAVE6.md`
@@ -93,7 +93,7 @@ This file defines the roles of the repository documents so the public surface st
 * If active commands/setup changed -> update `docs/RUNBOOK.md`.
 * If archived or recoverable command/reference changed -> update `docs/ARCHIVED_TRACKS.md`.
 * If the machine/runtime baseline or host-profile policy changed -> update `docs/QWEN3_MODEL_STACK.md`.
-* If public release cadence, supported profiles, CI/test tiers, or the `ATM10-Agent` x `abyss-stack` boundary changed -> update `docs/PRODUCT_EDGE_POSTURE.md`.
+* If public release cadence, supported/preliminary profile claims, CI/test tiers, or the `ATM10-Agent` x `abyss-stack` boundary changed -> update `docs/PRODUCT_EDGE_POSTURE.md`.
 * If there is an important public status/result -> update `MANIFEST.md`, and `ROADMAP.md` if direction changed.
 * If a wave-scoped public hardening or release reference changed -> update the matching `docs/RELEASE_*.md` document.
 * If first-wave owner-local stressor or adaptation contract wording changes -> update `docs/ANTIFRAGILITY_FIRST_WAVE.md` and the linked `schemas/` + `examples/` surfaces.
@@ -107,4 +107,4 @@ This file defines the roles of the repository documents so the public surface st
 * Do not mix active runbook content with archived or historical command references.
 * Do not keep tracked review snapshots, proposed-doc scratch copies, or tool-local config in the public tree.
 * Do not duplicate counters like `N passed` or long run-id lists across multiple public docs.
-* Do not spread release cadence, support-tier, or supported-profile claims across several public docs when `docs/PRODUCT_EDGE_POSTURE.md` already carries that contract.
+* Do not spread release cadence, support-tier, or supported/preliminary profile claims across several public docs when `docs/PRODUCT_EDGE_POSTURE.md` already carries that contract.

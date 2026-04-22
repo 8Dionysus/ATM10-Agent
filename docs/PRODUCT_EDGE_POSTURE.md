@@ -1,6 +1,6 @@
 # PRODUCT_EDGE_POSTURE.md
 
-Current as of: 2026-04-07
+Current as of: 2026-04-21
 
 This document defines the public product-edge contract for `ATM10-Agent`.
 It keeps release cadence, supported profiles, CI/test tiers, and the `ATM10-Agent` x `abyss-stack` boundary short and explicit.
@@ -22,17 +22,21 @@ It keeps release cadence, supported profiles, CI/test tiers, and the `ATM10-Agen
 
 Rule: a public support claim should not exceed the highest tier that actually validates it.
 
+As of 2026-04-21, there is no Fedora/Linux public support tier in this repository. A future Linux portable-core or Fedora companion workflow must be named here before it can become support evidence.
+
 ## Supported profiles
 
 | profile | status | current meaning |
 |---|---|---|
 | `ov_intel_core_ultra_local` | supported baseline | the validated repo-host baseline on Windows 11 + PowerShell 7 with the current `OpenVINO-first` runtime posture |
 | `combo_a` | supported additive parity profile | an additive gateway/operator profile with external `Qdrant` + `Neo4j`, kept explicit and reviewable through dedicated smoke/nightly surfaces |
+| `fedora_local_dev` | preliminary development profile | an additive Fedora-first workspace path for portable-core and dev-companion stabilization; not a public ATM10 product-edge support default and not yet a CI-backed support claim |
 | future host profiles such as `ollama_nvidia_local` or other non-OpenVINO paths | preliminary only | they may be explored, but they are not public supported defaults until they land as explicit host profiles with their own measurements, docs, and promotion evidence |
 
 ## ATM10-Agent x abyss-stack boundary
 
-- `ATM10-Agent` is a Windows 11 product-edge repository with its own runnable scripts, docs, tests, and operator surfaces.
+- `ATM10-Agent` remains a Windows 11 product-edge repository with its own runnable scripts, docs, tests, and operator surfaces.
+- `fedora_local_dev` may be used as a Fedora-first development profile for portable core and operator-companion stabilization. It does not by itself prove ATM10/Minecraft parity, Windows-edge replacement, or broad `abyss-stack` deployment support.
 - `abyss-stack` is the broader infrastructure substrate in the ecosystem. This repository may consume or align with that substrate, but its current public validation does not prove Fedora-first stack parity or broad deployment support across `abyss-stack` profiles.
 - A future explicit supported-profile bridge to `abyss-stack` must be additive, named here, and reflected in `MANIFEST.md` and `ROADMAP.md` when it becomes a real public claim.
 
