@@ -138,3 +138,30 @@ python scripts/start_operator_fedora_dev.py \
 
 The CI lane installs `requirements-linux-dev.txt`, not `requirements-dev.txt`.
 That keeps Windows-only capture dependencies out of the portable Linux smoke.
+
+
+## Fedora companion milestone receipt
+
+After startup command and instance discovery mechanics are stable, write a development companion receipt:
+
+```bash
+ATM10_DIR=/path/to/ATM10 \
+python scripts/write_fedora_companion_receipt.py \
+  --runs-dir runs/fedora-companion-receipt \
+  --capture-region 0,0,1920,1080
+```
+
+For CI mechanics only, where a real ATM10 instance is not available:
+
+```bash
+python scripts/write_fedora_companion_receipt.py \
+  --runs-dir runs/ci-fedora-companion-receipt \
+  --capture-region 0,0,1920,1080 \
+  --allow-missing-atm10-dir \
+  -- \
+  --pilot-vlm-provider stub \
+  --pilot-text-provider stub
+```
+
+The CI form validates the receipt seam; it is not promotion evidence for Fedora product-edge support.
+See `docs/FEDORA_COMPANION_MILESTONE.md` for the acceptance boundary.

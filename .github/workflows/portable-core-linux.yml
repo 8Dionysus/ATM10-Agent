@@ -37,6 +37,8 @@ jobs:
             tests/test_readiness_scopes.py \
             tests/test_discover_instance.py \
             tests/test_start_operator_fedora_dev.py \
+            tests/test_fedora_companion_milestone.py \
+            tests/test_windows_product_edge_contract.py \
             tests/test_portable_core_linux_workflow.py
 
       - name: Smoke - Instance discovery artifact
@@ -52,3 +54,13 @@ jobs:
             --no-tts-runtime \
             -- \
             --pilot-vlm-provider stub
+
+      - name: Smoke - Fedora companion milestone receipt
+        run: |
+          python scripts/write_fedora_companion_receipt.py \
+            --runs-dir runs/ci-fedora-companion-receipt \
+            --capture-region 0,0,1920,1080 \
+            --allow-missing-atm10-dir \
+            -- \
+            --pilot-vlm-provider stub \
+            --pilot-text-provider stub
