@@ -8,11 +8,40 @@ from typing import Any, Sequence
 
 ATM10_SESSION_PROBE_SCHEMA = "atm10_session_probe_v1"
 _ATM10_HEURISTIC_THRESHOLD = 4
+_SESSION_PROBE_BACKENDS = ("windows_win32", "linux_manual", "unsupported")
+
+
+def list_session_probe_backend_ids() -> tuple[str, ...]:
+    return _SESSION_PROBE_BACKENDS
 
 
 def _utc_now(now: datetime | None = None) -> str:
     effective_now = now or datetime.now(timezone.utc)
     return effective_now.astimezone(timezone.utc).isoformat()
+
+
+def _platform_name(platform_name: str | None = None) -> str:
+    return str(platform_name or sys.platform).strip().lower()
+
+
+def select_session_probe_backend_id(
+    *,
+    platform_name: str | None = None,
+    backend_name: str | None = None,
+) -> str:
+    explicit_backend = str(backend_name or "").strip().lower()
+    if explicit_backend:
+        if explicit_backend not in _SESSION_PROBE_BACKENDS:
+            available = ", ".join(_SESSION_PROBE_BACKENDS)
+            raise KeyError(f"unknown session_probe_backend={explicit_backend!r}; expected one of: {available}")
+        return explicit_backend
+
+    platform = _platform_name(platform_name)
+    if platform == "win32":
+        return "windows_win32"
+    if platform.startswith("linux"):
+        return "linux_manual"
+    return "unsupported"
 
 
 def _normalize_capture_bbox(value: Sequence[int] | None) -> list[int] | None:
@@ -67,21 +96,16 @@ def _atm10_heuristic_score(*, window_title: str, process_name: str) -> int:
     title = window_title.strip().lower()
     process = process_name.strip().lower()
     score = 0
-
     if "atm10" in title or "atm 10" in title or "all the mods 10" in title:
         score += 4
     elif "all the mods" in title:
         score += 4
-
     if "minecraft" in title:
         score += 3
-
     if any(token in process for token in ("minecraft", "prismlauncher", "multimc", "curseforge")):
         score += 2
-
     if process in {"java.exe", "javaw.exe"} or "javaw" in process or process.endswith("\\java.exe"):
         score += 1
-
     return score
 
 
@@ -148,10 +172,9 @@ def _resolve_process_name(pid: int) -> str:
         ctypes.windll.kernel32.CloseHandle(handle)
 
 
-def _enumerate_visible_windows() -> list[dict[str, Any]]:
-    if sys.platform != "win32":
+def _enumerate_visible_windows(*, platform_name: str | None = None) -> list[dict[str, Any]]:
+    if _platform_name(platform_name) != "win32":
         return []
-
     from ctypes import wintypes
 
     class RECT(ctypes.Structure):
@@ -164,7 +187,6 @@ def _enumerate_visible_windows() -> list[dict[str, Any]]:
 
     user32 = ctypes.windll.user32
     windows: list[dict[str, Any]] = []
-
     enum_proc = ctypes.WINFUNCTYPE(ctypes.c_int, wintypes.HWND, wintypes.LPARAM)
 
     def _callback(hwnd: int, _lparam: int) -> int:
@@ -180,11 +202,9 @@ def _enumerate_visible_windows() -> list[dict[str, Any]]:
         window_title = title_buffer.value.strip()
         if not window_title:
             return 1
-
         rect = RECT()
         if not bool(user32.GetWindowRect(hwnd, ctypes.byref(rect))):
             return 1
-
         pid = wintypes.DWORD()
         user32.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
         process_name = _resolve_process_name(int(pid.value))
@@ -202,13 +222,12 @@ def _enumerate_visible_windows() -> list[dict[str, Any]]:
     return windows
 
 
-def find_best_atm10_window() -> dict[str, Any] | None:
-    if sys.platform != "win32":
+def find_best_atm10_window(*, platform_name: str | None = None) -> dict[str, Any] | None:
+    if _platform_name(platform_name) != "win32":
         return None
-
     foreground_hwnd = _foreground_window_handle()
     candidates: list[dict[str, Any]] = []
-    for window in _enumerate_visible_windows():
+    for window in _enumerate_visible_windows(platform_name=platform_name):
         candidate = dict(window)
         candidate["foreground"] = int(candidate.get("hwnd", 0)) == foreground_hwnd
         candidate["heuristic_score"] = _atm10_heuristic_score(
@@ -217,10 +236,96 @@ def find_best_atm10_window() -> dict[str, Any] | None:
         )
         if int(candidate["heuristic_score"]) >= _ATM10_HEURISTIC_THRESHOLD:
             candidates.append(candidate)
-
     if not candidates:
         return None
     return sorted(candidates, key=_candidate_sort_key, reverse=True)[0]
+
+
+def _probe_windows_win32(
+    *,
+    checked_at_utc: str,
+    capture_target_kind: str,
+    capture_bbox: Sequence[int] | None,
+    platform_name: str | None,
+) -> dict[str, Any]:
+    best_candidate = find_best_atm10_window(platform_name=platform_name)
+    if best_candidate is None:
+        return _build_probe_payload(
+            checked_at_utc=checked_at_utc,
+            capture_target_kind=capture_target_kind,
+            capture_bbox=capture_bbox,
+            candidate=None,
+            reason_codes=["atm10_window_not_found"],
+            status="attention",
+            atm10_probable=False,
+            capture_intersects_window=None,
+        )
+
+    capture_intersects_window = _bbox_intersects(
+        best_candidate.get("window_bounds"),
+        capture_bbox,
+    )
+    reason_codes: list[str] = []
+    atm10_probable = True
+    status = "ok"
+    if capture_intersects_window is False:
+        reason_codes.append("capture_target_miss")
+        atm10_probable = False
+        status = "attention"
+    if not bool(best_candidate.get("foreground")):
+        reason_codes.append("atm10_window_not_foreground")
+        status = "attention"
+
+    return _build_probe_payload(
+        checked_at_utc=checked_at_utc,
+        capture_target_kind=capture_target_kind,
+        capture_bbox=capture_bbox,
+        candidate=best_candidate,
+        reason_codes=reason_codes,
+        status=status,
+        atm10_probable=atm10_probable,
+        capture_intersects_window=capture_intersects_window,
+    )
+
+
+def _probe_linux_manual(
+    *,
+    checked_at_utc: str,
+    capture_target_kind: str,
+    capture_bbox: Sequence[int] | None,
+) -> dict[str, Any]:
+    reason_codes = ["window_identity_unavailable", "manual_capture_source_required"]
+    if capture_target_kind == "unknown":
+        reason_codes.append("capture_target_kind_unknown")
+
+    return _build_probe_payload(
+        checked_at_utc=checked_at_utc,
+        capture_target_kind=capture_target_kind,
+        capture_bbox=capture_bbox,
+        candidate=None,
+        reason_codes=reason_codes,
+        status="attention",
+        atm10_probable=False,
+        capture_intersects_window=None,
+    )
+
+
+def _probe_unsupported(
+    *,
+    checked_at_utc: str,
+    capture_target_kind: str,
+    capture_bbox: Sequence[int] | None,
+) -> dict[str, Any]:
+    return _build_probe_payload(
+        checked_at_utc=checked_at_utc,
+        capture_target_kind=capture_target_kind,
+        capture_bbox=capture_bbox,
+        candidate=None,
+        reason_codes=["platform_not_supported"],
+        status="error",
+        atm10_probable=False,
+        capture_intersects_window=None,
+    )
 
 
 def probe_atm10_session(
@@ -228,59 +333,32 @@ def probe_atm10_session(
     capture_target_kind: str,
     capture_bbox: Sequence[int] | None = None,
     now: datetime | None = None,
+    platform_name: str | None = None,
+    backend_name: str | None = None,
 ) -> dict[str, Any]:
     checked_at_utc = _utc_now(now)
     normalized_capture_target_kind = _capture_target_kind(capture_target_kind)
     normalized_capture_bbox = _normalize_capture_bbox(capture_bbox)
-
-    if sys.platform != "win32":
-        return _build_probe_payload(
-            checked_at_utc=checked_at_utc,
-            capture_target_kind=normalized_capture_target_kind,
-            capture_bbox=normalized_capture_bbox,
-            candidate=None,
-            reason_codes=["platform_not_supported"],
-            status="error",
-            atm10_probable=False,
-            capture_intersects_window=None,
-        )
-
-    best_candidate = find_best_atm10_window()
-    if best_candidate is None:
-        return _build_probe_payload(
-            checked_at_utc=checked_at_utc,
-            capture_target_kind=normalized_capture_target_kind,
-            capture_bbox=normalized_capture_bbox,
-            candidate=None,
-            reason_codes=["atm10_window_not_found"],
-            status="attention",
-            atm10_probable=False,
-            capture_intersects_window=None,
-        )
-    capture_intersects_window = _bbox_intersects(
-        best_candidate.get("window_bounds"),
-        normalized_capture_bbox,
+    backend_id = select_session_probe_backend_id(
+        platform_name=platform_name,
+        backend_name=backend_name,
     )
-    reason_codes: list[str] = []
-    atm10_probable = True
-    status = "ok"
 
-    if capture_intersects_window is False:
-        reason_codes.append("capture_target_miss")
-        atm10_probable = False
-        status = "attention"
-
-    if not bool(best_candidate.get("foreground")):
-        reason_codes.append("atm10_window_not_foreground")
-        status = "attention"
-
-    return _build_probe_payload(
+    if backend_id == "windows_win32":
+        return _probe_windows_win32(
+            checked_at_utc=checked_at_utc,
+            capture_target_kind=normalized_capture_target_kind,
+            capture_bbox=normalized_capture_bbox,
+            platform_name=platform_name,
+        )
+    if backend_id == "linux_manual":
+        return _probe_linux_manual(
+            checked_at_utc=checked_at_utc,
+            capture_target_kind=normalized_capture_target_kind,
+            capture_bbox=normalized_capture_bbox,
+        )
+    return _probe_unsupported(
         checked_at_utc=checked_at_utc,
         capture_target_kind=normalized_capture_target_kind,
         capture_bbox=normalized_capture_bbox,
-        candidate=best_candidate,
-        reason_codes=reason_codes,
-        status=status,
-        atm10_probable=atm10_probable,
-        capture_intersects_window=capture_intersects_window,
     )

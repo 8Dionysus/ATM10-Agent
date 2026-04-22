@@ -3,10 +3,10 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import sys
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Mapping
-
 
 MARKERS = ("config", "mods", "logs", "saves")
 
@@ -18,16 +18,121 @@ def _env_path(env: Mapping[str, str], key: str) -> Path | None:
     return Path(value).expanduser()
 
 
-def resolve_minecraft_dir(env: Mapping[str, str]) -> tuple[Path, str]:
+def _runtime_platform(platform_name: str | None = None) -> str:
+    return (platform_name or sys.platform).lower()
+
+
+def _home_path(env: Mapping[str, str], home: Path | None = None) -> Path:
+    if home is not None:
+        return home
+    from_env = env.get("HOME") or env.get("USERPROFILE")
+    if from_env:
+        return Path(from_env).expanduser()
+    return Path.home()
+
+
+def _xdg_data_home(env: Mapping[str, str], home: Path) -> Path:
+    from_env = env.get("XDG_DATA_HOME")
+    if from_env:
+        return Path(from_env).expanduser()
+    return home / ".local" / "share"
+
+
+def _dedupe_roots(roots: list[tuple[Path, str]]) -> list[tuple[Path, str]]:
+    seen: set[str] = set()
+    result: list[tuple[Path, str]] = []
+    for path, source in roots:
+        key = str(path.expanduser())
+        if key in seen:
+            continue
+        seen.add(key)
+        result.append((path.expanduser(), source))
+    return result
+
+
+def resolve_minecraft_dir(
+    env: Mapping[str, str],
+    *,
+    platform_name: str | None = None,
+    home: Path | None = None,
+) -> tuple[Path, str]:
+    """Resolve the base Minecraft directory with env-first, OS-aware fallbacks."""
+
     from_env = _env_path(env, "MINECRAFT_DIR")
     if from_env is not None:
         return from_env, "env"
 
-    appdata = env.get("APPDATA")
-    if appdata:
-        return Path(appdata) / ".minecraft", "appdata_fallback"
+    platform = _runtime_platform(platform_name)
+    home_path = _home_path(env, home=home)
 
-    return Path.home() / "AppData" / "Roaming" / ".minecraft", "home_fallback"
+    if platform.startswith("win"):
+        appdata = env.get("APPDATA")
+        if appdata:
+            return Path(appdata) / ".minecraft", "appdata_fallback"
+        return home_path / "AppData" / "Roaming" / ".minecraft", "home_fallback"
+
+    if platform == "darwin":
+        return home_path / "Library" / "Application Support" / "minecraft", "macos_home_fallback"
+
+    return home_path / ".minecraft", "linux_home_fallback"
+
+
+def candidate_instance_roots(
+    minecraft_dir: Path,
+    env: Mapping[str, str],
+    *,
+    platform_name: str | None = None,
+    home: Path | None = None,
+) -> list[tuple[Path, str]]:
+    """Return ordered roots to scan for ATM10 instances.
+
+    The order is intentionally env/base-Minecraft first, then launcher-specific
+    comfort fallbacks. This keeps explicit operator configuration stronger than
+    launcher heuristics.
+    """
+
+    platform = _runtime_platform(platform_name)
+    home_path = _home_path(env, home=home)
+    roots: list[tuple[Path, str]] = [
+        (minecraft_dir / "versions", "versions_scan"),
+        (minecraft_dir / "instances", "minecraft_instances_scan"),
+    ]
+
+    if platform.startswith("linux"):
+        xdg_home = _xdg_data_home(env, home_path)
+        roots.extend(
+            [
+                (xdg_home / "PrismLauncher" / "instances", "xdg_prismlauncher_instances_scan"),
+                (xdg_home / "PolyMC" / "instances", "xdg_polymc_instances_scan"),
+                (xdg_home / "com.modrinth.theseus" / "profiles", "xdg_modrinth_profiles_scan"),
+                (
+                    home_path / ".var" / "app" / "org.prismlauncher.PrismLauncher" / "data" / "PrismLauncher" / "instances",
+                    "flatpak_prismlauncher_instances_scan",
+                ),
+                (
+                    home_path / ".var" / "app" / "com.modrinth.ModrinthApp" / "data" / "com.modrinth.theseus" / "profiles",
+                    "flatpak_modrinth_profiles_scan",
+                ),
+                (home_path / "curseforge" / "minecraft" / "Instances", "home_curseforge_instances_scan"),
+                (home_path / "Games" / "CurseForge" / "Instances", "home_games_curseforge_instances_scan"),
+            ]
+        )
+    elif platform.startswith("win"):
+        appdata = env.get("APPDATA")
+        localappdata = env.get("LOCALAPPDATA")
+        if appdata:
+            roots.append((Path(appdata) / "CurseForge" / "minecraft" / "Instances", "appdata_curseforge_instances_scan"))
+        if localappdata:
+            roots.append((Path(localappdata) / "Programs" / "CurseForge" / "minecraft" / "Instances", "localappdata_curseforge_instances_scan"))
+    elif platform == "darwin":
+        roots.extend(
+            [
+                (home_path / "Library" / "Application Support" / "PrismLauncher" / "instances", "macos_prismlauncher_instances_scan"),
+                (home_path / "Library" / "Application Support" / "com.modrinth.theseus" / "profiles", "macos_modrinth_profiles_scan"),
+            ]
+        )
+
+    return _dedupe_roots(roots)
 
 
 def _is_atm10_candidate(path: Path) -> bool:
@@ -49,23 +154,46 @@ def _candidate_sort_key(path: Path) -> tuple[int, float, str]:
     return score, modified, name
 
 
-def resolve_atm10_dir(minecraft_dir: Path, env: Mapping[str, str]) -> tuple[Path | None, str]:
+def _scan_atm10_candidates(roots: list[tuple[Path, str]]) -> list[tuple[Path, str]]:
+    candidates: list[tuple[Path, str]] = []
+    for root, source in roots:
+        if not root.is_dir():
+            continue
+        if _is_atm10_candidate(root):
+            candidates.append((root, source))
+        try:
+            children = list(root.iterdir())
+        except OSError:
+            continue
+        for child in children:
+            if child.is_dir() and _is_atm10_candidate(child):
+                candidates.append((child, source))
+    return candidates
+
+
+def resolve_atm10_dir(
+    minecraft_dir: Path,
+    env: Mapping[str, str],
+    *,
+    platform_name: str | None = None,
+    home: Path | None = None,
+) -> tuple[Path | None, str]:
     from_env = _env_path(env, "ATM10_DIR")
     if from_env is not None:
         return from_env, "env"
 
-    versions_dir = minecraft_dir / "versions"
-    if not versions_dir.is_dir():
-        return None, "not_found"
-
-    candidates = [
-        child for child in versions_dir.iterdir() if child.is_dir() and _is_atm10_candidate(child)
-    ]
+    roots = candidate_instance_roots(
+        minecraft_dir,
+        env,
+        platform_name=platform_name,
+        home=home,
+    )
+    candidates = _scan_atm10_candidates(roots)
     if not candidates:
         return None, "not_found"
 
-    selected = max(candidates, key=_candidate_sort_key)
-    return selected, "versions_scan"
+    selected, source = max(candidates, key=lambda item: _candidate_sort_key(item[0]))
+    return selected, source
 
 
 def collect_markers(atm10_dir: Path | None) -> dict[str, bool]:
@@ -78,19 +206,46 @@ def _to_str(path: Path | None) -> str | None:
     return str(path) if path is not None else None
 
 
-def build_report(env: Mapping[str, str], now: datetime | None = None) -> dict[str, Any]:
-    minecraft_dir, minecraft_source = resolve_minecraft_dir(env)
-    atm10_dir, atm10_source = resolve_atm10_dir(minecraft_dir, env)
-
+def build_report(
+    env: Mapping[str, str],
+    now: datetime | None = None,
+    *,
+    platform_name: str | None = None,
+    home: Path | None = None,
+) -> dict[str, Any]:
+    platform = _runtime_platform(platform_name)
+    home_path = _home_path(env, home=home)
+    minecraft_dir, minecraft_source = resolve_minecraft_dir(
+        env,
+        platform_name=platform,
+        home=home_path,
+    )
+    candidate_roots = candidate_instance_roots(
+        minecraft_dir,
+        env,
+        platform_name=platform,
+        home=home_path,
+    )
+    atm10_dir, atm10_source = resolve_atm10_dir(
+        minecraft_dir,
+        env,
+        platform_name=platform,
+        home=home_path,
+    )
     if now is None:
         now = datetime.now(timezone.utc)
 
     return {
         "timestamp_utc": now.astimezone(timezone.utc).isoformat(),
         "inputs": {
+            "platform": platform,
             "MINECRAFT_DIR": env.get("MINECRAFT_DIR"),
             "ATM10_DIR": env.get("ATM10_DIR"),
             "APPDATA": env.get("APPDATA"),
+            "LOCALAPPDATA": env.get("LOCALAPPDATA"),
+            "HOME": env.get("HOME"),
+            "USERPROFILE": env.get("USERPROFILE"),
+            "XDG_DATA_HOME": env.get("XDG_DATA_HOME"),
         },
         "discovery_sources": {
             "minecraft_dir": minecraft_source,
@@ -99,6 +254,10 @@ def build_report(env: Mapping[str, str], now: datetime | None = None) -> dict[st
         "paths": {
             "minecraft_dir": _to_str(minecraft_dir),
             "versions_dir": _to_str(minecraft_dir / "versions"),
+            "candidate_instance_roots": [
+                {"path": _to_str(path), "source": source}
+                for path, source in candidate_roots
+            ],
             "atm10_dir": _to_str(atm10_dir),
         },
         "exists": {
@@ -130,14 +289,19 @@ def run_discovery(
     env: Mapping[str, str] | None = None,
     runs_dir: Path = Path("runs"),
     now: datetime | None = None,
+    platform_name: str | None = None,
+    home: Path | None = None,
 ) -> tuple[dict[str, Any], Path]:
     env_map = dict(os.environ if env is None else env)
     if now is None:
         now = datetime.now(timezone.utc)
-
     run_dir = _create_run_dir(runs_dir, now=now)
-
-    report = build_report(env_map, now=now)
+    report = build_report(
+        env_map,
+        now=now,
+        platform_name=platform_name,
+        home=home,
+    )
     report_path = run_dir / "instance_paths.json"
     report_path.write_text(json.dumps(report, indent=2), encoding="utf-8")
     return report, report_path
@@ -145,6 +309,7 @@ def run_discovery(
 
 def _print_summary(report: Mapping[str, Any], report_path: Path) -> None:
     print(f"[discover_instance] artifact: {report_path}")
+    print(f"platform: {report['inputs']['platform']}")
     print(f"minecraft_dir: {report['paths']['minecraft_dir']} (exists={report['exists']['minecraft_dir']})")
     print(f"atm10_dir: {report['paths']['atm10_dir']} (exists={report['exists']['atm10_dir']})")
     marker_bits = ", ".join(f"{name}={value}" for name, value in report["markers"].items())

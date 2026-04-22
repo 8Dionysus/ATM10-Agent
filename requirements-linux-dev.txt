@@ -1,0 +1,5 @@
+# Fedora/Linux development companion profile.
+# Preliminary path for portable-core and manual/region capture experiments; not full ATM10 product-edge parity.
+-r requirements-core.txt
+mss>=9.0.0,<11.0.0
+pytest>=8.0.0,<9.0.0
