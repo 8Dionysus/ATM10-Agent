@@ -111,3 +111,30 @@ Expected readiness posture:
 
 Do not update `MANIFEST.md` or README to claim Fedora public support from this runbook alone.
 Promotion requires artifacted smoke evidence and an explicit support-tier update in `docs/PRODUCT_EDGE_POSTURE.md`.
+
+
+## Portable-core Linux CI lane
+
+After the instance-discovery wave, the lightweight Fedora/Linux validation path is:
+
+```bash
+python -m pytest -q \
+  tests/test_host_profiles.py \
+  tests/test_atm10_session_probe_adapters.py \
+  tests/test_readiness_scopes.py \
+  tests/test_discover_instance.py \
+  tests/test_start_operator_fedora_dev.py \
+  tests/test_portable_core_linux_workflow.py
+
+python scripts/discover_instance.py --runs-dir runs/ci-linux-discover-instance
+python scripts/start_operator_fedora_dev.py \
+  --print-only \
+  --runs-dir runs/ci-fedora-startup-print-only \
+  --no-voice-runtime \
+  --no-tts-runtime \
+  -- \
+  --pilot-vlm-provider stub
+```
+
+The CI lane installs `requirements-linux-dev.txt`, not `requirements-dev.txt`.
+That keeps Windows-only capture dependencies out of the portable Linux smoke.
