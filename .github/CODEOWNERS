@@ -1,0 +1,17 @@
+# Narrow ownership map for governance-critical operator surfaces.
+/.agents/ @8Dionysus
+/.github/ @8Dionysus
+/docs/ @8Dionysus
+/examples/ @8Dionysus
+/schemas/ @8Dionysus
+/scripts/ @8Dionysus
+/src/ @8Dionysus
+/tests/ @8Dionysus
+
+/AGENTS.md @8Dionysus
+/AUDIT.md @8Dionysus
+/MANIFEST.md @8Dionysus
+/README.md @8Dionysus
+/ROADMAP.md @8Dionysus
+/pytest.ini @8Dionysus
+/requirements*.txt @8Dionysus
