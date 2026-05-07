@@ -1,0 +1,9 @@
+interface:
+  display_name: ATM10 Change Protocol
+  short_description: ATM10 bounded change overlay
+  default_prompt: Use $atm10-change-protocol to apply the base change protocol with repo-relative atm10 paths, commands, and local review notes.
+  icon_small: ./assets/small-logo.svg
+  icon_large: ./assets/large-logo.svg
+  brand_color: '#6D28D9'
+policy:
+  allow_implicit_invocation: true
