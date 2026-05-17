@@ -106,7 +106,7 @@ def test_build_startup_plan_uses_primary_operator_profile_defaults() -> None:
     assert plan["artifact_roots"]["operator_runs_dir"] == str(Path("runs"))
     assert plan["gateway"]["url"] == "http://127.0.0.1:8770"
     assert plan["streamlit"]["url"] == "http://127.0.0.1:8501"
-    assert plan["gateway"]["runs_dir"] == str(Path("runs") / "gateway-http")
+    assert plan["gateway"]["runs_dir"] == str(Path("runs"))
     assert plan["streamlit"]["runs_dir"] == str(Path("runs"))
     assert "scripts/gateway_v1_http_service.py" in plan["gateway"]["command"]
     assert "--operator-runs-dir" in plan["gateway"]["command"]
@@ -118,7 +118,7 @@ def test_parse_args_derives_child_run_dirs_from_base_runs_dir(tmp_path: Path) ->
     args = start_operator_product.parse_args(["--runs-dir", str(tmp_path / "audit-root")])
 
     assert args.runs_dir == tmp_path / "audit-root"
-    assert args.gateway_runs_dir == tmp_path / "audit-root" / "gateway-http"
+    assert args.gateway_runs_dir == tmp_path / "audit-root"
     assert args.panel_runs_dir == tmp_path / "audit-root"
     assert args.voice_runtime_runs_dir == tmp_path / "audit-root" / "voice-runtime"
     assert args.tts_runtime_runs_dir == tmp_path / "audit-root" / "tts-runtime"
@@ -136,7 +136,7 @@ def test_parse_args_uses_qwen2_5_vl_7b_default_model_dir() -> None:
     assert args.voice_asr_max_new_tokens == 64
     assert args.voice_asr_warmup_request is True
     assert args.voice_asr_warmup_language == "ru"
-    assert args.pilot_input_device_index == 1
+    assert args.pilot_input_device_index is None
     assert args.pilot_vlm_max_new_tokens == 64
     assert args.pilot_text_max_new_tokens == 64
     assert args.pilot_hybrid_timeout_sec == 1.0
@@ -214,6 +214,37 @@ def test_build_startup_plan_tracks_combo_a_external_services() -> None:
     assert "--neo4j-url" in plan["gateway"]["command"]
     assert session_state["qdrant"]["status"] == "external"
     assert session_state["neo4j"]["status"] == "external"
+
+
+def test_reconcile_final_session_state_preserves_external_probe_status() -> None:
+    run_payload = {
+        "session_state": {
+            "qdrant": {
+                "service_name": "qdrant",
+                "managed": False,
+                "configured": True,
+                "status": "ok",
+                "pid": None,
+            },
+            "gateway": {
+                "service_name": "gateway",
+                "managed": True,
+                "configured": True,
+                "status": "ok",
+                "pid": 1234,
+            },
+        }
+    }
+
+    start_operator_product._reconcile_final_session_state(
+        run_payload,
+        {},
+        finished_at_utc="2026-03-22T18:00:00+00:00",
+    )
+
+    assert run_payload["session_state"]["qdrant"]["status"] == "ok"
+    assert run_payload["session_state"]["qdrant"].get("last_event") is None
+    assert run_payload["session_state"]["gateway"]["status"] == "stopped"
 
 
 def test_build_startup_plan_manages_opt_in_runtimes() -> None:
@@ -310,7 +341,7 @@ def test_build_startup_plan_manages_opt_in_pilot_runtime() -> None:
     assert "stub" in pilot_plan["command"]
     assert "--pilot-text-provider" in pilot_plan["command"]
     assert "--pilot-vlm-device" in pilot_plan["command"]
-    assert "GPU" in pilot_plan["command"]
+    assert pilot_plan["command"][pilot_plan["command"].index("--pilot-vlm-device") + 1] == "GPU"
     assert "--pilot-text-device" in pilot_plan["command"]
     assert pilot_plan["command"][pilot_plan["command"].index("--pilot-text-device") + 1] == "GPU"
     assert "--input-device-index" in pilot_plan["command"]
@@ -367,8 +398,7 @@ def test_build_startup_plan_uses_openvino_pilot_providers_by_default() -> None:
     assert "--pilot-text-provider" in pilot_plan["command"]
     assert "openvino" in pilot_plan["command"]
     assert "stub" not in pilot_plan["command"]
-    assert "--input-device-index" in pilot_plan["command"]
-    assert "1" in pilot_plan["command"]
+    assert "--input-device-index" not in pilot_plan["command"]
 
 
 def test_parse_args_rejects_conflicting_voice_runtime_options() -> None:

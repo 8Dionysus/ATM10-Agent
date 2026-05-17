@@ -122,6 +122,7 @@ def test_combo_a_operating_cycle_marks_green_inputs_eligible(tmp_path: Path) -> 
     assert summary["blocking_reason_codes"] == []
     assert summary["recommended_actions"] == []
     assert summary["availability_status"] == "ready"
+    assert result["run_payload"]["scenario"] == "combo_a_policy"
 
 
 def test_combo_a_operating_cycle_missing_local_artifact_holds_with_specific_action(tmp_path: Path) -> None:

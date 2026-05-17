@@ -342,6 +342,35 @@ def test_progress_hold_when_ready_streak_is_below_threshold(tmp_path: Path) -> N
     assert "latest_governance_hold" in summary["recommendation"]["reason_codes"]
 
 
+def test_progress_hold_when_governance_go_but_latest_readiness_not_ready(tmp_path: Path) -> None:
+    readiness_root = tmp_path / "readiness-runs"
+    governance_root = tmp_path / "governance-runs"
+    _seed_readiness_history(
+        readiness_root,
+        start=datetime(2026, 3, 1, 0, 0, 0, tzinfo=timezone.utc),
+        statuses=["ready", "ready", "ready", "not_ready"],
+        window_observed=14,
+    )
+    _seed_governance_history(
+        governance_root,
+        start=datetime(2026, 3, 1, 1, 0, 0, tzinfo=timezone.utc),
+        decisions=["go"],
+        latest_ready_streak=3,
+    )
+
+    result = progress_checker.run_gateway_sla_fail_nightly_progress(
+        readiness_runs_dir=readiness_root,
+        governance_runs_dir=governance_root,
+        policy="report_only",
+        runs_dir=tmp_path / "progress-runs",
+    )
+    summary = result["summary_payload"]
+
+    assert summary["decision_status"] == "hold"
+    assert summary["recommendation"]["target_critical_policy"] == "signal_only"
+    assert "latest_readiness_not_ready" in summary["recommendation"]["reason_codes"]
+
+
 def test_progress_counts_invalid_or_mismatched_histories(tmp_path: Path) -> None:
     readiness_root = tmp_path / "readiness-runs"
     governance_root = tmp_path / "governance-runs"

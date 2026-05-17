@@ -322,10 +322,12 @@ def build_live_hud_state(
     elif ocr_text.strip():
         text_preview = " ".join(ocr_text.split())[:240]
 
+    ocr_status = str(sources["ocr"].get("status"))
+    mod_hook_status = str(sources["mod_hook"].get("status"))
     status = "error"
     if screenshot_ok and (
-        str(sources["ocr"].get("status")) in {"ok", "empty", "unavailable"}
-        or str(sources["mod_hook"].get("status")) in {"ok", "not_configured", "missing", "invalid"}
+        ocr_status in {"ok", "empty", "unavailable"}
+        or mod_hook_status == "ok"
     ):
         status = "ok" if hud_lines or quest_updates or player_state else "partial"
 

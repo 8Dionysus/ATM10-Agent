@@ -97,11 +97,9 @@ def _atm10_heuristic_score(*, window_title: str, process_name: str) -> int:
     process = process_name.strip().lower()
     score = 0
     if "atm10" in title or "atm 10" in title or "all the mods 10" in title:
-        score += 4
-    elif "all the mods" in title:
-        score += 4
+        score += 6
     if "minecraft" in title:
-        score += 3
+        score += 1
     if any(token in process for token in ("minecraft", "prismlauncher", "multimc", "curseforge")):
         score += 2
     if process in {"java.exe", "javaw.exe"} or "javaw" in process or process.endswith("\\java.exe"):

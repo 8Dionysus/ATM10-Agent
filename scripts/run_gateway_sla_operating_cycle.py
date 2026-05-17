@@ -132,7 +132,11 @@ def _load_source_details(
     checked_at_utc = payload.get("checked_at_utc")
     if checked_at_utc is not None:
         details["checked_at_utc"] = checked_at_utc
-    checked_at = _parse_iso_datetime(checked_at_utc)
+    try:
+        checked_at = _parse_iso_datetime(checked_at_utc)
+    except (TypeError, ValueError) as exc:
+        details["status"] = _SOURCE_STATUS_INVALID
+        return details, payload, f"{source_name}: invalid checked_at_utc: {exc}"
     details["fresh_for_current_utc_day"] = _is_same_utc_day(checked_at, now)
 
     if str(payload.get("schema_version", "")).strip() != expected_schema_version:
@@ -587,7 +591,12 @@ def run_gateway_sla_operating_cycle(
 
         sources, payloads, final_warnings = _load_source_bundle(runs_dir=runs_dir, now=now)
         warnings.extend(final_warnings)
-        manual_details = _extract_manual_runner_details(payloads)
+        final_manual_current = _manual_snapshot_is_current_cluster(
+            sources=sources,
+            payloads=payloads,
+            now=now,
+        )
+        manual_details = _extract_manual_runner_details(payloads) if final_manual_current else _extract_manual_runner_details({})
         triage = _extract_triage(payloads)
         interpretation = _build_interpretation(triage=triage, manual_details=manual_details)
         policy_surface = _build_policy_surface(

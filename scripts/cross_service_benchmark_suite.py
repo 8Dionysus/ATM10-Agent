@@ -648,6 +648,8 @@ def run_cross_service_benchmark_suite(
             combo_a_seed_result = seed_combo_a_fixture_data(
                 scope="cross_service_suite",
                 docs_path=kag_docs_path,
+                qdrant_docs_path=retrieval_docs_path,
+                neo4j_docs_path=kag_docs_path,
                 runs_dir=child_runs_root / "combo_a_seed",
                 qdrant_host=qdrant_host,
                 qdrant_port=qdrant_port,

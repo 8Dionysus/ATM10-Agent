@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
@@ -108,6 +109,18 @@ def _read_text(path: Path) -> str | None:
         return None
 
 
+def _requirement_names(text: str) -> set[str]:
+    names: set[str] = set()
+    for raw_line in text.splitlines():
+        line = raw_line.split("#", 1)[0].strip()
+        if not line or line.startswith("-"):
+            continue
+        name = re.split(r"[<>=!~;\[]", line, maxsplit=1)[0].strip()
+        if name:
+            names.add(name.lower().replace("_", "-"))
+    return names
+
+
 def evaluate_windows_dependency_boundary(repo_root: str | Path = ".") -> dict[str, Any]:
     """Check that Windows-only edge dependencies stay outside portable core."""
 
@@ -133,14 +146,14 @@ def evaluate_windows_dependency_boundary(repo_root: str | Path = ".") -> dict[st
 
     if win_edge_txt is None:
         blocking.append("requirements_win_edge_missing")
-    elif "dxcam" in win_edge_txt.lower():
+    elif "dxcam" in _requirement_names(win_edge_txt):
         satisfied.append("windows_edge_contains_dxcam")
     else:
         blocking.append("windows_edge_missing_dxcam")
 
     if core_txt is None:
         blocking.append("requirements_core_missing")
-    elif "dxcam" not in core_txt.lower():
+    elif "dxcam" not in _requirement_names(core_txt):
         satisfied.append("portable_core_does_not_contain_dxcam")
     else:
         blocking.append("portable_core_contains_dxcam")

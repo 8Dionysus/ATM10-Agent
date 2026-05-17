@@ -213,6 +213,16 @@ def _parse_json_body_bytes(
     return payload
 
 
+def _content_length_from_headers(request_headers: Mapping[str, Any], *, policy: TTSHTTPPolicy) -> int | None:
+    content_length_raw = request_headers.get("content-length")
+    content_length = int(content_length_raw) if content_length_raw is not None else None
+    if content_length is not None and content_length < 0:
+        raise ValueError("invalid Content-Length header")
+    if content_length is not None and content_length > policy.max_request_body_bytes:
+        raise TTSPayloadLimitError(error_code="payload_too_large", message="payload too large")
+    return content_length
+
+
 def _internal_error_response(
     *,
     run_dir: Path | None,
@@ -807,12 +817,12 @@ def create_app(
                 status_code=401,
                 content={"ok": False, "error": "unauthorized", "error_code": "unauthorized"},
             )
-        raw_body = await http_request.body()
         try:
-            content_length_raw = http_request.headers.get("content-length")
-            content_length = int(content_length_raw) if content_length_raw is not None else None
-            if content_length is not None and content_length < 0:
-                raise ValueError("invalid Content-Length header")
+            content_length = _content_length_from_headers(
+                http_request.headers,
+                policy=effective_http_policy,
+            )
+            raw_body = await http_request.body()
             payload = _parse_json_body_bytes(
                 body_bytes=raw_body,
                 content_length=content_length,
@@ -855,12 +865,12 @@ def create_app(
                 status_code=401,
                 content={"ok": False, "error": "unauthorized", "error_code": "unauthorized"},
             )
-        raw_body = await http_request.body()
         try:
-            content_length_raw = http_request.headers.get("content-length")
-            content_length = int(content_length_raw) if content_length_raw is not None else None
-            if content_length is not None and content_length < 0:
-                raise ValueError("invalid Content-Length header")
+            content_length = _content_length_from_headers(
+                http_request.headers,
+                policy=effective_http_policy,
+            )
+            raw_body = await http_request.body()
             payload = _parse_json_body_bytes(
                 body_bytes=raw_body,
                 content_length=content_length,

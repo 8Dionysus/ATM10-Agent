@@ -315,8 +315,7 @@ def run_gateway_sla_fail_nightly_readiness(
                 "history_summary_json": str(history_summary_path),
             },
         }
-        for output_path in {summary_out_path, history_summary_path}:
-            _write_json(output_path, summary_payload)
+        _write_json(summary_out_path, summary_payload)
         run_payload["status"] = "error"
         run_payload["error_code"] = "gateway_sla_fail_readiness_failed"
         run_payload["error"] = str(exc)

@@ -908,6 +908,76 @@ def test_render_safe_actions_tab_uses_recommended_action_preselect_without_auto_
     assert fake_st.button_calls[0]["disabled"] is True
 
 
+def test_render_safe_actions_tab_uses_action_aware_post_timeout(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class ConfirmingStreamlit(_FakeStreamlit):
+        def checkbox(self, label: str) -> bool:
+            self.checkbox_calls.append(label)
+            return True
+
+        def button(self, label: str, disabled: bool = False) -> bool:
+            self.button_calls.append({"label": label, "disabled": disabled})
+            return not disabled
+
+    captured: dict[str, object] = {}
+    fake_st = ConfirmingStreamlit()
+    monkeypatch.setattr(panel, "st", fake_st)
+    monkeypatch.setattr(
+        panel,
+        "fetch_gateway_safe_actions",
+        lambda gateway_url, timeout_sec, history_limit=10: (
+            {
+                "schema_version": "gateway_operator_safe_actions_v1",
+                "status": "ok",
+                "catalog": [
+                    {
+                        "action_key": "gateway_local_core",
+                        "label": "Gateway local smoke core",
+                    },
+                ],
+                "recent_runs": [],
+                "recommended_action_key": "gateway_local_core",
+                "recommended_action_keys": ["gateway_local_core"],
+            },
+            None,
+        ),
+    )
+
+    def fake_run_gateway_safe_action(
+        gateway_url: str,
+        timeout_sec: float,
+        *,
+        action_key: str,
+        confirm: bool,
+        action_timeout_sec: float = 300.0,
+    ) -> tuple[dict[str, object], None]:
+        captured.update(
+            {
+                "gateway_url": gateway_url,
+                "timeout_sec": timeout_sec,
+                "action_key": action_key,
+                "confirm": confirm,
+                "action_timeout_sec": action_timeout_sec,
+            }
+        )
+        return {
+            "schema_version": "gateway_operator_safe_action_run_v1",
+            "status": "ok",
+        }, None
+
+    monkeypatch.setattr(panel, "run_gateway_safe_action", fake_run_gateway_safe_action)
+
+    panel._render_safe_actions_tab(
+        gateway_url="http://127.0.0.1:8770",
+        gateway_timeout_sec=0.5,
+    )
+
+    assert captured["action_key"] == "gateway_local_core"
+    assert captured["confirm"] is True
+    assert captured["timeout_sec"] >= captured["action_timeout_sec"]
+
+
 def test_render_pilot_readiness_section_ready(monkeypatch: pytest.MonkeyPatch) -> None:
     fake_st = _FakeStreamlit()
     monkeypatch.setattr(panel, "st", fake_st)

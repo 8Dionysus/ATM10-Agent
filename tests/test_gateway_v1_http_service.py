@@ -6,6 +6,7 @@ import sys
 import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -946,3 +947,36 @@ def test_gateway_v1_http_service_bind_policy_requires_token_for_non_loopback() -
             service_token=None,
             allow_insecure_no_token=False,
         )
+
+
+def test_gateway_v1_http_service_main_preserves_empty_service_token_override(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    captured: dict[str, object] = {}
+
+    def fake_create_app(**kwargs: object) -> object:
+        captured.update(kwargs)
+        return object()
+
+    monkeypatch.setenv("ATM10_SERVICE_TOKEN", "env-token")
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "gateway_v1_http_service.py",
+            "--runs-dir",
+            str(tmp_path / "runs"),
+            "--service-token",
+            "",
+        ],
+    )
+    monkeypatch.setattr(gateway_http, "create_app", fake_create_app)
+    monkeypatch.setitem(
+        sys.modules,
+        "uvicorn",
+        SimpleNamespace(run=lambda *args, **kwargs: None),
+    )
+
+    assert gateway_http.main() == 0
+    assert captured["service_token"] == ""

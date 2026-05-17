@@ -433,12 +433,6 @@ def _run_security_scan(
         try:
             parsed = json.loads(stdout_text)
             vulnerabilities = _normalize_pip_audit_vulnerabilities(parsed)
-            if allowed_packages is not None:
-                vulnerabilities = [
-                    item
-                    for item in vulnerabilities
-                    if _normalize_package_name(str(item.get("name", ""))) in allowed_packages
-                ]
             vulnerabilities_count = _count_pip_audit_vulnerabilities(vulnerabilities)
             if result.returncode in {0, 1}:
                 payload.update(

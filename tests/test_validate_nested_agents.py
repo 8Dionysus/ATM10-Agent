@@ -26,6 +26,11 @@ def _write_minimal_required_tree(repo_root: Path) -> None:
 
 
 class ValidateNestedAgentsTests(unittest.TestCase):
+    def test_repository_tree_validates_cleanly(self) -> None:
+        repo_root = Path(__file__).resolve().parents[1]
+        result = validator.validate(repo_root)
+        self.assertEqual((), result.issues)
+
     def test_minimal_required_tree_passes(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             repo_root = Path(tmp)

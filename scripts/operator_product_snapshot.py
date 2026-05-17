@@ -1218,7 +1218,10 @@ def _build_governance_diagnostics(
         for item in recommended_actions:
             if not isinstance(item, Mapping):
                 continue
-            action_key = str(item.get("action_key", "")).strip()
+            raw_action_key = item.get("action_key")
+            if raw_action_key is None:
+                continue
+            action_key = str(raw_action_key).strip()
             if action_key:
                 next_safe_action = action_key
                 break
@@ -2006,7 +2009,11 @@ def _parse_history_row(source: str, run_dir: Path) -> tuple[dict[str, Any] | Non
         summary_path = (
             Path(str(history_summary_json))
             if isinstance(history_summary_json, str)
-            else (run_dir / "cross_service_benchmark_suite.json")
+            else (
+                Path(str(summary_json))
+                if isinstance(summary_json, str)
+                else (run_dir / "cross_service_benchmark_suite.json")
+            )
         )
         summary_payload, summary_error = load_json_object(summary_path)
         if summary_error is not None or summary_payload is None:

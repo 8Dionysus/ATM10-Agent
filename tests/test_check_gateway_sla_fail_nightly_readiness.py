@@ -234,6 +234,7 @@ def test_readiness_error_when_no_valid_snapshots(tmp_path: Path) -> None:
     assert result["exit_code"] == 2
     assert summary["status"] == "error"
     assert summary["error"] is not None
+    assert not Path(summary["paths"]["history_summary_json"]).exists()
 
 
 def test_readiness_exit_policy_report_only_not_ready_returns_zero(tmp_path: Path) -> None:

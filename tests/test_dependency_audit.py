@@ -353,7 +353,7 @@ def test_dependency_audit_parses_vulnerabilities_when_pip_audit_returns_one(tmp_
     assert result["ok"] is False
 
 
-def test_dependency_audit_filters_security_vulnerabilities_outside_scope(tmp_path: Path) -> None:
+def test_dependency_audit_keeps_transitive_security_vulnerabilities(tmp_path: Path) -> None:
     repo_root = tmp_path / "repo"
     runs_dir = tmp_path / "runs"
     requirements_path = repo_root / "requirements.txt"
@@ -395,6 +395,6 @@ def test_dependency_audit_filters_security_vulnerabilities_outside_scope(tmp_pat
     )
 
     assert result["security_payload"]["status"] == "ok"
-    assert result["security_payload"]["vulnerabilities_count"] == 0
-    assert result["run_payload"]["exit_code"] == 0
-    assert result["ok"] is True
+    assert result["security_payload"]["vulnerabilities_count"] == 1
+    assert result["run_payload"]["exit_code"] == 2
+    assert result["ok"] is False

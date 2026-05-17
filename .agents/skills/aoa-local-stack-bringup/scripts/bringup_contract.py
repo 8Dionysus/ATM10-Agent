@@ -114,7 +114,7 @@ def main() -> int:
         print(json.dumps(result, indent=2))
     else:
         print(json.dumps(result))
-    return 0 if not result["errors"] else 2
+    return 0 if not result["errors"] and result.get("verdict") != "hold" else 2
 
 
 if __name__ == "__main__":

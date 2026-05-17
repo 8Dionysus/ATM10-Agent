@@ -676,6 +676,50 @@ def test_parse_history_row_prefers_run_local_cross_service_history_summary(tmp_p
     assert row["summary_json"] == str(history_summary_path)
 
 
+def test_parse_history_row_falls_back_to_cross_service_summary_json(tmp_path: Path) -> None:
+    run_dir = tmp_path / "runs" / "ci-smoke-cross-service-suite" / "20260322_181500-cross-service-benchmark-suite"
+    run_dir.mkdir(parents=True, exist_ok=True)
+    summary_path = tmp_path / "custom" / "cross_service_benchmark_suite.json"
+    _write_json(
+        summary_path,
+        {
+            "overall_sla_status": "custom-summary",
+            "services": {"gateway": {}, "voice": {}, "tts": {}},
+            "degraded_services": ["voice"],
+        },
+    )
+    _write_json(
+        run_dir / "run.json",
+        {
+            "timestamp_utc": "2026-03-22T18:15:00+00:00",
+            "mode": "cross_service_benchmark_suite",
+            "status": "ok",
+            "paths": {
+                "summary_json": str(summary_path),
+            },
+        },
+    )
+
+    row, warning = operator_snapshot._parse_history_row("cross_service_suite", run_dir)
+
+    assert warning is None
+    assert row is not None
+    assert row["details"] == "custom-summary"
+    assert row["summary_json"] == str(summary_path)
+
+
+def test_governance_diagnostics_ignores_null_action_key() -> None:
+    diagnostics = operator_snapshot._build_governance_diagnostics(
+        {
+            "blocking_reason_codes": ["needs_refresh"],
+            "recommended_actions": [{"action_key": None}],
+        }
+    )
+
+    assert diagnostics["top_blocker"] == "needs_refresh"
+    assert diagnostics["next_safe_action"] is None
+
+
 def test_build_operator_product_snapshot_includes_startup_diagnostics_healthy(
     tmp_path: Path, monkeypatch
 ) -> None:

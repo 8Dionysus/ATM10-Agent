@@ -70,6 +70,8 @@ TAB_NAMES = (
 MOBILE_LAYOUT_POLICY_SCHEMA = "streamlit_mobile_layout_policy_v1"
 MOBILE_LAYOUT_BREAKPOINT_PX_DEFAULT = 768
 MOBILE_BASELINE_VIEWPORT = {"width": 390, "height": 844}
+DEFAULT_SAFE_ACTION_TIMEOUT_SEC = 300.0
+SAFE_ACTION_HTTP_TIMEOUT_BUFFER_SEC = 5.0
 
 SAFE_ACTIONS: dict[str, dict[str, Any]] = {
     "gateway_local_core": {
@@ -927,6 +929,10 @@ def run_gateway_safe_action(
             f"{payload.get('schema_version')!r} != {GATEWAY_OPERATOR_SAFE_ACTION_RUN_SCHEMA!r}"
         )
     return payload, None
+
+
+def safe_action_request_timeout_sec(*, gateway_timeout_sec: float, action_timeout_sec: float) -> float:
+    return max(float(gateway_timeout_sec), float(action_timeout_sec) + SAFE_ACTION_HTTP_TIMEOUT_BUFFER_SEC)
 
 
 def _render_snapshot_warnings(title: str, warnings: list[str]) -> None:
@@ -2218,11 +2224,16 @@ def _render_safe_actions_tab(*, gateway_url: str, gateway_timeout_sec: float) ->
     confirm = st.checkbox("I understand this stays smoke-only and goes through the gateway.")
     if st.button("Execute safe action", disabled=not confirm):
         selected_key = action_labels[selected_label]
+        action_timeout_sec = DEFAULT_SAFE_ACTION_TIMEOUT_SEC
         result, run_error = run_gateway_safe_action(
             gateway_url,
-            gateway_timeout_sec,
+            safe_action_request_timeout_sec(
+                gateway_timeout_sec=gateway_timeout_sec,
+                action_timeout_sec=action_timeout_sec,
+            ),
             action_key=selected_key,
             confirm=True,
+            action_timeout_sec=action_timeout_sec,
         )
         if run_error is not None:
             st.error(run_error)

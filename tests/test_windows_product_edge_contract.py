@@ -50,6 +50,20 @@ def test_windows_dependency_boundary_blocks_dxcam_in_core(tmp_path: Path) -> Non
     assert "portable_core_contains_dxcam" in payload["blocking_reason_codes"]
 
 
+def test_windows_dependency_boundary_ignores_dxcam_comments(tmp_path: Path) -> None:
+    (tmp_path / "requirements.txt").write_text("-r requirements-win-edge.txt\n", encoding="utf-8")
+    (tmp_path / "requirements-win-edge.txt").write_text(
+        "-r requirements-core.txt\n# dxcam belongs here but is missing\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "requirements-core.txt").write_text("fastapi\n", encoding="utf-8")
+
+    payload = evaluate_windows_dependency_boundary(tmp_path)
+
+    assert payload["status"] == "attention"
+    assert "windows_edge_missing_dxcam" in payload["blocking_reason_codes"]
+
+
 def test_combined_windows_product_edge_contract_can_check_repo_files() -> None:
     payload = evaluate_windows_product_edge_contract(repo_root=Path("."))
 

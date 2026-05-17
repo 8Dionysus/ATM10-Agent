@@ -442,7 +442,9 @@ def test_build_default_service_reports_piper_not_configured_in_health(monkeypatc
     service.prewarm()
     health = service.health()
 
-    assert health["preferred_tts_engine"] == "windows_sapi_fallback"
+    preferred_engine = health["preferred_tts_engine"]
+    assert preferred_engine in {"windows_sapi_fallback", "silence_fallback"}
+    assert health["prewarm"][preferred_engine]["ok"] is True
     assert health["piper_available"] is False
     assert health["piper_prewarm_ok"] is False
     assert health["tts_degraded_reason"] == "piper_not_configured"
@@ -743,6 +745,15 @@ def test_tts_service_maps_payload_too_large_to_413() -> None:
     assert response.status_code == 413
     payload = response.json()
     assert payload["error_code"] == "payload_too_large"
+
+
+def test_tts_content_length_limit_is_checked_before_body_buffering() -> None:
+    policy = tts_runtime_service.TTSHTTPPolicy(max_request_body_bytes=64)
+
+    with pytest.raises(tts_runtime_service.TTSPayloadLimitError) as exc:
+        tts_runtime_service._content_length_from_headers({"content-length": "65"}, policy=policy)
+
+    assert exc.value.error_code == "payload_too_large"
 
 
 def test_tts_service_maps_payload_limit_exceeded_to_413() -> None:

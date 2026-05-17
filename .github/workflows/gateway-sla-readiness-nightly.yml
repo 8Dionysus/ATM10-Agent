@@ -31,6 +31,7 @@ jobs:
           path: |
             runs/nightly-gateway-sla-history
             runs/nightly-gateway-sla-trend-history
+            runs/nightly-gateway-sla-trend-strict
             runs/nightly-gateway-sla-readiness
             runs/nightly-gateway-sla-governance
             runs/nightly-gateway-sla-progress
@@ -102,7 +103,7 @@ jobs:
       - name: Smoke - Gateway SLA trend snapshot (promoted fail_nightly strict gate)
         if: env.GATEWAY_SLA_EFFECTIVE_POLICY == 'fail_nightly'
         run: |
-          python scripts/gateway_sla_trend_snapshot.py --sla-runs-dir runs/nightly-gateway-sla-history --history-limit 30 --baseline-window 5 --critical-policy fail_nightly --runs-dir runs/nightly-gateway-sla-trend-history
+          python scripts/gateway_sla_trend_snapshot.py --sla-runs-dir runs/nightly-gateway-sla-history --history-limit 30 --baseline-window 5 --critical-policy fail_nightly --runs-dir runs/nightly-gateway-sla-trend-strict
 
       - name: Summary - Gateway SLA fail_nightly readiness
         if: always()
@@ -320,6 +321,7 @@ jobs:
           path: |
             runs/nightly-gateway-sla-history
             runs/nightly-gateway-sla-trend-history
+            runs/nightly-gateway-sla-trend-strict
             runs/nightly-gateway-sla-readiness
             runs/nightly-gateway-sla-governance
             runs/nightly-gateway-sla-progress
@@ -340,6 +342,8 @@ jobs:
             runs/nightly-gateway-sla-history/**/gateway_sla_summary.json
             runs/nightly-gateway-sla-trend-history/**/gateway_sla_trend_snapshot.json
             runs/nightly-gateway-sla-trend-history/**/summary.md
+            runs/nightly-gateway-sla-trend-strict/**/gateway_sla_trend_snapshot.json
+            runs/nightly-gateway-sla-trend-strict/**/summary.md
             runs/nightly-gateway-sla-readiness/readiness_summary.json
             runs/nightly-gateway-sla-readiness/**/readiness_summary.json
             runs/nightly-gateway-sla-governance/governance_summary.json

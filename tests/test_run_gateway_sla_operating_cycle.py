@@ -208,6 +208,51 @@ def test_operating_cycle_reuses_fresh_nightly_snapshot_without_manual_runner(tmp
     assert summary["promotion_state"] == "blocked"
 
 
+def test_operating_cycle_treats_malformed_checked_at_as_source_warning(tmp_path: Path) -> None:
+    runs_dir = tmp_path / "runs"
+    checked = "2026-03-12T03:40:00+00:00"
+    _write_json(_summary_path(runs_dir, "readiness"), _readiness_payload(checked_at_utc="not-a-date"))
+    _write_json(_summary_path(runs_dir, "governance"), _governance_payload(checked_at_utc=checked))
+    _write_json(_summary_path(runs_dir, "progress"), _progress_payload(checked_at_utc=checked))
+    _write_json(_summary_path(runs_dir, "transition"), _transition_payload(checked_at_utc=checked))
+    _write_json(_summary_path(runs_dir, "remediation"), _remediation_payload(checked_at_utc=checked))
+    _write_json(_summary_path(runs_dir, "integrity"), _integrity_payload(checked_at_utc=checked))
+
+    sources, _payloads, warnings = operating_cycle._load_source_bundle(
+        runs_dir=runs_dir,
+        now=datetime(2026, 3, 12, 22, 2, 55, tzinfo=timezone.utc),
+    )
+
+    assert sources["readiness"]["status"] == "invalid"
+    assert any("invalid checked_at_utc" in warning for warning in warnings)
+
+
+def test_operating_cycle_ignores_stale_blocked_manual_gate_when_nightly_sources_are_fresh(tmp_path: Path) -> None:
+    runs_dir = tmp_path / "runs"
+    stale_manual_checked = "2026-03-11T21:53:15+00:00"
+    checked = "2026-03-12T03:40:00+00:00"
+    _write_json(
+        _summary_path(runs_dir, "manual_runner"),
+        _manual_runner_payload(checked_at_utc=stale_manual_checked, execution_mode="blocked"),
+    )
+    _write_json(_summary_path(runs_dir, "readiness"), _readiness_payload(checked_at_utc=checked))
+    _write_json(_summary_path(runs_dir, "governance"), _governance_payload(checked_at_utc=checked))
+    _write_json(_summary_path(runs_dir, "progress"), _progress_payload(checked_at_utc=checked))
+    _write_json(_summary_path(runs_dir, "transition"), _transition_payload(checked_at_utc=checked))
+    _write_json(_summary_path(runs_dir, "remediation"), _remediation_payload(checked_at_utc=checked))
+    _write_json(_summary_path(runs_dir, "integrity"), _integrity_payload(checked_at_utc=checked))
+
+    result = operating_cycle.run_gateway_sla_operating_cycle(
+        runs_dir=runs_dir,
+        policy="report_only",
+        now=datetime(2026, 3, 12, 22, 2, 55, tzinfo=timezone.utc),
+    )
+    interpretation = result["summary_payload"]["interpretation"]
+
+    assert interpretation["blocked_manual_gate"] is False
+    assert interpretation["next_action_hint"] != "wait_for_utc_reset"
+
+
 def test_operating_cycle_runs_manual_fallback_in_fixed_order(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     runs_dir = tmp_path / "runs"
     stale_checked = "2026-03-11T21:53:16+00:00"

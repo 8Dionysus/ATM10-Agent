@@ -132,6 +132,35 @@ def test_query_kag_neo4j_combines_direct_and_expansion_scores(monkeypatch) -> No
     assert results[1]["score"] == 0.1
 
 
+def test_query_kag_neo4j_unscoped_queries_exclude_tagged_fixture_data(monkeypatch) -> None:
+    calls: list[str] = []
+
+    def _fake_run_cypher(*, url: str, database: str, user: str, password: str, statement: str, parameters, timeout_sec: float):
+        calls.append(statement)
+        return []
+
+    monkeypatch.setattr(neo4j_backend, "_run_cypher", _fake_run_cypher)
+
+    assert neo4j_backend.query_kag_neo4j(
+        url="http://localhost:7474",
+        database="neo4j",
+        user="neo4j",
+        password="secret",
+        query="steel tools",
+        topk=5,
+        timeout_sec=5.0,
+    ) == []
+
+    assert len(calls) == 4
+    assert all("$dataset_tag IS NULL OR" not in statement for statement in calls)
+    assert "coalesce(d.dataset_tag, '') = ''" in calls[0]
+    assert "coalesce(e.dataset_tag, '') = ''" in calls[0]
+    assert "coalesce(q.dataset_tag, '') = ''" in calls[1]
+    assert "coalesce(n.dataset_tag, '') = ''" in calls[1]
+    assert "coalesce(d.dataset_tag, '') = ''" in calls[2]
+    assert "coalesce(d.dataset_tag, '') = ''" in calls[3]
+
+
 def test_query_kag_neo4j_single_token_prefers_chapter_filename_match(monkeypatch) -> None:
     def _fake_run_cypher(*, url: str, database: str, user: str, password: str, statement: str, parameters, timeout_sec: float):
         entities = parameters["entities"]
