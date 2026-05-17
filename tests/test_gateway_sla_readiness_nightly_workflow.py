@@ -70,6 +70,8 @@ def test_gateway_sla_readiness_nightly_contains_transition_wiring() -> None:
     assert "--summary-json runs/nightly-gateway-sla-operating-cycle/operating_cycle_summary.json" in operating_cycle_block
     assert "GATEWAY_SLA_EFFECTIVE_POLICY" in resolve_policy_block
     assert "if: env.GATEWAY_SLA_EFFECTIVE_POLICY == 'fail_nightly'" in strict_gate_block
+    assert "--runs-dir runs/nightly-gateway-sla-trend-strict" in strict_gate_block
+    assert "--runs-dir runs/nightly-gateway-sla-trend-history" not in strict_gate_block
     for block in (
         readiness_summary_block,
         governance_summary_block,
@@ -86,6 +88,7 @@ def test_gateway_sla_readiness_nightly_contains_transition_wiring() -> None:
     upload_artifact_block = _extract_step_block(text, "Upload artifact - Gateway SLA readiness nightly runs")
 
     for block in (restore_cache_block, save_cache_block):
+        assert "runs/nightly-gateway-sla-trend-strict" in block
         assert "runs/nightly-gateway-sla-governance" in block
         assert "runs/nightly-gateway-sla-progress" in block
         assert "runs/nightly-gateway-sla-transition" in block

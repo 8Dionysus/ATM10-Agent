@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -76,6 +77,29 @@ def test_linux_xdg_prismlauncher_instances_are_scanned(tmp_path: Path) -> None:
 
     assert path == instance
     assert source == "xdg_prismlauncher_instances_scan"
+
+
+def test_minecraft_dir_candidates_take_precedence_over_newer_launcher_fallback(tmp_path: Path) -> None:
+    configured = tmp_path / "configured-minecraft"
+    configured_instance = configured / "instances" / "All the Mods 10 - configured"
+    fallback_instance = tmp_path / "xdg" / "PrismLauncher" / "instances" / "All the Mods 10 - fallback"
+    (configured_instance / "mods").mkdir(parents=True)
+    (fallback_instance / "mods").mkdir(parents=True)
+    os.utime(configured_instance, (1_000_000_000, 1_000_000_000))
+    os.utime(fallback_instance, (2_000_000_000, 2_000_000_000))
+
+    path, source = resolve_atm10_dir(
+        configured,
+        {
+            "MINECRAFT_DIR": str(configured),
+            "XDG_DATA_HOME": str(tmp_path / "xdg"),
+        },
+        platform_name="linux",
+        home=tmp_path,
+    )
+
+    assert path == configured_instance
+    assert source == "minecraft_instances_scan"
 
 
 def test_candidate_instance_roots_are_deduplicated(tmp_path: Path) -> None:

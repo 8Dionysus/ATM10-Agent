@@ -335,6 +335,10 @@ def run_gateway_sla_fail_nightly_progress(
         decision_go = (
             latest_governance is not None
             and latest_governance_status == "go"
+            and latest_readiness["readiness_status"] == "ready"
+            and remaining_for_window == 0
+            and latest_ready_streak >= required_ready_streak
+            and readiness_invalid_or_mismatched_count == 0
             and governance_invalid_or_mismatched_count == 0
         )
         decision_status = "go" if decision_go else "hold"

@@ -42,6 +42,25 @@ def test_runtime_falls_back_to_piper_when_xtts_fails() -> None:
     assert result["chunks"][0].cached is False
 
 
+def test_health_reports_preferred_engine_from_router_priority() -> None:
+    xtts = CallbackTTSEngine(
+        name="xtts_v2",
+        synthesize_fn=lambda text, _language, _speaker: (make_silence_wav_bytes(duration_ms=200 + len(text)), 24000),
+    )
+    piper = CallbackTTSEngine(
+        name="piper",
+        synthesize_fn=lambda text, _language, _speaker: (make_silence_wav_bytes(duration_ms=200 + len(text)), 22050),
+    )
+    service = TTSRuntimeService(
+        xtts_engine=xtts,
+        piper_engine=piper,
+        silero_engine=None,
+        effective_config={"piper": {"model_path": "voice.onnx"}},
+    )
+
+    assert service.health()["preferred_tts_engine"] == "xtts_v2"
+
+
 def test_runtime_uses_silero_for_ru_service_voice() -> None:
     calls: dict[str, int] = {"silero": 0}
 

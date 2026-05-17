@@ -379,6 +379,34 @@ def test_hybrid_query_demo_emits_stressor_receipt_for_retrieval_only_fallback(
     assert receipt_payload["intent_id"] is None
 
 
+def test_hybrid_query_demo_stressor_receipt_ids_are_run_unique(tmp_path: Path) -> None:
+    now = datetime(2026, 3, 24, 18, 0, 0, tzinfo=timezone.utc)
+    results_payload = {
+        "planner_status": "retrieval_only_fallback",
+        "warnings": ["kag stage failed"],
+    }
+    first = hybrid_query_demo._build_stressor_receipt(
+        now=now,
+        profile="combo_a",
+        run_dir=tmp_path / "20260324_180000-hybrid-query",
+        run_json_path=tmp_path / "first" / "run.json",
+        results_json_path=tmp_path / "first" / "hybrid_query_results.json",
+        results_payload=results_payload,
+    )
+    second = hybrid_query_demo._build_stressor_receipt(
+        now=now,
+        profile="combo_a",
+        run_dir=tmp_path / "20260324_180000-hybrid-query_01",
+        run_json_path=tmp_path / "second" / "run.json",
+        results_json_path=tmp_path / "second" / "hybrid_query_results.json",
+        results_payload=results_payload,
+    )
+
+    assert first["receipt_id"] != second["receipt_id"]
+    assert "20260324_180000-hybrid-query" in first["receipt_id"]
+    assert "20260324_180000-hybrid-query_01" in second["receipt_id"]
+
+
 def test_hybrid_query_demo_skips_stressor_receipt_for_healthy_run(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

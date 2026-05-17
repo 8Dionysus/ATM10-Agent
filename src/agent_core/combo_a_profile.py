@@ -103,6 +103,8 @@ def seed_combo_a_fixture_data(
     *,
     scope: str,
     docs_path: Path,
+    qdrant_docs_path: Path | None = None,
+    neo4j_docs_path: Path | None = None,
     runs_dir: Path,
     max_entities_per_doc: int = 128,
     qdrant_collection: str | None = None,
@@ -125,6 +127,8 @@ def seed_combo_a_fixture_data(
 
     effective_collection = qdrant_collection or combo_a_fixture_collection(scope)
     effective_dataset_tag = neo4j_dataset_tag or combo_a_fixture_dataset_tag(scope)
+    effective_qdrant_docs_path = qdrant_docs_path or docs_path
+    effective_neo4j_docs_path = neo4j_docs_path or docs_path
     run_dir = _create_run_dir(runs_dir, scope=scope, now=now)
     run_json_path = run_dir / "run.json"
     seed_summary_json = run_dir / "seed_summary.json"
@@ -138,6 +142,8 @@ def seed_combo_a_fixture_data(
         "scope": scope,
         "request": {
             "docs_path": str(docs_path),
+            "qdrant_docs_path": str(effective_qdrant_docs_path),
+            "neo4j_docs_path": str(effective_neo4j_docs_path),
             "max_entities_per_doc": max_entities_per_doc,
             "qdrant_collection": effective_collection,
             "qdrant_host": qdrant_host,
@@ -159,9 +165,10 @@ def seed_combo_a_fixture_data(
 
     try:
         password = resolve_neo4j_password(neo4j_password)
-        docs = load_docs(docs_path)
+        qdrant_docs = load_docs(effective_qdrant_docs_path)
+        neo4j_docs = load_docs(effective_neo4j_docs_path)
         qdrant_summary = ingest_docs_qdrant(
-            docs,
+            qdrant_docs,
             collection=effective_collection,
             host=qdrant_host,
             port=qdrant_port,
@@ -169,7 +176,7 @@ def seed_combo_a_fixture_data(
             timeout_sec=qdrant_timeout_sec,
             batch_size=qdrant_batch_size,
         )
-        graph_payload = build_kag_graph(docs, max_entities_per_doc=max_entities_per_doc)
+        graph_payload = build_kag_graph(neo4j_docs, max_entities_per_doc=max_entities_per_doc)
         _write_json(graph_json_path, graph_payload)
         neo4j_summary = sync_kag_graph_neo4j(
             graph_payload,

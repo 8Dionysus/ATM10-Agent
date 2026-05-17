@@ -334,6 +334,7 @@ def run_combo_a_operating_cycle(
     run_payload: dict[str, Any] = {
         "timestamp_utc": now.isoformat(),
         "mode": "combo_a_operating_cycle",
+        "scenario": "combo_a_policy",
         "status": "started",
         "params": {
             "runs_dir": str(runs_dir),

@@ -34,10 +34,12 @@ def _scoped_node_id(raw_id: str, dataset_tag: str | None) -> str:
     return f"{normalized_dataset_tag}::{normalized_id}"
 
 
-def _dataset_where_clause(alias: str, dataset_tag: str | None) -> str:
-    if not str(dataset_tag or "").strip():
+def _dataset_scope_where_clause(aliases: Sequence[str], dataset_tag: str | None) -> str:
+    if not aliases:
         return ""
-    return f"WHERE {alias}.dataset_tag = $dataset_tag"
+    if str(dataset_tag or "").strip():
+        return "WHERE " + " AND ".join(f"{alias}.dataset_tag = $dataset_tag" for alias in aliases)
+    return "WHERE " + " AND ".join(f"coalesce({alias}.dataset_tag, '') = ''" for alias in aliases)
 
 
 def _neo4j_cypher_json(
@@ -332,7 +334,6 @@ UNWIND $entities AS token
 MATCH (d:Doc)-[:MENTIONS]->(e:Entity {entity: token})
 {dataset_where}
 WITH d, e
-WHERE $dataset_tag IS NULL OR e.dataset_tag = $dataset_tag
 WITH d, collect(DISTINCT e.entity) AS matched_entities, toFloat(count(DISTINCT e)) AS direct_score
 RETURN d.doc_id AS doc_id,
        d.source AS source,
@@ -340,7 +341,7 @@ RETURN d.doc_id AS doc_id,
        d.path AS path,
        matched_entities,
        direct_score
-""".strip().replace("{dataset_where}", _dataset_where_clause("d", normalized_dataset_tag))
+""".strip().replace("{dataset_where}", _dataset_scope_where_clause(("d", "e"), normalized_dataset_tag))
 
     direct_rows = _run_cypher(
         url=url,
@@ -362,11 +363,7 @@ RETURN d.doc_id AS doc_id,
             statement="""
 UNWIND $entities AS token
 MATCH (q:Entity {entity: token})-[c:COOCCURS]-(n:Entity)<-[:MENTIONS]-(d:Doc)
-WHERE $dataset_tag IS NULL OR (
-    q.dataset_tag = $dataset_tag
-    AND n.dataset_tag = $dataset_tag
-    AND d.dataset_tag = $dataset_tag
-)
+{dataset_where}
 WITH d,
      d.source AS source,
      d.title AS title,
@@ -377,7 +374,10 @@ RETURN d.doc_id AS doc_id,
        title,
        path,
        expansion_score
-""".strip(),
+""".strip().replace(
+                "{dataset_where}",
+                _dataset_scope_where_clause(("q", "n", "d"), normalized_dataset_tag),
+            ),
             parameters={"entities": query_entities, "dataset_tag": normalized_dataset_tag},
         )
     lexical_rows: list[dict[str, Any]] = []
@@ -391,7 +391,7 @@ RETURN d.doc_id AS doc_id,
             statement="""
 CALL db.index.fulltext.queryNodes('kag_doc_fulltext', $query_text) YIELD node, score
 WITH node AS d, toFloat(score) AS fulltext_score
-WHERE $dataset_tag IS NULL OR d.dataset_tag = $dataset_tag
+{dataset_where}
 WITH d,
      fulltext_score,
      toLower(coalesce(d.title, '')) AS title_lc,
@@ -410,7 +410,10 @@ RETURN d.doc_id AS doc_id,
        matched_lexical,
        toFloat(size(matched_lexical)) AS lexical_score,
        fulltext_score
-""".strip(),
+""".strip().replace(
+                "{dataset_where}",
+                _dataset_scope_where_clause(("d",), normalized_dataset_tag),
+            ),
             parameters={
                 "entities": query_entities,
                 "query_text": query,
@@ -438,7 +441,7 @@ RETURN d.doc_id AS doc_id,
                 timeout_sec=timeout_sec,
                 statement="""
 MATCH (d:Doc)
-WHERE $dataset_tag IS NULL OR d.dataset_tag = $dataset_tag
+{dataset_where}
 WITH d,
      toLower(coalesce(d.title, '')) AS title_lc,
      CASE
@@ -457,7 +460,10 @@ RETURN d.doc_id AS doc_id,
        0.0 AS fulltext_score
 ORDER BY lexical_score DESC, d.doc_id ASC
 LIMIT $limit
-""".strip(),
+""".strip().replace(
+                    "{dataset_where}",
+                    _dataset_scope_where_clause(("d",), normalized_dataset_tag),
+                ),
                 parameters={
                     "entities": query_entities,
                     "limit": max(topk * 5, 20),

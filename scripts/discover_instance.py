@@ -188,12 +188,13 @@ def resolve_atm10_dir(
         platform_name=platform_name,
         home=home,
     )
-    candidates = _scan_atm10_candidates(roots)
-    if not candidates:
-        return None, "not_found"
+    for root, source in roots:
+        candidates = _scan_atm10_candidates([(root, source)])
+        if candidates:
+            selected, selected_source = max(candidates, key=lambda item: _candidate_sort_key(item[0]))
+            return selected, selected_source
 
-    selected, source = max(candidates, key=lambda item: _candidate_sort_key(item[0]))
-    return selected, source
+    return None, "not_found"
 
 
 def collect_markers(atm10_dir: Path | None) -> dict[str, bool]:

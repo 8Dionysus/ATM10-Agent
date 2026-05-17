@@ -89,7 +89,7 @@ def _build_stressor_receipt(
     mode_after = str(results_payload.get("planner_status", "")).strip() or "unknown"
     return {
         "schema_version": "stressor_receipt_v1",
-        "receipt_id": f"atm10:hybrid-query:{timestamp_utc}:retrieval-only-fallback",
+        "receipt_id": f"atm10:hybrid-query:{timestamp_utc}:{run_dir.name}:retrieval-only-fallback",
         "timestamp_utc": timestamp_utc,
         "repo": "ATM10-Agent",
         "layer": "application",

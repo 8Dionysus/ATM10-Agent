@@ -305,7 +305,15 @@ class TTSRuntimeService:
         if not isinstance(piper_prewarm_ok, bool):
             piper_prewarm_ok = None
         piper_error = str(piper_prewarm.get("error", "")).strip() or None
-        preferred_tts_engine = "piper" if piper_configured else "windows_sapi_fallback"
+        router_chain = self._router_chain(TTSRequest(text="diagnostic", language="en"))
+        preferred_tts_engine = None
+        for engine in router_chain:
+            engine_prewarm = prewarm.get(engine.name)
+            engine_prewarm = engine_prewarm if isinstance(engine_prewarm, Mapping) else {}
+            if engine_prewarm.get("ok") is False:
+                continue
+            preferred_tts_engine = engine.name
+            break
         tts_degraded_reason: str | None = None
         if piper_configured:
             if piper_prewarm_ok is False and piper_error:

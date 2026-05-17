@@ -58,6 +58,30 @@ def test_build_safe_actions_overview_exposes_return_recommendation(tmp_path: Pat
     assert overview["recommended_action_keys"] == ["gateway_http_core"]
 
 
+def test_policy_refresh_safe_action_writes_canonical_operating_cycle_root(tmp_path: Path) -> None:
+    command, action_runs_dir, summary_path = safe_actions.resolve_safe_action(
+        "gateway_sla_operating_cycle_smoke",
+        tmp_path / "runs",
+    )
+
+    assert action_runs_dir == tmp_path / "runs" / "nightly-gateway-sla-operating-cycle"
+    assert summary_path == action_runs_dir / "operating_cycle_summary.json"
+    assert command[command.index("--runs-dir") + 1] == str(action_runs_dir)
+    assert command[command.index("--summary-json") + 1] == str(summary_path)
+
+
+def test_combo_a_policy_refresh_safe_action_writes_canonical_operating_cycle_root(tmp_path: Path) -> None:
+    command, action_runs_dir, summary_path = safe_actions.resolve_safe_action(
+        "combo_a_operating_cycle_smoke",
+        tmp_path / "runs",
+    )
+
+    assert action_runs_dir == tmp_path / "runs" / "nightly-combo-a-operating-cycle"
+    assert summary_path == action_runs_dir / "operating_cycle_summary.json"
+    assert command[command.index("--runs-dir") + 1] == str(action_runs_dir)
+    assert command[command.index("--summary-json") + 1] == str(summary_path)
+
+
 def test_return_contract_examples_exist() -> None:
     repo_root = Path(__file__).resolve().parents[1]
 

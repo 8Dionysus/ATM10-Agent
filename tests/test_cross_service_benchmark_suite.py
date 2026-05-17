@@ -246,6 +246,8 @@ def test_run_cross_service_benchmark_suite_combo_a_uses_live_profile_paths(
     assert summary_payload["overall_sla_status"] == "pass"
     assert summary_payload["paths"]["combo_a_seed_run_dir"].endswith("seed-run")
     assert seed_calls["scope"] == "cross_service_suite"
+    assert seed_calls["qdrant_docs_path"] == Path("tests") / "fixtures" / "retrieval_docs_sample.jsonl"
+    assert seed_calls["neo4j_docs_path"] == Path("tests") / "fixtures" / "kag_neo4j_docs_sample.jsonl"
     assert retrieval_calls["backend"] == "qdrant"
     assert retrieval_calls["collection"] == "atm10_combo_a_fixture_cross_service_suite"
     assert kag_calls["neo4j_dataset_tag"] == "atm10_combo_a_fixture_cross_service_suite"

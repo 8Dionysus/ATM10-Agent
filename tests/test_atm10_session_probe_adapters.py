@@ -80,3 +80,14 @@ def test_windows_backend_no_window_contract_is_unchanged(monkeypatch: pytest.Mon
     assert payload["window_found"] is False
     assert payload["atm10_probable"] is False
     assert payload["reason_codes"] == ["atm10_window_not_found"]
+
+
+def test_atm10_heuristic_requires_atm10_specific_title() -> None:
+    assert session_probe._atm10_heuristic_score(
+        window_title="Minecraft - All the Mods 9",
+        process_name="javaw.exe",
+    ) < 4
+    assert session_probe._atm10_heuristic_score(
+        window_title="Minecraft - All the Mods 10",
+        process_name="javaw.exe",
+    ) >= 4

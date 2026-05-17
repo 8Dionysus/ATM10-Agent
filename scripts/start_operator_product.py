@@ -49,7 +49,6 @@ DEFAULT_LIVE_PILOT_HYBRID_TIMEOUT_SEC = DEFAULT_HOST_PROFILE.pilot_hybrid_timeou
 DEFAULT_LIVE_PILOT_GATEWAY_TOPK = DEFAULT_HOST_PROFILE.pilot_gateway_topk
 DEFAULT_LIVE_PILOT_GATEWAY_CANDIDATE_K = DEFAULT_HOST_PROFILE.pilot_gateway_candidate_k
 DEFAULT_LIVE_PILOT_MAX_ENTITIES_PER_DOC = DEFAULT_HOST_PROFILE.pilot_max_entities_per_doc
-DEFAULT_LIVE_PILOT_INPUT_DEVICE_INDEX = DEFAULT_HOST_PROFILE.pilot_input_device_index
 UNCONFIGURED_PILOT_RUNTIME_URL_SENTINEL = "disabled"
 
 
@@ -91,7 +90,7 @@ def _write_json(path: Path, payload: dict[str, Any]) -> None:
 
 def _resolve_effective_runs_dirs(args: argparse.Namespace) -> argparse.Namespace:
     args.runs_dir = Path(args.runs_dir)
-    args.gateway_runs_dir = Path(args.gateway_runs_dir) if args.gateway_runs_dir is not None else args.runs_dir / "gateway-http"
+    args.gateway_runs_dir = Path(args.gateway_runs_dir) if args.gateway_runs_dir is not None else args.runs_dir
     args.panel_runs_dir = Path(args.panel_runs_dir) if args.panel_runs_dir is not None else args.runs_dir
     args.voice_runtime_runs_dir = (
         Path(args.voice_runtime_runs_dir) if args.voice_runtime_runs_dir is not None else args.runs_dir / "voice-runtime"
@@ -587,6 +586,8 @@ def _reconcile_final_session_state(
         if not isinstance(entry, dict):
             continue
         current_status = str(entry.get("status", "")).strip()
+        if not bool(entry.get("managed")):
+            continue
         if current_status in {"error", "external", "not_configured"}:
             continue
         if entry.get("pid") is None and current_status == "pending":
@@ -815,7 +816,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         "--gateway-runs-dir",
         type=Path,
         default=None,
-        help="Gateway runs directory (default: <runs-dir>/gateway-http).",
+        help="Gateway runs directory (default: <runs-dir>).",
     )
     parser.add_argument(
         "--panel-runs-dir",
@@ -1006,8 +1007,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument(
         "--pilot-input-device-index",
         type=int,
-        default=selected_defaults.get("pilot_input_device_index", DEFAULT_LIVE_PILOT_INPUT_DEVICE_INDEX),
-        help="Explicit sounddevice input device index passed to pilot_runtime_loop.py.",
+        default=None,
+        help="Explicit sounddevice input device index passed to pilot_runtime_loop.py; omit for auto-selection.",
     )
     parser.add_argument(
         "--pilot-vlm-max-new-tokens",
