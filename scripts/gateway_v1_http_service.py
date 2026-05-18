@@ -108,7 +108,8 @@ def _validate_policy(policy: GatewayHTTPPolicy) -> None:
 def _resolve_service_token(cli_value: str | None) -> str | None:
     if cli_value is not None:
         stripped = cli_value.strip()
-        return stripped or None
+        if stripped:
+            return stripped
     env_value = os.getenv(_SERVICE_TOKEN_ENV, "").strip()
     return env_value or None
 
@@ -894,7 +895,7 @@ def main() -> int:
         runs_dir=args.runs_dir,
         operator_runs_dir=args.operator_runs_dir,
         policy=policy,
-        service_token=args.service_token if args.service_token is not None else service_token,
+        service_token=service_token,
         expose_openapi=args.expose_openapi,
         voice_service_url=args.voice_service_url,
         tts_service_url=args.tts_service_url,

@@ -925,7 +925,10 @@ def test_gateway_v1_http_service_cli_help_exits_zero(monkeypatch: pytest.MonkeyP
     assert exc.value.code == 0
 
 
-def test_gateway_v1_http_service_bind_policy_requires_token_for_non_loopback() -> None:
+def test_gateway_v1_http_service_bind_policy_requires_token_for_non_loopback(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("ATM10_SERVICE_TOKEN", raising=False)
     assert gateway_http._validate_bind_security(
         host="127.0.0.1",
         service_token=None,
@@ -947,9 +950,15 @@ def test_gateway_v1_http_service_bind_policy_requires_token_for_non_loopback() -
             service_token=None,
             allow_insecure_no_token=False,
         )
+    monkeypatch.setenv("ATM10_SERVICE_TOKEN", "env-token")
+    assert gateway_http._validate_bind_security(
+        host="0.0.0.0",
+        service_token="",
+        allow_insecure_no_token=False,
+    ) == "env-token"
 
 
-def test_gateway_v1_http_service_main_preserves_empty_service_token_override(
+def test_gateway_v1_http_service_main_passes_validated_service_token(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
@@ -965,6 +974,8 @@ def test_gateway_v1_http_service_main_preserves_empty_service_token_override(
         "argv",
         [
             "gateway_v1_http_service.py",
+            "--host",
+            "0.0.0.0",
             "--runs-dir",
             str(tmp_path / "runs"),
             "--service-token",
@@ -979,4 +990,4 @@ def test_gateway_v1_http_service_main_preserves_empty_service_token_override(
     )
 
     assert gateway_http.main() == 0
-    assert captured["service_token"] == ""
+    assert captured["service_token"] == "env-token"
