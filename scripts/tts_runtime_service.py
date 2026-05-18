@@ -223,6 +223,24 @@ def _content_length_from_headers(request_headers: Mapping[str, Any], *, policy: 
     return content_length
 
 
+async def _read_limited_request_body(
+    http_request: FastAPIRequest,
+    *,
+    policy: TTSHTTPPolicy,
+) -> tuple[bytes, int | None]:
+    content_length = _content_length_from_headers(http_request.headers, policy=policy)
+    chunks: list[bytes] = []
+    observed_bytes = 0
+    async for chunk in http_request.stream():
+        if not chunk:
+            continue
+        observed_bytes += len(chunk)
+        if observed_bytes > policy.max_request_body_bytes:
+            raise TTSPayloadLimitError(error_code="payload_too_large", message="payload too large")
+        chunks.append(chunk)
+    return b"".join(chunks), content_length
+
+
 def _internal_error_response(
     *,
     run_dir: Path | None,
@@ -818,11 +836,10 @@ def create_app(
                 content={"ok": False, "error": "unauthorized", "error_code": "unauthorized"},
             )
         try:
-            content_length = _content_length_from_headers(
-                http_request.headers,
+            raw_body, content_length = await _read_limited_request_body(
+                http_request,
                 policy=effective_http_policy,
             )
-            raw_body = await http_request.body()
             payload = _parse_json_body_bytes(
                 body_bytes=raw_body,
                 content_length=content_length,
@@ -866,11 +883,10 @@ def create_app(
                 content={"ok": False, "error": "unauthorized", "error_code": "unauthorized"},
             )
         try:
-            content_length = _content_length_from_headers(
-                http_request.headers,
+            raw_body, content_length = await _read_limited_request_body(
+                http_request,
                 policy=effective_http_policy,
             )
-            raw_body = await http_request.body()
             payload = _parse_json_body_bytes(
                 body_bytes=raw_body,
                 content_length=content_length,

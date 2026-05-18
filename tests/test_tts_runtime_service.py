@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import base64
 import io
 import json
@@ -12,6 +13,23 @@ import numpy as np
 import pytest
 import scripts.tts_runtime_service as tts_runtime_service
 from src.agent_core.tts_runtime import TTSChunk
+
+
+class _FakeStreamingRequest:
+    def __init__(self, *, headers: dict[str, str] | None = None, chunks: list[bytes] | None = None) -> None:
+        self.headers = headers or {}
+        self._chunks = chunks or []
+        self.streamed_chunks: list[bytes] = []
+        self.body_called = False
+
+    async def stream(self):
+        for chunk in self._chunks:
+            self.streamed_chunks.append(chunk)
+            yield chunk
+
+    async def body(self) -> bytes:
+        self.body_called = True
+        raise AssertionError("bounded reader must not call body()")
 
 
 def test_request_from_payload_validates_text() -> None:
@@ -756,6 +774,30 @@ def test_tts_content_length_limit_is_checked_before_body_buffering() -> None:
     assert exc.value.error_code == "payload_too_large"
 
 
+def test_tts_content_length_limit_is_checked_before_streaming_body() -> None:
+    policy = tts_runtime_service.TTSHTTPPolicy(max_request_body_bytes=64)
+    request = _FakeStreamingRequest(headers={"content-length": "65"}, chunks=[b"{}"])
+
+    with pytest.raises(tts_runtime_service.TTSPayloadLimitError) as exc:
+        asyncio.run(tts_runtime_service._read_limited_request_body(request, policy=policy))
+
+    assert exc.value.error_code == "payload_too_large"
+    assert request.streamed_chunks == []
+    assert request.body_called is False
+
+
+def test_tts_streaming_body_limit_stops_without_draining_request() -> None:
+    policy = tts_runtime_service.TTSHTTPPolicy(max_request_body_bytes=5)
+    request = _FakeStreamingRequest(chunks=[b"abc", b"def", b"ghi"])
+
+    with pytest.raises(tts_runtime_service.TTSPayloadLimitError) as exc:
+        asyncio.run(tts_runtime_service._read_limited_request_body(request, policy=policy))
+
+    assert exc.value.error_code == "payload_too_large"
+    assert request.streamed_chunks == [b"abc", b"def"]
+    assert request.body_called is False
+
+
 def test_tts_service_maps_payload_limit_exceeded_to_413() -> None:
     from fastapi.testclient import TestClient
 
@@ -792,6 +834,44 @@ def test_tts_service_maps_payload_limit_exceeded_to_413() -> None:
     assert response.status_code == 413
     payload = response.json()
     assert payload["error_code"] == "payload_limit_exceeded"
+
+
+def test_tts_stream_maps_payload_too_large_to_413() -> None:
+    from fastapi.testclient import TestClient
+
+    class _FakeService:
+        def start(self) -> None:
+            return
+
+        def stop(self) -> None:
+            return
+
+        def prewarm(self) -> dict[str, dict[str, object]]:
+            return {}
+
+        def health(self) -> dict[str, object]:
+            return {
+                "status": "ok",
+                "worker_alive": True,
+                "queue_size": 0,
+                "cache_items": 0,
+                "prewarm": {},
+            }
+
+        def iter_synthesize(self, _request):
+            raise AssertionError("iter_synthesize must not be called for oversized payload")
+
+    app = tts_runtime_service.create_app(
+        _FakeService(),
+        prewarm=False,
+        http_policy=tts_runtime_service.TTSHTTPPolicy(max_request_body_bytes=64),
+    )
+    with TestClient(app) as client:
+        response = client.post("/tts_stream", json={"text": "x" * 1024})
+
+    assert response.status_code == 413
+    payload = response.json()
+    assert payload["error_code"] == "payload_too_large"
 
 
 def test_tts_service_requires_auth_token_when_configured() -> None:
