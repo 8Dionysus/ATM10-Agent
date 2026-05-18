@@ -417,17 +417,15 @@ def run_gateway_sla_fail_nightly_transition(
 
         computed_ready_streak = _compute_ready_streak(readiness_rows) if readiness_rows else 0
         latest_ready_streak = computed_ready_streak
-        if latest_progress is not None:
-            latest_ready_streak = int(latest_progress.get("latest_ready_streak", latest_ready_streak))
-        elif latest_governance is not None:
-            latest_ready_streak = int(latest_governance.get("latest_ready_streak", latest_ready_streak))
 
         latest_window_observed = 0 if latest_readiness is None else int(latest_readiness.get("window_observed", 0))
         remaining_for_window = max(0, expected_readiness_window - latest_window_observed)
         remaining_for_streak = max(0, required_ready_streak - latest_ready_streak)
+        progress_remaining_for_window = remaining_for_window
+        progress_remaining_for_streak = remaining_for_streak
         if latest_progress is not None:
-            remaining_for_window = int(latest_progress.get("remaining_for_window", remaining_for_window))
-            remaining_for_streak = int(latest_progress.get("remaining_for_streak", remaining_for_streak))
+            progress_remaining_for_window = int(latest_progress.get("remaining_for_window", progress_remaining_for_window))
+            progress_remaining_for_streak = int(latest_progress.get("remaining_for_streak", progress_remaining_for_streak))
 
         invalid_or_mismatched_count = readiness_invalid + governance_invalid + progress_invalid
         readiness_valid_count = len(readiness_rows)
@@ -507,8 +505,8 @@ def run_gateway_sla_fail_nightly_transition(
                     "latest_ready_streak": 0
                     if latest_progress is None
                     else int(latest_progress.get("latest_ready_streak", 0)),
-                    "remaining_for_window": remaining_for_window,
-                    "remaining_for_streak": remaining_for_streak,
+                    "remaining_for_window": progress_remaining_for_window,
+                    "remaining_for_streak": progress_remaining_for_streak,
                 },
                 "aggregated": {
                     "invalid_or_mismatched_count": invalid_or_mismatched_count,
