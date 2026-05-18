@@ -263,6 +263,31 @@ def test_transition_hold_when_latest_not_ready(tmp_path: Path) -> None:
     assert "latest_readiness_not_ready" in summary["recommendation"]["reason_codes"]
 
 
+def test_transition_uses_computed_readiness_streak_for_gate(tmp_path: Path) -> None:
+    seed_root = tmp_path / "seed"
+    _seed_history(seed_root, datetime(2026, 3, 1, 0, 0, 0, tzinfo=timezone.utc), 14)
+    penultimate_readiness = sorted((seed_root / "readiness").glob("**/readiness_summary.json"))[-2]
+    payload = json.loads(penultimate_readiness.read_text(encoding="utf-8"))
+    payload["readiness_status"] = "not_ready"
+    penultimate_readiness.write_text(json.dumps(payload), encoding="utf-8")
+
+    result = transition_checker.run_gateway_sla_fail_nightly_transition(
+        readiness_runs_dir=seed_root / "readiness",
+        governance_runs_dir=seed_root / "governance",
+        progress_runs_dir=seed_root / "progress",
+        policy="report_only",
+        runs_dir=tmp_path / "transition-runs",
+    )
+    summary = result["summary_payload"]
+
+    assert summary["status"] == "ok"
+    assert summary["allow_switch"] is False
+    assert summary["observed"]["readiness"]["latest_ready_streak"] == 1
+    assert summary["observed"]["progress"]["latest_ready_streak"] == 3
+    assert summary["observed"]["aggregated"]["latest_ready_streak"] == 1
+    assert "ready_streak_below_threshold" in summary["recommendation"]["reason_codes"]
+
+
 def test_transition_hold_when_readiness_count_below_window(tmp_path: Path) -> None:
     seed_root = tmp_path / "seed"
     _seed_history(seed_root, datetime(2026, 3, 1, 0, 0, 0, tzinfo=timezone.utc), 5)
