@@ -42,6 +42,14 @@ It does not own:
 - Self-agency, recurrence, quest, progression, checkpoint, or growth language must stay bounded, reviewable, evidence-linked, and reversible.
 - Report what changed, what was verified, what was not verified, and where the next agent should resume.
 
+## Memory route
+
+For recall, continuity, compaction recovery, comparison with past work, or
+preserved lessons, start with `aoa_memo` and the workspace memory map. Session
+grounding routes through `.aoa`; local candidate writing routes through this
+project's `memo/` port when that port exists; durable reviewed memory lands
+through `aoa-memo`.
+
 ## Operator rules
 
 - Preserve reproducibility, Windows 11 plus PowerShell 7 operability, public-doc hygiene, and artifact policy.
