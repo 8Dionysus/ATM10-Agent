@@ -19,6 +19,7 @@ Local-first ATM10 companion with an active operator loop and an internal agent s
 - public release cadence, supported profiles, and test tiers: `docs/PRODUCT_EDGE_POSTURE.md`
 - first-wave antifragility contract surfaces: `docs/ANTIFRAGILITY_FIRST_WAVE.md`
 - document roles and public-surface boundaries: `docs/SOURCE_OF_TRUTH.md`
+- durable public decision rationale: `docs/decisions/README.md`
 - archived and recoverable reference tracks: `docs/ARCHIVED_TRACKS.md`
 
 ## Route by need
@@ -26,6 +27,7 @@ Local-first ATM10 companion with an active operator loop and an internal agent s
 - operator command and recovery path: `docs/RUNBOOK.md` and `docs/RECURRENCE_OPERATOR_RECOVERY.md`
 - public status, milestones, release cadence, test tiers, and supported profiles: `MANIFEST.md`, `ROADMAP.md`, and `docs/PRODUCT_EDGE_POSTURE.md`
 - current hardening release reference: `docs/RELEASE_WAVE6.md`
+- durable rationale lookup: `docs/decisions/README.md` and generated indexes under `docs/decisions/indexes/`
 - first-wave degraded hybrid-query receipts and companion contracts: `docs/ANTIFRAGILITY_FIRST_WAVE.md`, `schemas/stressor_receipt_v1.json`, and `schemas/adaptation_delta_v1.json`
 - via negativa pruning checklist: `docs/VIA_NEGATIVA_CHECKLIST.md`
 - source-of-truth and ecosystem placement: `docs/SOURCE_OF_TRUTH.md` and `docs/ECOSYSTEM_CONTEXT.md`

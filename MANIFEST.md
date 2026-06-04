@@ -60,6 +60,7 @@ Current as of: 2026-04-07
 - Machine/runtime host policy: `docs/QWEN3_MODEL_STACK.md`
 - Operator recurrence landing: `docs/RECURRENCE_OPERATOR_RECOVERY.md`
 - Doc roles/policy: `docs/SOURCE_OF_TRUTH.md`
+- Durable public decision rationale: `docs/decisions/README.md`
 - Archived tracks: `docs/ARCHIVED_TRACKS.md`
 
 ## Public docs boundary

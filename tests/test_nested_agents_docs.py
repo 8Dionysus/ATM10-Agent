@@ -11,6 +11,7 @@ NESTED_AGENTS = [
     Path("src/hybrid/AGENTS.md"),
     Path("tests/AGENTS.md"),
     Path("scripts/AGENTS.md"),
+    Path("docs/decisions/AGENTS.md"),
 ]
 
 DISALLOWED_LITERALS = [
@@ -57,6 +58,12 @@ REQUIRED_MARKERS = {
         "phase_a_smoke.py",
         "retrieve_demo.py",
         "automation_intent_chain_smoke.py",
+    ],
+    Path("docs/decisions/AGENTS.md"): [
+        "ATM10-D-####",
+        "Companion layers",
+        "Operator surfaces",
+        "python scripts/generate_decision_indexes.py --check",
     ],
 }
 

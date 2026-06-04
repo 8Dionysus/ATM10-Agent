@@ -47,6 +47,11 @@ This file defines the roles of the repository documents so the public surface st
   * Defines the first-wave `stressor_receipt_v1` / `adaptation_delta_v1` posture and links to the repo-local schemas/examples.
   * Does not replace `docs/RUNBOOK.md` as the active operational surface.
 
+* `docs/decisions/`
+  * Tracked public decision-rationale lane for durable route, boundary, validator, operator posture, host-profile, product-edge, and public-surface decisions.
+  * Uses canonical `ATM10-D-####` records and generated lookup indexes.
+  * Explains why decisions were made; it does not replace current public status, roadmap direction, runnable commands, implementation, tests, schemas, workflows, or artifact evidence.
+
 * `TODO.md` (local-only, ignored)
   * Maintainer execution scratchpad.
   * Not part of the public repository contract.
@@ -57,7 +62,7 @@ This file defines the roles of the repository documents so the public surface st
 
 * `docs/DECISIONS.md` (local-only, ignored)
   * Maintainer architecture/policy decision ledger.
-  * Public-facing outcomes should be reflected in canonical public docs as needed.
+  * Public-facing durable decisions should land in `docs/decisions/`; outcomes should still be reflected in canonical public docs as needed.
 
 * `docs/SESSION_YYYY-MM-DD.md` and `docs/SESSION_WEEKLY_TEMPLATE.md` (local-only, ignored)
   * Maintainer chronology and templates.
@@ -82,6 +87,7 @@ This file defines the roles of the repository documents so the public surface st
   * `docs/ARCHIVED_TRACKS.md`
   * `docs/QWEN3_MODEL_STACK.md`
   * `docs/SOURCE_OF_TRUTH.md`
+  * `docs/decisions/README.md`
 * `docs/RELEASE_WAVE6.md` is wave-scoped reference, not the repo-wide cadence surface.
 * `docs/ECOSYSTEM_CONTEXT.md` is reference-only.
 * `docs/ANTIFRAGILITY_FIRST_WAVE.md` is contract/reference-only.
@@ -90,6 +96,7 @@ This file defines the roles of the repository documents so the public surface st
 ## Update Rules
 
 * If behavior/architecture changed -> update any impacted canonical public docs, and local `docs/DECISIONS.md` when needed.
+* If a public durable decision needs rationale -> add a canonical `docs/decisions/ATM10-D-####-*.md` record and regenerate decision indexes.
 * If active commands/setup changed -> update `docs/RUNBOOK.md`.
 * If archived or recoverable command/reference changed -> update `docs/ARCHIVED_TRACKS.md`.
 * If the machine/runtime baseline or host-profile policy changed -> update `docs/QWEN3_MODEL_STACK.md`.
