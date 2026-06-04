@@ -20,6 +20,19 @@ REQUIRED_AGENTS_DOCS: dict[str, tuple[str, ...]] = {
         'dry-run or report-only behavior as the default',
         'ATM10_SERVICE_TOKEN',
         'python scripts/phase_a_smoke.py',
+        'python scripts/generate_decision_indexes.py --check',
+    ),
+    '.github/AGENTS.md': (
+        "repository's GitHub platform surface",
+        'Repo Validation',
+        'public-safe',
+        'workflow YAML',
+    ),
+    'Spark/AGENTS.md': (
+        'Spark lane',
+        'fast-loop lane',
+        'dry-run-by-default posture',
+        'python -m pytest',
     ),
     'src/AGENTS.md': (
         'Nearest-file precedence',
@@ -53,8 +66,19 @@ REQUIRED_AGENTS_DOCS: dict[str, tuple[str, ...]] = {
     'docs/AGENTS.md': (
         'operator-facing public docs',
         'docs/SOURCE_OF_TRUTH.md',
+        'durable decision rationale',
         'dry-run by default',
         'tests/test_public_repo_hardening.py',
+    ),
+    'docs/decisions/AGENTS.md': (
+        'durable public decision rationale',
+        'ATM10-D-####',
+        'Companion layers',
+        'Operator surfaces',
+        'generated indexes',
+        'Keep ignored `docs/DECISIONS.md` local-only',
+        'python scripts/generate_decision_indexes.py --check',
+        'python scripts/validate_decision_records.py',
     ),
     'schemas/AGENTS.md': (
         'operator and antifragility contracts',

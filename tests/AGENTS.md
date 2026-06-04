@@ -15,6 +15,7 @@ Read the root `AGENTS.md` first. This file only adds local rules for regression 
 - Do not rely on workstation-specific paths, private logs, local models, or network access for default test coverage.
 - Keep `tests/fixtures/` small, sanitized, and reusable. Treat fixture format changes as contract changes.
 - When public docs or workflow surfaces change, update the matching hardening tests instead of relying on manual review.
+- When decision-rationale surfaces change, update `tests/test_decision_indexes.py` or the nested guidance tests in the same change.
 
 ## Change rules
 

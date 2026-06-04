@@ -31,6 +31,7 @@ Representative surfaces include:
 
 - PowerShell wrappers should stay thin launchers, not hidden policy forks.
 - If a script changes artifact schema, readiness checks, or documented commands, update the matching tests and the canonical docs in the same change.
+- If decision-index tooling changes, update `docs/decisions/AGENTS.md`, regenerate indexes, and run the decision validator.
 - Avoid hidden machine mutation, destructive host actions, or workstation-specific assumptions.
 
 ## Validate
@@ -46,4 +47,6 @@ python -m pytest
 python scripts/phase_a_smoke.py --vlm-provider stub --runs-dir runs\smoke-phase-a
 python scripts/retrieve_demo.py --in tests/fixtures/retrieval_docs_sample.jsonl --query "mekanism steel" --topk 3 --candidate-k 10 --reranker none --runs-dir runs\smoke-retrieve
 python scripts/automation_intent_chain_smoke.py --intent-json tests/fixtures/intent_open_quest_book.json --runs-dir runs\smoke-intent
+python scripts/generate_decision_indexes.py --check
+python scripts/validate_decision_records.py
 ```

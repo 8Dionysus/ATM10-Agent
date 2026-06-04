@@ -1,4 +1,6 @@
-# Spark lane for ATM10-Agent
+# AGENTS.md
+
+## Spark lane for ATM10-Agent
 
 This file only governs work started from `Spark/`.
 

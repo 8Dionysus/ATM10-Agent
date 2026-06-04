@@ -5,7 +5,7 @@ This directory owns operator-facing public docs for the local companion surface.
 
 ## Scope
 
-Docs here explain current capabilities, runbooks, recurrence and recovery, source-of-truth boundaries, release posture, and operator safety.
+Docs here explain current capabilities, runbooks, recurrence and recovery, source-of-truth boundaries, durable decision rationale, release posture, and operator safety.
 They must stay aligned with `MANIFEST.md`, `ROADMAP.md`, `docs/RUNBOOK.md`, and `docs/SOURCE_OF_TRUTH.md`.
 
 ## Local contract
@@ -22,4 +22,11 @@ For public docs and runbook changes, use the nearest hardening checks:
 
 ```powershell
 python -m pytest tests/test_public_repo_hardening.py tests/test_build_runbook_link.py
+```
+
+For decision-rationale changes, also run:
+
+```powershell
+python scripts/generate_decision_indexes.py --check
+python scripts/validate_decision_records.py
 ```

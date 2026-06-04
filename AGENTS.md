@@ -30,7 +30,8 @@ It does not own:
 4. `docs/RUNBOOK.md`
 5. `docs/SOURCE_OF_TRUTH.md`
 6. scripts, modules, tests, schemas, docs, or examples you will touch
-7. `docs/AGENTS_ROOT_REFERENCE.md` for preserved full root branches
+7. `docs/decisions/README.md` when durable route, boundary, validator, operator, host-profile, or public-surface rationale is in scope
+8. `docs/AGENTS_ROOT_REFERENCE.md` for preserved full root branches
 
 
 ## AGENTS stack law
@@ -84,6 +85,7 @@ python -m pytest
 ```
 
 If a runnable entrypoint changes, run the nearest smoke path or add targeted tests. Examples remain in `docs/AGENTS_ROOT_REFERENCE.md`.
+If durable decision rationale changes, run `python scripts/generate_decision_indexes.py --check`, `python scripts/validate_decision_records.py`, and the owning targeted tests.
 
 ## Report
 
