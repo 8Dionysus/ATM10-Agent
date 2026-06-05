@@ -19,6 +19,7 @@ Decision notes explain rationale. They do not own current runtime behavior, publ
 - Keep safe automation dry-run by default unless the owning implementation, docs, and tests explicitly widen behavior.
 - Keep local paths, private logs, hostnames, screenshots, model paths, tokens, and run artifacts out of tracked decision notes.
 - Treat generated indexes under `docs/decisions/indexes/` as read models only.
+- Keep `modeled_surfaces` in `docs/decisions/indexes/index_contract.yaml` as a top-level list of normalized repo-relative paths under `docs/decisions/`; do not use it for root non-record Markdown.
 
 ## Record shape
 
