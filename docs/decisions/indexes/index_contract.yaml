@@ -10,6 +10,7 @@ generated_indexes:
   - docs/decisions/indexes/by-companion-layer.md
   - docs/decisions/indexes/by-operator-surface.md
   - docs/decisions/indexes/by-guard.md
+modeled_surfaces:
 fields:
   decision_id:
     required: true
