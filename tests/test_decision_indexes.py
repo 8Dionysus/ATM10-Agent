@@ -68,3 +68,32 @@ def test_decision_id_must_match_filename_prefix(tmp_path: Path) -> None:
     _, issues = decision_indexes.collect_decision_records(tmp_path)
 
     assert any("Decision ID must match filename prefix" in message for _, message in issues)
+
+
+def test_original_date_must_use_canonical_yyyy_mm_dd(tmp_path: Path) -> None:
+    decision_dir = tmp_path / "docs" / "decisions"
+    decision_dir.mkdir(parents=True)
+    decision = decision_dir / "ATM10-D-0001-example.md"
+    decision.write_text(
+        "\n".join(
+            [
+                "# Example",
+                "",
+                "## Index Metadata",
+                "",
+                "- Decision ID: ATM10-D-0001",
+                "- Original date: 20260604",
+                "- Surface classes: docs/decisions",
+                "- Companion layers: docs",
+                "- Operator surfaces: none",
+                "- Guard families: public-surface hygiene",
+                "- Posture: accepted",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    _, issues = decision_indexes.collect_decision_records(tmp_path)
+
+    assert ("docs/decisions/ATM10-D-0001-example.md", "Original date must use YYYY-MM-DD") in issues
