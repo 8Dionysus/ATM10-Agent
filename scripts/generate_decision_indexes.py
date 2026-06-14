@@ -17,6 +17,7 @@ INDEX_DIR = DECISIONS_DIR / "indexes"
 DECISION_PREFIX = "ATM10-D"
 DECISION_RE = re.compile(r"^ATM10-D-(\d{4})-[a-z0-9][a-z0-9-]*\.md$")
 DECISION_ID_RE = re.compile(r"^ATM10-D-\d{4}$")
+ORIGINAL_DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 STATIC_MARKDOWN = {"AGENTS.md", "README.md", "TEMPLATE.md"}
 
 INDEX_PATHS = (
@@ -117,7 +118,9 @@ def collect_decision_records(repo_root: Path = REPO_ROOT) -> tuple[list[Decision
             issues.append((rel, f"Decision ID must match filename prefix '{expected_id}'"))
         if decision_id and not DECISION_ID_RE.match(decision_id):
             issues.append((rel, "Decision ID must match ATM10-D-####"))
-        if original_date:
+        if original_date and not ORIGINAL_DATE_RE.match(original_date):
+            issues.append((rel, "Original date must use YYYY-MM-DD"))
+        elif original_date:
             try:
                 date.fromisoformat(original_date)
             except ValueError:
