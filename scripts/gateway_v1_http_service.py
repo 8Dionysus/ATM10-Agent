@@ -105,11 +105,16 @@ def _validate_policy(policy: GatewayHTTPPolicy) -> None:
         raise ValueError("artifact_retention_days must be >= 0.")
 
 
+def _normalize_service_token(value: str | None) -> str | None:
+    if value is None:
+        return None
+    stripped = value.strip()
+    return stripped or None
+
+
 def _resolve_service_token(cli_value: str | None) -> str | None:
     if cli_value is not None:
-        stripped = cli_value.strip()
-        if stripped:
-            return stripped
+        return _normalize_service_token(cli_value)
     env_value = os.getenv(_SERVICE_TOKEN_ENV, "").strip()
     return env_value or None
 
@@ -319,7 +324,7 @@ def create_app(
     effective_operator_runs_dir = Path(operator_runs_dir) if operator_runs_dir is not None else Path(runs_dir)
     effective_policy = policy or GatewayHTTPPolicy()
     _validate_policy(effective_policy)
-    effective_service_token = _resolve_service_token(service_token)
+    effective_service_token = _normalize_service_token(service_token)
     _ = cleanup_old_gateway_artifacts(
         runs_dir=runs_dir,
         retention_days=effective_policy.artifact_retention_days,

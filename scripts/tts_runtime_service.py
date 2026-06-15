@@ -104,10 +104,16 @@ def _validate_http_policy(policy: TTSHTTPPolicy) -> None:
         raise ValueError("max_object_keys must be > 0.")
 
 
+def _normalize_service_token(value: str | None) -> str | None:
+    if value is None:
+        return None
+    stripped = value.strip()
+    return stripped or None
+
+
 def _resolve_service_token(cli_value: str | None) -> str | None:
     if cli_value is not None:
-        stripped = cli_value.strip()
-        return stripped or None
+        return _normalize_service_token(cli_value)
     env_value = os.getenv(_SERVICE_TOKEN_ENV, "").strip()
     return env_value or None
 
@@ -785,7 +791,7 @@ def create_app(
 ) -> Any:
     effective_http_policy = http_policy or TTSHTTPPolicy()
     _validate_http_policy(effective_http_policy)
-    effective_service_token = _resolve_service_token(service_token)
+    effective_service_token = _normalize_service_token(service_token)
     try:
         from fastapi import FastAPI, Request
         from fastapi.responses import JSONResponse, StreamingResponse
