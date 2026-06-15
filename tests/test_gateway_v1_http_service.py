@@ -953,12 +953,77 @@ def test_gateway_v1_http_service_bind_policy_requires_token_for_non_loopback(
     monkeypatch.setenv("ATM10_SERVICE_TOKEN", "env-token")
     assert gateway_http._validate_bind_security(
         host="0.0.0.0",
-        service_token="",
+        service_token=None,
         allow_insecure_no_token=False,
     ) == "env-token"
+    assert gateway_http._validate_bind_security(
+        host="127.0.0.1",
+        service_token="",
+        allow_insecure_no_token=False,
+    ) is None
+    assert gateway_http._validate_bind_security(
+        host="0.0.0.0",
+        service_token="",
+        allow_insecure_no_token=True,
+    ) is None
+    with pytest.raises(ValueError, match="allow-insecure-no-token"):
+        gateway_http._validate_bind_security(
+            host="0.0.0.0",
+            service_token="",
+            allow_insecure_no_token=False,
+        )
 
 
-def test_gateway_v1_http_service_main_passes_validated_service_token(
+def test_gateway_v1_http_service_create_app_does_not_reimport_env_token(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.setenv("ATM10_SERVICE_TOKEN", "env-token")
+
+    app = gateway_http.create_app(runs_dir=tmp_path / "runs", service_token=None)
+
+    with TestClient(app) as client:
+        response = client.get("/healthz")
+
+    assert response.status_code == 200
+
+
+def test_gateway_v1_http_service_main_preserves_empty_token_override_on_loopback(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    captured: dict[str, object] = {}
+
+    def fake_create_app(**kwargs: object) -> object:
+        captured.update(kwargs)
+        return object()
+
+    monkeypatch.setenv("ATM10_SERVICE_TOKEN", "env-token")
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "gateway_v1_http_service.py",
+            "--host",
+            "127.0.0.1",
+            "--runs-dir",
+            str(tmp_path / "runs"),
+            "--service-token",
+            "",
+        ],
+    )
+    monkeypatch.setattr(gateway_http, "create_app", fake_create_app)
+    monkeypatch.setitem(
+        sys.modules,
+        "uvicorn",
+        SimpleNamespace(run=lambda *args, **kwargs: None),
+    )
+
+    assert gateway_http.main() == 0
+    assert captured["service_token"] is None
+
+
+def test_gateway_v1_http_service_main_passes_env_service_token_when_cli_omitted(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
@@ -978,8 +1043,6 @@ def test_gateway_v1_http_service_main_passes_validated_service_token(
             "0.0.0.0",
             "--runs-dir",
             str(tmp_path / "runs"),
-            "--service-token",
-            "",
         ],
     )
     monkeypatch.setattr(gateway_http, "create_app", fake_create_app)
@@ -991,3 +1054,60 @@ def test_gateway_v1_http_service_main_passes_validated_service_token(
 
     assert gateway_http.main() == 0
     assert captured["service_token"] == "env-token"
+
+
+def test_gateway_v1_http_service_main_passes_validated_service_token(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    captured: dict[str, object] = {}
+
+    def fake_create_app(**kwargs: object) -> object:
+        captured.update(kwargs)
+        return object()
+
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "gateway_v1_http_service.py",
+            "--host",
+            "0.0.0.0",
+            "--runs-dir",
+            str(tmp_path / "runs"),
+            "--service-token",
+            "cli-token",
+        ],
+    )
+    monkeypatch.setattr(gateway_http, "create_app", fake_create_app)
+    monkeypatch.setitem(
+        sys.modules,
+        "uvicorn",
+        SimpleNamespace(run=lambda *args, **kwargs: None),
+    )
+
+    assert gateway_http.main() == 0
+    assert captured["service_token"] == "cli-token"
+
+
+def test_gateway_v1_http_service_main_rejects_empty_token_override_on_non_loopback(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.setenv("ATM10_SERVICE_TOKEN", "env-token")
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "gateway_v1_http_service.py",
+            "--host",
+            "0.0.0.0",
+            "--runs-dir",
+            str(tmp_path / "runs"),
+            "--service-token",
+            "",
+        ],
+    )
+
+    with pytest.raises(SystemExit, match="allow-insecure-no-token"):
+        gateway_http.main()

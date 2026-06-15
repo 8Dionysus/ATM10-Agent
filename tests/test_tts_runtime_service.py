@@ -916,6 +916,41 @@ def test_tts_service_requires_auth_token_when_configured() -> None:
     assert authorized_health.status_code == 200
 
 
+def test_tts_create_app_does_not_reimport_env_token(monkeypatch: pytest.MonkeyPatch) -> None:
+    from fastapi.testclient import TestClient
+
+    class _FakeService:
+        def start(self) -> None:
+            return
+
+        def stop(self) -> None:
+            return
+
+        def prewarm(self) -> dict[str, dict[str, object]]:
+            return {}
+
+        def health(self) -> dict[str, object]:
+            return {
+                "status": "ok",
+                "worker_alive": True,
+                "queue_size": 0,
+                "cache_items": 0,
+                "prewarm": {},
+            }
+
+    monkeypatch.setenv("ATM10_SERVICE_TOKEN", "env-token")
+    app = tts_runtime_service.create_app(
+        _FakeService(),
+        prewarm=False,
+        service_token=None,
+    )
+
+    with TestClient(app) as client:
+        response = client.get("/health")
+
+    assert response.status_code == 200
+
+
 def test_tts_service_sanitizes_internal_error_and_logs_locally(tmp_path: Path) -> None:
     from fastapi.testclient import TestClient
 
@@ -971,7 +1006,10 @@ def test_tts_service_sanitizes_internal_error_and_logs_locally(tmp_path: Path) -
     assert log_payload["redaction"]["applied"] is True
 
 
-def test_tts_runtime_service_bind_policy_requires_token_for_non_loopback() -> None:
+def test_tts_runtime_service_bind_policy_requires_token_for_non_loopback(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("ATM10_SERVICE_TOKEN", raising=False)
     assert tts_runtime_service._validate_bind_security(
         host="127.0.0.1",
         service_token=None,
@@ -991,5 +1029,27 @@ def test_tts_runtime_service_bind_policy_requires_token_for_non_loopback() -> No
         tts_runtime_service._validate_bind_security(
             host="0.0.0.0",
             service_token=None,
+            allow_insecure_no_token=False,
+        )
+    monkeypatch.setenv("ATM10_SERVICE_TOKEN", "env-token")
+    assert tts_runtime_service._validate_bind_security(
+        host="0.0.0.0",
+        service_token=None,
+        allow_insecure_no_token=False,
+    ) == "env-token"
+    assert tts_runtime_service._validate_bind_security(
+        host="127.0.0.1",
+        service_token="",
+        allow_insecure_no_token=False,
+    ) is None
+    assert tts_runtime_service._validate_bind_security(
+        host="0.0.0.0",
+        service_token="",
+        allow_insecure_no_token=True,
+    ) is None
+    with pytest.raises(ValueError, match="allow-insecure-no-token"):
+        tts_runtime_service._validate_bind_security(
+            host="0.0.0.0",
+            service_token="",
             allow_insecure_no_token=False,
         )
