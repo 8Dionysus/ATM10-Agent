@@ -66,7 +66,7 @@ def test_policy_refresh_safe_action_writes_canonical_operating_cycle_root(tmp_pa
 
     assert action_runs_dir == tmp_path / "runs" / "nightly-gateway-sla-operating-cycle"
     assert summary_path == action_runs_dir / "operating_cycle_summary.json"
-    assert command[command.index("--runs-dir") + 1] == str(action_runs_dir)
+    assert command[command.index("--runs-dir") + 1] == str(tmp_path / "runs")
     assert command[command.index("--summary-json") + 1] == str(summary_path)
 
 
@@ -78,7 +78,7 @@ def test_combo_a_policy_refresh_safe_action_writes_canonical_operating_cycle_roo
 
     assert action_runs_dir == tmp_path / "runs" / "nightly-combo-a-operating-cycle"
     assert summary_path == action_runs_dir / "operating_cycle_summary.json"
-    assert command[command.index("--runs-dir") + 1] == str(action_runs_dir)
+    assert command[command.index("--runs-dir") + 1] == str(tmp_path / "runs")
     assert command[command.index("--summary-json") + 1] == str(summary_path)
 
 

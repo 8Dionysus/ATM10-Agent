@@ -97,6 +97,7 @@ SAFE_ACTIONS: dict[str, dict[str, Any]] = {
         "scenario": "policy_surface",
         "runs_subdir": "nightly-combo-a-operating-cycle",
         "summary_name": "operating_cycle_summary.json",
+        "reads_live_runs_root": True,
     },
     "gateway_sla_operating_cycle_smoke": {
         "label": "Gateway SLA operating cycle smoke",
@@ -104,6 +105,7 @@ SAFE_ACTIONS: dict[str, dict[str, Any]] = {
         "scenario": "policy_surface",
         "runs_subdir": "nightly-gateway-sla-operating-cycle",
         "summary_name": "operating_cycle_summary.json",
+        "reads_live_runs_root": True,
     },
 }
 
@@ -238,11 +240,12 @@ def resolve_safe_action(action_key: str, runs_dir: Path) -> tuple[list[str], Pat
         raise ValueError(f"unsupported safe action: {action_key!r}")
     action_runs_dir = Path(runs_dir) / config["runs_subdir"]
     summary_path = action_runs_dir / config["summary_name"]
+    command_runs_dir = Path(runs_dir) if bool(config.get("reads_live_runs_root")) else action_runs_dir
     command = [
         sys.executable,
         config["script"],
         "--runs-dir",
-        str(action_runs_dir),
+        str(command_runs_dir),
         "--summary-json",
         str(summary_path),
     ]

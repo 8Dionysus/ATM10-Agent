@@ -477,6 +477,7 @@ def test_resolve_safe_action_supports_combo_a_operating_cycle(tmp_path: Path) ->
     command, summary_path = panel.resolve_safe_action("combo_a_operating_cycle_smoke", tmp_path)
     assert "scripts/run_combo_a_operating_cycle.py" in command
     assert "--scenario" not in command
+    assert command[command.index("--runs-dir") + 1] == str(tmp_path)
     assert str(summary_path).endswith("operating_cycle_summary.json")
 
 
@@ -484,6 +485,7 @@ def test_resolve_safe_action_supports_gateway_sla_operating_cycle(tmp_path: Path
     command, summary_path = panel.resolve_safe_action("gateway_sla_operating_cycle_smoke", tmp_path)
     assert "scripts/run_gateway_sla_operating_cycle.py" in command
     assert "--scenario" not in command
+    assert command[command.index("--runs-dir") + 1] == str(tmp_path)
     assert str(summary_path).endswith("operating_cycle_summary.json")
 
 
