@@ -18,7 +18,11 @@ from scripts.hybrid_query_demo import run_hybrid_query
 from scripts.kag_build_baseline import run_kag_build_baseline
 from scripts.kag_query_demo import run_kag_query_demo
 from scripts.kag_query_neo4j import run_kag_query_neo4j
-from scripts.operator_product_safe_actions import append_safe_action_audit, run_safe_action
+from scripts.operator_product_safe_actions import (
+    append_safe_action_audit,
+    run_safe_action,
+    safe_action_reads_live_runs_root,
+)
 from src.agent_core.combo_a_profile import (
     COMBO_A_PROFILE,
     DEFAULT_COMBO_A_NEO4J_DATABASE,
@@ -593,7 +597,8 @@ def _run_safe_action_smoke(
     if timeout_sec <= 0:
         raise ValueError("payload.timeout_sec must be > 0.")
 
-    action_result = run_safe_action(action_key, child_runs_dir, timeout_sec=timeout_sec)
+    safe_action_runs_dir = audit_runs_dir if safe_action_reads_live_runs_root(action_key) else child_runs_dir
+    action_result = run_safe_action(action_key, safe_action_runs_dir, timeout_sec=timeout_sec)
     append_safe_action_audit(audit_runs_dir, action_result)
 
     child_runs = {"safe_action_smoke": str(action_result["action_runs_dir"])}
