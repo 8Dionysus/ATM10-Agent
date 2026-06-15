@@ -466,10 +466,12 @@ def test_gateway_v1_local_automation_dry_run_ok(tmp_path: Path) -> None:
 
 def test_gateway_v1_local_safe_action_smoke_ok(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     captured_audit: dict[str, object] = {}
+    captured_action: dict[str, object] = {}
 
     def _fake_run_safe_action(action_key: str, runs_dir: Path, *, timeout_sec: float = 300.0) -> dict[str, object]:
         assert action_key == "gateway_local_core"
         assert timeout_sec == 45.0
+        captured_action["runs_dir"] = str(runs_dir)
         return {
             "schema_version": "gateway_operator_safe_action_run_v1",
             "timestamp_utc": "2026-02-27T10:04:30+00:00",
@@ -511,6 +513,61 @@ def test_gateway_v1_local_safe_action_smoke_ok(tmp_path: Path, monkeypatch: pyte
     assert response_payload["result"]["action_key"] == "gateway_local_core"
     assert response_payload["result"]["smoke_only"] is True
     assert "safe_action_smoke" in response_payload["artifacts"]["child_runs"]
+    assert str(captured_action["runs_dir"]).startswith(str(tmp_path / "runs"))
+    assert str(captured_action["runs_dir"]).endswith("child_runs")
+    assert captured_audit["runs_dir"] == str(tmp_path / "runs")
+
+
+def test_gateway_v1_local_live_root_safe_action_uses_configured_runs_root(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured_action: dict[str, object] = {}
+    captured_audit: dict[str, object] = {}
+
+    def _fake_run_safe_action(action_key: str, runs_dir: Path, *, timeout_sec: float = 300.0) -> dict[str, object]:
+        assert action_key == "combo_a_operating_cycle_smoke"
+        assert timeout_sec == 45.0
+        captured_action["runs_dir"] = str(runs_dir)
+        return {
+            "schema_version": "gateway_operator_safe_action_run_v1",
+            "timestamp_utc": "2026-02-27T10:04:30+00:00",
+            "action_key": action_key,
+            "action_runs_dir": str(runs_dir / "nightly-combo-a-operating-cycle"),
+            "summary_json": str(runs_dir / "nightly-combo-a-operating-cycle" / "operating_cycle_summary.json"),
+            "exit_code": 0,
+            "status": "ok",
+            "ok": True,
+            "summary_status": "ok",
+            "error": None,
+        }
+
+    def _fake_append_safe_action_audit(runs_dir: Path, entry: dict[str, object]) -> None:
+        captured_audit["runs_dir"] = str(runs_dir)
+        captured_audit["entry"] = dict(entry)
+
+    monkeypatch.setattr(gateway, "run_safe_action", _fake_run_safe_action)
+    monkeypatch.setattr(gateway, "append_safe_action_audit", _fake_append_safe_action_audit)
+
+    result = gateway.run_gateway_request(
+        request_payload={
+            "schema_version": "gateway_request_v1",
+            "operation": "safe_action_smoke",
+            "payload": {
+                "action_key": "combo_a_operating_cycle_smoke",
+                "confirm": True,
+                "timeout_sec": 45.0,
+            },
+        },
+        runs_dir=tmp_path / "runs",
+        now=datetime(2026, 2, 27, 10, 4, 30, tzinfo=timezone.utc),
+    )
+
+    response_payload = result["response_payload"]
+    assert result["ok"] is True
+    assert response_payload["status"] == "ok"
+    assert response_payload["result"]["action_key"] == "combo_a_operating_cycle_smoke"
+    assert captured_action["runs_dir"] == str(tmp_path / "runs")
     assert captured_audit["runs_dir"] == str(tmp_path / "runs")
 
 

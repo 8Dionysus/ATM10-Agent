@@ -127,6 +127,11 @@ def safe_action_catalog() -> list[dict[str, Any]]:
     ]
 
 
+def safe_action_reads_live_runs_root(action_key: str) -> bool:
+    config = SAFE_ACTIONS.get(action_key)
+    return bool(config is not None and config.get("reads_live_runs_root"))
+
+
 def recommended_safe_actions(reason_code: str) -> list[str]:
     return recommended_safe_actions_for_reason(reason_code)
 
