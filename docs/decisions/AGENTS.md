@@ -26,7 +26,7 @@ Decision notes explain rationale. They do not own current runtime behavior, publ
 Every decision record has an `## Index Metadata` block with:
 
 - `Decision ID`
-- `Original date`
+- `Original date` in canonical `YYYY-MM-DD` form
 - `Surface classes`
 - `Companion layers`
 - `Operator surfaces`
