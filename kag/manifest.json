@@ -1,0 +1,72 @@
+{
+  "schema_version": "aoa-local-kag-manifest-v1",
+  "repo": "ATM10-Agent",
+  "owner_surface": "kag/AGENTS.md",
+  "source_surfaces": [
+    {
+      "repo": "ATM10-Agent",
+      "path": "src/kag/baseline.py",
+      "source_class": "runtime_advisory",
+      "role": "primary",
+      "authority": "authored_source"
+    },
+    {
+      "repo": "ATM10-Agent",
+      "path": "src/kag/neo4j_backend.py",
+      "source_class": "runtime_advisory",
+      "role": "supporting",
+      "authority": "authored_source"
+    },
+    {
+      "repo": "ATM10-Agent",
+      "path": "docs/RUNBOOK.md",
+      "source_class": "runtime_advisory",
+      "role": "owner_route",
+      "authority": "authored_source"
+    },
+    {
+      "repo": "ATM10-Agent",
+      "path": "docs/SOURCE_OF_TRUTH.md",
+      "source_class": "runtime_advisory",
+      "role": "supporting",
+      "authority": "authored_source"
+    },
+    {
+      "repo": "ATM10-Agent",
+      "path": "README.md",
+      "source_class": "runtime_advisory",
+      "role": "supporting",
+      "authority": "authored_source"
+    }
+  ],
+  "record_classes": [
+    "node",
+    "edge",
+    "index",
+    "projection",
+    "receipt"
+  ],
+  "storage_posture": {
+    "git_surface": "portable_records",
+    "payload_class": "manifest",
+    "runtime_route": "source-repo"
+  },
+  "validation_routes": [
+    {
+      "route": "python -m pytest",
+      "lane": "owner-local"
+    }
+  ],
+  "consumer_routes": [
+    "aoa-kag registry",
+    "project-local runtime",
+    "aoa-kag-mcp resource"
+  ],
+  "owner_return_routes": [
+    {
+      "repo": "ATM10-Agent",
+      "surface": "docs/RUNBOOK.md",
+      "route_kind": "runtime"
+    }
+  ]
+}

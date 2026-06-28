@@ -1,0 +1,53 @@
+{
+  "schema_version": "aoa-local-kag-record-v1",
+  "repo": "ATM10-Agent",
+  "local_id": "node:atm10:project-kag-runtime",
+  "record_class": "node",
+  "source_refs": [
+    {
+      "repo": "ATM10-Agent",
+      "path": "src/kag/baseline.py",
+      "source_class": "runtime_advisory",
+      "role": "primary",
+      "authority": "authored_source"
+    },
+    {
+      "repo": "ATM10-Agent",
+      "path": "src/kag/neo4j_backend.py",
+      "source_class": "runtime_advisory",
+      "role": "supporting",
+      "authority": "authored_source"
+    }
+  ],
+  "source_owner": "ATM10-Agent",
+  "provenance_mode": "strict_source_linked",
+  "derived_method": "source-linked local KAG node over project-local KAG runtime modules",
+  "generated_or_authored": "authored_control",
+  "status": "active",
+  "owner_return_route": {
+    "repo": "ATM10-Agent",
+    "surface": "docs/RUNBOOK.md",
+    "route_kind": "runtime"
+  },
+  "freshness": {
+    "mode": "source_snapshot",
+    "state": "current",
+    "checked_ref": "src/kag/baseline.py"
+  },
+  "builder": {
+    "route": "project-local KAG modules",
+    "surface": "src/kag/baseline.py"
+  },
+  "validator": {
+    "route": "python -m pytest",
+    "lane": "owner-local"
+  },
+  "storage_posture": {
+    "git_surface": "portable_records",
+    "payload_class": "node",
+    "runtime_route": "source-repo"
+  },
+  "consumer_route": "aoa-kag registry",
+  "node_kind": "source_surface",
+  "label": "project-local KAG runtime modules"
+}
