@@ -1,0 +1,53 @@
+{
+  "schema_version": "aoa-local-kag-record-v1",
+  "repo": "ATM10-Agent",
+  "local_id": "node:atm10:operator-runbook-route",
+  "record_class": "node",
+  "source_refs": [
+    {
+      "repo": "ATM10-Agent",
+      "path": "docs/RUNBOOK.md",
+      "source_class": "runtime_advisory",
+      "role": "owner_route",
+      "authority": "authored_source"
+    },
+    {
+      "repo": "ATM10-Agent",
+      "path": "docs/SOURCE_OF_TRUTH.md",
+      "source_class": "runtime_advisory",
+      "role": "supporting",
+      "authority": "authored_source"
+    }
+  ],
+  "source_owner": "ATM10-Agent",
+  "provenance_mode": "strict_source_linked",
+  "derived_method": "source-linked local KAG node over operator runbook route",
+  "generated_or_authored": "authored_control",
+  "status": "active",
+  "owner_return_route": {
+    "repo": "ATM10-Agent",
+    "surface": "docs/RUNBOOK.md",
+    "route_kind": "runtime"
+  },
+  "freshness": {
+    "mode": "source_snapshot",
+    "state": "current",
+    "checked_ref": "docs/RUNBOOK.md"
+  },
+  "builder": {
+    "route": "project-local KAG modules",
+    "surface": "src/kag/baseline.py"
+  },
+  "validator": {
+    "route": "python -m pytest",
+    "lane": "owner-local"
+  },
+  "storage_posture": {
+    "git_surface": "portable_records",
+    "payload_class": "node",
+    "runtime_route": "source-repo"
+  },
+  "consumer_route": "aoa-kag registry",
+  "node_kind": "route_surface",
+  "label": "operator runbook route"
+}

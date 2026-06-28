@@ -57,6 +57,12 @@ REQUIRED_AGENTS_DOCS: dict[str, tuple[str, ...]] = {
         'NEO4J_PASSWORD',
         'tests/test_kag_neo4j_backend.py',
     ),
+    'kag/AGENTS.md': (
+        'local KAG provider home',
+        'source-linked records',
+        'operator runbook surfaces',
+        'source-return route',
+    ),
     'src/hybrid/AGENTS.md': (
         '`baseline_first`',
         '`combo_a` additive',

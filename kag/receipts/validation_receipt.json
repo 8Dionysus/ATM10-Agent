@@ -1,0 +1,54 @@
+{
+  "schema_version": "aoa-local-kag-record-v1",
+  "repo": "ATM10-Agent",
+  "local_id": "receipt:validation:atm10-provider",
+  "record_class": "receipt",
+  "source_refs": [
+    {
+      "repo": "ATM10-Agent",
+      "path": "src/kag/baseline.py",
+      "source_class": "runtime_advisory",
+      "role": "primary",
+      "authority": "authored_source"
+    },
+    {
+      "repo": "ATM10-Agent",
+      "path": "docs/RUNBOOK.md",
+      "source_class": "runtime_advisory",
+      "role": "owner_route",
+      "authority": "authored_source"
+    }
+  ],
+  "source_owner": "ATM10-Agent",
+  "provenance_mode": "strict_source_linked",
+  "derived_method": "source-linked local KAG receipt over project provider records",
+  "generated_or_authored": "generated_from_source",
+  "status": "active",
+  "owner_return_route": {
+    "repo": "ATM10-Agent",
+    "surface": "docs/RUNBOOK.md",
+    "route_kind": "runtime"
+  },
+  "freshness": {
+    "mode": "validator_receipt",
+    "state": "current",
+    "checked_ref": "src/kag/baseline.py"
+  },
+  "builder": {
+    "route": "python -m pytest",
+    "surface": "tests/"
+  },
+  "validator": {
+    "route": "python -m pytest",
+    "lane": "owner-local"
+  },
+  "storage_posture": {
+    "git_surface": "receipt",
+    "payload_class": "receipt",
+    "runtime_route": "source-repo"
+  },
+  "consumer_route": "aoa-kag registry",
+  "receipt_kind": "validation",
+  "result": "current",
+  "fallback_route": "python -m pytest"
+}
