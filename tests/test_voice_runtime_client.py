@@ -18,10 +18,18 @@ def _write_audio_fixture(path: Path) -> None:
 def test_voice_runtime_client_health_mode_writes_response(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    def _fake_request_json(*, method: str, url: str, payload: dict[str, object] | None, timeout_sec: float = 120.0):
+    def _fake_request_json(
+        *,
+        method: str,
+        url: str,
+        payload: dict[str, object] | None,
+        timeout_sec: float = 120.0,
+        service_token: str | None = None,
+    ):
         assert method == "GET"
         assert url == "http://127.0.0.1:8765/health"
         assert payload is None
+        assert service_token is None
         return {"status": "ok"}
 
     monkeypatch.setattr(voice_runtime_client, "_request_json", _fake_request_json)
@@ -43,13 +51,56 @@ def test_voice_runtime_client_health_mode_writes_response(
     assert response_payload["status"] == "ok"
 
 
+def test_voice_runtime_client_forwards_service_token(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    captured: dict[str, object] = {}
+
+    def _fake_request_json(
+        *,
+        method: str,
+        url: str,
+        payload: dict[str, object] | None,
+        timeout_sec: float = 120.0,
+        service_token: str | None = None,
+    ):
+        captured["service_token"] = service_token
+        assert method == "GET"
+        assert url == "http://127.0.0.1:8765/health"
+        assert payload is None
+        return {"status": "ok"}
+
+    monkeypatch.setattr(voice_runtime_client, "_request_json", _fake_request_json)
+
+    result = voice_runtime_client.run_voice_runtime_client(
+        service_url="http://127.0.0.1:8765",
+        mode="health",
+        runs_dir=tmp_path / "runs",
+        service_token="test-token",
+        now=datetime(2026, 2, 20, 22, 10, 30, tzinfo=timezone.utc),
+    )
+
+    assert result["ok"] is True
+    assert captured["service_token"] == "test-token"
+    assert result["run_payload"]["auth"]["enabled"] is True
+    assert result["run_payload"]["auth"]["header"] == "X-ATM10-Token"
+
+
 def test_voice_runtime_client_asr_mode_audio_file(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     captured: dict[str, object] = {}
 
-    def _fake_request_json(*, method: str, url: str, payload: dict[str, object] | None, timeout_sec: float = 120.0):
+    def _fake_request_json(
+        *,
+        method: str,
+        url: str,
+        payload: dict[str, object] | None,
+        timeout_sec: float = 120.0,
+        service_token: str | None = None,
+    ):
         assert method == "POST"
         assert url == "http://127.0.0.1:8765/asr"
         assert payload is not None
+        assert service_token is None
         captured["payload"] = payload
         return {"ok": True, "result": {"text": "hello", "language": "english"}}
 
@@ -101,10 +152,18 @@ def test_voice_runtime_client_tts_mode_forwards_runtime(
 ) -> None:
     captured: dict[str, object] = {}
 
-    def _fake_request_json(*, method: str, url: str, payload: dict[str, object] | None, timeout_sec: float = 120.0):
+    def _fake_request_json(
+        *,
+        method: str,
+        url: str,
+        payload: dict[str, object] | None,
+        timeout_sec: float = 120.0,
+        service_token: str | None = None,
+    ):
         assert method == "POST"
         assert url == "http://127.0.0.1:8765/tts"
         assert payload is not None
+        assert service_token is None
         captured["payload"] = payload
         return {"ok": True, "result": {"audio_out_wav": "C:/tmp/out.wav"}}
 
@@ -131,10 +190,18 @@ def test_voice_runtime_client_tts_mode_forwards_ovms_overrides(
 ) -> None:
     captured: dict[str, object] = {}
 
-    def _fake_request_json(*, method: str, url: str, payload: dict[str, object] | None, timeout_sec: float = 120.0):
+    def _fake_request_json(
+        *,
+        method: str,
+        url: str,
+        payload: dict[str, object] | None,
+        timeout_sec: float = 120.0,
+        service_token: str | None = None,
+    ):
         assert method == "POST"
         assert url == "http://127.0.0.1:8765/tts"
         assert payload is not None
+        assert service_token is None
         captured["payload"] = payload
         return {"ok": True, "result": {"audio_out_wav": "C:/tmp/out.wav"}}
 
@@ -165,10 +232,18 @@ def test_voice_runtime_client_tts_mode_sends_safe_output_filename(
 ) -> None:
     captured: dict[str, object] = {}
 
-    def _fake_request_json(*, method: str, url: str, payload: dict[str, object] | None, timeout_sec: float = 120.0):
+    def _fake_request_json(
+        *,
+        method: str,
+        url: str,
+        payload: dict[str, object] | None,
+        timeout_sec: float = 120.0,
+        service_token: str | None = None,
+    ):
         assert method == "POST"
         assert url == "http://127.0.0.1:8765/tts"
         assert payload is not None
+        assert service_token is None
         captured["payload"] = payload
         return {"ok": True, "result": {"audio_out_wav": "runs/service/tts_outputs/client.wav"}}
 
@@ -198,10 +273,12 @@ def test_voice_runtime_client_tts_stream_writes_events(
         url: str,
         payload: dict[str, object] | None,
         timeout_sec: float = 300.0,
+        service_token: str | None = None,
     ):
         assert method == "POST"
         assert url == "http://127.0.0.1:8765/tts_stream"
         assert payload is not None
+        assert service_token is None
         assert payload["text"] == "stream text"
         assert payload["chunk_ms"] == 150
         assert payload["runtime"] == "ovms"
@@ -244,7 +321,15 @@ def test_voice_runtime_client_tts_stream_writes_events(
 def test_voice_runtime_client_sets_unreachable_error_code(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    def _fake_request_json(*, method: str, url: str, payload: dict[str, object] | None, timeout_sec: float = 120.0):
+    def _fake_request_json(
+        *,
+        method: str,
+        url: str,
+        payload: dict[str, object] | None,
+        timeout_sec: float = 120.0,
+        service_token: str | None = None,
+    ):
+        assert service_token is None
         raise RuntimeError("Cannot connect to voice service at http://127.0.0.1:8765/health: refused")
 
     monkeypatch.setattr(voice_runtime_client, "_request_json", _fake_request_json)

@@ -12,10 +12,18 @@ import scripts.tts_runtime_client as tts_runtime_client
 
 
 def test_tts_runtime_client_health_writes_response(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    def _fake_request_json(*, method: str, url: str, payload: dict[str, object] | None, timeout_sec: float = 120.0):
+    def _fake_request_json(
+        *,
+        method: str,
+        url: str,
+        payload: dict[str, object] | None,
+        timeout_sec: float = 120.0,
+        service_token: str | None = None,
+    ):
         assert method == "GET"
         assert url == "http://127.0.0.1:8780/health"
         assert payload is None
+        assert service_token is None
         return {"status": "ok", "cache_items": 3}
 
     monkeypatch.setattr(tts_runtime_client, "_request_json", _fake_request_json)
@@ -37,16 +45,59 @@ def test_tts_runtime_client_health_writes_response(monkeypatch: pytest.MonkeyPat
     assert response_payload["status"] == "ok"
 
 
+def test_tts_runtime_client_forwards_service_token(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    captured: dict[str, object] = {}
+
+    def _fake_request_json(
+        *,
+        method: str,
+        url: str,
+        payload: dict[str, object] | None,
+        timeout_sec: float = 120.0,
+        service_token: str | None = None,
+    ):
+        captured["service_token"] = service_token
+        assert method == "GET"
+        assert url == "http://127.0.0.1:8780/health"
+        assert payload is None
+        return {"status": "ok"}
+
+    monkeypatch.setattr(tts_runtime_client, "_request_json", _fake_request_json)
+
+    result = tts_runtime_client.run_tts_runtime_client(
+        service_url="http://127.0.0.1:8780",
+        mode="health",
+        runs_dir=tmp_path / "runs",
+        service_token="test-token",
+        now=datetime(2026, 2, 22, 0, 1, 30, tzinfo=timezone.utc),
+    )
+
+    assert result["ok"] is True
+    assert captured["service_token"] == "test-token"
+    assert result["run_payload"]["auth"]["enabled"] is True
+    assert result["run_payload"]["auth"]["header"] == "X-ATM10-Token"
+
+
 def test_tts_runtime_client_tts_writes_response_and_first_chunk_audio(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     captured: dict[str, object] = {}
     wav_bytes = b"RIFFfakewavdata"
 
-    def _fake_request_json(*, method: str, url: str, payload: dict[str, object] | None, timeout_sec: float = 120.0):
+    def _fake_request_json(
+        *,
+        method: str,
+        url: str,
+        payload: dict[str, object] | None,
+        timeout_sec: float = 120.0,
+        service_token: str | None = None,
+    ):
         assert method == "POST"
         assert url == "http://127.0.0.1:8780/tts"
         assert payload is not None
+        assert service_token is None
         captured["payload"] = payload
         return {
             "ok": True,
@@ -90,10 +141,12 @@ def test_tts_runtime_client_tts_stream_writes_events(monkeypatch: pytest.MonkeyP
         url: str,
         payload: dict[str, object] | None,
         timeout_sec: float = 120.0,
+        service_token: str | None = None,
     ):
         assert method == "POST"
         assert url == "http://127.0.0.1:8780/tts_stream"
         assert payload is not None
+        assert service_token is None
         assert payload["service_voice"] is True
         return [
             {"event": "started"},
@@ -128,4 +181,3 @@ def test_tts_runtime_client_cli_help_exits_zero(monkeypatch: pytest.MonkeyPatch)
     with pytest.raises(SystemExit) as exc:
         tts_runtime_client.parse_args()
     assert exc.value.code == 0
-

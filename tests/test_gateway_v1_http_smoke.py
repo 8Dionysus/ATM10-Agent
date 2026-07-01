@@ -139,8 +139,9 @@ def test_gateway_v1_http_smoke_combo_a_ok(tmp_path: Path, monkeypatch: pytest.Mo
         def __exit__(self, exc_type, exc, tb):
             return False
 
-        def post(self, path: str, json: dict[str, object]):
+        def post(self, path: str, json: dict[str, object], headers: dict[str, str] | None = None):
             assert path == "/v1/gateway"
+            assert headers == {}
             request_payloads.append(json)
             return _FakeResponse(str(json["operation"]))
 
@@ -186,6 +187,19 @@ def test_gateway_v1_http_smoke_invalid_scenario_raises_value_error(tmp_path: Pat
             runs_dir=tmp_path / "runs",
             now=datetime(2026, 2, 27, 23, 2, 0, tzinfo=timezone.utc),
         )
+
+
+def test_gateway_v1_http_smoke_passes_service_token(tmp_path: Path) -> None:
+    result = gateway_http_smoke.run_gateway_v1_http_smoke(
+        scenario="core",
+        runs_dir=tmp_path / "runs",
+        service_token="test-token",
+        now=datetime(2026, 2, 27, 23, 2, 30, tzinfo=timezone.utc),
+    )
+
+    assert result["summary_payload"]["status"] == "ok"
+    assert result["run_payload"]["auth"]["enabled"] is True
+    assert result["run_payload"]["auth"]["header"] == "X-ATM10-Token"
 
 
 def test_gateway_v1_http_smoke_cli_help_exits_zero(monkeypatch: pytest.MonkeyPatch) -> None:
