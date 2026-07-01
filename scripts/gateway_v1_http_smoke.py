@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 import math
+import os
 import sys
 import time
 from datetime import datetime, timezone
@@ -22,6 +23,9 @@ from src.agent_core.combo_a_profile import (
     seed_combo_a_fixture_data,
 )
 from scripts.gateway_v1_http_service import create_app, map_gateway_http_status
+
+_SERVICE_TOKEN_HEADER = "X-ATM10-Token"
+_SERVICE_TOKEN_ENV = "ATM10_SERVICE_TOKEN"
 
 
 def _utc_now() -> str:
@@ -47,6 +51,21 @@ def _create_run_dir(runs_dir: Path, *, scenario: str, now: datetime) -> Path:
 def _write_json(path: Path, payload: Mapping[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8")
+
+
+def _resolve_service_token(cli_value: str | None) -> str | None:
+    if cli_value is not None:
+        stripped = cli_value.strip()
+        return stripped or None
+    env_value = os.getenv(_SERVICE_TOKEN_ENV, "").strip()
+    return env_value or None
+
+
+def _auth_headers(service_token: str | None) -> dict[str, str]:
+    effective_service_token = _resolve_service_token(service_token)
+    if effective_service_token is None:
+        return {}
+    return {_SERVICE_TOKEN_HEADER: effective_service_token}
 
 
 def _percentile_nearest_rank(values: list[float], percentile: float) -> float | None:
@@ -216,6 +235,7 @@ def run_gateway_v1_http_smoke(
     combo_a_neo4j_database: str = DEFAULT_COMBO_A_NEO4J_DATABASE,
     combo_a_neo4j_user: str = DEFAULT_COMBO_A_NEO4J_USER,
     combo_a_neo4j_password: str | None = None,
+    service_token: str | None = None,
     now: datetime | None = None,
 ) -> dict[str, Any]:
     if scenario not in {"core", "hybrid", "automation", "combo_a"}:
@@ -232,6 +252,8 @@ def run_gateway_v1_http_smoke(
     run_json_path = run_dir / "run.json"
     summary_path = summary_json if summary_json is not None else (runs_dir / "gateway_http_smoke_summary.json")
     gateway_runs_dir = run_dir / "gateway_http_runs"
+    effective_service_token = _resolve_service_token(service_token)
+    auth_headers = _auth_headers(effective_service_token)
     combo_a_seed_result = None
     combo_a_seed_summary = None
     if scenario == "combo_a":
@@ -279,6 +301,10 @@ def run_gateway_v1_http_smoke(
         "scenario": scenario,
         "started_at_utc": started_at_utc,
         "request_count": len(requests),
+        "auth": {
+            "enabled": effective_service_token is not None,
+            "header": _SERVICE_TOKEN_HEADER,
+        },
         "paths": {
             "run_dir": str(run_dir),
             "run_json": str(run_json_path),
@@ -297,13 +323,14 @@ def run_gateway_v1_http_smoke(
         neo4j_url=combo_a_neo4j_url if scenario == "combo_a" else None,
         neo4j_database=combo_a_neo4j_database,
         neo4j_user=combo_a_neo4j_user,
+        service_token=effective_service_token,
     )
     request_summaries: list[dict[str, Any]] = []
     all_ok = True
     with TestClient(app) as client:
         for request in requests:
             request_started = time.perf_counter()
-            http_response = client.post("/v1/gateway", json=request)
+            http_response = client.post("/v1/gateway", json=request, headers=auth_headers)
             latency_ms = round((time.perf_counter() - request_started) * 1000.0, 3)
             response_json = http_response.json()
             expected_http_status = map_gateway_http_status(response_json)
@@ -409,6 +436,11 @@ def parse_args() -> argparse.Namespace:
         default=None,
         help="Combo A Neo4j password (or use NEO4J_PASSWORD env var).",
     )
+    parser.add_argument(
+        "--service-token",
+        default=None,
+        help="Optional gateway service token for X-ATM10-Token (fallback: ATM10_SERVICE_TOKEN).",
+    )
     return parser.parse_args()
 
 
@@ -424,6 +456,7 @@ def main() -> int:
         combo_a_neo4j_database=args.neo4j_database,
         combo_a_neo4j_user=args.neo4j_user,
         combo_a_neo4j_password=args.neo4j_password,
+        service_token=args.service_token,
     )
     run_dir = result["run_dir"]
     summary_payload = result["summary_payload"]

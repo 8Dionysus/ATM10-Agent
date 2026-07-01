@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -72,6 +73,8 @@ MOBILE_LAYOUT_BREAKPOINT_PX_DEFAULT = 768
 MOBILE_BASELINE_VIEWPORT = {"width": 390, "height": 844}
 DEFAULT_SAFE_ACTION_TIMEOUT_SEC = 300.0
 SAFE_ACTION_HTTP_TIMEOUT_BUFFER_SEC = 5.0
+SERVICE_TOKEN_HEADER = "X-ATM10-Token"
+SERVICE_TOKEN_ENV = "ATM10_SERVICE_TOKEN"
 
 SAFE_ACTIONS: dict[str, dict[str, Any]] = {
     "gateway_local_core": {
@@ -751,9 +754,35 @@ canonical_history_roots = shared_canonical_history_roots
 build_metrics_history_rows = shared_build_metrics_history_rows
 
 
-def fetch_gateway_health(gateway_url: str, timeout_sec: float) -> tuple[dict[str, Any] | None, str | None]:
+def _resolve_service_token(cli_value: str | None) -> str | None:
+    if cli_value is not None:
+        stripped = cli_value.strip()
+        return stripped or None
+    env_value = os.getenv(SERVICE_TOKEN_ENV, "").strip()
+    return env_value or None
+
+
+def _auth_headers(service_token: str | None) -> dict[str, str]:
+    effective_service_token = _resolve_service_token(service_token)
+    if effective_service_token is None:
+        return {}
+    return {SERVICE_TOKEN_HEADER: effective_service_token}
+
+
+def _json_headers(service_token: str | None) -> dict[str, str]:
+    headers = {"Content-Type": "application/json"}
+    headers.update(_auth_headers(service_token))
+    return headers
+
+
+def fetch_gateway_health(
+    gateway_url: str,
+    timeout_sec: float,
+    *,
+    service_token: str | None = None,
+) -> tuple[dict[str, Any] | None, str | None]:
     url = gateway_url.rstrip("/") + "/healthz"
-    req = request.Request(url=url, method="GET")
+    req = request.Request(url=url, method="GET", headers=_auth_headers(service_token))
     try:
         with request.urlopen(req, timeout=timeout_sec) as response:
             body = response.read()
@@ -771,9 +800,11 @@ def fetch_gateway_health(gateway_url: str, timeout_sec: float) -> tuple[dict[str
 def fetch_gateway_operator_snapshot(
     gateway_url: str,
     timeout_sec: float,
+    *,
+    service_token: str | None = None,
 ) -> tuple[dict[str, Any] | None, str | None]:
     url = gateway_url.rstrip("/") + "/v1/operator/snapshot"
-    req = request.Request(url=url, method="GET")
+    req = request.Request(url=url, method="GET", headers=_auth_headers(service_token))
     try:
         with request.urlopen(req, timeout=timeout_sec) as response:
             body = response.read()
@@ -798,9 +829,10 @@ def fetch_gateway_operator_runs(
     timeout_sec: float,
     *,
     limit: int = 20,
+    service_token: str | None = None,
 ) -> tuple[dict[str, Any] | None, str | None]:
     url = gateway_url.rstrip("/") + f"/v1/operator/runs?limit={max(int(limit), 1)}"
-    req = request.Request(url=url, method="GET")
+    req = request.Request(url=url, method="GET", headers=_auth_headers(service_token))
     try:
         with request.urlopen(req, timeout=timeout_sec) as response:
             body = response.read()
@@ -827,6 +859,7 @@ def fetch_gateway_operator_history(
     selected_sources: list[str] | None = None,
     selected_statuses: list[str] | None = None,
     limit_per_source: int = 10,
+    service_token: str | None = None,
 ) -> tuple[dict[str, Any] | None, str | None]:
     query_parts = [f"limit_per_source={max(int(limit_per_source), 1)}"]
     if selected_sources:
@@ -834,7 +867,7 @@ def fetch_gateway_operator_history(
     if selected_statuses:
         query_parts.append("status=" + ",".join(selected_statuses))
     url = gateway_url.rstrip("/") + "/v1/operator/history?" + "&".join(query_parts)
-    req = request.Request(url=url, method="GET")
+    req = request.Request(url=url, method="GET", headers=_auth_headers(service_token))
     try:
         with request.urlopen(req, timeout=timeout_sec) as response:
             body = response.read()
@@ -859,9 +892,10 @@ def fetch_gateway_safe_actions(
     timeout_sec: float,
     *,
     history_limit: int = 10,
+    service_token: str | None = None,
 ) -> tuple[dict[str, Any] | None, str | None]:
     url = gateway_url.rstrip("/") + f"/v1/operator/safe-actions?history_limit={max(int(history_limit), 1)}"
-    req = request.Request(url=url, method="GET")
+    req = request.Request(url=url, method="GET", headers=_auth_headers(service_token))
     try:
         with request.urlopen(req, timeout=timeout_sec) as response:
             body = response.read()
@@ -888,6 +922,7 @@ def run_gateway_safe_action(
     action_key: str,
     confirm: bool,
     action_timeout_sec: float = 300.0,
+    service_token: str | None = None,
 ) -> tuple[dict[str, Any] | None, str | None]:
     url = gateway_url.rstrip("/") + "/v1/operator/safe-actions/run"
     body = json.dumps(
@@ -901,7 +936,7 @@ def run_gateway_safe_action(
         url=url,
         method="POST",
         data=body,
-        headers={"Content-Type": "application/json"},
+        headers=_json_headers(service_token),
     )
     try:
         with request.urlopen(req, timeout=timeout_sec) as response:
@@ -1814,6 +1849,11 @@ def parse_panel_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="Gateway health timeout in seconds (default: 3.0).",
     )
     parser.add_argument(
+        "--service-token",
+        default=None,
+        help="Optional gateway service token for X-ATM10-Token (fallback: ATM10_SERVICE_TOKEN).",
+    )
+    parser.add_argument(
         "--compact-breakpoint-px",
         type=int,
         default=MOBILE_LAYOUT_BREAKPOINT_PX_DEFAULT,
@@ -1821,6 +1861,7 @@ def parse_panel_args(argv: list[str] | None = None) -> argparse.Namespace:
     )
     args, _unknown = parser.parse_known_args(argv)
     args.operator_runs_dir = Path(args.operator_runs_dir) if args.operator_runs_dir is not None else Path(args.runs_dir)
+    args.service_token = _resolve_service_token(args.service_token)
     return args
 
 
@@ -1936,12 +1977,14 @@ def _render_run_explorer_tab(
     *,
     gateway_url: str,
     gateway_timeout_sec: float,
+    service_token: str | None,
     sources: dict[str, Path],
 ) -> None:
     runs_payload, runs_error = fetch_gateway_operator_runs(
         gateway_url,
         gateway_timeout_sec,
         limit=20,
+        service_token=service_token,
     )
     if runs_payload is not None:
         rows = runs_payload.get("rows")
@@ -1977,6 +2020,7 @@ def _render_latest_metrics_tab(
     *,
     gateway_url: str,
     gateway_timeout_sec: float,
+    service_token: str | None,
     operator_snapshot_payload: dict[str, Any] | None,
     operator_snapshot_error: str | None,
 ) -> None:
@@ -2141,6 +2185,7 @@ def _render_latest_metrics_tab(
         selected_sources=selected_sources,
         selected_statuses=selected_statuses,
         limit_per_source=limit_per_source,
+        service_token=service_token,
     )
     if history_payload is not None:
         history_rows = history_payload.get("rows")
@@ -2171,11 +2216,17 @@ def _render_latest_metrics_tab(
     st.dataframe(history_rows, width="stretch")
 
 
-def _render_safe_actions_tab(*, gateway_url: str, gateway_timeout_sec: float) -> None:
+def _render_safe_actions_tab(
+    *,
+    gateway_url: str,
+    gateway_timeout_sec: float,
+    service_token: str | None,
+) -> None:
     safe_actions_payload, safe_actions_error = fetch_gateway_safe_actions(
         gateway_url,
         gateway_timeout_sec,
         history_limit=10,
+        service_token=service_token,
     )
     if safe_actions_payload is None:
         st.warning(
@@ -2234,6 +2285,7 @@ def _render_safe_actions_tab(*, gateway_url: str, gateway_timeout_sec: float) ->
             action_key=selected_key,
             confirm=True,
             action_timeout_sec=action_timeout_sec,
+            service_token=service_token,
         )
         if run_error is not None:
             st.error(run_error)
@@ -2247,6 +2299,7 @@ def _render_safe_actions_tab(*, gateway_url: str, gateway_timeout_sec: float) ->
             gateway_url,
             gateway_timeout_sec,
             history_limit=10,
+            service_token=service_token,
         )
 
     audit_rows = safe_actions_payload.get("recent_runs") if isinstance(safe_actions_payload, dict) else None
@@ -2305,9 +2358,12 @@ def render_panel(args: argparse.Namespace) -> None:
 
     runs_dir = Path(st.session_state["runs_dir"])
     operator_runs_dir = Path(st.session_state["operator_runs_dir"])
+    gateway_service_token = _resolve_service_token(args.service_token)
     sources = canonical_summary_sources(runs_dir)
     operator_snapshot_payload, operator_snapshot_error = fetch_gateway_operator_snapshot(
-        gateway_url, args.gateway_timeout_sec
+        gateway_url,
+        args.gateway_timeout_sec,
+        service_token=gateway_service_token,
     )
     operator_startup_payload = (
         _nested_get(operator_snapshot_payload, "operator_context", "startup")
@@ -2325,7 +2381,11 @@ def render_panel(args: argparse.Namespace) -> None:
         health_payload = operator_snapshot_payload.get("gateway")
         health_error = None
     else:
-        health_payload, health_error = fetch_gateway_health(gateway_url, args.gateway_timeout_sec)
+        health_payload, health_error = fetch_gateway_health(
+            gateway_url,
+            args.gateway_timeout_sec,
+            service_token=gateway_service_token,
+        )
     tabs = st.tabs(list(TAB_NAMES))
 
     with tabs[0]:
@@ -2341,6 +2401,7 @@ def render_panel(args: argparse.Namespace) -> None:
         _render_run_explorer_tab(
             gateway_url=gateway_url,
             gateway_timeout_sec=args.gateway_timeout_sec,
+            service_token=gateway_service_token,
             sources=sources,
         )
     with tabs[2]:
@@ -2349,6 +2410,7 @@ def render_panel(args: argparse.Namespace) -> None:
             sources,
             gateway_url=gateway_url,
             gateway_timeout_sec=args.gateway_timeout_sec,
+            service_token=gateway_service_token,
             operator_snapshot_payload=operator_snapshot_payload,
             operator_snapshot_error=operator_snapshot_error,
         )
@@ -2356,6 +2418,7 @@ def render_panel(args: argparse.Namespace) -> None:
         _render_safe_actions_tab(
             gateway_url=gateway_url,
             gateway_timeout_sec=args.gateway_timeout_sec,
+            service_token=gateway_service_token,
         )
 
 

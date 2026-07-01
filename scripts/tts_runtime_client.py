@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import base64
 import json
+import os
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -13,6 +14,9 @@ from urllib.request import Request, urlopen
 REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
+
+_SERVICE_TOKEN_HEADER = "X-ATM10-Token"
+_SERVICE_TOKEN_ENV = "ATM10_SERVICE_TOKEN"
 
 
 def _create_run_dir(runs_dir: Path, now: datetime) -> Path:
@@ -36,18 +40,35 @@ def _write_json(path: Path, payload: Mapping[str, Any]) -> None:
     path.write_text(json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8")
 
 
+def _resolve_service_token(cli_value: str | None) -> str | None:
+    if cli_value is not None:
+        stripped = cli_value.strip()
+        return stripped or None
+    env_value = os.getenv(_SERVICE_TOKEN_ENV, "").strip()
+    return env_value or None
+
+
+def _json_headers(service_token: str | None) -> dict[str, str]:
+    headers = {"Content-Type": "application/json"}
+    effective_service_token = _resolve_service_token(service_token)
+    if effective_service_token is not None:
+        headers[_SERVICE_TOKEN_HEADER] = effective_service_token
+    return headers
+
+
 def _request_json(
     *,
     method: str,
     url: str,
     payload: Mapping[str, Any] | None,
     timeout_sec: float = 120.0,
+    service_token: str | None = None,
 ) -> dict[str, Any]:
     data = None if payload is None else json.dumps(payload).encode("utf-8")
     request = Request(
         url=url,
         method=method,
-        headers={"Content-Type": "application/json"},
+        headers=_json_headers(service_token),
         data=data,
     )
     try:
@@ -66,12 +87,13 @@ def _request_ndjson(
     url: str,
     payload: Mapping[str, Any] | None,
     timeout_sec: float = 120.0,
+    service_token: str | None = None,
 ) -> list[dict[str, Any]]:
     data = None if payload is None else json.dumps(payload).encode("utf-8")
     request = Request(
         url=url,
         method=method,
-        headers={"Content-Type": "application/json"},
+        headers=_json_headers(service_token),
         data=data,
     )
     events: list[dict[str, Any]] = []
@@ -122,12 +144,14 @@ def run_tts_runtime_client(
     service_voice: bool = False,
     chunk_chars: int | None = None,
     timeout_sec: float = 120.0,
+    service_token: str | None = None,
     now: datetime | None = None,
 ) -> dict[str, Any]:
     if now is None:
         now = datetime.now(timezone.utc)
     run_dir = _create_run_dir(runs_dir, now)
     run_json_path = run_dir / "run.json"
+    effective_service_token = _resolve_service_token(service_token)
 
     run_payload: dict[str, Any] = {
         "timestamp_utc": now.astimezone(timezone.utc).isoformat(),
@@ -135,6 +159,10 @@ def run_tts_runtime_client(
         "status": "started",
         "request_mode": mode,
         "service_url": service_url.rstrip("/"),
+        "auth": {
+            "enabled": effective_service_token is not None,
+            "header": _SERVICE_TOKEN_HEADER,
+        },
         "paths": {
             "run_dir": str(run_dir),
             "run_json": str(run_json_path),
@@ -145,7 +173,13 @@ def run_tts_runtime_client(
     try:
         base_url = service_url.rstrip("/")
         if mode == "health":
-            response = _request_json(method="GET", url=f"{base_url}/health", payload=None, timeout_sec=timeout_sec)
+            response = _request_json(
+                method="GET",
+                url=f"{base_url}/health",
+                payload=None,
+                timeout_sec=timeout_sec,
+                service_token=effective_service_token,
+            )
             response_path = run_dir / "health_response.json"
             _write_json(response_path, response)
             run_payload["status"] = "ok"
@@ -164,7 +198,13 @@ def run_tts_runtime_client(
             }
             if isinstance(chunk_chars, int) and chunk_chars > 0:
                 request_payload["chunk_chars"] = int(chunk_chars)
-            response = _request_json(method="POST", url=f"{base_url}/tts", payload=request_payload, timeout_sec=timeout_sec)
+            response = _request_json(
+                method="POST",
+                url=f"{base_url}/tts",
+                payload=request_payload,
+                timeout_sec=timeout_sec,
+                service_token=effective_service_token,
+            )
             response_path = run_dir / "tts_response.json"
             _write_json(response_path, response)
             maybe_audio = _extract_first_chunk_audio(response)
@@ -193,6 +233,7 @@ def run_tts_runtime_client(
                 url=f"{base_url}/tts_stream",
                 payload=request_payload,
                 timeout_sec=timeout_sec,
+                service_token=effective_service_token,
             )
             events_path = run_dir / "tts_stream_events.jsonl"
             with events_path.open("w", encoding="utf-8") as handle:
@@ -225,6 +266,11 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--runs-dir", type=Path, default=Path("runs"), help="Run artifact base directory.")
     parser.add_argument("--timeout-sec", type=float, default=120.0, help="HTTP timeout in seconds.")
+    parser.add_argument(
+        "--service-token",
+        default=None,
+        help="Optional service token for X-ATM10-Token (fallback: ATM10_SERVICE_TOKEN).",
+    )
 
     subparsers = parser.add_subparsers(dest="mode", required=True)
     subparsers.add_parser("health", help="Check runtime health.")
@@ -258,6 +304,7 @@ def main() -> int:
         service_voice=bool(getattr(args, "service_voice", False)),
         chunk_chars=getattr(args, "chunk_chars", None),
         timeout_sec=float(getattr(args, "timeout_sec", 120.0)),
+        service_token=args.service_token,
     )
     run_dir = result["run_dir"]
     print(f"[tts_runtime_client] run_dir: {run_dir}")
@@ -267,4 +314,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

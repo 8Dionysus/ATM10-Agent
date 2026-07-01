@@ -233,6 +233,35 @@ def test_fetch_gateway_health_failure_returns_error() -> None:
     assert error is not None
 
 
+def test_fetch_gateway_health_sends_service_token(monkeypatch: pytest.MonkeyPatch) -> None:
+    captured: dict[str, object] = {}
+
+    class _FakeResponse:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def read(self) -> bytes:
+            return json.dumps({"status": "ok"}).encode("utf-8")
+
+    def _fake_urlopen(req, timeout):
+        captured["headers"] = dict(req.header_items())
+        return _FakeResponse()
+
+    monkeypatch.setattr(panel.request, "urlopen", _fake_urlopen)
+    payload, error = panel.fetch_gateway_health(
+        "http://127.0.0.1:8770",
+        timeout_sec=0.1,
+        service_token="test-token",
+    )
+
+    assert error is None
+    assert payload == {"status": "ok"}
+    assert captured["headers"]["X-atm10-token"] == "test-token"
+
+
 def test_fetch_gateway_operator_snapshot_failure_returns_error() -> None:
     payload, error = panel.fetch_gateway_operator_snapshot("http://127.0.0.1:1", timeout_sec=0.1)
     assert payload is None
@@ -870,7 +899,7 @@ def test_render_safe_actions_tab_uses_recommended_action_preselect_without_auto_
     monkeypatch.setattr(
         panel,
         "fetch_gateway_safe_actions",
-        lambda gateway_url, gateway_timeout_sec, history_limit=10: (
+        lambda gateway_url, gateway_timeout_sec, history_limit=10, service_token=None: (
             {
                 "schema_version": "gateway_operator_safe_actions_v1",
                 "status": "ok",
@@ -895,6 +924,7 @@ def test_render_safe_actions_tab_uses_recommended_action_preselect_without_auto_
     panel._render_safe_actions_tab(
         gateway_url="http://127.0.0.1:8770",
         gateway_timeout_sec=0.5,
+        service_token=None,
     )
 
     assert fake_st.selectbox_calls
@@ -926,10 +956,10 @@ def test_render_safe_actions_tab_uses_action_aware_post_timeout(
     fake_st = ConfirmingStreamlit()
     monkeypatch.setattr(panel, "st", fake_st)
     monkeypatch.setattr(
-        panel,
-        "fetch_gateway_safe_actions",
-        lambda gateway_url, timeout_sec, history_limit=10: (
-            {
+            panel,
+            "fetch_gateway_safe_actions",
+            lambda gateway_url, timeout_sec, history_limit=10, service_token=None: (
+                {
                 "schema_version": "gateway_operator_safe_actions_v1",
                 "status": "ok",
                 "catalog": [
@@ -953,6 +983,7 @@ def test_render_safe_actions_tab_uses_action_aware_post_timeout(
         action_key: str,
         confirm: bool,
         action_timeout_sec: float = 300.0,
+        service_token: str | None = None,
     ) -> tuple[dict[str, object], None]:
         captured.update(
             {
@@ -961,6 +992,7 @@ def test_render_safe_actions_tab_uses_action_aware_post_timeout(
                 "action_key": action_key,
                 "confirm": confirm,
                 "action_timeout_sec": action_timeout_sec,
+                "service_token": service_token,
             }
         )
         return {
@@ -973,11 +1005,13 @@ def test_render_safe_actions_tab_uses_action_aware_post_timeout(
     panel._render_safe_actions_tab(
         gateway_url="http://127.0.0.1:8770",
         gateway_timeout_sec=0.5,
+        service_token=None,
     )
 
     assert captured["action_key"] == "gateway_local_core"
     assert captured["confirm"] is True
     assert captured["timeout_sec"] >= captured["action_timeout_sec"]
+    assert captured["service_token"] is None
 
 
 def test_render_pilot_readiness_section_ready(monkeypatch: pytest.MonkeyPatch) -> None:
