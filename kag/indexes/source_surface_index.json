@@ -66,7 +66,7 @@
   },
   "index_identity": {
     "artifact_kind": "source_surface_index",
-    "content_digest": "461b75715a378c44f9007d26d4a5344909f351e2a76db00438f4c560e792a0af",
+    "content_digest": "85be762e0c5072a43c2d8494b3e106e2f35ba9b65f32cd22597c4f3ea122ccbe",
     "local_id": "index:repo-local:source-surfaces",
     "schema_ref": "aoa-kag:schemas/repo-local-kag-index.schema.json"
   },
@@ -24913,7 +24913,7 @@
         "content_hash": "fdda82331ce74d1e3b8052498f75076b90d10d95bcc29723192008f0a6976a1a",
         "git_ref": "git-index-source-tree",
         "id": "file:.gitattributes:618cd5b83d",
-        "mime": "application/octet-stream",
+        "mime": "text/plain",
         "path": ".gitattributes",
         "repo": "ATM10-Agent",
         "size_bytes": 238
@@ -25116,7 +25116,7 @@
         "content_hash": "da21c84aae49af7041bcc0da68540bc35f8c1ac2cefc67791e067fd1af91cef5",
         "git_ref": "git-index-source-tree",
         "id": "file:.github/codeowners:3d36a1bf06",
-        "mime": "application/octet-stream",
+        "mime": "text/plain",
         "path": ".github/CODEOWNERS",
         "repo": "ATM10-Agent",
         "size_bytes": 392
@@ -25768,7 +25768,7 @@
         "state": "current"
       },
       "identity": {
-        "content_hash": "60aa6562d8a7a4a9511c858e8a09793016851dadb170fb7c8c3a316c6f34a5dc",
+        "content_hash": "11be4162b970be24c5b7a139eb174c3d443b8973b6762e0b4d7e6f6405c9cb6d",
         "git_ref": "git-index-source-tree",
         "id": "file:.github/workflows/repo-validation.yml:3affb923d0",
         "mime": "application/yaml",
@@ -25807,7 +25807,7 @@
       },
       "signs": {
         "attestation_ref": "",
-        "digest": "60aa6562d8a7a4a9511c858e8a09793016851dadb170fb7c8c3a316c6f34a5dc",
+        "digest": "11be4162b970be24c5b7a139eb174c3d443b8973b6762e0b4d7e6f6405c9cb6d",
         "signature_ref": "",
         "verification_state": "digest-only"
       },
@@ -25949,7 +25949,7 @@
         "content_hash": "be27c192f7a9bbd93f8c6775539b3ac9463d0d2783e328ce0f49926500ba39cf",
         "git_ref": "git-index-source-tree",
         "id": "file:.gitignore:bc37d034ba",
-        "mime": "application/octet-stream",
+        "mime": "text/plain",
         "path": ".gitignore",
         "repo": "ATM10-Agent",
         "size_bytes": 526
@@ -26791,7 +26791,7 @@
         "content_hash": "c3c3f3010b5fc82d741cb3a245d29bdca72d9afe8487384060d7bed8bddb0423",
         "git_ref": "git-index-source-tree",
         "id": "file:license:c693279643",
-        "mime": "application/octet-stream",
+        "mime": "text/plain",
         "path": "LICENSE",
         "repo": "ATM10-Agent",
         "size_bytes": 10240
@@ -34508,7 +34508,7 @@
         "content_hash": "7aa37a28cd6df050b3f180692ae8044e716a0bf34dd9e244dc2b545b6bdc05a6",
         "git_ref": "git-index-source-tree",
         "id": "file:pytest.ini:fb6a686182",
-        "mime": "application/octet-stream",
+        "mime": "text/plain",
         "path": "pytest.ini",
         "repo": "ATM10-Agent",
         "size_bytes": 79
@@ -41857,7 +41857,7 @@
         "content_hash": "deecf8b2334cabafa9009ac3353f0abd675ed773a16c37e314481f1c479d3db6",
         "git_ref": "git-index-source-tree",
         "id": "file:scripts/run_qwen3_openvino.ps1:1f67208506",
-        "mime": "application/octet-stream",
+        "mime": "text/plain",
         "path": "scripts/run_qwen3_openvino.ps1",
         "repo": "ATM10-Agent",
         "size_bytes": 2247
@@ -42130,7 +42130,7 @@
         "content_hash": "355f8bbbbf37b0a68f71a303600c0b90698e29a4600c161c6539edab2bb49e83",
         "git_ref": "git-index-source-tree",
         "id": "file:scripts/start_voice_whisper_npu.ps1:98ea4b9d8c",
-        "mime": "application/octet-stream",
+        "mime": "text/plain",
         "path": "scripts/start_voice_whisper_npu.ps1",
         "repo": "ATM10-Agent",
         "size_bytes": 1161
@@ -47146,7 +47146,7 @@
         "content_hash": "5d9f48888224c6e08da8637743451fc1528eb0e20072586bfb27242c1fa426e1",
         "git_ref": "git-index-source-tree",
         "id": "file:tests/fixtures/kag_neo4j_docs_sample.jsonl:66647f7752",
-        "mime": "application/octet-stream",
+        "mime": "application/x-ndjson",
         "path": "tests/fixtures/kag_neo4j_docs_sample.jsonl",
         "repo": "ATM10-Agent",
         "size_bytes": 2234
@@ -47233,7 +47233,7 @@
         "content_hash": "1beb7c51bd65e62b182f1f7f4b48a59ccf5d72cc929398249c0283cd496b72c4",
         "git_ref": "git-index-source-tree",
         "id": "file:tests/fixtures/kag_neo4j_eval_hard.jsonl:40b8aa4277",
-        "mime": "application/octet-stream",
+        "mime": "application/x-ndjson",
         "path": "tests/fixtures/kag_neo4j_eval_hard.jsonl",
         "repo": "ATM10-Agent",
         "size_bytes": 746
@@ -47320,7 +47320,7 @@
         "content_hash": "7b40015b6f90b4719733ddad78934601a135d452dd98dd90778bd85f07c9d53a",
         "git_ref": "git-index-source-tree",
         "id": "file:tests/fixtures/kag_neo4j_eval_sample.jsonl:50ed50c14a",
-        "mime": "application/octet-stream",
+        "mime": "application/x-ndjson",
         "path": "tests/fixtures/kag_neo4j_eval_sample.jsonl",
         "repo": "ATM10-Agent",
         "size_bytes": 635
@@ -47407,7 +47407,7 @@
         "content_hash": "ad951620a274dc65b7e4d6a516b3c4efa5e1a1aed89ca95e016567743bfa4a6a",
         "git_ref": "git-index-source-tree",
         "id": "file:tests/fixtures/rag_docs_sample.jsonl:69b6142332",
-        "mime": "application/octet-stream",
+        "mime": "application/x-ndjson",
         "path": "tests/fixtures/rag_docs_sample.jsonl",
         "repo": "ATM10-Agent",
         "size_bytes": 180
@@ -47494,7 +47494,7 @@
         "content_hash": "a2b705ead029302bfb48d2bdc7e66553e9737d84ba6d39e4f44b9ad10a26bd36",
         "git_ref": "git-index-source-tree",
         "id": "file:tests/fixtures/retrieval_docs_sample.jsonl:2086e9e640",
-        "mime": "application/octet-stream",
+        "mime": "application/x-ndjson",
         "path": "tests/fixtures/retrieval_docs_sample.jsonl",
         "repo": "ATM10-Agent",
         "size_bytes": 567
@@ -47581,7 +47581,7 @@
         "content_hash": "f1951b9fda3f4f4ea438f68e72e1786f0f73bdf3901126ef249c5686ee96b45e",
         "git_ref": "git-index-source-tree",
         "id": "file:tests/fixtures/retrieval_eval_sample.jsonl:c30915484b",
-        "mime": "application/octet-stream",
+        "mime": "application/x-ndjson",
         "path": "tests/fixtures/retrieval_eval_sample.jsonl",
         "repo": "ATM10-Agent",
         "size_bytes": 208
@@ -47668,7 +47668,7 @@
         "content_hash": "d269f1cd97e5a947366c288906ef69111db028688ea0bb4026ba323d6c986758",
         "git_ref": "git-index-source-tree",
         "id": "file:tests/fixtures/tts_benchmark_sample.jsonl:6559311732",
-        "mime": "application/octet-stream",
+        "mime": "application/x-ndjson",
         "path": "tests/fixtures/tts_benchmark_sample.jsonl",
         "repo": "ATM10-Agent",
         "size_bytes": 224
