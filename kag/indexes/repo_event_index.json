@@ -1,0 +1,1287 @@
+{
+  "entries": [
+    {
+      "event_kind": "command_run",
+      "event_role": "producer",
+      "heading_ref": null,
+      "id": "event:repo:71ff4112e820356d8d28",
+      "observation_state": "declared",
+      "path": ".agents/skills/aoa-dry-run-first/scripts/dry_run_contract.py",
+      "source_record_id": "file:.agents/skills/aoa-dry-run-first/scripts/dry_run_contract.py:e1480fe2d2"
+    },
+    {
+      "event_kind": "command_run",
+      "event_role": "producer",
+      "heading_ref": null,
+      "id": "event:repo:1a4264c1ae252a633db6",
+      "observation_state": "declared",
+      "path": ".agents/skills/aoa-dry-run-first/scripts/preview_gap_check.py",
+      "source_record_id": "file:.agents/skills/aoa-dry-run-first/scripts/preview_gap_check.py:0ea89b83a2"
+    },
+    {
+      "event_kind": "command_run",
+      "event_role": "producer",
+      "heading_ref": null,
+      "id": "event:repo:9c3f24ccdf0a6f5f355d",
+      "observation_state": "declared",
+      "path": ".agents/skills/aoa-local-stack-bringup/scripts/bringup_contract.py",
+      "source_record_id": "file:.agents/skills/aoa-local-stack-bringup/scripts/bringup_contract.py:65fb7d4d41"
+    },
+    {
+      "event_kind": "command_run",
+      "event_role": "producer",
+      "heading_ref": null,
+      "id": "event:repo:4b30131023bd20a06f1f",
+      "observation_state": "declared",
+      "path": ".agents/skills/aoa-local-stack-bringup/scripts/readiness_summary.py",
+      "source_record_id": "file:.agents/skills/aoa-local-stack-bringup/scripts/readiness_summary.py:b9778391e0"
+    },
+    {
+      "event_kind": "command_run",
+      "event_role": "producer",
+      "heading_ref": null,
+      "id": "event:repo:8f5d3ee31d26541adc0e",
+      "observation_state": "declared",
+      "path": ".agents/skills/aoa-safe-infra-change/scripts/infra_change_contract.py",
+      "source_record_id": "file:.agents/skills/aoa-safe-infra-change/scripts/infra_change_contract.py:f074327882"
+    },
+    {
+      "event_kind": "command_run",
+      "event_role": "producer",
+      "heading_ref": null,
+      "id": "event:repo:d675c5d6b1854fcf59ae",
+      "observation_state": "declared",
+      "path": ".agents/skills/aoa-safe-infra-change/scripts/risk_surface_scan.py",
+      "source_record_id": "file:.agents/skills/aoa-safe-infra-change/scripts/risk_surface_scan.py:4783038b81"
+    },
+    {
+      "event_kind": "workflow_run",
+      "event_role": "producer",
+      "heading_ref": null,
+      "id": "event:repo:64ba1361ea7a95afb8a9",
+      "observation_state": "declared",
+      "path": ".github/workflows/combo-a-profile-smoke.yml",
+      "source_record_id": "file:.github/workflows/combo-a-profile-smoke.yml:e5be210b39"
+    },
+    {
+      "event_kind": "workflow_run",
+      "event_role": "producer",
+      "heading_ref": null,
+      "id": "event:repo:30ad9c8d819e4f4f35df",
+      "observation_state": "declared",
+      "path": ".github/workflows/gateway-sla-readiness-nightly.yml",
+      "source_record_id": "file:.github/workflows/gateway-sla-readiness-nightly.yml:1f6a74db52"
+    },
+    {
+      "event_kind": "workflow_run",
+      "event_role": "producer",
+      "heading_ref": null,
+      "id": "event:repo:b99c1c3b4b0d0247d1fd",
+      "observation_state": "declared",
+      "path": ".github/workflows/kag-neo4j-guardrail-nightly.yml",
+      "source_record_id": "file:.github/workflows/kag-neo4j-guardrail-nightly.yml:3b7bdc7304"
+    },
+    {
+      "event_kind": "workflow_run",
+      "event_role": "producer",
+      "heading_ref": null,
+      "id": "event:repo:877a62d8b923ec090f51",
+      "observation_state": "declared",
+      "path": ".github/workflows/portable-core-linux.yml",
+      "source_record_id": "file:.github/workflows/portable-core-linux.yml:fc1dbed110"
+    },
+    {
+      "event_kind": "workflow_run",
+      "event_role": "producer",
+      "heading_ref": null,
+      "id": "event:repo:1b1d77b5605cd9742f40",
+      "observation_state": "declared",
+      "path": ".github/workflows/pytest.yml",
+      "source_record_id": "file:.github/workflows/pytest.yml:2500680f4b"
+    },
+    {
+      "event_kind": "workflow_run",
+      "event_role": "producer",
+      "heading_ref": null,
+      "id": "event:repo:6ca7a8a9b422ff4d1a30",
+      "observation_state": "declared",
+      "path": ".github/workflows/repo-validation.yml",
+      "source_record_id": "file:.github/workflows/repo-validation.yml:3affb923d0"
+    },
+    {
+      "event_kind": "workflow_run",
+      "event_role": "producer",
+      "heading_ref": null,
+      "id": "event:repo:d23f1d953c70ed200ac7",
+      "observation_state": "declared",
+      "path": ".github/workflows/security-nightly.yml",
+      "source_record_id": "file:.github/workflows/security-nightly.yml:354f66accb"
+    },
+    {
+      "event_kind": "release_lane",
+      "event_role": "declaration",
+      "heading_ref": {
+        "anchor": "unreleased",
+        "level": 2,
+        "line": 8,
+        "ref": "CHANGELOG.md#unreleased",
+        "title": "[Unreleased]"
+      },
+      "id": "event:repo:c73cd7cbd3ff8796460e",
+      "observation_state": "declared",
+      "path": "CHANGELOG.md",
+      "source_record_id": "file:changelog.md:06572a96a5"
+    },
+    {
+      "event_kind": "decision_record",
+      "event_role": "declaration",
+      "heading_ref": null,
+      "id": "event:repo:df0944ac803ef6eb5e2e",
+      "observation_state": "declared",
+      "path": "docs/decisions/ATM10-D-0001-public-decision-rationale-lane.md",
+      "source_record_id": "file:docs/decisions/atm10-d-0001-public-decision-rationale-lane.md:4e2ff9c7b1"
+    },
+    {
+      "event_kind": "decision_record",
+      "event_role": "declaration",
+      "heading_ref": null,
+      "id": "event:repo:dc42d9ff26499b9d7645",
+      "observation_state": "declared",
+      "path": "docs/decisions/TEMPLATE.md",
+      "source_record_id": "file:docs/decisions/template.md:874770b824"
+    },
+    {
+      "event_kind": "decision_record",
+      "event_role": "declaration",
+      "heading_ref": null,
+      "id": "event:repo:8c7ab6bf712d8b8bc87c",
+      "observation_state": "declared",
+      "path": "docs/decisions/indexes/by-companion-layer.md",
+      "source_record_id": "file:docs/decisions/indexes/by-companion-layer.md:636de8595a"
+    },
+    {
+      "event_kind": "decision_record",
+      "event_role": "declaration",
+      "heading_ref": null,
+      "id": "event:repo:f5bf50df50ef51120c3f",
+      "observation_state": "declared",
+      "path": "docs/decisions/indexes/by-date.md",
+      "source_record_id": "file:docs/decisions/indexes/by-date.md:7f76a83a93"
+    },
+    {
+      "event_kind": "decision_record",
+      "event_role": "declaration",
+      "heading_ref": null,
+      "id": "event:repo:83396194f24940db9f1e",
+      "observation_state": "declared",
+      "path": "docs/decisions/indexes/by-guard.md",
+      "source_record_id": "file:docs/decisions/indexes/by-guard.md:8ae406686a"
+    },
+    {
+      "event_kind": "decision_record",
+      "event_role": "declaration",
+      "heading_ref": null,
+      "id": "event:repo:35ace2c0edd18f0faf14",
+      "observation_state": "declared",
+      "path": "docs/decisions/indexes/by-number.md",
+      "source_record_id": "file:docs/decisions/indexes/by-number.md:02e6940a39"
+    },
+    {
+      "event_kind": "decision_record",
+      "event_role": "declaration",
+      "heading_ref": null,
+      "id": "event:repo:410d1f85b64d6a27f1cc",
+      "observation_state": "declared",
+      "path": "docs/decisions/indexes/by-operator-surface.md",
+      "source_record_id": "file:docs/decisions/indexes/by-operator-surface.md:c9a51a16c1"
+    },
+    {
+      "event_kind": "decision_record",
+      "event_role": "declaration",
+      "heading_ref": null,
+      "id": "event:repo:f85c16fe70ceef3bea0d",
+      "observation_state": "declared",
+      "path": "docs/decisions/indexes/by-surface.md",
+      "source_record_id": "file:docs/decisions/indexes/by-surface.md:acd156903f"
+    },
+    {
+      "event_kind": "validation_receipt",
+      "event_role": "receipt",
+      "heading_ref": null,
+      "id": "event:repo:49202b0770ce7f7985eb",
+      "observation_state": "observed",
+      "path": "kag/receipts/validation_receipt.json",
+      "source_record_id": "file:kag/receipts/validation_receipt.json:8e616be0cd"
+    },
+    {
+      "event_kind": "generation_run",
+      "event_role": "producer",
+      "heading_ref": null,
+      "id": "event:repo:24b9d981e05eee76d3fe",
+      "observation_state": "declared",
+      "path": "scripts/build_runbook_link.py",
+      "source_record_id": "file:scripts/build_runbook_link.py:d8838f0a47"
+    },
+    {
+      "event_kind": "generation_run",
+      "event_role": "producer",
+      "heading_ref": null,
+      "id": "event:repo:67b5dd929c5b9cc8da5f",
+      "observation_state": "declared",
+      "path": "scripts/generate_decision_indexes.py",
+      "source_record_id": "file:scripts/generate_decision_indexes.py:9ee2698c6e"
+    },
+    {
+      "event_kind": "command_run",
+      "event_role": "producer",
+      "heading_ref": null,
+      "id": "event:repo:27723a257d70d1a93c97",
+      "observation_state": "declared",
+      "path": "scripts/run_combo_a_operating_cycle.py",
+      "source_record_id": "file:scripts/run_combo_a_operating_cycle.py:d308ce8c40"
+    },
+    {
+      "event_kind": "command_run",
+      "event_role": "producer",
+      "heading_ref": null,
+      "id": "event:repo:f808500f3d8b94f68bdd",
+      "observation_state": "declared",
+      "path": "scripts/run_gateway_sla_manual_nightly.py",
+      "source_record_id": "file:scripts/run_gateway_sla_manual_nightly.py:8f3b41250f"
+    },
+    {
+      "event_kind": "command_run",
+      "event_role": "producer",
+      "heading_ref": null,
+      "id": "event:repo:30d3cb1d2711f336a271",
+      "observation_state": "declared",
+      "path": "scripts/run_gateway_sla_operating_cycle.py",
+      "source_record_id": "file:scripts/run_gateway_sla_operating_cycle.py:617e6f90f1"
+    },
+    {
+      "event_kind": "command_run",
+      "event_role": "producer",
+      "heading_ref": null,
+      "id": "event:repo:8a15b57f178e42e87f81",
+      "observation_state": "declared",
+      "path": "scripts/run_qwen3_openvino.ps1",
+      "source_record_id": "file:scripts/run_qwen3_openvino.ps1:1f67208506"
+    },
+    {
+      "event_kind": "command_run",
+      "event_role": "producer",
+      "heading_ref": null,
+      "id": "event:repo:98879fceae8cb36296a8",
+      "observation_state": "declared",
+      "path": "scripts/start_operator_fedora_dev.py",
+      "source_record_id": "file:scripts/start_operator_fedora_dev.py:b9afbba646"
+    },
+    {
+      "event_kind": "command_run",
+      "event_role": "producer",
+      "heading_ref": null,
+      "id": "event:repo:ff8a5114cb03b83a1056",
+      "observation_state": "declared",
+      "path": "scripts/start_operator_product.py",
+      "source_record_id": "file:scripts/start_operator_product.py:371fc64e7e"
+    },
+    {
+      "event_kind": "command_run",
+      "event_role": "producer",
+      "heading_ref": null,
+      "id": "event:repo:0f94ddce630f93eb20ce",
+      "observation_state": "declared",
+      "path": "scripts/start_voice_whisper_npu.ps1",
+      "source_record_id": "file:scripts/start_voice_whisper_npu.ps1:98ea4b9d8c"
+    },
+    {
+      "event_kind": "validation_run",
+      "event_role": "producer",
+      "heading_ref": null,
+      "id": "event:repo:403f4c0609b87d74ef17",
+      "observation_state": "declared",
+      "path": "scripts/validate_decision_records.py",
+      "source_record_id": "file:scripts/validate_decision_records.py:20e04d231d"
+    },
+    {
+      "event_kind": "validation_run",
+      "event_role": "producer",
+      "heading_ref": null,
+      "id": "event:repo:3caa771f7ddf0eab6694",
+      "observation_state": "declared",
+      "path": "scripts/validate_nested_agents.py",
+      "source_record_id": "file:scripts/validate_nested_agents.py:5befe5bd63"
+    },
+    {
+      "event_kind": "test_run",
+      "event_role": "producer",
+      "heading_ref": null,
+      "id": "event:repo:4abf4168c04d57f575a9",
+      "observation_state": "declared",
+      "path": "tests/test_antifragility_public_surface.py",
+      "source_record_id": "file:tests/test_antifragility_public_surface.py:5c53b98670"
+    },
+    {
+      "event_kind": "test_run",
+      "event_role": "producer",
+      "heading_ref": null,
+      "id": "event:repo:f2250c471af84473c322",
+      "observation_state": "declared",
+      "path": "tests/test_aoa_skill_contract_scripts.py",
+      "source_record_id": "file:tests/test_aoa_skill_contract_scripts.py:e731954650"
+    },
+    {
+      "event_kind": "test_run",
+      "event_role": "producer",
+      "heading_ref": null,
+      "id": "event:repo:59955dcbef03da5a183a",
+      "observation_state": "declared",
+      "path": "tests/test_asr_demo.py",
+      "source_record_id": "file:tests/test_asr_demo.py:a8b05988d1"
+    },
+    {
+      "event_kind": "test_run",
+      "event_role": "producer",
+      "heading_ref": null,
+      "id": "event:repo:d6a5bbd36f59cd35b7fd",
+      "observation_state": "declared",
+      "path": "tests/test_asr_demo_whisper_genai.py",
+      "source_record_id": "file:tests/test_asr_demo_whisper_genai.py:56ae651a60"
+    },
+    {
+      "event_kind": "test_run",
+      "event_role": "producer",
+      "heading_ref": null,
+      "id": "event:repo:89ea089aa54133a396b3",
+      "observation_state": "declared",
+      "path": "tests/test_atm10_session_probe_adapters.py",
+      "source_record_id": "file:tests/test_atm10_session_probe_adapters.py:faa8a4f997"
+    },
+    {
+      "event_kind": "test_run",
+      "event_role": "producer",
+      "heading_ref": null,
+      "id": "event:repo:c5ceb612673fc996e9fd",
+      "observation_state": "declared",
+      "path": "tests/test_automation_dry_run.py",
+      "source_record_id": "file:tests/test_automation_dry_run.py:727c64381c"
+    },
+    {
+      "event_kind": "test_run",
+      "event_role": "producer",
+      "heading_ref": null,
+      "id": "event:repo:437b8a112f28d2eb0ba9",
+      "observation_state": "declared",
+      "path": "tests/test_automation_intent_chain_smoke.py",
+      "source_record_id": "file:tests/test_automation_intent_chain_smoke.py:cf18013154"
+    },
+    {
+      "event_kind": "test_run",
+      "event_role": "producer",
+      "heading_ref": null,
+      "id": "event:repo:d93821cc95dd6d5fbb0c",
+      "observation_state": "declared",
+      "path": "tests/test_benchmark_asr_backends.py",
+      "source_record_id": "file:tests/test_benchmark_asr_backends.py:63c33b4845"
+    },
+    {
+      "event_kind": "test_run",
+      "event_role": "producer",
+      "heading_ref": null,
+      "id": "event:repo:11d8adeeeff20f90c3b2",
+      "observation_state": "declared",
+      "path": "tests/test_benchmark_pilot_openvino_devices.py",
+      "source_record_id": "file:tests/test_benchmark_pilot_openvino_devices.py:362eec463c"
+    },
+    {
+      "event_kind": "test_run",
+      "event_role": "producer",
+      "heading_ref": null,
+      "id": "event:repo:442d94952b0b6db1697e",
+      "observation_state": "declared",
+      "path": "tests/test_benchmark_tts_runtime.py",
+      "source_record_id": "file:tests/test_benchmark_tts_runtime.py:fa6fea41f5"
+    },
+    {
+      "event_kind": "test_run",
+      "event_role": "producer",
+      "heading_ref": null,
+      "id": "event:repo:2a6f74b097cdf5518370",
+      "observation_state": "declared",
+      "path": "tests/test_build_runbook_link.py",
+      "source_record_id": "file:tests/test_build_runbook_link.py:a9854f411e"
+    },
+    {
+      "event_kind": "test_run",
+      "event_role": "producer",
+      "heading_ref": null,
+      "id": "event:repo:ce0dfd9a30dbd364d995",
+      "observation_state": "declared",
+      "path": "tests/test_check_automation_smoke_contract.py",
+      "source_record_id": "file:tests/test_check_automation_smoke_contract.py:646ac8c710"
+    },
+    {
+      "event_kind": "test_run",
+      "event_role": "producer",
+      "heading_ref": null,
+      "id": "event:repo:3be0e1d74ac9ce86ac74",
+      "observation_state": "declared",
+      "path": "tests/test_check_gateway_sla.py",
+      "source_record_id": "file:tests/test_check_gateway_sla.py:5b48b092f9"
+    },
+    {
+      "event_kind": "test_run",
+      "event_role": "producer",
+      "heading_ref": null,
+      "id": "event:repo:2f5ee66e6148c284a899",
+      "observation_state": "declared",
+      "path": "tests/test_check_gateway_sla_fail_nightly_governance.py",
+      "source_record_id": "file:tests/test_check_gateway_sla_fail_nightly_governance.py:8d8093d1c6"
+    },
+    {
+      "event_kind": "test_run",
+      "event_role": "producer",
+      "heading_ref": null,
+      "id": "event:repo:148e83b52610cd7abea5",
+      "observation_state": "declared",
+      "path": "tests/test_check_gateway_sla_fail_nightly_integrity.py",
+      "source_record_id": "file:tests/test_check_gateway_sla_fail_nightly_integrity.py:ae96eee73d"
+    },
+    {
+      "event_kind": "test_run",
+      "event_role": "producer",
+      "heading_ref": null,
+      "id": "event:repo:4c5a3522473bbd602d9b",
+      "observation_state": "declared",
+      "path": "tests/test_check_gateway_sla_fail_nightly_progress.py",
+      "source_record_id": "file:tests/test_check_gateway_sla_fail_nightly_progress.py:6fe67d13fd"
+    },
+    {
+      "event_kind": "test_run",
+      "event_role": "producer",
+      "heading_ref": null,
+      "id": "event:repo:a7e69d0ab18c0fcf540b",
+      "observation_state": "declared",
+      "path": "tests/test_check_gateway_sla_fail_nightly_readiness.py",
+      "source_record_id": "file:tests/test_check_gateway_sla_fail_nightly_readiness.py:cd7f6f2d60"
+    },
+    {
+      "event_kind": "test_run",
+      "event_role": "producer",
+      "heading_ref": null,
+      "id": "event:repo:fc7816e931dcce63eaf8",
+      "observation_state": "declared",
+      "path": "tests/test_check_gateway_sla_fail_nightly_remediation.py",
+      "source_record_id": "file:tests/test_check_gateway_sla_fail_nightly_remediation.py:c8d63ef335"
+    },
+    {
+      "event_kind": "test_run",
+      "event_role": "producer",
+      "heading_ref": null,
+      "id": "event:repo:63bf577d35da8e460b13",
+      "observation_state": "declared",
+      "path": "tests/test_check_gateway_sla_fail_nightly_transition.py",
+      "source_record_id": "file:tests/test_check_gateway_sla_fail_nightly_transition.py:3a410fa62a"
+    },
+    {
+      "event_kind": "test_run",
+      "event_role": "producer",
+      "heading_ref": null,
+      "id": "event:repo:c85295366c638edb0d5d",
+      "observation_state": "declared",
+      "path": "tests/test_check_gateway_sla_manual_cadence_brief.py",
+      "source_record_id": "file:tests/test_check_gateway_sla_manual_cadence_brief.py:adeac82ef4"
+    },
+    {
+      "event_kind": "test_run",
+      "event_role": "producer",
+      "heading_ref": null,
+      "id": "event:repo:87db36fba56e0d73d64e",
+      "observation_state": "declared",
+      "path": "tests/test_check_gateway_sla_manual_cycle_summary.py",
+      "source_record_id": "file:tests/test_check_gateway_sla_manual_cycle_summary.py:817d165cb8"
+    },
+    {
+      "event_kind": "test_run",
+      "event_role": "producer",
+      "heading_ref": null,
+      "id": "event:repo:fad65ce50239594c3608",
+      "observation_state": "declared",
+      "path": "tests/test_check_gateway_sla_manual_preflight.py",
+      "source_record_id": "file:tests/test_check_gateway_sla_manual_preflight.py:a644de2198"
+    },
+    {
+      "event_kind": "test_run",
+      "event_role": "producer",
+      "heading_ref": null,
+      "id": "event:repo:8685d93dfdbed97b324c",
+      "observation_state": "declared",
+      "path": "tests/test_check_kag_neo4j_guardrail.py",
+      "source_record_id": "file:tests/test_check_kag_neo4j_guardrail.py:d2a2871637"
+    },
+    {
+      "event_kind": "test_run",
+      "event_role": "producer",
+      "heading_ref": null,
+      "id": "event:repo:4a650e859907e32a0217",
+      "observation_state": "declared",
+      "path": "tests/test_check_pilot_live_preflight.py",
+      "source_record_id": "file:tests/test_check_pilot_live_preflight.py:96eba8c090"
+    },
+    {
+      "event_kind": "test_run",
+      "event_role": "producer",
+      "heading_ref": null,
+      "id": "event:repo:74dedf4ec24af38d2cb8",
+      "observation_state": "declared",
+      "path": "tests/test_check_pilot_runtime_readiness.py",
+      "source_record_id": "file:tests/test_check_pilot_runtime_readiness.py:58dd4eae99"
+    },
+    {
+      "event_kind": "test_run",
+      "event_role": "producer",
+      "heading_ref": null,
+      "id": "event:repo:07955d3d51aa21c53925",
+      "observation_state": "declared",
+      "path": "tests/test_collect_smoke_run_summary.py",
+      "source_record_id": "file:tests/test_collect_smoke_run_summary.py:0e7ab37156"
+    },
+    {
+      "event_kind": "test_run",
+      "event_role": "producer",
+      "heading_ref": null,
+      "id": "event:repo:e7e253d6e504a00ffce5",
+      "observation_state": "declared",
+      "path": "tests/test_combo_a_profile.py",
+      "source_record_id": "file:tests/test_combo_a_profile.py:69343c2b94"
+    },
+    {
+      "event_kind": "test_run",
+      "event_role": "producer",
+      "heading_ref": null,
+      "id": "event:repo:e63a4042735f2c8e3293",
+      "observation_state": "declared",
+      "path": "tests/test_compare_kag_neo4j_warmup.py",
+      "source_record_id": "file:tests/test_compare_kag_neo4j_warmup.py:403f5934b1"
+    },
+    {
+      "event_kind": "test_run",
+      "event_role": "producer",
+      "heading_ref": null,
+      "id": "event:repo:f87cdb8703435666b9b4",
+      "observation_state": "declared",
+      "path": "tests/test_cross_service_benchmark_suite.py",
+      "source_record_id": "file:tests/test_cross_service_benchmark_suite.py:a0e10ed980"
+    },
+    {
+      "event_kind": "test_run",
+      "event_role": "producer",
+      "heading_ref": null,
+      "id": "event:repo:27f1b8fd1843e8e3eea0",
+      "observation_state": "declared",
+      "path": "tests/test_decision_indexes.py",
+      "source_record_id": "file:tests/test_decision_indexes.py:b90af86566"
+    },
+    {
+      "event_kind": "test_run",
+      "event_role": "producer",
+      "heading_ref": null,
+      "id": "event:repo:fe9742e1d2cf19a6a3e1",
+      "observation_state": "declared",
+      "path": "tests/test_dependency_audit.py",
+      "source_record_id": "file:tests/test_dependency_audit.py:f5e63f8ed1"
+    },
+    {
+      "event_kind": "test_run",
+      "event_role": "producer",
+      "heading_ref": null,
+      "id": "event:repo:386b8cfbcef39d438125",
+      "observation_state": "declared",
+      "path": "tests/test_discover_instance.py",
+      "source_record_id": "file:tests/test_discover_instance.py:9e8f48fce8"
+    },
+    {
+      "event_kind": "test_run",
+      "event_role": "producer",
+      "heading_ref": null,
+      "id": "event:repo:3998796bbd0630fc7bdf",
+      "observation_state": "declared",
+      "path": "tests/test_eval_kag_file.py",
+      "source_record_id": "file:tests/test_eval_kag_file.py:edfa15beaa"
+    },
+    {
+      "event_kind": "test_run",
+      "event_role": "producer",
+      "heading_ref": null,
+      "id": "event:repo:db39417d2c29017828de",
+      "observation_state": "declared",
+      "path": "tests/test_eval_kag_neo4j.py",
+      "source_record_id": "file:tests/test_eval_kag_neo4j.py:63c7156cfa"
+    },
+    {
+      "event_kind": "test_run",
+      "event_role": "producer",
+      "heading_ref": null,
+      "id": "event:repo:1b02014a9a03d10d608c",
+      "observation_state": "declared",
+      "path": "tests/test_eval_retrieval.py",
+      "source_record_id": "file:tests/test_eval_retrieval.py:2bd0b272a9"
+    },
+    {
+      "event_kind": "test_run",
+      "event_role": "producer",
+      "heading_ref": null,
+      "id": "event:repo:58c5264b859919f1890f",
+      "observation_state": "declared",
+      "path": "tests/test_export_qwen3_custom_openvino.py",
+      "source_record_id": "file:tests/test_export_qwen3_custom_openvino.py:a108c2a660"
+    },
+    {
+      "event_kind": "test_run",
+      "event_role": "producer",
+      "heading_ref": null,
+      "id": "event:repo:c5fc0ac38281efa75aa9",
+      "observation_state": "declared",
+      "path": "tests/test_export_qwen3_openvino.py",
+      "source_record_id": "file:tests/test_export_qwen3_openvino.py:402c025701"
+    },
+    {
+      "event_kind": "test_run",
+      "event_role": "producer",
+      "heading_ref": null,
+      "id": "event:repo:38cf965b836912e11b40",
+      "observation_state": "declared",
+      "path": "tests/test_export_qwen3_tts_openvino.py",
+      "source_record_id": "file:tests/test_export_qwen3_tts_openvino.py:e6151ae055"
+    },
+    {
+      "event_kind": "test_run",
+      "event_role": "producer",
+      "heading_ref": null,
+      "id": "event:repo:92b3d4c4256c4a51cb29",
+      "observation_state": "declared",
+      "path": "tests/test_fedora_companion_milestone.py",
+      "source_record_id": "file:tests/test_fedora_companion_milestone.py:b30ab33d88"
+    },
+    {
+      "event_kind": "test_run",
+      "event_role": "producer",
+      "heading_ref": null,
+      "id": "event:repo:2f56074c115aa86488d5",
+      "observation_state": "declared",
+      "path": "tests/test_ftbquests_ingest.py",
+      "source_record_id": "file:tests/test_ftbquests_ingest.py:b6ecd838b4"
+    },
+    {
+      "event_kind": "test_run",
+      "event_role": "producer",
+      "heading_ref": null,
+      "id": "event:repo:823f0ba9aa2130cbe404",
+      "observation_state": "declared",
+      "path": "tests/test_gateway_artifact_policy.py",
+      "source_record_id": "file:tests/test_gateway_artifact_policy.py:fa4c07332e"
+    },
+    {
+      "event_kind": "test_run",
+      "event_role": "producer",
+      "heading_ref": null,
+      "id": "event:repo:ad5e8bba12dca556173c",
+      "observation_state": "declared",
+      "path": "tests/test_gateway_sla_readiness_nightly_workflow.py",
+      "source_record_id": "file:tests/test_gateway_sla_readiness_nightly_workflow.py:038b0d6f2b"
+    },
+    {
+      "event_kind": "test_run",
+      "event_role": "producer",
+      "heading_ref": null,
+      "id": "event:repo:c8c1f17c2937c2644a98",
+      "observation_state": "declared",
+      "path": "tests/test_gateway_sla_trend_snapshot.py",
+      "source_record_id": "file:tests/test_gateway_sla_trend_snapshot.py:fc44e60172"
+    },
+    {
+      "event_kind": "test_run",
+      "event_role": "producer",
+      "heading_ref": null,
+      "id": "event:repo:3d17cb864d12e67a896e",
+      "observation_state": "declared",
+      "path": "tests/test_gateway_v1_contract_parity_matrix.py",
+      "source_record_id": "file:tests/test_gateway_v1_contract_parity_matrix.py:052fc79de2"
+    },
+    {
+      "event_kind": "test_run",
+      "event_role": "producer",
+      "heading_ref": null,
+      "id": "event:repo:63e616eec72585d65b99",
+      "observation_state": "declared",
+      "path": "tests/test_gateway_v1_http_service.py",
+      "source_record_id": "file:tests/test_gateway_v1_http_service.py:70c0d0e322"
+    },
+    {
+      "event_kind": "test_run",
+      "event_role": "producer",
+      "heading_ref": null,
+      "id": "event:repo:0102002ab45f769eda7f",
+      "observation_state": "declared",
+      "path": "tests/test_gateway_v1_http_smoke.py",
+      "source_record_id": "file:tests/test_gateway_v1_http_smoke.py:eed734b745"
+    },
+    {
+      "event_kind": "test_run",
+      "event_role": "producer",
+      "heading_ref": null,
+      "id": "event:repo:483a9a22bffb0d7161c4",
+      "observation_state": "declared",
+      "path": "tests/test_gateway_v1_local.py",
+      "source_record_id": "file:tests/test_gateway_v1_local.py:8deefbebe7"
+    },
+    {
+      "event_kind": "test_run",
+      "event_role": "producer",
+      "heading_ref": null,
+      "id": "event:repo:d1efef5ae83a1fe71cb1",
+      "observation_state": "declared",
+      "path": "tests/test_gateway_v1_smoke.py",
+      "source_record_id": "file:tests/test_gateway_v1_smoke.py:19e7786c02"
+    },
+    {
+      "event_kind": "test_run",
+      "event_role": "producer",
+      "heading_ref": null,
+      "id": "event:repo:a555da0d4d2f85f93d68",
+      "observation_state": "declared",
+      "path": "tests/test_github_actions_runtime_pins.py",
+      "source_record_id": "file:tests/test_github_actions_runtime_pins.py:c4e41ba854"
+    },
+    {
+      "event_kind": "test_run",
+      "event_role": "producer",
+      "heading_ref": null,
+      "id": "event:repo:c1629fcc176a57203c61",
+      "observation_state": "declared",
+      "path": "tests/test_grounded_reply_openvino.py",
+      "source_record_id": "file:tests/test_grounded_reply_openvino.py:9c383c8eb4"
+    },
+    {
+      "event_kind": "test_run",
+      "event_role": "producer",
+      "heading_ref": null,
+      "id": "event:repo:5f377342b87ae170af38",
+      "observation_state": "declared",
+      "path": "tests/test_host_profiles.py",
+      "source_record_id": "file:tests/test_host_profiles.py:8c66cff152"
+    },
+    {
+      "event_kind": "test_run",
+      "event_role": "producer",
+      "heading_ref": null,
+      "id": "event:repo:7e789fc76c112dcd542f",
+      "observation_state": "declared",
+      "path": "tests/test_hud_mod_hook_baseline.py",
+      "source_record_id": "file:tests/test_hud_mod_hook_baseline.py:021687d7f4"
+    },
+    {
+      "event_kind": "test_run",
+      "event_role": "producer",
+      "heading_ref": null,
+      "id": "event:repo:94407a31be471ba73920",
+      "observation_state": "declared",
+      "path": "tests/test_hud_ocr_baseline.py",
+      "source_record_id": "file:tests/test_hud_ocr_baseline.py:ef46686b3e"
+    },
+    {
+      "event_kind": "test_run",
+      "event_role": "producer",
+      "heading_ref": null,
+      "id": "event:repo:53f5dfe1c03002a310dd",
+      "observation_state": "declared",
+      "path": "tests/test_hybrid_query_demo.py",
+      "source_record_id": "file:tests/test_hybrid_query_demo.py:66bc4c7858"
+    },
+    {
+      "event_kind": "test_run",
+      "event_role": "producer",
+      "heading_ref": null,
+      "id": "event:repo:0a31477a8936791e94d2",
+      "observation_state": "declared",
+      "path": "tests/test_ingest_qdrant_script.py",
+      "source_record_id": "file:tests/test_ingest_qdrant_script.py:0f12f9fa54"
+    },
+    {
+      "event_kind": "test_run",
+      "event_role": "producer",
+      "heading_ref": null,
+      "id": "event:repo:d7f451996ce818e0ce77",
+      "observation_state": "declared",
+      "path": "tests/test_intent_to_automation_plan.py",
+      "source_record_id": "file:tests/test_intent_to_automation_plan.py:5e8246fb24"
+    },
+    {
+      "event_kind": "test_run",
+      "event_role": "producer",
+      "heading_ref": null,
+      "id": "event:repo:3083740ffd11dd3a8800",
+      "observation_state": "declared",
+      "path": "tests/test_kag_build_baseline.py",
+      "source_record_id": "file:tests/test_kag_build_baseline.py:450f521510"
+    },
+    {
+      "event_kind": "test_run",
+      "event_role": "producer",
+      "heading_ref": null,
+      "id": "event:repo:cfa3b6c54f91403f6b17",
+      "observation_state": "declared",
+      "path": "tests/test_kag_guardrail_trend_snapshot.py",
+      "source_record_id": "file:tests/test_kag_guardrail_trend_snapshot.py:991932391d"
+    },
+    {
+      "event_kind": "test_run",
+      "event_role": "producer",
+      "heading_ref": null,
+      "id": "event:repo:1b339b7532a3335c9b8d",
+      "observation_state": "declared",
+      "path": "tests/test_kag_neo4j_backend.py",
+      "source_record_id": "file:tests/test_kag_neo4j_backend.py:76e6f62a6b"
+    },
+    {
+      "event_kind": "test_run",
+      "event_role": "producer",
+      "heading_ref": null,
+      "id": "event:repo:5421cee85b403d7c9c76",
+      "observation_state": "declared",
+      "path": "tests/test_kag_query_demo.py",
+      "source_record_id": "file:tests/test_kag_query_demo.py:c2a2f43037"
+    },
+    {
+      "event_kind": "test_run",
+      "event_role": "producer",
+      "heading_ref": null,
+      "id": "event:repo:5dec160b8f07f0521c62",
+      "observation_state": "declared",
+      "path": "tests/test_kag_query_neo4j.py",
+      "source_record_id": "file:tests/test_kag_query_neo4j.py:bff76a9867"
+    },
+    {
+      "event_kind": "test_run",
+      "event_role": "producer",
+      "heading_ref": null,
+      "id": "event:repo:86414bd6a5c9411669f9",
+      "observation_state": "declared",
+      "path": "tests/test_kag_sync_neo4j.py",
+      "source_record_id": "file:tests/test_kag_sync_neo4j.py:e5ac95e073"
+    },
+    {
+      "event_kind": "test_run",
+      "event_role": "producer",
+      "heading_ref": null,
+      "id": "event:repo:ad4465a997285d70485e",
+      "observation_state": "declared",
+      "path": "tests/test_live_hud_state.py",
+      "source_record_id": "file:tests/test_live_hud_state.py:62a0d07a23"
+    },
+    {
+      "event_kind": "test_run",
+      "event_role": "producer",
+      "heading_ref": null,
+      "id": "event:repo:87839de5c44c2cb2e5f9",
+      "observation_state": "declared",
+      "path": "tests/test_nested_agents_docs.py",
+      "source_record_id": "file:tests/test_nested_agents_docs.py:d990104fd4"
+    },
+    {
+      "event_kind": "test_run",
+      "event_role": "producer",
+      "heading_ref": null,
+      "id": "event:repo:9fea3392fb0b1901a8b8",
+      "observation_state": "declared",
+      "path": "tests/test_normalize_ftbquests_script.py",
+      "source_record_id": "file:tests/test_normalize_ftbquests_script.py:47bb11ad48"
+    },
+    {
+      "event_kind": "test_run",
+      "event_role": "producer",
+      "heading_ref": null,
+      "id": "event:repo:419a0df93750ca9ba25c",
+      "observation_state": "declared",
+      "path": "tests/test_openvino_diag.py",
+      "source_record_id": "file:tests/test_openvino_diag.py:2aad301c81"
+    },
+    {
+      "event_kind": "test_run",
+      "event_role": "producer",
+      "heading_ref": null,
+      "id": "event:repo:f3f7f0f164fe237dfb2a",
+      "observation_state": "declared",
+      "path": "tests/test_operator_product_safe_actions.py",
+      "source_record_id": "file:tests/test_operator_product_safe_actions.py:9a1c6b40ed"
+    },
+    {
+      "event_kind": "test_run",
+      "event_role": "producer",
+      "heading_ref": null,
+      "id": "event:repo:043863fd95e72735d25e",
+      "observation_state": "declared",
+      "path": "tests/test_operator_product_snapshot.py",
+      "source_record_id": "file:tests/test_operator_product_snapshot.py:cb6e74943f"
+    },
+    {
+      "event_kind": "test_run",
+      "event_role": "producer",
+      "heading_ref": null,
+      "id": "event:repo:dc14dc7fd8c1fbea857f",
+      "observation_state": "declared",
+      "path": "tests/test_operator_return_recovery.py",
+      "source_record_id": "file:tests/test_operator_return_recovery.py:d5e87c3626"
+    },
+    {
+      "event_kind": "test_run",
+      "event_role": "producer",
+      "heading_ref": null,
+      "id": "event:repo:05622d3de7772d43200b",
+      "observation_state": "declared",
+      "path": "tests/test_phase_a_smoke.py",
+      "source_record_id": "file:tests/test_phase_a_smoke.py:520dee1a23"
+    },
+    {
+      "event_kind": "test_run",
+      "event_role": "producer",
+      "heading_ref": null,
+      "id": "event:repo:c7b674162a7193e83661",
+      "observation_state": "declared",
+      "path": "tests/test_pilot_runtime_loop.py",
+      "source_record_id": "file:tests/test_pilot_runtime_loop.py:190dab8a3c"
+    },
+    {
+      "event_kind": "test_run",
+      "event_role": "producer",
+      "heading_ref": null,
+      "id": "event:repo:a8deec3f7f89e24fad2c",
+      "observation_state": "declared",
+      "path": "tests/test_portable_core_linux_workflow.py",
+      "source_record_id": "file:tests/test_portable_core_linux_workflow.py:d80c6bdfb4"
+    },
+    {
+      "event_kind": "test_run",
+      "event_role": "producer",
+      "heading_ref": null,
+      "id": "event:repo:a483d65ae83658f75483",
+      "observation_state": "declared",
+      "path": "tests/test_probe_qwen3_voice_support.py",
+      "source_record_id": "file:tests/test_probe_qwen3_voice_support.py:c6a68bd7d6"
+    },
+    {
+      "event_kind": "test_run",
+      "event_role": "producer",
+      "heading_ref": null,
+      "id": "event:repo:cbbbc7da093035ecd7f4",
+      "observation_state": "declared",
+      "path": "tests/test_public_repo_hardening.py",
+      "source_record_id": "file:tests/test_public_repo_hardening.py:5931947310"
+    },
+    {
+      "event_kind": "test_run",
+      "event_role": "producer",
+      "heading_ref": null,
+      "id": "event:repo:b99e33a814e79f2e485e",
+      "observation_state": "declared",
+      "path": "tests/test_qdrant_integration.py",
+      "source_record_id": "file:tests/test_qdrant_integration.py:d9b5b6d3b3"
+    },
+    {
+      "event_kind": "test_run",
+      "event_role": "producer",
+      "heading_ref": null,
+      "id": "event:repo:6e4ad7f1763761caeed7",
+      "observation_state": "declared",
+      "path": "tests/test_qwen3_voice_probe_matrix.py",
+      "source_record_id": "file:tests/test_qwen3_voice_probe_matrix.py:bfdd053e0b"
+    },
+    {
+      "event_kind": "test_run",
+      "event_role": "producer",
+      "heading_ref": null,
+      "id": "event:repo:0ebec3095db30ff83554",
+      "observation_state": "declared",
+      "path": "tests/test_rag_doc_contract.py",
+      "source_record_id": "file:tests/test_rag_doc_contract.py:8f30b53a4c"
+    },
+    {
+      "event_kind": "test_run",
+      "event_role": "producer",
+      "heading_ref": null,
+      "id": "event:repo:1920df6beb4502212adf",
+      "observation_state": "declared",
+      "path": "tests/test_readiness_scopes.py",
+      "source_record_id": "file:tests/test_readiness_scopes.py:3a50c100cd"
+    },
+    {
+      "event_kind": "test_run",
+      "event_role": "producer",
+      "heading_ref": null,
+      "id": "event:repo:dd89664cfc07621018bc",
+      "observation_state": "declared",
+      "path": "tests/test_requirements_profiles.py",
+      "source_record_id": "file:tests/test_requirements_profiles.py:0a2d821afa"
+    },
+    {
+      "event_kind": "test_run",
+      "event_role": "producer",
+      "heading_ref": null,
+      "id": "event:repo:68cb410430c98e24a747",
+      "observation_state": "declared",
+      "path": "tests/test_retrieval_demo.py",
+      "source_record_id": "file:tests/test_retrieval_demo.py:878fc7efce"
+    },
+    {
+      "event_kind": "test_run",
+      "event_role": "producer",
+      "heading_ref": null,
+      "id": "event:repo:3c3bede3f071e11da10f",
+      "observation_state": "declared",
+      "path": "tests/test_retrieval_profiles.py",
+      "source_record_id": "file:tests/test_retrieval_profiles.py:ed98a0819e"
+    },
+    {
+      "event_kind": "test_run",
+      "event_role": "producer",
+      "heading_ref": null,
+      "id": "event:repo:635ff13cb1098ccb93fc",
+      "observation_state": "declared",
+      "path": "tests/test_retrieve_demo_script.py",
+      "source_record_id": "file:tests/test_retrieve_demo_script.py:dc5be96846"
+    },
+    {
+      "event_kind": "test_run",
+      "event_role": "producer",
+      "heading_ref": null,
+      "id": "event:repo:bf33cd0a8d83a93992a8",
+      "observation_state": "declared",
+      "path": "tests/test_run_combo_a_operating_cycle.py",
+      "source_record_id": "file:tests/test_run_combo_a_operating_cycle.py:afd64f29fb"
+    },
+    {
+      "event_kind": "test_run",
+      "event_role": "producer",
+      "heading_ref": null,
+      "id": "event:repo:29b8d1eb9552adaf45ed",
+      "observation_state": "declared",
+      "path": "tests/test_run_gateway_sla_manual_nightly.py",
+      "source_record_id": "file:tests/test_run_gateway_sla_manual_nightly.py:4edac5a43c"
+    },
+    {
+      "event_kind": "test_run",
+      "event_role": "producer",
+      "heading_ref": null,
+      "id": "event:repo:4ead6ffcc51df960a57a",
+      "observation_state": "declared",
+      "path": "tests/test_run_gateway_sla_operating_cycle.py",
+      "source_record_id": "file:tests/test_run_gateway_sla_operating_cycle.py:b39ffc611c"
+    },
+    {
+      "event_kind": "test_run",
+      "event_role": "producer",
+      "heading_ref": null,
+      "id": "event:repo:121f732a72aaea71edaf",
+      "observation_state": "declared",
+      "path": "tests/test_service_sla.py",
+      "source_record_id": "file:tests/test_service_sla.py:09cfae0443"
+    },
+    {
+      "event_kind": "test_run",
+      "event_role": "producer",
+      "heading_ref": null,
+      "id": "event:repo:c36b16a2327e841894ff",
+      "observation_state": "declared",
+      "path": "tests/test_start_operator_fedora_dev.py",
+      "source_record_id": "file:tests/test_start_operator_fedora_dev.py:edeefb859a"
+    },
+    {
+      "event_kind": "test_run",
+      "event_role": "producer",
+      "heading_ref": null,
+      "id": "event:repo:f34465607eb3a5c2f60a",
+      "observation_state": "declared",
+      "path": "tests/test_start_operator_product.py",
+      "source_record_id": "file:tests/test_start_operator_product.py:3335c39c34"
+    },
+    {
+      "event_kind": "test_run",
+      "event_role": "producer",
+      "heading_ref": null,
+      "id": "event:repo:92165a955773afa924a8",
+      "observation_state": "declared",
+      "path": "tests/test_streamlit_ia_doc.py",
+      "source_record_id": "file:tests/test_streamlit_ia_doc.py:812cb5469a"
+    },
+    {
+      "event_kind": "test_run",
+      "event_role": "producer",
+      "heading_ref": null,
+      "id": "event:repo:219e41d68f1d1a4f4ed2",
+      "observation_state": "declared",
+      "path": "tests/test_streamlit_operator_panel.py",
+      "source_record_id": "file:tests/test_streamlit_operator_panel.py:840034baa5"
+    },
+    {
+      "event_kind": "test_run",
+      "event_role": "producer",
+      "heading_ref": null,
+      "id": "event:repo:6bd6b243803695d88b68",
+      "observation_state": "declared",
+      "path": "tests/test_streamlit_operator_panel_smoke.py",
+      "source_record_id": "file:tests/test_streamlit_operator_panel_smoke.py:4628bcb10b"
+    },
+    {
+      "event_kind": "test_run",
+      "event_role": "producer",
+      "heading_ref": null,
+      "id": "event:repo:e5201ab1b2349d301928",
+      "observation_state": "declared",
+      "path": "tests/test_text_core_openvino_demo.py",
+      "source_record_id": "file:tests/test_text_core_openvino_demo.py:835c8a9523"
+    },
+    {
+      "event_kind": "test_run",
+      "event_role": "producer",
+      "heading_ref": null,
+      "id": "event:repo:08297910d21b1f6fc75d",
+      "observation_state": "declared",
+      "path": "tests/test_tts_demo.py",
+      "source_record_id": "file:tests/test_tts_demo.py:dfc3121bdf"
+    },
+    {
+      "event_kind": "test_run",
+      "event_role": "producer",
+      "heading_ref": null,
+      "id": "event:repo:6a19480e6fdbf8f1cd40",
+      "observation_state": "declared",
+      "path": "tests/test_tts_runtime.py",
+      "source_record_id": "file:tests/test_tts_runtime.py:e08749964b"
+    },
+    {
+      "event_kind": "test_run",
+      "event_role": "producer",
+      "heading_ref": null,
+      "id": "event:repo:415c9ba3f962e5a6001e",
+      "observation_state": "declared",
+      "path": "tests/test_tts_runtime_client.py",
+      "source_record_id": "file:tests/test_tts_runtime_client.py:8f208a6ba6"
+    },
+    {
+      "event_kind": "test_run",
+      "event_role": "producer",
+      "heading_ref": null,
+      "id": "event:repo:2d880707859c5b242ff6",
+      "observation_state": "declared",
+      "path": "tests/test_tts_runtime_service.py",
+      "source_record_id": "file:tests/test_tts_runtime_service.py:da5e4dc698"
+    },
+    {
+      "event_kind": "test_run",
+      "event_role": "producer",
+      "heading_ref": null,
+      "id": "event:repo:9f078d41c8b796a3333b",
+      "observation_state": "declared",
+      "path": "tests/test_validate_nested_agents.py",
+      "source_record_id": "file:tests/test_validate_nested_agents.py:46cd12457c"
+    },
+    {
+      "event_kind": "test_run",
+      "event_role": "producer",
+      "heading_ref": null,
+      "id": "event:repo:f366d0a44fdd1bc7bcf9",
+      "observation_state": "declared",
+      "path": "tests/test_vlm_openvino.py",
+      "source_record_id": "file:tests/test_vlm_openvino.py:740857f5cd"
+    },
+    {
+      "event_kind": "test_run",
+      "event_role": "producer",
+      "heading_ref": null,
+      "id": "event:repo:ddbd82370721be694a9c",
+      "observation_state": "declared",
+      "path": "tests/test_vlm_provider.py",
+      "source_record_id": "file:tests/test_vlm_provider.py:db7d8319c4"
+    },
+    {
+      "event_kind": "test_run",
+      "event_role": "producer",
+      "heading_ref": null,
+      "id": "event:repo:19f635c132064ade9457",
+      "observation_state": "declared",
+      "path": "tests/test_voice_runtime_client.py",
+      "source_record_id": "file:tests/test_voice_runtime_client.py:94d1ffc933"
+    },
+    {
+      "event_kind": "test_run",
+      "event_role": "producer",
+      "heading_ref": null,
+      "id": "event:repo:4589ae5fd783da497b42",
+      "observation_state": "declared",
+      "path": "tests/test_voice_runtime_service.py",
+      "source_record_id": "file:tests/test_voice_runtime_service.py:d64afa4c15"
+    },
+    {
+      "event_kind": "test_run",
+      "event_role": "producer",
+      "heading_ref": null,
+      "id": "event:repo:c4effc7596a2957de8e0",
+      "observation_state": "declared",
+      "path": "tests/test_windows_product_edge_contract.py",
+      "source_record_id": "file:tests/test_windows_product_edge_contract.py:4e898dbdac"
+    },
+    {
+      "event_kind": "test_run",
+      "event_role": "producer",
+      "heading_ref": null,
+      "id": "event:repo:9b82c8c80d7c6c879061",
+      "observation_state": "declared",
+      "path": "tests/test_workflow_public_surface.py",
+      "source_record_id": "file:tests/test_workflow_public_surface.py:ce00a76c22"
+    }
+  ],
+  "index_identity": {
+    "artifact_kind": "repository_event_index",
+    "content_digest": "92833ed6e888d427a2f6c66ab694ec7dad87b4d9bcaddef2c2a03c22b23ba81e",
+    "index_kind": "event",
+    "local_id": "index:repo-local:events",
+    "schema_ref": "aoa-kag:schemas/repo-local-kag-repository-index.schema.json"
+  },
+  "registry_output": {
+    "consumer": "aoa-kag-mcp",
+    "resource_shape": "repo-local-event-index",
+    "stable_fields": [
+      "id",
+      "event_kind",
+      "event_role",
+      "source_record_id",
+      "path",
+      "heading_ref"
+    ]
+  },
+  "repo": {
+    "git_ref": "git-index-source-tree",
+    "name": "ATM10-Agent",
+    "owner_type": "workspace",
+    "root": "."
+  },
+  "schema_version": "aoa-repo-local-kag-repository-index-v1",
+  "source_index": {
+    "content_digest": "300ebe9a6695acd31356a9a11813ec171868a614d84d5af913ddf3adf2229066",
+    "local_id": "index:repo-local:source-surfaces",
+    "path": "kag/indexes/source_surface_index.json"
+  },
+  "summary": {
+    "entry_count": 137,
+    "kind_counts": {
+      "command_run": 13,
+      "decision_record": 8,
+      "generation_run": 2,
+      "release_lane": 1,
+      "test_run": 103,
+      "validation_receipt": 1,
+      "validation_run": 2,
+      "workflow_run": 7
+    }
+  }
+}
