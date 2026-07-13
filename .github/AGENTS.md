@@ -11,7 +11,7 @@ Do not encode sibling-repo doctrine, private workspace assumptions, or hidden re
 ## Platform sync
 
 Keep `.github/CODEOWNERS`, PR templates, and workflow names aligned with the root route card.
-`Repo Validation` is the landing check expected by the root GitHub landing workflow. If that check is added, renamed, or its meaning changes, update the root route, PR expectations, and this file in the same change.
+`Repo Validation` checks canonical repo-local KAG family parity and the repository validation lanes. If that check is added, renamed, or its meaning changes, update the root route, PR expectations, and this file in the same change.
 
 When workflow or repository-policy files change, report:
 
