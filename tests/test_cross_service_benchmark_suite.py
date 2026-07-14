@@ -28,6 +28,14 @@ def test_run_cross_service_benchmark_suite_writes_summary(tmp_path: Path) -> Non
     assert summary_payload["overall_sla_status"] in {"pass", "breach"}
     assert sorted(summary_payload["services"].keys()) == ["kag_file", "retrieval", "voice_asr", "voice_tts"]
     assert any(row["source"] == "voice_asr" for row in summary_payload["summary_matrix"])
+    assert summary_payload["stats"]["cross_service_sla_pass_ratio"] == {
+        "status": "observed",
+        "reason": "complete",
+        "profile": "baseline_first",
+        "numerator": 4,
+        "denominator": 4,
+        "ratio": 1.0,
+    }
     assert Path(summary_payload["paths"]["summary_json"]).is_file()
     assert Path(summary_payload["paths"]["summary_md"]).is_file()
 
@@ -76,6 +84,7 @@ def test_run_cross_service_benchmark_suite_marks_child_breach_without_suite_erro
     assert result["summary_payload"]["status"] == "ok"
     assert result["summary_payload"]["overall_sla_status"] == "breach"
     assert "retrieval" in result["summary_payload"]["degraded_services"]
+    assert result["summary_payload"]["stats"]["cross_service_sla_pass_ratio"]["ratio"] == 0.75
 
 
 def test_run_cross_service_benchmark_suite_errors_when_summary_artifact_missing(
@@ -103,6 +112,10 @@ def test_run_cross_service_benchmark_suite_errors_when_summary_artifact_missing(
     assert result["ok"] is False
     assert result["summary_payload"]["status"] == "error"
     assert "suite_orchestration" in result["summary_payload"]["degraded_services"]
+    assert result["summary_payload"]["stats"]["cross_service_sla_pass_ratio"] == {
+        "status": "unknown",
+        "reason": "incomplete_suite",
+    }
 
 
 def test_run_cross_service_benchmark_suite_combo_a_uses_live_profile_paths(
@@ -244,6 +257,7 @@ def test_run_cross_service_benchmark_suite_combo_a_uses_live_profile_paths(
     assert summary_payload["profile"] == "combo_a"
     assert sorted(summary_payload["services"].keys()) == ["kag_neo4j", "retrieval", "voice_asr", "voice_tts"]
     assert summary_payload["overall_sla_status"] == "pass"
+    assert summary_payload["stats"]["cross_service_sla_pass_ratio"]["ratio"] == 1.0
     assert summary_payload["paths"]["combo_a_seed_run_dir"].endswith("seed-run")
     assert seed_calls["scope"] == "cross_service_suite"
     assert seed_calls["qdrant_docs_path"] == Path("tests") / "fixtures" / "retrieval_docs_sample.jsonl"

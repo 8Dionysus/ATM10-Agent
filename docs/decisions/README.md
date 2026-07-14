@@ -15,7 +15,7 @@ Ordinary implementation notes, generated output, runtime logs, local run artifac
 | output | canonical decision note, generated lookup indexes, and route back to the owning source surface |
 | owner | `docs/decisions/AGENTS.md` for lane law; decision notes for rationale; generated indexes for lookup only |
 | next route | owning implementation or doc first, then nearest route card, `MANIFEST.md`, `ROADMAP.md`, `docs/SOURCE_OF_TRUTH.md`, generated lookup indexes, or the affected sibling owner |
-| validation | `python scripts/generate_decision_indexes.py --check` and `python scripts/validate_decision_records.py`, plus the owning validator for the changed surface |
+| validation | executable decision-lane checks in `docs/decisions/AGENTS.md`, plus the owning validator for the changed surface |
 
 ## Authority
 
@@ -51,17 +51,8 @@ The lookup indexes under [indexes](indexes/README.md) are generated from that me
 - [Decisions by operator surface](indexes/by-operator-surface.md)
 - [Decisions by validation or guard family](indexes/by-guard.md)
 
-Regenerate the read models after decision metadata changes:
-
-```powershell
-python scripts/generate_decision_indexes.py
-```
-
-Check generated parity before closeout:
-
-```powershell
-python scripts/generate_decision_indexes.py --check
-```
+Regenerate and check the read models after decision metadata changes through
+the executable route in `docs/decisions/AGENTS.md`.
 
 ## Lookup Route
 

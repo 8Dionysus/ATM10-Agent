@@ -13,6 +13,12 @@ This file defines the roles of the repository documents so the public surface st
   * Short public repository snapshot (current date, capabilities, links).
   * Primary public current-state document.
 
+* `stats/README.md`
+  * Owner-local statistical questions, populations, evidence routes, and
+    authority ceilings for this companion.
+  * Uses the shared `aoa-stats` grammar without moving project evidence or
+    product meaning into the central organ.
+
 * `ROADMAP.md`
   * Public direction, milestones, horizons, and high-level risks.
   * Public replacement for the old tracked `PLANS.md` role.
@@ -81,6 +87,7 @@ This file defines the roles of the repository documents so the public surface st
 
 * For the public repo surface, priority belongs to:
   * `MANIFEST.md`
+  * `stats/README.md`
   * `ROADMAP.md`
   * `docs/PRODUCT_EDGE_POSTURE.md`
   * `docs/RUNBOOK.md`

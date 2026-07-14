@@ -19,6 +19,13 @@
     },
     {
       "repo": "ATM10-Agent",
+      "path": "stats/README.md",
+      "source_class": "runtime_advisory",
+      "role": "supporting",
+      "authority": "authored_source"
+    },
+    {
+      "repo": "ATM10-Agent",
       "path": "docs/RUNBOOK.md",
       "source_class": "runtime_advisory",
       "role": "owner_route",

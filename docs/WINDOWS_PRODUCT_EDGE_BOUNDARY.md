@@ -24,11 +24,9 @@ It does not prove Win32 window discovery, DXGI capture, or Windows ATM10 accepta
 
 ## Validation
 
-Run the pure contract tests:
-
-```bash
-python -m pytest -q tests/test_windows_product_edge_contract.py
-```
+The pure contract check is owned by
+`tests/test_windows_product_edge_contract.py`; use the repository verification
+route in `AGENTS.md`.
 
 The dependency boundary must stay shaped like this:
 

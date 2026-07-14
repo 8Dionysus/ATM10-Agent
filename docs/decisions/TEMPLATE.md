@@ -43,12 +43,6 @@ Name what becomes easier, what remains constrained, and what future contributors
 
 ## Validation
 
-Run:
-
-```powershell
-python scripts/generate_decision_indexes.py
-python scripts/generate_decision_indexes.py --check
-python scripts/validate_decision_records.py
-```
-
-Also run the validator for the owning surface the decision describes.
+Name the owning validation surface and the evidence obtained. Executable
+decision-lane checks remain in `docs/decisions/AGENTS.md`; also use the
+validator owned by the surface this decision describes.

@@ -7,7 +7,7 @@ Current as of: 2026-04-07
 - Project: `atm10-agent`
 - Target platform: Windows 11 + PowerShell 7
 - Target Python: 3.11+ (validated on 3.12.10)
-- Current test status: `python -m pytest` green (see CI and this manifest for the current public snapshot).
+- Current repository validation is green (see CI for the executable evidence).
 
 ## Architecture posture
 
@@ -23,6 +23,7 @@ Current as of: 2026-04-07
 - Hybrid planner: `scripts/hybrid_query_demo.py` + additive `hybrid_query` gateway flow with `baseline_first` default (`retrieval first -> file KAG expansion -> RRF merge`) and additive `combo_a` parity profile (`qdrant + neo4j`), with machine-readable degraded fallbacks (`retrieval_only_fallback|kag_only_fallback|grounding_unavailable`) instead of hard failure when grounding stages are unavailable.
 - Hybrid antifragility first wave: `scripts/hybrid_query_demo.py` now emits one source-owned `stressor_receipt_v1` for bounded `planner_status=retrieval_only_fallback`, while `schemas/adaptation_delta_v1.json` and `examples/` keep the reviewed-change companion surface explicit without auto-emitting deltas.
 - Cross-service SLA + benchmark suite: `scripts/cross_service_benchmark_suite.py` + normalized `service_sla_summary_v1` artifacts for `voice_asr`, `voice_tts`, `retrieval`, and `kag`, aggregated into `cross_service_benchmark_suite_v1`, with `baseline_first` default and additive `profile=combo_a` (`voice_runtime_service + tts_runtime_service + qdrant + neo4j`).
+- Owner-local stats port: `stats/` defines the live-capable cross-service SLA pass ratio over the exact expected lanes of one completed suite, while shared measurement grammar and cross-owner composition remain with `aoa-stats`.
 - KAG nightly guardrail: `.github/workflows/kag-neo4j-guardrail-nightly.yml`.
 - Combo A live parity workflow: `.github/workflows/combo-a-profile-smoke.yml` (`workflow_dispatch` + nightly schedule, external `Qdrant`/`Neo4j`, live operator snapshot capture, combo_a gateway smoke, combo_a cross-service suite, combo_a nightly operating-cycle decision surface, promoted strict `fail_on_hold` only when eligible).
 - Trend snapshot: `scripts/kag_guardrail_trend_snapshot.py` (rolling-baseline + severity flags + `critical_policy`).

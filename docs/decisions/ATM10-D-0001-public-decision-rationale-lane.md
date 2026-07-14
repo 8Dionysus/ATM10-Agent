@@ -67,13 +67,6 @@ Generated indexes must stay derived from decision metadata and must not be hand-
 
 ## Validation
 
-Run:
-
-```powershell
-python scripts/generate_decision_indexes.py
-python scripts/generate_decision_indexes.py --check
-python scripts/validate_decision_records.py
-python -m pytest tests/test_decision_indexes.py tests/test_nested_agents_docs.py tests/test_validate_nested_agents.py
-```
-
-For this first landing, also run the public-surface hardening subset because the change updates document-role and nested guidance surfaces.
+The executable decision-lane checks are owned by
+`docs/decisions/AGENTS.md`. This first landing also used the public-surface
+hardening route because it changed document roles and nested guidance.

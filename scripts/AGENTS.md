@@ -19,6 +19,10 @@ Representative surfaces include:
 - `cross_service_benchmark_suite.py`, `run_combo_a_operating_cycle.py`
 - `pilot_runtime_loop.py`, `operator_product_snapshot.py`, `streamlit_operator_panel.py`
 
+`cross_service_benchmark_suite.py` owns the live evidence artifact used by the
+local stats port. `validate_local_stats_port.py` is only a thin delegate to the
+shared `aoa-stats` contract validator; keep measurement meaning under `stats/`.
+
 ## Local contract
 
 - Treat these scripts as canonical runnable surfaces. Keep CLI flags, artifact paths, and public-facing behavior stable unless the task explicitly changes the contract.

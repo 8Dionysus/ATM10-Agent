@@ -18,14 +18,8 @@ The milestone proves that the portable companion core can be exercised from a Fe
 
 ## Receipt
 
-Generate a real local receipt:
-
-```bash
-ATM10_DIR=/path/to/ATM10 \
-python scripts/write_fedora_companion_receipt.py \
-  --runs-dir runs/fedora-companion-receipt \
-  --capture-region 0,0,1920,1080
-```
+Generate a real local receipt through the owner route in
+`docs/FEDORA_LOCAL_DEV_RUNBOOK.md`.
 
 The artifact is written as:
 
@@ -50,17 +44,9 @@ milestone_evaluation.blocking_reason_codes=[]
 
 ## CI mechanics smoke
 
-CI can validate the receipt machinery without depending on a local ATM10 installation:
-
-```bash
-python scripts/write_fedora_companion_receipt.py \
-  --runs-dir runs/ci-fedora-companion-receipt \
-  --capture-region 0,0,1920,1080 \
-  --allow-missing-atm10-dir \
-  -- \
-  --pilot-vlm-provider stub \
-  --pilot-text-provider stub
-```
+CI can validate the receipt machinery without depending on a local ATM10
+installation. The exact smoke route is owned by
+`docs/FEDORA_LOCAL_DEV_RUNBOOK.md` and the workflow.
 
 `--allow-missing-atm10-dir` skips the `atm10_instance_path_known` criterion and must not be used as promotion evidence for a real local companion milestone.
 

@@ -45,9 +45,7 @@ Global controls (header):
 * `Refresh` button (manual refresh only)
 * `Last refreshed at` (UTC timestamp)
 
-Future entrypoint (`M8.1`):
-
-* `python -m streamlit run scripts/streamlit_operator_panel.py -- --runs-dir runs --gateway-url http://127.0.0.1:8770`
+The implemented entrypoint is owned by `docs/RUNBOOK.md`.
 
 ## Screen specs (4 zones)
 

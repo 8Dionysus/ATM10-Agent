@@ -16,10 +16,12 @@ This repository owns:
 - retrieval and KAG paths inside this project
 - gateway, operator-panel, voice, service wrappers, safe automation intent to plan to dry-run flows
 - project-local recurrence, operator recovery, public docs, workflow hardening, tests, and explicitly defined stressor/adaptation receipts
+- owner-local statistical questions over companion service and operator evidence
 
 It does not own:
 
-- global AoA technique, skill, eval, routing, memo, playbook, KAG, stats, role, progression, or self-agent policy
+- global AoA technique, skill, eval, routing, memo, playbook, KAG, shared stats
+  grammar, role, progression, or self-agent policy
 - sibling repo ownership boundaries or hidden operational lore
 
 ## Start here
@@ -84,8 +86,9 @@ cd <repo>
 python -m pytest
 ```
 
-If a runnable entrypoint changes, run the nearest smoke path or add targeted tests. Examples remain in `docs/AGENTS_ROOT_REFERENCE.md`.
+If a runnable entrypoint changes, run the nearest smoke path or add targeted tests. Operational examples remain in `docs/RUNBOOK.md`.
 If durable decision rationale changes, run `python scripts/generate_decision_indexes.py --check`, `python scripts/validate_decision_records.py`, and the owning targeted tests.
+For `stats/` or its cross-service producer, also run `python scripts/validate_local_stats_port.py`.
 
 ## Report
 

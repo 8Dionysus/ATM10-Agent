@@ -57,11 +57,24 @@ REQUIRED_AGENTS_DOCS: dict[str, tuple[str, ...]] = {
         'NEO4J_PASSWORD',
         'tests/test_kag_neo4j_backend.py',
     ),
+    'evals/AGENTS.md': (
+        'skeleton port',
+        'aoa-evals',
+        'project-local intake',
+        'validate_local_eval_port.py',
+    ),
     'kag/AGENTS.md': (
         'local KAG provider home',
         'source-linked records',
         'operator runbook surfaces',
         'source-return route',
+    ),
+    'stats/AGENTS.md': (
+        'owner-local statistical questions',
+        'cross_service_benchmark_suite_v1',
+        'missing expected lane',
+        'aoa-stats',
+        'validate_local_stats_port.py',
     ),
     'src/hybrid/AGENTS.md': (
         '`baseline_first`',

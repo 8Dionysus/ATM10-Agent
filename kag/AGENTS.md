@@ -14,8 +14,8 @@ runbook surfaces for `aoa-kag` registry, composition, and MCP consumers.
 ## Read before editing
 
 Read the root `AGENTS.md`, this card, `kag/README.md`, `kag/manifest.json`,
-`docs/RUNBOOK.md`, `docs/SOURCE_OF_TRUTH.md`, and `src/kag/AGENTS.md` before
-changing provider records.
+`stats/README.md`, `docs/RUNBOOK.md`, `docs/SOURCE_OF_TRUTH.md`, and
+`src/kag/AGENTS.md` before changing provider records.
 
 ## Boundaries
 

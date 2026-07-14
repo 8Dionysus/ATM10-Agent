@@ -200,7 +200,11 @@ Expected result:
 * Inside there are `run.json`, `cross_service_benchmark_suite.json`, `summary.md`, and `child_runs/`.
 * Child runs execute in canonical order: `voice_asr -> voice_tts -> retrieval -> kag_file`.
 * Each child run writes a normalized `service_sla_summary.json` next to its native artifacts.
-* `cross_service_benchmark_suite.json` contains `schema_version = cross_service_benchmark_suite_v1`, `services`, `summary_matrix`, `degraded_services`, and `paths.child_runs`.
+* `cross_service_benchmark_suite.json` contains `schema_version = cross_service_benchmark_suite_v1`, `services`, `summary_matrix`, `degraded_services`, `stats.cross_service_sla_pass_ratio`, and `paths.child_runs`.
+* The stats ratio is observed only for the exact profile-specific service
+  population in a completed, internally consistent suite. Missing lanes or
+  contradictory child/overall status produce `unknown`; a complete all-breach
+  suite produces an observed zero.
 * `--smoke-stub-voice-asr` keeps the suite reproducible in CI and local smoke paths without a live ASR backend.
 * For `profile=combo_a`, the child order becomes `voice_asr -> voice_tts -> retrieval -> kag_neo4j`, retrieval uses `Qdrant`, KAG uses `Neo4j`, and the suite writes `paths.combo_a_seed_run_dir` for the isolated fixture seeding step.
 * For `profile=combo_a`, the live nightly workflow can additionally aggregate the suite output into `combo_a_operating_cycle_v1` for nightly-only promotion decisions.
