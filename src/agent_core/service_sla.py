@@ -6,6 +6,10 @@ from typing import Any, Mapping, Sequence
 
 SERVICE_SLA_SCHEMA = "service_sla_summary_v1"
 CROSS_SERVICE_BENCHMARK_SUITE_SCHEMA = "cross_service_benchmark_suite_v1"
+EXPECTED_CROSS_SERVICE_LANES: dict[str, frozenset[str]] = {
+    "baseline_first": frozenset({"voice_asr", "voice_tts", "retrieval", "kag_file"}),
+    "combo_a": frozenset({"voice_asr", "voice_tts", "retrieval", "kag_neo4j"}),
+}
 _PRIMARY_QUALITY_KEYS: dict[str, tuple[str, ...]] = {
     "voice_asr": ("text_similarity_avg",),
     "voice_tts": ("non_empty_audio_rate", "cache_hit_rate", "chunk_count_mean"),
@@ -173,6 +177,65 @@ def degraded_services(services: Mapping[str, Mapping[str, Any]]) -> list[str]:
         if str(summary.get("status", "unknown")) != "ok" or str(summary.get("sla_status", "unknown")) != "pass":
             degraded.append(str(source))
     return sorted(degraded)
+
+
+def derive_cross_service_sla_pass_ratio(
+    suite: Mapping[str, Any],
+) -> dict[str, Any]:
+    """Derive the owner-local SLA pass ratio from one completed suite."""
+
+    if suite.get("schema_version") != CROSS_SERVICE_BENCHMARK_SUITE_SCHEMA:
+        return {"status": "unknown", "reason": "invalid_suite_schema"}
+
+    profile = suite.get("profile")
+    expected_lanes = EXPECTED_CROSS_SERVICE_LANES.get(str(profile))
+    if expected_lanes is None:
+        return {"status": "unknown", "reason": "unsupported_profile"}
+    if suite.get("status") != "ok":
+        return {"status": "unknown", "reason": "incomplete_suite"}
+
+    services = suite.get("services")
+    if not isinstance(services, Mapping) or set(services) != expected_lanes:
+        return {"status": "unknown", "reason": "incomplete_expected_population"}
+
+    passing = 0
+    degraded: list[str] = []
+    for lane_name in sorted(expected_lanes):
+        summary = services[lane_name]
+        if not isinstance(summary, Mapping) or summary.get("schema_version") != SERVICE_SLA_SCHEMA:
+            return {"status": "unknown", "reason": "malformed_service_summary"}
+        status = summary.get("status")
+        sla_status = summary.get("sla_status")
+        if status not in {"ok", "error"} or sla_status not in {"pass", "breach"}:
+            return {"status": "unknown", "reason": "malformed_service_summary"}
+        if status != "ok" and sla_status == "pass":
+            return {"status": "unknown", "reason": "inconsistent_service_summary"}
+        if status == "ok" and sla_status == "pass":
+            passing += 1
+        else:
+            degraded.append(lane_name)
+
+    expected_overall = "pass" if not degraded else "breach"
+    if suite.get("overall_sla_status") != expected_overall:
+        return {"status": "unknown", "reason": "inconsistent_overall_sla_status"}
+
+    declared_degraded = suite.get("degraded_services")
+    if (
+        not isinstance(declared_degraded, list)
+        or not all(isinstance(item, str) for item in declared_degraded)
+        or sorted(declared_degraded) != degraded
+    ):
+        return {"status": "unknown", "reason": "inconsistent_degraded_services"}
+
+    denominator = len(expected_lanes)
+    return {
+        "status": "observed",
+        "reason": "complete",
+        "profile": profile,
+        "numerator": passing,
+        "denominator": denominator,
+        "ratio": passing / denominator,
+    }
 
 
 def _extract_summary_json_path(summary: Mapping[str, Any]) -> str | None:

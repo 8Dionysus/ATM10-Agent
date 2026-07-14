@@ -8,13 +8,9 @@ product-edge parity.
 
 ## Explicit inputs
 
-Use explicit environment variables when possible:
-
-```bash
-export MINECRAFT_DIR="$HOME/.minecraft"
-export ATM10_DIR="$HOME/.local/share/PrismLauncher/instances/All the Mods 10"
-python scripts/discover_instance.py --runs-dir runs/fedora-discovery
-```
+Use explicit `MINECRAFT_DIR` and `ATM10_DIR` environment variables when
+possible. The runnable discovery path lives in `docs/RUNBOOK.md`; Fedora
+variants live in `docs/FEDORA_LOCAL_DEV_RUNBOOK.md`.
 
 `ATM10_DIR` is the strongest signal and wins over launcher scans.
 

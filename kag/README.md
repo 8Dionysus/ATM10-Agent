@@ -10,7 +10,7 @@ source-linked records.
 | role | local KAG provider for project-local retrieval, KAG runtime code, and operator runbook handles |
 | records | `nodes/`, `edges/`, `indexes/`, `projections/`, `receipts/` |
 | manifest | `manifest.json` |
-| source route | `docs/RUNBOOK.md`, `src/kag/baseline.py`, `src/kag/neo4j_backend.py` |
+| source route | `docs/RUNBOOK.md`, `stats/README.md`, `src/kag/baseline.py`, `src/kag/neo4j_backend.py` |
 | consumer route | `aoa-kag` registry/composition, `abyss-stack`, MCP resources |
 | owner return | `docs/RUNBOOK.md` |
 

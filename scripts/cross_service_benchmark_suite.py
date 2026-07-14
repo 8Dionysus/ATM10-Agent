@@ -39,6 +39,7 @@ from src.agent_core.service_sla import (
     build_service_sla_summary,
     build_suite_summary_row,
     degraded_services as build_degraded_services,
+    derive_cross_service_sla_pass_ratio,
 )
 
 
@@ -828,6 +829,9 @@ def run_cross_service_benchmark_suite(
                 ),
             },
         }
+        suite_payload["stats"] = {
+            "cross_service_sla_pass_ratio": derive_cross_service_sla_pass_ratio(suite_payload)
+        }
         _write_json(suite_summary_history_path, suite_payload)
         if suite_summary_out_path != suite_summary_history_path:
             _write_json(suite_summary_out_path, suite_payload)
@@ -870,6 +874,9 @@ def run_cross_service_benchmark_suite(
                 "child_runs_root": str(child_runs_root),
                 "child_runs": child_paths,
             },
+        }
+        suite_payload["stats"] = {
+            "cross_service_sla_pass_ratio": derive_cross_service_sla_pass_ratio(suite_payload)
         }
         _write_json(suite_summary_history_path, suite_payload)
         if suite_summary_out_path != suite_summary_history_path:

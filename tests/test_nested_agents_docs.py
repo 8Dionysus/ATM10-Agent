@@ -9,6 +9,7 @@ NESTED_AGENTS = [
     Path("src/rag/AGENTS.md"),
     Path("src/kag/AGENTS.md"),
     Path("src/hybrid/AGENTS.md"),
+    Path("stats/AGENTS.md"),
     Path("tests/AGENTS.md"),
     Path("scripts/AGENTS.md"),
     Path("docs/decisions/AGENTS.md"),
@@ -48,6 +49,12 @@ REQUIRED_MARKERS = {
         "planner.py",
         "baseline_first",
         "combo_a",
+    ],
+    Path("stats/AGENTS.md"): [
+        "owner-local statistical questions",
+        "cross_service_benchmark_suite_v1",
+        "missing expected lane",
+        "aoa-stats",
     ],
     Path("tests/AGENTS.md"): [
         "tests/fixtures/",

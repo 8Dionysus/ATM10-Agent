@@ -1,0 +1,118 @@
+{
+  "schema_version": "aoa_stats_local_port_v1",
+  "contract_version": "1.0.0",
+  "owner_repo": "ATM10-Agent",
+  "status": "active",
+  "owner_boundary_ref": "AGENTS.md",
+  "central_contract_refs": [
+    "aoa-stats:stats/measurement-contract/measurement-contract.schema.json",
+    "aoa-stats:stats/measurement-contract/measurement-packet.schema.json"
+  ],
+  "evidence_posture": {
+    "live_state": "mixed",
+    "privacy": "public",
+    "raw_content_allowed": false
+  },
+  "questions": [
+    {
+      "id": "question:cross-service-sla-pass-ratio",
+      "question": "What fraction of the expected service lanes passed their own SLA in one completed cross-service benchmark suite?",
+      "consumer_refs": [
+        "stats/README.md",
+        "MANIFEST.md",
+        "scripts/cross_service_benchmark_suite.py"
+      ]
+    }
+  ],
+  "measurements": [
+    {
+      "schema_version": "aoa_stats_measurement_contract_v1",
+      "measurement_id": "ATM10-Agent/cross-service-sla-pass-ratio",
+      "contract_version": "1.0.0",
+      "owner_repo": "ATM10-Agent",
+      "question_ref": "question:cross-service-sla-pass-ratio",
+      "semantic_class": "statistic",
+      "statistic": "ratio",
+      "object_kind": "cross-service-benchmark-suite",
+      "unit": {
+        "symbol": "1",
+        "quantity": "proportion"
+      },
+      "population": {
+        "subject": "expected service lanes in one completed ATM10-Agent cross-service benchmark suite",
+        "definition": "the exact profile-specific service set declared by cross_service_benchmark_suite_v1: voice ASR, voice TTS, retrieval, and the profile-selected KAG lane",
+        "inclusion_rule": "one expected lane with a complete service_sla_summary_v1 entry in suite.services",
+        "exclusion_rule": "suite orchestration, child samples, paths, raw artifacts, extra lanes, and incomplete or error suites",
+        "sampling": "census"
+      },
+      "window": {
+        "temporality": "instant",
+        "clock": "owner_defined"
+      },
+      "dimensions": {
+        "allowed": [
+          {
+            "name": "profile",
+            "max_cardinality": 2,
+            "sensitivity": "public"
+          }
+        ],
+        "prohibited": [
+          "service_name",
+          "backend",
+          "path",
+          "run_id"
+        ]
+      },
+      "aggregation": {
+        "operator": "none",
+        "across": []
+      },
+      "missingness": {
+        "states": [
+          "missing",
+          "unknown",
+          "stale"
+        ],
+        "zero_is_observation": true
+      },
+      "uncertainty": {
+        "required": false,
+        "methods": [
+          "not_applicable"
+        ]
+      },
+      "provenance": {
+        "evidence_refs_required": true,
+        "source_revision_required": true
+      },
+      "lifecycle": {
+        "status": "active",
+        "compatible_with": []
+      },
+      "privacy": {
+        "classification": "public",
+        "raw_content_allowed": false,
+        "sensitive_dimensions_allowed": false
+      },
+      "live_state": {
+        "capability": "live_capable"
+      },
+      "authority_ceiling": "Counts expected service lanes whose own summary reports status=ok and sla_status=pass in one internally consistent completed suite; it does not aggregate heterogeneous child metrics or establish operator readiness, gameplay success, current host health, product support, causal service quality, or an eval verdict."
+    }
+  ],
+  "exports": [
+    {
+      "measurement_id": "ATM10-Agent/cross-service-sla-pass-ratio",
+      "posture": "reference",
+      "packet_refs": [
+        "stats/packets/cross-service-sla-pass-ratio.reference.json"
+      ],
+      "evidence_refs": [
+        "scripts/cross_service_benchmark_suite.py",
+        "src/agent_core/service_sla.py",
+        "tests/fixtures/"
+      ]
+    }
+  ]
+}

@@ -136,23 +136,9 @@ While editing:
 
 ### VERIFY
 
-Minimum validation after code changes:
-
-```powershell
-cd <repo-root>
-.\.venv\Scripts\Activate.ps1
-python -m pytest
-```
-
-If you touch a runnable entrypoint, also run the nearest smoke path or add
-targeted tests.
-Examples include:
-
-```powershell
-python scripts/phase_a_smoke.py
-python scripts/start_operator_product.py --runs-dir runs
-python scripts/automation_intent_chain_smoke.py --intent-json tests/fixtures/intent_open_quest_book.json --runs-dir runs\smoke-intent
-```
+Use the current verification routes in root and nested `AGENTS.md`. If a
+runnable entrypoint changes, use its active smoke path in `docs/RUNBOOK.md` or
+add targeted tests.
 
 ### REPORT
 

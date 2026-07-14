@@ -64,7 +64,7 @@ Not in scope:
 
 Wave 6 was validated through the normal repository regression and hardening surfaces:
 
-- full `python -m pytest` regression baseline at rollout time
+- full repository regression baseline at rollout time
 - targeted service tests for gateway, voice, and TTS auth/error paths
 - dependency-audit checks for fail-on-critical behavior
 - smoke validation for gateway HTTP, gateway SLA, and Streamlit operator surfaces
