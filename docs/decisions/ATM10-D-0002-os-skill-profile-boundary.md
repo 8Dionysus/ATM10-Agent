@@ -51,6 +51,29 @@ non-skill owner. A graph node or migration row alone is not evidence.
 The two ATM10-specific overlays have already passed that manual comparison.
 Their raw prompts and traces remain session-owned.
 
+The landing gate passed on 2026-07-23:
+
+- a fresh read-only Codex session in the cleaned ATM10 checkout selected the
+  global `aoa-knowledge-stewardship` authority-map front door without being
+  given either historical ATM10 skill name;
+- it selected Artifact Trust only as a conditional second capability for a
+  concrete generated-artifact consumer boundary and correctly excluded it from
+  an ordinary source edit;
+- both installed packages returned through v2 receipts to byte-identical owner
+  bundles, while full-owner ref lag was bounded to changes outside those bundle
+  paths;
+- the current checkout contained no `.agents/`, no active `SKILL.md`, and no
+  same-name repository definition;
+- the former change overlay's useful remainder stayed in root and nested
+  `AGENTS.md`, `docs/SOURCE_OF_TRUTH.md`, owner builders and checks, and the
+  host-native `plan -> scoped edit -> verify -> report` loop.
+
+The central migration ledger separately carries the manually evaluated
+functional disposition for every removed shared name. This gate proves
+delivery and selection for the two ATM10-specific outcomes; it does not claim
+that every historical bundle name remains callable or that the installed
+profile is permanently drift-free.
+
 ## Options Considered
 
 - Keep refreshing the full copied catalog inside ATM10.
