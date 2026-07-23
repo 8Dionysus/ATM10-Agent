@@ -5,3 +5,4 @@
 | Decision ID | Date | Decision | Path | Surface classes | Companion layers | Operator surfaces | Guard families | Posture |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | ATM10-D-0001 | 2026-06-04 | [ATM10-D-0001 - Public Decision Rationale Lane](../ATM10-D-0001-public-decision-rationale-lane.md) | `docs/decisions/ATM10-D-0001-public-decision-rationale-lane.md` | docs/decisions, docs/source-of-truth, scripts/validation, tests/public-surface | docs, scripts, tests | none | public-surface hygiene, generated index parity, owner boundary | accepted |
+| ATM10-D-0002 | 2026-07-23 | [ATM10-D-0002 - OS Skill Profile Boundary](../ATM10-D-0002-os-skill-profile-boundary.md) | `docs/decisions/ATM10-D-0002-os-skill-profile-boundary.md` | owner boundary, skill exposure, generated/read-model | root, tests, KAG | none | owner boundary, discovery, generated/read-model | accepted |

@@ -24,6 +24,11 @@ It does not own:
   grammar, role, progression, or self-agent policy
 - sibling repo ownership boundaries or hidden operational lore
 
+Shared and globally advertised skills arrive through the OS user profile;
+`.agents/skills` is not an ATM10 source home. A future ATM10-specific callable
+bundle must first earn an owner-local `skills/` home and must not duplicate a
+same-name global installation.
+
 ## Start here
 
 1. `README.md`

@@ -6,6 +6,14 @@
 
 - [ATM10-D-0001 - Public Decision Rationale Lane](../ATM10-D-0001-public-decision-rationale-lane.md) (`docs/decisions/ATM10-D-0001-public-decision-rationale-lane.md`)
 
+## KAG
+
+- [ATM10-D-0002 - OS Skill Profile Boundary](../ATM10-D-0002-os-skill-profile-boundary.md) (`docs/decisions/ATM10-D-0002-os-skill-profile-boundary.md`)
+
+## root
+
+- [ATM10-D-0002 - OS Skill Profile Boundary](../ATM10-D-0002-os-skill-profile-boundary.md) (`docs/decisions/ATM10-D-0002-os-skill-profile-boundary.md`)
+
 ## scripts
 
 - [ATM10-D-0001 - Public Decision Rationale Lane](../ATM10-D-0001-public-decision-rationale-lane.md) (`docs/decisions/ATM10-D-0001-public-decision-rationale-lane.md`)
@@ -13,3 +21,4 @@
 ## tests
 
 - [ATM10-D-0001 - Public Decision Rationale Lane](../ATM10-D-0001-public-decision-rationale-lane.md) (`docs/decisions/ATM10-D-0001-public-decision-rationale-lane.md`)
+- [ATM10-D-0002 - OS Skill Profile Boundary](../ATM10-D-0002-os-skill-profile-boundary.md) (`docs/decisions/ATM10-D-0002-os-skill-profile-boundary.md`)
