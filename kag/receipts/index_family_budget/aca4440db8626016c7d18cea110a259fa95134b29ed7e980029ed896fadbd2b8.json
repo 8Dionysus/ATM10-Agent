@@ -1,0 +1,17 @@
+{
+  "allowed_bytes": 8923217,
+  "allowed_tracked_bytes": 7394445,
+  "approved_by": "repository-owner",
+  "base_ref": "482a8fc7cb23e33742f7440168c231779d74c5c3",
+  "changed_generated_bytes": 8923217,
+  "changed_generated_files": 285,
+  "decision_ref": "aoa-kag:docs/decisions/AOA-KAG-D-0017-portable-content-addressed-repository-family.md",
+  "default_limit_bytes": 1048576,
+  "head_family_digest": "aca4440db8626016c7d18cea110a259fa95134b29ed7e980029ed896fadbd2b8",
+  "reason": "Remove 27 stale repository skill copies after the OS profile proves preserved shared capability routes; retain semantic adapters in aoa-skills.",
+  "repo": "ATM10-Agent",
+  "schema_version": "aoa-repo-local-kag-budget-receipt-v1",
+  "scope": "generated_delta",
+  "tracked_bytes": 7394445,
+  "tracked_bytes_max": 10485760
+}

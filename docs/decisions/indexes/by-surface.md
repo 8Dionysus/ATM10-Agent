@@ -10,9 +10,21 @@
 
 - [ATM10-D-0001 - Public Decision Rationale Lane](../ATM10-D-0001-public-decision-rationale-lane.md) (`docs/decisions/ATM10-D-0001-public-decision-rationale-lane.md`)
 
+## generated/read-model
+
+- [ATM10-D-0002 - OS Skill Profile Boundary](../ATM10-D-0002-os-skill-profile-boundary.md) (`docs/decisions/ATM10-D-0002-os-skill-profile-boundary.md`)
+
+## owner boundary
+
+- [ATM10-D-0002 - OS Skill Profile Boundary](../ATM10-D-0002-os-skill-profile-boundary.md) (`docs/decisions/ATM10-D-0002-os-skill-profile-boundary.md`)
+
 ## scripts/validation
 
 - [ATM10-D-0001 - Public Decision Rationale Lane](../ATM10-D-0001-public-decision-rationale-lane.md) (`docs/decisions/ATM10-D-0001-public-decision-rationale-lane.md`)
+
+## skill exposure
+
+- [ATM10-D-0002 - OS Skill Profile Boundary](../ATM10-D-0002-os-skill-profile-boundary.md) (`docs/decisions/ATM10-D-0002-os-skill-profile-boundary.md`)
 
 ## tests/public-surface
 
