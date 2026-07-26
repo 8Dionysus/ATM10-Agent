@@ -6,7 +6,8 @@ Root route card for `ATM10-Agent`.
 
 `ATM10-Agent` is a local-first ATM10 companion for Windows 11 and PowerShell 7.
 One installable package owns perception, interpretation, world/KAG, embedded
-memory, response/plan, optional dry-run action/voice, trace, and replay.
+memory, turn-local provider routes, response/plan, optional dry-run
+action/voice, trace, and replay.
 It is an operator-facing project surface, not a federation-wide doctrine owner.
 
 ## Owner lane
@@ -16,8 +17,9 @@ This repository owns:
 - perception and HUD ingestion paths
 - retrieval and KAG paths inside this project
 - embedded ATM10 memory, working context, and explicit consolidation
-- provider interfaces, Windows capture/session evidence, and safe automation
-  intent-to-plan-to-dry-run flows
+- provider interfaces, turn-local selection evidence, reviewed
+  promotion/rollback contracts, Windows capture/session evidence, and safe
+  automation intent-to-plan-to-dry-run flows
 - public docs, workflow hardening, tests, and explicitly defined
   stressor/adaptation receipts
 

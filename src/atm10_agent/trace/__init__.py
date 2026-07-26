@@ -45,6 +45,11 @@ def record_turn(
                 if isinstance(turn.get("stages"), Mapping)
                 else None
             ),
+            "providers": (
+                turn.get("stages", {}).get("providers")
+                if isinstance(turn.get("stages"), Mapping)
+                else None
+            ),
             "run_artifact": str(turn_path),
             "replay_of": turn.get("replay_of"),
         },

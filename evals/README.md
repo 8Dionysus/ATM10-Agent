@@ -23,7 +23,7 @@ proof score.
 ## Current Status
 
 Active: `atm10-companion-core` protects the deterministic stub turn, cited
-retrieval, file product KAG, honest hybrid degradation, and dry-run action
-fence. A passing report supports only that deterministic core claim and does
-not prove Windows acceptance, live-provider quality, gameplay correctness, or
-product benefit.
+retrieval, file product KAG, turn-local provider-route honesty, explicit
+degradation, and the dry-run action fence. A passing report supports only that
+deterministic core claim and does not prove Windows acceptance, live-provider
+quality, gameplay correctness, or product benefit.

@@ -32,6 +32,7 @@ COMPANION_CORE_SPEC = EvalSpec(
         "file-backed cited world and product KAG",
         "dry-run action fence",
         "explicit optional-provider degradation",
+        "turn-local provider routing with return handles",
         "state and trace separation",
         "negative cases and provider-free replay",
     ),
@@ -45,6 +46,7 @@ COMPANION_CORE_SPEC = EvalSpec(
         "deterministic-stub-turn",
         "cited-file-world",
         "dry-run-action-fence",
+        "provider-route-honesty",
         "optional-provider-honesty",
         "state-trace-separation",
         "useful-negative-cases",
@@ -70,6 +72,7 @@ _CASE_EVIDENCE = {
     "deterministic-stub-turn": "tests/test_companion_eval.py",
     "cited-file-world": "tests/test_companion_eval.py",
     "dry-run-action-fence": "tests/test_action_contract.py",
+    "provider-route-honesty": "tests/test_provider_routing.py",
     "optional-provider-honesty": "tests/test_companion_eval.py",
     "state-trace-separation": "tests/test_companion_eval.py",
     "useful-negative-cases": "tests/test_companion_eval.py",
@@ -79,6 +82,9 @@ _CASE_LIMITATIONS = {
     "deterministic-stub-turn": "Does not exercise a live perception provider.",
     "cited-file-world": "Covers fixture-backed sources, not general world truth.",
     "dry-run-action-fence": "Proves no input emission, not successful game control.",
+    "provider-route-honesty": (
+        "Records deterministic core choices, not live provider quality or optimality."
+    ),
     "optional-provider-honesty": "Covers the absent-provider path, not live audio quality.",
     "state-trace-separation": "Checks local files, not crash durability or concurrency.",
     "useful-negative-cases": "Covers named negatives, not every malformed request.",
@@ -180,6 +186,37 @@ def run_companion_core_suite(
             "world_backend": turn["stages"]["world"]["backend"],
         }
 
+    def provider_routes() -> tuple[bool, dict[str, Any]]:
+        turn = shared["base_turn"]
+        bundle = turn["stages"]["providers"]
+        routes = bundle["routes"]
+        selected = {
+            capability: result["selected_provider"]
+            for capability, result in routes.items()
+            if result["status"] == "selected"
+        }
+        passed = (
+            bundle["status"] == "ok"
+            and bundle["global_router"] is False
+            and routes["perception.vlm"]["selected_provider"]
+            == "deterministic_stub_v1"
+            and routes["world.store"]["selected_provider"]
+            == "embedded_file_world"
+            and routes["action.game_tool"]["selected_provider"]
+            == "dry_run_game_tool_planner"
+            and routes["voice.asr"]["status"] == "not_requested"
+            and routes["voice.tts"]["status"] == "not_requested"
+            and all(
+                result["decision_id"].startswith(turn["turn_id"])
+                for result in routes.values()
+            )
+        )
+        return passed, {
+            "route_count": len(routes),
+            "selected": selected,
+            "global_router": bundle["global_router"],
+        }
+
     def dry_run_actions() -> tuple[bool, dict[str, Any]]:
         observed: dict[str, Any] = {}
         passed = True
@@ -226,6 +263,8 @@ def run_companion_core_suite(
             and voice["status"] == "degraded"
             and voice["audio_written"] is False
             and voice["degradation_reason"] == "voice_provider_not_configured"
+            and turn["stages"]["providers"]["routes"]["voice.tts"]["status"]
+            == "unavailable"
         )
         return passed, {
             "turn_id": turn["turn_id"],
@@ -289,6 +328,10 @@ def run_companion_core_suite(
             unsupported["status"] == "degraded"
             and unsupported["action"]["executed"] is False
             and unsupported["action"]["degradation_reason"] == "unsupported_action_intent"
+            and unsupported["stages"]["providers"]["routes"]["action.game_tool"][
+                "status"
+            ]
+            == "rejected"
             and no_match["status"] == "degraded"
             and no_match["stages"]["world"]["degradation_reason"] == "no_retrieval_match"
             and not no_match["citations"]
@@ -309,6 +352,7 @@ def run_companion_core_suite(
             and replayed["turn_id"] != original["turn_id"]
             and replayed["response"] == original["response"]
             and replayed["citations"] == original["citations"]
+            and replayed["stages"]["providers"]["replay_routing_performed"] is False
         )
         return passed, {
             "source_turn_id": original["turn_id"],
@@ -321,6 +365,7 @@ def run_companion_core_suite(
         _case("deterministic-stub-turn", ("PB-001",), deterministic_turn),
         _case("cited-file-world", ("PB-002", "PB-003"), cited_world),
         _case("dry-run-action-fence", ("PB-005",), dry_run_actions),
+        _case("provider-route-honesty", ("PB-007",), provider_routes),
         _case("optional-provider-honesty", ("PB-007",), optional_voice),
         _case("state-trace-separation", ("PB-008",), state_trace_separation),
         _case("useful-negative-cases", ("PB-012",), useful_negatives),

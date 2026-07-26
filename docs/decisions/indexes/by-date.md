@@ -13,3 +13,4 @@
 ## 2026-07-25
 
 - [ATM10-D-0003 - Autonomous Modular Monolith](../ATM10-D-0003-autonomous-modular-monolith.md) (`docs/decisions/ATM10-D-0003-autonomous-modular-monolith.md`)
+- [ATM10-D-0004 - Local Provider Routing and Reviewed Promotion](../ATM10-D-0004-local-provider-routing-and-reviewed-promotion.md) (`docs/decisions/ATM10-D-0004-local-provider-routing-and-reviewed-promotion.md`)

@@ -34,6 +34,8 @@ def _write_wheel(path: Path, *, requires_dist: list[str] | None = None, extra_ro
             "atm10_agent/proof/evals.py",
             "atm10_agent/proof/measurements.py",
             "atm10_agent/proof/provenance.py",
+            "atm10_agent/providers/promotion.py",
+            "atm10_agent/providers/routing.py",
             "atm10_agent/world/knowledge.py",
             "atm10_agent/windows_acceptance.py",
         ):
@@ -65,6 +67,8 @@ def _write_sdist(path: Path, *, omit: str | None = None) -> None:
         "src/atm10_agent/proof/evals.py",
         "src/atm10_agent/proof/measurements.py",
         "src/atm10_agent/proof/provenance.py",
+        "src/atm10_agent/providers/promotion.py",
+        "src/atm10_agent/providers/routing.py",
         "src/atm10_agent/world/knowledge.py",
     }
     with tarfile.open(path, "w:gz") as archive:

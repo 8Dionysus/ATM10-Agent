@@ -168,9 +168,12 @@ The rebuild is complete only when all of the following are true:
    model, or hidden host configuration.
 4. Product KAG/world and cited retrieval remain useful without root repo-self
    KAG, Qdrant, or Neo4j.
-5. Optional providers are replaceable, import-light, and honestly degraded.
+5. Optional providers are replaceable, import-light, honestly degraded, and
+   selected through turn-local traceable route results rather than a global
+   router.
 6. Automation remains dry-run by default with executable negative tests.
-7. Mutable state and append-only traces have distinct contracts.
+7. Mutable state, durable memory, append-only traces, and eval evidence have
+   distinct contracts.
 8. Windows 11 + PowerShell 7 acceptance is current and separate.
 9. No production code uses repository path injection or imports `scripts.*`.
 10. Dependency metadata, resolved evidence, source distribution, and wheel are

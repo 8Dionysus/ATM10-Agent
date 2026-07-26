@@ -22,6 +22,11 @@
       "protects": "PB-005"
     },
     {
+      "id": "provider-route-honesty",
+      "test_ref": "tests/test_provider_routing.py",
+      "protects": "PB-007"
+    },
+    {
       "id": "optional-provider-honesty",
       "test_ref": "tests/test_companion_eval.py",
       "protects": "PB-007"
