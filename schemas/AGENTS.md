@@ -1,11 +1,12 @@
 # AGENTS.md
 
 Local guidance for `schemas/` in `ATM10-Agent`. Read the root `AGENTS.md` first.
-This directory owns operator and antifragility contracts for the companion project.
+This directory owns antifragility contracts for the companion project.
 
 ## Scope
 
-Schemas here describe project-local receipts and operator surfaces such as `stressor_receipt_v1.json`, `adaptation_delta_v1.json`, `gateway_operator_return_event.schema.json`, and return-summary catalogs.
+Schemas here describe project-local receipts such as `stressor_receipt_v1.json`
+and `adaptation_delta_v1.json`.
 They do not define federation-wide proof, role, checkpoint, or self-agent doctrine.
 
 ## Local contract
@@ -21,6 +22,6 @@ They do not define federation-wide proof, role, checkpoint, or self-agent doctri
 Use targeted contract checks, then broader pytest if needed:
 
 ```powershell
-python -m pytest tests/test_antifragility_public_surface.py tests/test_operator_product_safe_actions.py tests/test_operator_return_recovery.py
+python -m pytest tests/test_antifragility_public_surface.py
 python -m pytest
 ```

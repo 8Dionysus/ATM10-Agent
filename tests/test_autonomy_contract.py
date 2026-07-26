@@ -4,7 +4,6 @@ import json
 from pathlib import Path
 
 from scripts.validate_local_evals import validate_local_evals
-from scripts.validate_local_stats_port import validate_local_stats
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -89,9 +88,10 @@ def test_canonical_docs_route_to_autonomy_contract() -> None:
         assert "docs/autonomy/README.md" in text, path
 
 
-def test_eval_and_measurement_contracts_are_source_owned_and_valid() -> None:
+def test_eval_contract_is_source_owned_and_valid() -> None:
     assert validate_local_evals() == []
-    assert validate_local_stats() == []
+    assert not any(path.is_file() for path in (REPO_ROOT / "stats").rglob("*"))
+    assert not (REPO_ROOT / "scripts" / "validate_local_stats_port.py").exists()
 
 
 def test_repo_validation_has_no_sibling_checkout_or_owner_action() -> None:
@@ -103,12 +103,27 @@ def test_repo_validation_has_no_sibling_checkout_or_owner_action() -> None:
     assert "repository:" not in workflow
     assert "AOA_" not in workflow
     assert "scripts.validate_local_evals" in workflow
-    assert "scripts.validate_local_stats_port" in workflow
+    assert "scripts.validate_local_stats_port" not in workflow
     assert "Smoke - Autonomous companion package" in workflow
     assert "atm10 doctor" in workflow
     assert "atm10 run" in workflow
     assert "atm10 replay" in workflow
     assert "atm10 eval" in workflow
+
+
+def test_retired_control_plane_is_absent() -> None:
+    retired_paths = (
+        ".github/workflows/gateway-sla-readiness-nightly.yml",
+        ".github/workflows/combo-a-profile-smoke.yml",
+        "scripts/gateway_v1_local.py",
+        "scripts/pilot_runtime_loop.py",
+        "scripts/start_operator_product.py",
+        "scripts/streamlit_operator_panel.py",
+        "scripts/voice_runtime_service.py",
+        "scripts/tts_runtime_service.py",
+    )
+    for relative_path in retired_paths:
+        assert not (REPO_ROOT / relative_path).exists(), relative_path
 
 
 def test_repo_self_kag_is_removed_but_product_kag_remains() -> None:

@@ -8,7 +8,6 @@ Read the root `AGENTS.md` first. This file only adds local rules for the shared 
 
 This directory includes the shared runtime and policy surface used by multiple entrypoints, including:
 
-- `ops_policy.py`
 - `service_sla.py`
 - `combo_a_profile.py`
 - `atm10_session_probe.py`
@@ -30,7 +29,9 @@ This directory includes the shared runtime and policy surface used by multiple e
 
 - Avoid heavy import-time work, especially model loading, service probing, or device enumeration.
 - Preserve clear boundaries between policy, provider adapters, runtime clients, and presentation logic.
-- When changing `service_sla.py`, `combo_a_profile.py`, or provider selection logic, update the matching tests and any affected script entrypoints in the same change.
+- When changing `service_sla.py`, `combo_a_profile.py`, or provider selection
+  logic, update the matching tests and any affected focused tools in the same
+  change.
 
 ## Validate
 

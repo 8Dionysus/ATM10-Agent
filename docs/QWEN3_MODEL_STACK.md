@@ -1,102 +1,61 @@
-# Model Stack and Host Runtime Profiles (OpenVINO-first)
+# Optional model and hardware providers
 
-Current as of: 2026-04-21
+Current as of: 2026-07-25
 
-This file keeps the historical path `docs/QWEN3_MODEL_STACK.md` for continuity, but it now records the machine-specific runtime policy for `ATM10-Agent`, not only a Qwen3-only stack snapshot.
+This historical filename now records provider posture, not an application
+topology or a claim that a particular model stack is required.
 
-## Architecture posture
+## Core rule
 
-- `ATM10-Agent` is a local-first ATM10 companion with active operator-facing entrypoints and an internal agent stack built on top of perception, memory, routing, evals, dry-run automation, and artifacted worker-style processes.
-- Runtime backend choice is a host-profile decision. A host profile selects the inference/runtime path for one machine; it does not redefine the repo architecture.
-- The current product-edge baseline remains the validated Intel/OpenVINO host path on this repo machine.
-- Fedora-first development may be introduced only as an additive host profile for portable-core and dev-companion stabilization; it does not redefine Windows ATM10 product-edge support until promoted through evidence.
-- Future `NVIDIA`/`Ollama`, Fedora/Linux, or other paths should land as explicit additive host profiles with their own measurements, evals, and promotion criteria.
+The default `atm10_agent` turn uses deterministic perception and the
+file-backed world. Models and accelerators enrich that turn through replaceable
+providers. They never own the composition root, trace, action fence, build,
+test, or release contract.
 
-## Canonical current host profile
+## Current optional implementation anchors
 
-- Host profile id: `ov_intel_core_ultra_local`
-- Status: current supported product-edge baseline
-- Runtime family: `OpenVINO-first`
-- Placement policy: explicit per-stage `CPU/GPU/NPU` placement with artifacted measurement; use multi-accelerator parallelism where it helps instead of silently swapping the entire stack
-- Promotion rule: this profile remains canonical until another host profile is explicitly documented, evaluated, and promoted
+- `agent_core/vlm_stub.py`: deterministic acceptance provider;
+- `agent_core/vlm_openvino.py`: local OpenVINO vision provider;
+- `agent_core/vlm_openai.py`: optional remote vision provider;
+- `agent_core/grounded_reply_openvino.py`: local grounded-response provider;
+- `agent_core/io_voice.py`: optional ASR/TTS implementation helpers;
+- `agent_core/tts_runtime.py`: in-process TTS engine/router behavior;
+- `rag/retrieval.py`: in-memory baseline plus optional Qdrant path;
+- `kag/neo4j_backend.py`: optional Neo4j product-store adapter.
 
+All optional dependencies must be loaded at the use site and return explicit
+unavailable/degraded evidence when absent.
 
-## Development host profiles (additive, not promoted)
+## OpenVINO posture
 
-- Candidate profile id: `fedora_local_dev`
-- Status: preliminary development profile; not the current supported product-edge baseline
-- Intent: stabilize portable core, operator-companion surfaces, and Fedora-first workspace ergonomics before making ATM10/Minecraft parity claims
-- Current first-wave scope: gateway/operator surfaces, memory/retrieval/KAG development, voice/runtime experiments, dry-run automation contracts, artifact generation, and manual or region-based capture experiments
-- Explicitly out of scope for the first-wave claim: Windows-style ATM10 window identity, DXGI capture, supervised input, or broad `abyss-stack` deployment parity
-- Promotion rule: `fedora_local_dev` becomes a public supported profile only after it has runnable commands, CI or smoke evidence, and matching updates in `docs/PRODUCT_EDGE_POSTURE.md`, `ROADMAP.md`, and `MANIFEST.md`
+OpenVINO remains a validated provider family and is declared by the
+`openvino` optional extra. Device placement is provider configuration, not
+repository architecture. CPU/GPU/NPU measurements may guide a host-specific
+choice, but no local model directory, compiled blob, or device is committed or
+required by the core.
 
-## Future host profiles (additive)
+The model export, probe, and diagnostic scripts under `scripts/` are focused
+maintainer tools. They do not form a launch gate or a second application.
 
-- Expected examples: `ollama_nvidia_local`, `cuda_native_local`, or another explicit machine-specific path
-- New host profiles must document their own runtime assumptions, model choices, eval posture, and operator/pilot launch notes
-- Adding a future host profile does not silently rewrite `ov_intel_core_ultra_local`; the current baseline remains the default until public docs and validation say otherwise
+## Voice posture
 
-## Active target stack
+The package baseline is text-complete. `--voice` without a configured provider
+returns explicit degradation. ASR/TTS libraries and model runtimes are
+optional; separate HTTP voice/TTS services are retired.
 
-1. Text core LLM: `Qwen3-8B`
-2. Vision core: `Qwen2.5-VL-7B-Instruct`
-3. Retrieval: `Qwen3-Embedding-0.6B` + `Qwen3-Reranker-0.6B`
-4. Voice IN (active runtime): `Whisper v3 Turbo (OpenVINO GenAI)`
-5. Voice OUT (active runtime): `tts_runtime_service`
+## Host and evidence boundary
 
-Rule: prefer the strongest locally supported OpenVINO path per task on `ov_intel_core_ultra_local`. `Qwen3` remains the default text/retrieval family, but the active pilot vision path is allowed to use `Qwen2.5-VL` when current OpenVINO VLM runtime support is better.
+Windows 11 + PowerShell 7 remains the first product edge. Live hardware/model
+evidence must name the provider, model revision or local artifact identity,
+device, selected fallback, and trace. That evidence may prove one provider on
+one host; it cannot promote the provider into core.
 
-## Pilot runtime defaults
+Large models, mutable caches, compile blobs, and benchmark output remain
+outside Git. Follow the host storage policy before downloading or benchmarking
+them.
 
-* Grounded reply text core: `models/qwen3-8b-int4-cw-ov` on `GPU`
-* Live screen grounding: `models/qwen2.5-vl-7b-instruct-int4-ov` on `GPU`
-* ASR: `models/whisper-large-v3-turbo-ov` on `NPU`
+## Archived tracks
 
-## Archived / recoverable components
-
-* `Qwen3-TTS-12Hz-0.6B-CustomVoice` + `Qwen3-TTS-Tokenizer-12Hz` remain removed from the active stack.
-  * Reason: they do not meet production latency SLA and remain blocked for the preferred NPU path.
-* `Qwen3-ASR-0.6B` remains archived/recoverable.
-  * Reason: the active ASR path is Whisper GenAI; restore only through explicit opt-in flags.
-* `Qwen3-VL-4B-Instruct` custom OpenVINO export is archived for the active pilot path.
-  * Reason: the current OpenVINO GenAI VLM runtime rejects the exported `qwen3_vl` model type, so it is not used as the launch-gate vision baseline.
-
-## Local hardware/runtime profile
-
-* CPU: `Intel Core Ultra 9 285H`
-* RAM: `31.43 GiB`
-* OpenVINO devices: `CPU`, `GPU` (`Intel Arc 140T`), `NPU` (`Intel AI Boost`)
-* OpenVINO version: `2026.0.0`
-* OpenVINO GenAI version: `2026.0.0.0`
-
-## OpenVINO readiness matrix
-
-### Use pre-converted OpenVINO models now
-
-* Text core:
-  * `OpenVINO/Qwen3-8B-int4-cw-ov` (preferred `GPU` for the active pilot runtime on the repo host)
-  * fallback: `OpenVINO/Qwen3-8B-int8-ov`, `OpenVINO/Qwen3-8B-fp16-ov`
-* Vision:
-  * `OpenVINO/Qwen2.5-VL-7B-Instruct-int4-ov` (preferred `GPU`)
-  * `CPU` fallback is valid for diagnostics; `NPU` is not the current default for this model on the repo host
-* Retrieval:
-  * `OpenVINO/Qwen3-Embedding-0.6B-int8-ov` (or fp16)
-  * `OpenVINO/Qwen3-Reranker-0.6B-fp16-ov`
-
-### Archived conversion tracks (do not use as pilot launch-gate)
-
-* Vision:
-  * source: `Qwen/Qwen3-VL-4B-Instruct`
-  * status: archived experiment, blocked for the active OpenVINO GenAI VLM runtime path
-* Voice IN:
-  * source: `Qwen/Qwen3-ASR-0.6B`
-  * status: archived candidate path, validate before restore
-
-## Runtime policy
-
-* Default runtime for the active repo-host stack in this project: OpenVINO (`CPU|GPU|NPU`).
-* Device placement is stage-specific and may exploit multiple accelerators in parallel when the repo host supports it.
-* Pilot/Gateway surfaces stay local-first and artifacted under `runs/...`.
-* Host-edge dependencies and desktop-boundary adapters should stay separable from portable runtime surfaces; Windows-specific capture/input paths must not become portable-core assumptions.
-* Future non-OpenVINO paths must arrive as explicit host profiles instead of silent backend swaps.
-* The OpenAI-compatible adapter remains in the repo as an optional gateway layer; it does not replace the local OpenVINO stack as the pilot baseline.
+Historical Qwen ASR/TTS conversion and rollback commands live in
+`docs/ARCHIVED_TRACKS.md`. Their presence is recoverability evidence, not
+current support.

@@ -7,7 +7,7 @@ Thank you for contributing.
 Good contributions:
 - scripts, source modules, tests, and fixtures
 - public-safe docs for setup, runbook, and source-of-truth surfaces
-- gateway, retrieval, KAG, voice, operator-panel, and safe-automation improvements
+- companion loop, retrieval, KAG, optional providers, and dry-run action improvements
 - validation and smoke coverage that keeps the local-first product reproducible
 
 Bad contributions:

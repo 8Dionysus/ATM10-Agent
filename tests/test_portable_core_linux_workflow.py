@@ -24,37 +24,19 @@ def test_portable_core_linux_workflow_uses_linux_dependency_surface() -> None:
     text = _workflow_text()
 
     assert "runs-on: ubuntu-latest" in text
-    assert "pip install -r requirements-linux-dev.txt" in text
+    assert "python -m pip install . --no-deps" in text
+    assert "requirements-linux-dev.txt" not in text
     assert "pip install -r requirements-dev.txt" not in text
     assert "pip install -r requirements.txt" not in text
     assert "dxcam" not in text.lower()
 
 
-def test_portable_core_linux_workflow_exercises_wave_contracts() -> None:
+def test_portable_core_linux_workflow_exercises_installed_package() -> None:
     text = _workflow_text()
 
-    assert "tests/test_host_profiles.py" in text
-    assert "tests/test_atm10_session_probe_adapters.py" in text
-    assert "tests/test_readiness_scopes.py" in text
-    assert "tests/test_discover_instance.py" in text
-    assert "tests/test_start_operator_fedora_dev.py" in text
-    assert "scripts.discover_instance --runs-dir runs/ci-linux-discover-instance" in text
-    assert "scripts.start_operator_fedora_dev" in text
-    assert "--print-only" in text
-
-
-
-def test_portable_core_linux_workflow_writes_fedora_companion_receipt() -> None:
-    text = _workflow_text()
-
-    assert "tests/test_fedora_companion_milestone.py" in text
-    assert "scripts.write_fedora_companion_receipt" in text
-    assert "--allow-missing-atm10-dir" in text
-    assert "runs/ci-fedora-companion-receipt" in text
-
-
-
-def test_portable_core_linux_workflow_keeps_windows_edge_contract_visible() -> None:
-    text = _workflow_text()
-
-    assert "tests/test_windows_product_edge_contract.py" in text
+    assert "atm10 doctor" in text
+    assert "atm10 run" in text
+    assert "atm10 eval" in text
+    assert "companion-core" in text
+    assert "scripts." not in text
+    assert "fedora" not in text.lower()

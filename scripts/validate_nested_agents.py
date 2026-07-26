@@ -16,9 +16,8 @@ REPOSITORY_NAME = 'ATM10-Agent'
 
 REQUIRED_AGENTS_DOCS: dict[str, tuple[str, ...]] = {
     'scripts/AGENTS.md': (
-        'runnable entrypoints and operator tooling',
+        'transitional maintainer-tool shell',
         'dry-run or report-only behavior as the default',
-        'ATM10_SERVICE_TOKEN',
         'python -m scripts.phase_a_smoke',
         'python -m scripts.generate_decision_indexes --check',
     ),
@@ -63,13 +62,6 @@ REQUIRED_AGENTS_DOCS: dict[str, tuple[str, ...]] = {
         'deterministic cases',
         'validate_local_evals.py',
     ),
-    'stats/AGENTS.md': (
-        'owner-local statistical questions',
-        'cross_service_benchmark_suite_v1',
-        'missing expected lane',
-        'source-owned validator',
-        'validate_local_stats_port.py',
-    ),
     'src/atm10_agent/hybrid/AGENTS.md': (
         '`baseline_first`',
         '`combo_a` additive',
@@ -94,9 +86,8 @@ REQUIRED_AGENTS_DOCS: dict[str, tuple[str, ...]] = {
         'python -m scripts.validate_decision_records',
     ),
     'schemas/AGENTS.md': (
-        'operator and antifragility contracts',
+        'antifragility contracts',
         'schema changes are contract changes',
-        'gateway_operator_return_event.schema.json',
         'stressor_receipt_v1.json',
     ),
     'examples/AGENTS.md': (

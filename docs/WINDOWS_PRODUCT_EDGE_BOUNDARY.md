@@ -1,42 +1,44 @@
 # Windows product-edge boundary
 
-Windows remains the first-class ATM10 product-edge acceptance path while Fedora develops as an additive companion workspace.
+Windows 11 + PowerShell 7 remains the first ATM10 product-edge acceptance
+path. Linux proves only the portable deterministic core.
 
 ## Contract
 
-The Windows edge is intentionally explicit:
+- ATM10 window/session identity uses the package-owned Win32 probe;
+- explicit monitor or region capture prefers DXcam/DXGI;
+- window-handle and fallback capture use Pillow;
+- selected backend, target geometry, raw dimensions, resize, and DXcam errors
+  are recorded in the capture result;
+- capture dependencies live in the `windows` optional extra;
+- deterministic core import and execution do not load those dependencies;
+- action acceptance remains dry-run with `executed=false`.
 
-- default host profile: `ov_intel_core_ultra_local`
-- readiness scope: `product_edge`
-- window identity mode: `win32_atm10_window`
-- session probe backend: `windows_win32`
-- preferred capture backend: `dxcam_dxgi`
-- Windows dependency pack: `requirements-win-edge.txt`
-- portable core dependency pack: `requirements-core.txt`
+The implementation anchors are:
 
-The contract is represented by `src/atm10_agent/agent_core/windows_product_edge_contract.py` and covered by `tests/test_windows_product_edge_contract.py`.
+- `src/atm10_agent/agent_core/atm10_session_probe.py`;
+- `src/atm10_agent/perception/windows_capture.py`;
+- `tests/test_atm10_session_probe_adapters.py`;
+- `tests/test_windows_capture.py`;
+- `tests/test_windows_product_edge_contract.py`.
 
-## Why this exists
+## Dependency boundary
 
-Fedora-first development should improve the portable core without quietly weakening the ATM10/Minecraft Windows edge.
-A Linux/Fedora companion receipt can prove manual capture, dev-companion readiness, and local operator ergonomics.
-It does not prove Win32 window discovery, DXGI capture, or Windows ATM10 acceptance.
+`pyproject.toml` declares no core runtime dependency. The `windows` extra owns
+DXcam, NumPy, and Pillow. Compatibility requirements files must preserve the
+same direction until they are replaced by reproducible resolution artifacts.
 
-## Validation
+## Claim limit
 
-The pure contract check is owned by
-`tests/test_windows_product_edge_contract.py`; use the repository verification
-route in `AGENTS.md`.
+Deterministic tests prove selection, normalization, fallback, and trace shape;
+they do not prove a current physical ATM10 window or DXGI device. A release
+checkpoint needs separate Windows 11 + PowerShell 7 evidence for:
 
-The dependency boundary must stay shaped like this:
+1. selected ATM10 window and foreground/session posture;
+2. selected capture backend and target;
+3. successful screenshot artifact or explicit degraded fallback;
+4. companion turn trace;
+5. correlated dry-run action with no input emission.
 
-```text
-requirements.txt -> requirements-win-edge.txt -> requirements-core.txt
-requirements-win-edge.txt contains dxcam
-requirements-core.txt does not contain dxcam
-```
-
-## Promotion boundary
-
-Do not promote Fedora or any future host profile by editing the default profile in place.
-Additive profiles must keep their own profile id, readiness scope, workflow evidence, and support language.
+No Linux run, provider smoke, or document statement substitutes for that live
+evidence.

@@ -9,7 +9,6 @@ NESTED_AGENTS = [
     Path("src/atm10_agent/rag/AGENTS.md"),
     Path("src/atm10_agent/kag/AGENTS.md"),
     Path("src/atm10_agent/hybrid/AGENTS.md"),
-    Path("stats/AGENTS.md"),
     Path("tests/AGENTS.md"),
     Path("scripts/AGENTS.md"),
     Path("docs/decisions/AGENTS.md"),
@@ -31,7 +30,6 @@ REQUIRED_MARKERS = {
         "src/atm10_agent/hybrid/AGENTS.md",
     ],
     Path("src/atm10_agent/agent_core/AGENTS.md"): [
-        "ops_policy.py",
         "service_sla.py",
         "combo_a_profile.py",
     ],
@@ -50,12 +48,6 @@ REQUIRED_MARKERS = {
         "baseline_first",
         "combo_a",
     ],
-    Path("stats/AGENTS.md"): [
-        "owner-local statistical questions",
-        "cross_service_benchmark_suite_v1",
-        "missing expected lane",
-        "source-owned",
-    ],
     Path("tests/AGENTS.md"): [
         "tests/fixtures/",
         "python -m pytest",
@@ -64,7 +56,7 @@ REQUIRED_MARKERS = {
     Path("scripts/AGENTS.md"): [
         "phase_a_smoke.py",
         "retrieve_demo.py",
-        "automation_intent_chain_smoke.py",
+        "maintainer-tool shell",
     ],
     Path("docs/decisions/AGENTS.md"): [
         "ATM10-D-####",
