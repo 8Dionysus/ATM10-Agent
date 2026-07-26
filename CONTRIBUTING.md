@@ -30,8 +30,7 @@ Recommended local setup and validation:
 ```powershell
 cd <repo-root>
 .\.venv\Scripts\Activate.ps1
-python -m pip install -r requirements.txt
-python -m pip install -r requirements-dev.txt
+python -m pip install -e ".[dev]"
 python -m pytest
 ```
 

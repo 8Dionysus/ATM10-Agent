@@ -8,7 +8,7 @@ from typing import Any, Sequence
 
 ATM10_SESSION_PROBE_SCHEMA = "atm10_session_probe_v1"
 _ATM10_HEURISTIC_THRESHOLD = 4
-_SESSION_PROBE_BACKENDS = ("windows_win32", "linux_manual", "unsupported")
+_SESSION_PROBE_BACKENDS = ("windows_win32", "unsupported")
 
 
 def list_session_probe_backend_ids() -> tuple[str, ...]:
@@ -39,8 +39,6 @@ def select_session_probe_backend_id(
     platform = _platform_name(platform_name)
     if platform == "win32":
         return "windows_win32"
-    if platform.startswith("linux"):
-        return "linux_manual"
     return "unsupported"
 
 
@@ -286,28 +284,6 @@ def _probe_windows_win32(
     )
 
 
-def _probe_linux_manual(
-    *,
-    checked_at_utc: str,
-    capture_target_kind: str,
-    capture_bbox: Sequence[int] | None,
-) -> dict[str, Any]:
-    reason_codes = ["window_identity_unavailable", "manual_capture_source_required"]
-    if capture_target_kind == "unknown":
-        reason_codes.append("capture_target_kind_unknown")
-
-    return _build_probe_payload(
-        checked_at_utc=checked_at_utc,
-        capture_target_kind=capture_target_kind,
-        capture_bbox=capture_bbox,
-        candidate=None,
-        reason_codes=reason_codes,
-        status="attention",
-        atm10_probable=False,
-        capture_intersects_window=None,
-    )
-
-
 def _probe_unsupported(
     *,
     checked_at_utc: str,
@@ -348,12 +324,6 @@ def probe_atm10_session(
             capture_target_kind=normalized_capture_target_kind,
             capture_bbox=normalized_capture_bbox,
             platform_name=platform_name,
-        )
-    if backend_id == "linux_manual":
-        return _probe_linux_manual(
-            checked_at_utc=checked_at_utc,
-            capture_target_kind=normalized_capture_target_kind,
-            capture_bbox=normalized_capture_bbox,
         )
     return _probe_unsupported(
         checked_at_utc=checked_at_utc,

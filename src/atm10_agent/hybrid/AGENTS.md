@@ -10,8 +10,8 @@ This directory currently centers on `planner.py`, the merge and orchestration la
 
 ## Local contract
 
-- Keep `baseline_first` as the default planning posture unless the task explicitly changes the public contract.
-- Keep `combo_a` additive. It may enrich retrieval and KAG wiring, but it must not silently replace the baseline default.
+- Keep the dependency-free in-memory retrieval plus file KAG path as the default.
+- Qdrant and Neo4j are explicit optional backend choices, never an implicit machine profile.
 - Preserve explicit fallback behavior on KAG degradation. Retrieval-only fallback should be intentional and surfaced, not accidental.
 - Keep merge, ranking, and citation rationale deterministic enough for fixture-driven tests.
 

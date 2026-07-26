@@ -3,22 +3,23 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any, Mapping
 
-from atm10_agent.agent_core.combo_a_profile import (
-    DEFAULT_COMBO_A_NEO4J_DATABASE,
-    DEFAULT_COMBO_A_NEO4J_URL,
-    DEFAULT_COMBO_A_NEO4J_USER,
-    DEFAULT_COMBO_A_QDRANT_COLLECTION,
-    DEFAULT_COMBO_A_QDRANT_HOST,
-    DEFAULT_COMBO_A_QDRANT_PORT,
-    DEFAULT_COMBO_A_QDRANT_VECTOR_SIZE,
-    docs_path_required,
-)
 from atm10_agent.kag import build_kag_graph, query_kag_graph, query_kag_neo4j
 from atm10_agent.rag.retrieval import load_docs, retrieve_top_k, retrieve_top_k_qdrant
 
 HYBRID_QUERY_RESULTS_SCHEMA = "hybrid_query_results_v1"
 DEFAULT_HYBRID_PLANNER_MODE = "retrieval_first_kag_expansion"
 DEFAULT_RRF_K = 60
+DEFAULT_QDRANT_COLLECTION = "atm10_hybrid"
+DEFAULT_QDRANT_HOST = "127.0.0.1"
+DEFAULT_QDRANT_PORT = 6333
+DEFAULT_QDRANT_VECTOR_SIZE = 64
+DEFAULT_NEO4J_URL = "http://127.0.0.1:7474"
+DEFAULT_NEO4J_DATABASE = "neo4j"
+DEFAULT_NEO4J_USER = "neo4j"
+
+
+def docs_path_required(*, retrieval_backend: str, kag_backend: str) -> bool:
+    return retrieval_backend == "in_memory" or kag_backend == "file"
 
 
 def _citation_id(item: Mapping[str, Any]) -> str:
@@ -198,14 +199,14 @@ def execute_hybrid_query(
     max_entities_per_doc: int,
     retrieval_backend: str = "in_memory",
     kag_backend: str = "file",
-    qdrant_collection: str = DEFAULT_COMBO_A_QDRANT_COLLECTION,
-    qdrant_host: str = DEFAULT_COMBO_A_QDRANT_HOST,
-    qdrant_port: int = DEFAULT_COMBO_A_QDRANT_PORT,
-    qdrant_vector_size: int = DEFAULT_COMBO_A_QDRANT_VECTOR_SIZE,
+    qdrant_collection: str = DEFAULT_QDRANT_COLLECTION,
+    qdrant_host: str = DEFAULT_QDRANT_HOST,
+    qdrant_port: int = DEFAULT_QDRANT_PORT,
+    qdrant_vector_size: int = DEFAULT_QDRANT_VECTOR_SIZE,
     qdrant_timeout_sec: float = 10.0,
-    neo4j_url: str = DEFAULT_COMBO_A_NEO4J_URL,
-    neo4j_database: str = DEFAULT_COMBO_A_NEO4J_DATABASE,
-    neo4j_user: str = DEFAULT_COMBO_A_NEO4J_USER,
+    neo4j_url: str = DEFAULT_NEO4J_URL,
+    neo4j_database: str = DEFAULT_NEO4J_DATABASE,
+    neo4j_user: str = DEFAULT_NEO4J_USER,
     neo4j_password: str | None = None,
     neo4j_timeout_sec: float = 10.0,
     neo4j_dataset_tag: str | None = None,

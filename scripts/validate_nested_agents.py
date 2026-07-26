@@ -42,7 +42,7 @@ REQUIRED_AGENTS_DOCS: dict[str, tuple[str, ...]] = {
     'src/atm10_agent/agent_core/AGENTS.md': (
         'shared runtime and policy surface',
         'Never silently turn a dry-run or safe-action path into real input behavior',
-        'combo_a` stays additive',
+        'Service wrappers and runtime probes must degrade cleanly',
         'python -m pytest tests/test_service_sla.py',
     ),
     'src/atm10_agent/rag/AGENTS.md': (
@@ -63,8 +63,8 @@ REQUIRED_AGENTS_DOCS: dict[str, tuple[str, ...]] = {
         'validate_local_evals.py',
     ),
     'src/atm10_agent/hybrid/AGENTS.md': (
-        '`baseline_first`',
-        '`combo_a` additive',
+        'dependency-free in-memory retrieval plus file KAG path',
+        'Qdrant and Neo4j are explicit optional backend choices',
         'explicit fallback behavior on KAG degradation',
         'tests/test_hybrid_query_demo.py',
     ),

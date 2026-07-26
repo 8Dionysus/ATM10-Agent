@@ -6,6 +6,7 @@ import json
 import re
 import subprocess
 import sys
+import tomllib
 from datetime import datetime, timezone
 from importlib import metadata
 from pathlib import Path
@@ -15,39 +16,25 @@ from typing import Any, Mapping, Sequence
 INVENTORY_SCHEMA_VERSION = "dependency_inventory_v1"
 FINDINGS_SCHEMA_VERSION = "dependency_findings_v1"
 SECURITY_AUDIT_SCHEMA_VERSION = "dependency_security_audit_v1"
-DEFAULT_REQUIREMENTS_FILES = (
-    "requirements.txt",
-    "requirements-voice.txt",
-    "requirements-llm.txt",
-    "requirements-export.txt",
-    "requirements-dev.txt",
-)
-DEFAULT_SECURITY_REQUIREMENTS_FILES = (
-    "requirements.txt",
-    "requirements-voice.txt",
-    "requirements-llm.txt",
-    "requirements-dev.txt",
-)
+DEFAULT_REQUIREMENTS_FILES = ("pyproject.toml",)
+DEFAULT_SECURITY_REQUIREMENTS_FILES = ("pyproject.toml",)
 DEFAULT_SCAN_ROOTS = ("scripts", "src", "tests")
 OPTIONAL_RUNTIME_PACKAGES = {"qwen-asr", "qwen-tts"}
 
 IMPORT_TO_PACKAGE = {
-    "fastapi": "fastapi",
-    "httpx": "httpx",
     "librosa": "librosa",
     "nncf": "nncf",
     "numpy": "numpy",
     "openvino": "openvino",
     "openvino_genai": "openvino-genai",
     "optimum": "optimum",
+    "PIL": "pillow",
     "qwen_asr": "qwen-asr",
     "qwen_tts": "qwen-tts",
     "sounddevice": "sounddevice",
-    "streamlit": "streamlit",
     "torch": "torch",
     "transformers": "transformers",
     "TTS": "tts",
-    "uvicorn": "uvicorn",
 }
 
 
@@ -97,9 +84,56 @@ def _requirement_name_from_spec(spec: str) -> str | None:
     return _normalize_package_name(match.group(1))
 
 
-def _parse_requirements_file(path: Path) -> dict[str, Any]:
+def _parse_dependency_manifest(path: Path) -> dict[str, Any]:
     if not path.exists():
-        return {"path": str(path), "missing": True, "dependencies": [], "includes": []}
+        return {
+            "path": str(path),
+            "kind": "missing",
+            "missing": True,
+            "dependencies": [],
+            "groups": {},
+            "includes": [],
+        }
+
+    if path.name == "pyproject.toml":
+        payload = tomllib.loads(path.read_text(encoding="utf-8"))
+        project = payload.get("project", {})
+        if not isinstance(project, Mapping):
+            project = {}
+        raw_core = project.get("dependencies", [])
+        core_specs = raw_core if isinstance(raw_core, list) else []
+        raw_groups = project.get("optional-dependencies", {})
+        optional_groups = raw_groups if isinstance(raw_groups, Mapping) else {}
+        groups: dict[str, list[str]] = {}
+        dependencies: set[str] = set()
+        for spec in core_specs:
+            name = _requirement_name_from_spec(str(spec))
+            if name is not None:
+                dependencies.add(name)
+        for group_name, raw_specs in optional_groups.items():
+            specs = raw_specs if isinstance(raw_specs, list) else []
+            group_dependencies: set[str] = set()
+            for spec in specs:
+                name = _requirement_name_from_spec(str(spec))
+                if name is not None:
+                    dependencies.add(name)
+                    group_dependencies.add(name)
+            groups[str(group_name)] = sorted(group_dependencies)
+        return {
+            "path": str(path),
+            "kind": "pyproject",
+            "missing": False,
+            "dependencies": sorted(dependencies),
+            "groups": {
+                "core": sorted(
+                    name
+                    for spec in core_specs
+                    if (name := _requirement_name_from_spec(str(spec))) is not None
+                ),
+                **groups,
+            },
+            "includes": [],
+        }
 
     dependencies: list[str] = []
     includes: list[str] = []
@@ -117,7 +151,14 @@ def _parse_requirements_file(path: Path) -> dict[str, Any]:
         if name is not None:
             dependencies.append(name)
     dependencies = sorted(set(dependencies))
-    return {"path": str(path), "missing": False, "dependencies": dependencies, "includes": includes}
+    return {
+        "path": str(path),
+        "kind": "requirements",
+        "missing": False,
+        "dependencies": dependencies,
+        "groups": {},
+        "includes": includes,
+    }
 
 
 def _resolve_requirement_files(repo_root: Path, raw_paths: Sequence[str | Path]) -> list[Path]:
@@ -231,7 +272,7 @@ def _collect_declared_dependencies(
     missing_file_findings: list[dict[str, Any]] = []
 
     for req_file in requirement_files:
-        parsed = _parse_requirements_file(req_file)
+        parsed = _parse_dependency_manifest(req_file)
         details.append(parsed)
         for dependency in parsed["dependencies"]:
             declared.add(dependency)
@@ -239,8 +280,8 @@ def _collect_declared_dependencies(
             missing_file_findings.append(
                 {
                     "severity": "warn",
-                    "code": "requirements_file_missing",
-                    "message": f"Requirements file does not exist: {req_file}",
+                    "code": "dependency_manifest_missing",
+                    "message": f"Dependency manifest does not exist: {req_file}",
                     "path": str(req_file),
                 }
             )
@@ -284,7 +325,7 @@ def _build_findings(
                         "severity": "warn",
                         "code": "missing_optional_runtime_dependency",
                         "message": (
-                            "Optional runtime import is not present in declared requirements files: "
+                            "Optional runtime import is not present in declared dependency metadata: "
                             f"module={item['module']}, package={package_name}"
                         ),
                         "module": item["module"],
@@ -298,7 +339,7 @@ def _build_findings(
                     "severity": "error",
                     "code": "missing_runtime_dependency",
                     "message": (
-                        "Runtime import is not present in declared requirements files: "
+                        "Runtime import is not present in declared dependency metadata: "
                         f"module={item['module']}, package={package_name}"
                     ),
                     "module": item["module"],
@@ -317,7 +358,7 @@ def _build_findings(
                     "severity": "info",
                     "code": "missing_test_dependency",
                     "message": (
-                        "Test-only import is not present in declared requirements files: "
+                        "Test-only import is not present in declared dependency metadata: "
                         f"module={item['module']}, package={package_name}"
                     ),
                     "module": item["module"],
@@ -711,10 +752,8 @@ def parse_args() -> argparse.Namespace:
         nargs="+",
         default=list(DEFAULT_REQUIREMENTS_FILES),
         help=(
-            "Requirements files to analyze (default: "
-            "requirements.txt requirements-voice.txt requirements-llm.txt "
-            "requirements-dev.txt). Pass requirements-export.txt explicitly "
-            "to audit the optional export toolchain."
+            "Dependency manifests to analyze (default: pyproject.toml). "
+            "Legacy requirements files remain accepted for fixture and migration audits."
         ),
     )
     parser.add_argument(
@@ -722,10 +761,8 @@ def parse_args() -> argparse.Namespace:
         nargs="+",
         default=list(DEFAULT_SECURITY_REQUIREMENTS_FILES),
         help=(
-            "Requirements files that define the fail/report security scan scope "
-            "(default: requirements.txt requirements-voice.txt requirements-llm.txt "
-            "requirements-dev.txt). Pass requirements-export.txt explicitly to include "
-            "the optional export toolchain in the security scan."
+            "Dependency manifests that define the fail/report security scan scope "
+            "(default: pyproject.toml)."
         ),
     )
     return parser.parse_args()

@@ -23,13 +23,11 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements-dev.txt
-          pip install -r requirements-audit.txt
-          python -m pip install -e . --no-deps
+          python -m pip install -e ".[dev,audit]"
 
       - name: Security gate - Dependency audit (fail_on_critical)
         run: |
-          python -m scripts.dependency_audit --runs-dir runs/nightly-security-audit --policy fail_on_critical --with-security-scan true --security-requirements-files requirements.txt requirements-voice.txt requirements-llm.txt requirements-dev.txt
+          python -m scripts.dependency_audit --runs-dir runs/nightly-security-audit --policy fail_on_critical --with-security-scan true
 
       - name: Upload artifact - Security nightly report
         if: always()

@@ -277,7 +277,7 @@ def run_asr_backend_benchmark(
     whisper_language: str | None = None,
     whisper_max_new_tokens: int = 128,
     primary_backend: str = "whisper_genai",
-    profile: str = "baseline_first",
+    profile: str = "local_eval",
     policy: str = "signal_only",
     runs_dir: Path = Path("runs"),
     now: datetime | None = None,
@@ -509,8 +509,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--profile",
         type=str,
-        default="baseline_first",
-        help="Profile label for normalized SLA summary (default: baseline_first).",
+        default="local_eval",
+        help="Evidence-scope label for normalized SLA summary (default: local_eval).",
     )
     parser.add_argument(
         "--policy",

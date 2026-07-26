@@ -212,7 +212,7 @@ def test_execute_hybrid_query_retrieval_failure_degrades_to_kag_only(
         raise RuntimeError("qdrant collection missing")
 
     def _fake_query_kag_neo4j(**kwargs):
-        assert kwargs["dataset_tag"] == "atm10_combo_a_fixture"
+        assert kwargs["dataset_tag"] == "atm10_external_fixture"
         return [
             {
                 "id": "doc:steel_tools",
@@ -241,7 +241,7 @@ def test_execute_hybrid_query_retrieval_failure_degrades_to_kag_only(
         retrieval_backend="qdrant",
         kag_backend="neo4j",
         neo4j_password="fixture-password",
-        neo4j_dataset_tag="atm10_combo_a_fixture",
+        neo4j_dataset_tag="atm10_external_fixture",
     )
 
     assert result["planner_status"] == "kag_only_fallback"
@@ -278,7 +278,7 @@ def test_execute_hybrid_query_retrieval_failure_without_kag_results_marks_ground
         retrieval_backend="qdrant",
         kag_backend="neo4j",
         neo4j_password="fixture-password",
-        neo4j_dataset_tag="atm10_combo_a_fixture",
+        neo4j_dataset_tag="atm10_external_fixture",
     )
 
     assert result["planner_status"] == "grounding_unavailable"
@@ -349,11 +349,10 @@ def test_hybrid_query_demo_emits_stressor_receipt_for_retrieval_only_fallback(
     result = hybrid_query_demo.run_hybrid_query(
         query="steel tools",
         docs_path=_fixture_path("retrieval_docs_sample.jsonl"),
-        profile="combo_a",
         retrieval_backend="qdrant",
         kag_backend="neo4j",
         neo4j_password="fixture-password",
-        neo4j_dataset_tag="atm10_combo_a_fixture",
+        neo4j_dataset_tag="atm10_external_fixture",
         runs_dir=tmp_path / "runs",
         now=datetime(2026, 4, 7, 14, 12, 33, tzinfo=timezone.utc),
     )
@@ -371,7 +370,7 @@ def test_hybrid_query_demo_emits_stressor_receipt_for_retrieval_only_fallback(
     assert run_payload["result"]["stressor_receipt_id"] == receipt_payload["receipt_id"]
     assert run_payload["result"]["stressor_receipt_json"] == str(receipt_path)
     assert receipt_payload["surface"] == "hybrid-query"
-    assert receipt_payload["mode_before"] == "combo_a_hybrid"
+    assert receipt_payload["mode_before"] == "external_store_hybrid"
     assert receipt_payload["mode_after"] == "retrieval_only_fallback"
     assert receipt_payload["stressor_class"] == "kag_stage_failed"
     assert receipt_payload["mutation_blocked"] is True
@@ -387,7 +386,7 @@ def test_hybrid_query_demo_stressor_receipt_ids_are_run_unique(tmp_path: Path) -
     }
     first = hybrid_query_demo._build_stressor_receipt(
         now=now,
-        profile="combo_a",
+        mode_before="external_store_hybrid",
         run_dir=tmp_path / "20260324_180000-hybrid-query",
         run_json_path=tmp_path / "first" / "run.json",
         results_json_path=tmp_path / "first" / "hybrid_query_results.json",
@@ -395,7 +394,7 @@ def test_hybrid_query_demo_stressor_receipt_ids_are_run_unique(tmp_path: Path) -
     )
     second = hybrid_query_demo._build_stressor_receipt(
         now=now,
-        profile="combo_a",
+        mode_before="external_store_hybrid",
         run_dir=tmp_path / "20260324_180000-hybrid-query_01",
         run_json_path=tmp_path / "second" / "run.json",
         results_json_path=tmp_path / "second" / "hybrid_query_results.json",

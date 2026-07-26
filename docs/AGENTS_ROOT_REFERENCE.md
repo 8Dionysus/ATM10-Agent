@@ -168,7 +168,7 @@ Safe, normal contributions include:
 
 Request explicit confirmation before:
 
-- changing `requirements*.txt`
+- changing `pyproject.toml` dependency groups or `pylock.toml`
 - adding new services, ports, or infrastructure assumptions
 - downloading large models or datasets
 - enabling real input events that can change game state
@@ -199,7 +199,7 @@ Treat the following as P1:
 
 - weakening dry-run-by-default behavior
 - widening service exposure, auth posture, or network assumptions without explicit callout
-- changes to `requirements*.txt`, services, or ports made without the required ask-first posture
+- dependency metadata, service, or port changes made without the required ask-first posture
 - semantic contract changes in scripts, gateway, retrieval, KAG, voice, or automation flows without matching tests/docs updates
 - public docs leaking workstation-specific paths, internal hostnames, or sensitive runtime detail
 - claiming validation that was not actually run

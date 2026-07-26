@@ -17,7 +17,7 @@ service is required.
 | tier | surface | honest claim |
 |---|---|---|
 | Package regression | `.github/workflows/pytest.yml` | full tests and installed-package `doctor`, turn, replay, and eval on Windows |
-| Repository boundary | `.github/workflows/repo-validation.yml` | autonomy ledgers, decisions, package boundary, and deterministic smoke are source-owned |
+| Repository boundary | `.github/workflows/repo-validation.yml` | autonomy ledgers, decisions, package boundary, deterministic smoke, and installed-wheel release verification are source-owned |
 | Portable core | `.github/workflows/portable-core-linux.yml` | core wheel behavior is portable and does not import Windows extras |
 | Optional store | `.github/workflows/kag-neo4j-guardrail-nightly.yml` | Neo4j adapter quality only; it does not promote Neo4j into core |
 | Security | `.github/workflows/security-nightly.yml` | declared dependency audit at the scheduled revision |

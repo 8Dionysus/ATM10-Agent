@@ -1,0 +1,5 @@
+lock-version = "1.0"
+created-by = "pip"
+packages = [
+    { name = "atm10-agent", directory = { path = "." } },
+]

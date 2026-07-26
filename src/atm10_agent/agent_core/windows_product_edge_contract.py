@@ -1,29 +1,29 @@
+"""Pure checks for the first-class Windows ATM10 product edge."""
+
 from __future__ import annotations
 
 import re
+import tomllib
+from collections.abc import Mapping, Sequence
 from pathlib import Path
-from typing import Any, Mapping, Sequence
+from typing import Any
 
 from atm10_agent.agent_core.atm10_session_probe import select_session_probe_backend_id
-from atm10_agent.agent_core.host_profiles import DEFAULT_HOST_PROFILE_ID, host_profile_payload
-from atm10_agent.agent_core.readiness_scopes import PRODUCT_EDGE_SCOPE
 
-WINDOWS_PRODUCT_EDGE_CONTRACT_SCHEMA = "windows_product_edge_contract_v1"
-WINDOWS_DEPENDENCY_BOUNDARY_SCHEMA = "windows_dependency_boundary_v1"
+WINDOWS_PRODUCT_EDGE_CONTRACT_SCHEMA = "windows_product_edge_contract_v2"
+WINDOWS_DEPENDENCY_BOUNDARY_SCHEMA = "windows_dependency_boundary_v2"
+REQUIRED_WINDOWS_PACKAGES = frozenset({"dxcam", "numpy", "pillow"})
 
 
 def _dedupe(items: Sequence[str]) -> list[str]:
-    seen: set[str] = set()
-    result: list[str] = []
-    for item in items:
-        if item in seen:
-            continue
-        seen.add(item)
-        result.append(item)
-    return result
+    return list(dict.fromkeys(items))
 
 
-def _finish(payload: dict[str, Any], blocking: list[str], warnings: list[str] | None = None) -> dict[str, Any]:
+def _finish(
+    payload: dict[str, Any],
+    blocking: list[str],
+    warnings: list[str] | None = None,
+) -> dict[str, Any]:
     blocking = _dedupe(blocking)
     warnings = _dedupe(warnings or [])
     payload["blocking_reason_codes"] = blocking
@@ -32,175 +32,144 @@ def _finish(payload: dict[str, Any], blocking: list[str], warnings: list[str] | 
     return payload
 
 
-def evaluate_windows_product_edge_profile(profile_id: str | None = DEFAULT_HOST_PROFILE_ID) -> dict[str, Any]:
-    """Validate that a host profile still represents the Windows ATM10 edge."""
+def _dependency_name(spec: str) -> str:
+    match = re.match(r"^([A-Za-z0-9][A-Za-z0-9_.-]*)", spec.strip())
+    return "" if match is None else match.group(1).lower().replace("_", "-")
 
-    profile = host_profile_payload(profile_id or DEFAULT_HOST_PROFILE_ID)
-    host = profile.get("host")
-    host = host if isinstance(host, Mapping) else {}
-    capabilities = profile.get("capabilities")
-    capabilities = capabilities if isinstance(capabilities, Mapping) else {}
+
+def _dependency_names(raw_specs: Any) -> set[str]:
+    if not isinstance(raw_specs, list):
+        return set()
+    return {
+        name
+        for raw_spec in raw_specs
+        if isinstance(raw_spec, str) and (name := _dependency_name(raw_spec))
+    }
+
+
+def evaluate_windows_product_edge() -> dict[str, Any]:
+    """Validate stable platform facts without a machine-specific host profile."""
+
     backend = select_session_probe_backend_id(platform_name="win32")
-
-    required_checks = [
-        "default_profile_is_windows_edge",
-        "os_family_windows",
-        "readiness_scope_product_edge",
-        "window_identity_win32_atm10_window",
-        "preferred_capture_backend_dxcam_dxgi",
-        "win32_session_probe_backend_selected",
-        "window_session_probe_supported",
-    ]
-    satisfied: list[str] = []
-    blocking: list[str] = []
-
-    if profile.get("id") == DEFAULT_HOST_PROFILE_ID:
-        satisfied.append("default_profile_is_windows_edge")
-    else:
-        blocking.append("default_profile_mismatch")
-
-    if host.get("os_family") == "windows":
-        satisfied.append("os_family_windows")
-    else:
-        blocking.append("os_family_not_windows")
-
-    if host.get("readiness_scope") == PRODUCT_EDGE_SCOPE:
-        satisfied.append("readiness_scope_product_edge")
-    else:
-        blocking.append("readiness_scope_not_product_edge")
-
-    if host.get("window_identity_mode") == "win32_atm10_window":
-        satisfied.append("window_identity_win32_atm10_window")
-    else:
-        blocking.append("window_identity_not_win32_atm10")
-
-    if profile.get("preferred_capture_backend") == "dxcam_dxgi":
-        satisfied.append("preferred_capture_backend_dxcam_dxgi")
-    else:
-        blocking.append("preferred_capture_backend_not_dxcam_dxgi")
-
-    if backend == "windows_win32":
-        satisfied.append("win32_session_probe_backend_selected")
-    else:
-        blocking.append("win32_session_probe_backend_not_selected")
-
-    if bool(capabilities.get("supports_window_session_probe")):
-        satisfied.append("window_session_probe_supported")
-    else:
-        blocking.append("window_session_probe_not_supported")
-
+    blocking = [] if backend == "windows_win32" else ["win32_session_probe_backend_not_selected"]
     return _finish(
         {
             "schema_version": WINDOWS_PRODUCT_EDGE_CONTRACT_SCHEMA,
-            "profile_id": profile.get("id"),
-            "required_checks": required_checks,
-            "satisfied_checks": satisfied,
-            "session_probe_backend_for_win32": backend,
-            "profile": profile,
+            "platform": "windows",
+            "shell": "pwsh",
+            "session_probe_backend": backend,
+            "preferred_capture_backend": "dxcam_dxgi",
+            "fallback_capture_backend": "pillow_imagegrab",
+            "action_mode": "dry_run_only",
+            "required_checks": [
+                "win32_session_probe_backend_selected",
+                "dxcam_first_capture",
+                "pillow_fallback_evidence",
+                "dry_run_action_fence",
+            ],
+            "satisfied_checks": (
+                [
+                    "win32_session_probe_backend_selected",
+                    "dxcam_first_capture",
+                    "pillow_fallback_evidence",
+                    "dry_run_action_fence",
+                ]
+                if not blocking
+                else [
+                    "dxcam_first_capture",
+                    "pillow_fallback_evidence",
+                    "dry_run_action_fence",
+                ]
+            ),
         },
-        blocking=blocking,
+        blocking,
     )
 
 
-def _read_text(path: Path) -> str | None:
-    try:
-        return path.read_text(encoding="utf-8")
-    except OSError:
-        return None
-
-
-def _requirement_names(text: str) -> set[str]:
-    names: set[str] = set()
-    for raw_line in text.splitlines():
-        line = raw_line.split("#", 1)[0].strip()
-        if not line or line.startswith("-"):
-            continue
-        name = re.split(r"[<>=!~;\[]", line, maxsplit=1)[0].strip()
-        if name:
-            names.add(name.lower().replace("_", "-"))
-    return names
-
-
 def evaluate_windows_dependency_boundary(repo_root: str | Path = ".") -> dict[str, Any]:
-    """Check that Windows-only edge dependencies stay outside portable core."""
+    """Check Windows extras directly against canonical ``pyproject.toml``."""
 
-    root = Path(repo_root)
-    requirements_txt = _read_text(root / "requirements.txt")
-    win_edge_txt = _read_text(root / "requirements-win-edge.txt")
-    core_txt = _read_text(root / "requirements-core.txt")
+    pyproject_path = Path(repo_root) / "pyproject.toml"
+    try:
+        payload = tomllib.loads(pyproject_path.read_text(encoding="utf-8"))
+    except (OSError, tomllib.TOMLDecodeError):
+        return _finish(
+            {
+                "schema_version": WINDOWS_DEPENDENCY_BOUNDARY_SCHEMA,
+                "pyproject_path": str(pyproject_path),
+                "required_checks": [],
+                "satisfied_checks": [],
+            },
+            ["pyproject_unreadable"],
+        )
+
+    project = payload.get("project")
+    project = project if isinstance(project, Mapping) else {}
+    core = _dependency_names(project.get("dependencies"))
+    optional = project.get("optional-dependencies")
+    optional = optional if isinstance(optional, Mapping) else {}
+    windows = _dependency_names(optional.get("windows"))
+    non_windows = {
+        dependency
+        for extra_name, specs in optional.items()
+        if extra_name != "windows"
+        for dependency in _dependency_names(specs)
+    }
 
     required_checks = [
-        "requirements_txt_points_to_windows_edge",
-        "windows_edge_contains_dxcam",
-        "portable_core_does_not_contain_dxcam",
+        "core_dependency_free",
+        "windows_extra_complete",
+        "dxcam_is_windows_only",
     ]
     satisfied: list[str] = []
     blocking: list[str] = []
-
-    if requirements_txt is None:
-        blocking.append("requirements_txt_missing")
-    elif "requirements-win-edge.txt" in requirements_txt:
-        satisfied.append("requirements_txt_points_to_windows_edge")
+    if not core:
+        satisfied.append("core_dependency_free")
     else:
-        blocking.append("requirements_txt_missing_windows_edge_include")
-
-    if win_edge_txt is None:
-        blocking.append("requirements_win_edge_missing")
-    elif "dxcam" in _requirement_names(win_edge_txt):
-        satisfied.append("windows_edge_contains_dxcam")
+        blocking.append("core_has_runtime_dependencies")
+    missing_windows = sorted(REQUIRED_WINDOWS_PACKAGES - windows)
+    if not missing_windows:
+        satisfied.append("windows_extra_complete")
     else:
-        blocking.append("windows_edge_missing_dxcam")
-
-    if core_txt is None:
-        blocking.append("requirements_core_missing")
-    elif "dxcam" not in _requirement_names(core_txt):
-        satisfied.append("portable_core_does_not_contain_dxcam")
+        blocking.extend(f"windows_extra_missing_{name}" for name in missing_windows)
+    if "dxcam" not in core and "dxcam" not in non_windows:
+        satisfied.append("dxcam_is_windows_only")
     else:
-        blocking.append("portable_core_contains_dxcam")
+        blocking.append("dxcam_leaked_outside_windows_extra")
 
     return _finish(
         {
             "schema_version": WINDOWS_DEPENDENCY_BOUNDARY_SCHEMA,
-            "repo_root": str(root),
+            "pyproject_path": str(pyproject_path),
+            "core_dependencies": sorted(core),
+            "windows_dependencies": sorted(windows),
             "required_checks": required_checks,
             "satisfied_checks": satisfied,
         },
-        blocking=blocking,
+        blocking,
     )
 
 
 def evaluate_windows_product_edge_contract(
     *,
-    profile_id: str | None = DEFAULT_HOST_PROFILE_ID,
     repo_root: str | Path | None = None,
 ) -> dict[str, Any]:
-    profile_contract = evaluate_windows_product_edge_profile(profile_id)
-    dependency_contract = None if repo_root is None else evaluate_windows_dependency_boundary(repo_root)
-    blocking = list(profile_contract.get("blocking_reason_codes") or [])
-    if dependency_contract is not None:
-        blocking.extend(str(code) for code in dependency_contract.get("blocking_reason_codes") or [])
-
+    edge = evaluate_windows_product_edge()
+    dependency = (
+        None if repo_root is None else evaluate_windows_dependency_boundary(repo_root)
+    )
+    blocking = list(edge["blocking_reason_codes"])
+    if dependency is not None:
+        blocking.extend(dependency["blocking_reason_codes"])
     return _finish(
         {
             "schema_version": WINDOWS_PRODUCT_EDGE_CONTRACT_SCHEMA,
-            "profile_contract": profile_contract,
-            "dependency_contract": dependency_contract,
-            "required_checks": [
-                "windows_profile_contract_ok",
-                "windows_dependency_boundary_ok" if repo_root is not None else "windows_dependency_boundary_not_requested",
-            ],
-            "satisfied_checks": [
-                check
-                for check, contract in [
-                    ("windows_profile_contract_ok", profile_contract),
-                    ("windows_dependency_boundary_ok", dependency_contract),
-                ]
-                if contract is not None and contract.get("status") == "ok"
-            ],
+            "edge_contract": edge,
+            "dependency_contract": dependency,
             "notes": [
-                "Windows remains the ATM10 product-edge acceptance boundary.",
-                "Fedora local development companion evidence does not replace DXGI/Win32 acceptance.",
+                "Windows 11 and PowerShell 7 remain the ATM10 product edge.",
+                "Portable Linux evidence does not replace live Win32 and DXGI acceptance.",
             ],
         },
-        blocking=blocking,
+        blocking,
     )
