@@ -13,6 +13,7 @@ from atm10_agent import __version__
 from atm10_agent.app import CompanionApp
 from atm10_agent.contracts import TurnRequest
 from atm10_agent.evals import run_suite
+from atm10_agent.memory import EmbeddedMemoryStore, consolidate_memory
 from atm10_agent.windows_acceptance import (
     run_windows_live_acceptance,
     verify_windows_live_acceptance,
@@ -55,11 +56,13 @@ def _parser() -> argparse.ArgumentParser:
     run_parser.add_argument("--voice", action="store_true")
     run_parser.add_argument("--runs-dir", type=Path, default=Path("runs"))
     run_parser.add_argument("--state-dir", type=Path, default=Path(".atm10-state"))
+    run_parser.add_argument("--memory-dir", type=Path, default=Path(".atm10-memory"))
 
     replay_parser = subparsers.add_parser("replay", help="replay a saved turn without providers")
     replay_parser.add_argument("turn_json", type=Path)
     replay_parser.add_argument("--runs-dir", type=Path, default=Path("runs"))
     replay_parser.add_argument("--state-dir", type=Path, default=Path(".atm10-state"))
+    replay_parser.add_argument("--memory-dir", type=Path, default=Path(".atm10-memory"))
 
     eval_parser = subparsers.add_parser(
         "eval",
@@ -73,7 +76,15 @@ def _parser() -> argparse.ArgumentParser:
     eval_parser.add_argument("--runs-dir", type=Path, default=Path("runs/eval"))
     eval_parser.add_argument("--state-dir", type=Path, default=Path(".atm10-state/eval"))
     eval_parser.add_argument("--reports-dir", type=Path, default=Path("eval-results"))
+    eval_parser.add_argument("--memory-dir", type=Path, default=Path(".atm10-memory/eval"))
     eval_parser.add_argument("--now", type=_timestamp)
+
+    memory_parser = subparsers.add_parser(
+        "consolidate-memory",
+        help="derive proposed semantic/procedural memory candidates",
+    )
+    memory_parser.add_argument("--memory-dir", type=Path, default=Path(".atm10-memory"))
+    memory_parser.add_argument("--now", type=_timestamp)
 
     subparsers.add_parser("doctor", help="show the dependency-light core posture")
     windows_parser = subparsers.add_parser(
@@ -162,12 +173,26 @@ def main(argv: Sequence[str] | None = None) -> int:
             runs_dir=args.runs_dir,
             state_dir=args.state_dir,
             reports_dir=args.reports_dir,
+            memory_dir=args.memory_dir,
             now=args.now,
         )
         print(json.dumps(result, indent=2, ensure_ascii=False))
         return 0 if result["status"] == "pass" else 2
 
-    app = CompanionApp(runs_dir=args.runs_dir, state_dir=args.state_dir)
+    if args.command == "consolidate-memory":
+        observed_at = args.now or datetime.now(timezone.utc)
+        result = consolidate_memory(
+            store=EmbeddedMemoryStore(args.memory_dir),
+            observed_at_utc=observed_at.astimezone(timezone.utc).isoformat(),
+        )
+        print(json.dumps(result, indent=2, ensure_ascii=False))
+        return 0 if result["status"] == "ok" else 2
+
+    app = CompanionApp(
+        runs_dir=args.runs_dir,
+        state_dir=args.state_dir,
+        memory_dir=args.memory_dir,
+    )
     if args.command == "replay":
         result = app.replay(args.turn_json)
     else:

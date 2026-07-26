@@ -130,6 +130,7 @@ def run_companion_core_suite(
     runs_dir: Path,
     state_dir: Path,
     reports_dir: Path,
+    memory_dir: Path | None = None,
     now: datetime | None = None,
 ) -> dict[str, Any]:
     """Run the core product contract without pytest, services, models, or network."""
@@ -137,7 +138,12 @@ def run_companion_core_suite(
     observed_at = now or datetime.now(timezone.utc)
     if observed_at.tzinfo is None:
         observed_at = observed_at.replace(tzinfo=timezone.utc)
-    app = CompanionApp(runs_dir=runs_dir, state_dir=state_dir)
+    resolved_memory_dir = memory_dir or state_dir.with_name(f"{state_dir.name}-memory")
+    app = CompanionApp(
+        runs_dir=runs_dir,
+        state_dir=state_dir,
+        memory_dir=resolved_memory_dir,
+    )
     shared: dict[str, Any] = {}
 
     def deterministic_turn() -> tuple[bool, dict[str, Any]]:
@@ -231,19 +237,36 @@ def run_companion_core_suite(
     def state_trace_separation() -> tuple[bool, dict[str, Any]]:
         turn = shared["base_turn"]
         trace = turn["trace"]
+        memory = turn["stages"]["memory"]
         append_only = Path(trace["append_only_trace"])
         mutable = Path(trace["mutable_state"])
+        memory_objects = Path(memory["objects_store"])
+        working_context = Path(memory["working_context"])
         passed = (
             append_only.is_file()
             and mutable.is_file()
+            and memory_objects.is_file()
+            and working_context.is_file()
             and append_only.parent.resolve() != mutable.parent.resolve()
+            and memory_objects.parent.resolve() != mutable.parent.resolve()
+            and memory_objects.parent.resolve() != append_only.parent.resolve()
             and append_only.parent.resolve() == runs_dir.resolve()
             and mutable.parent.resolve() == state_dir.resolve()
+            and memory_objects.parent.resolve() == resolved_memory_dir.resolve()
         )
         return passed, {
             "append_only_trace_exists": append_only.is_file(),
             "mutable_state_exists": mutable.is_file(),
-            "separate_roots": append_only.parent.resolve() != mutable.parent.resolve(),
+            "memory_objects_exist": memory_objects.is_file(),
+            "working_context_exists": working_context.is_file(),
+            "separate_roots": len(
+                {
+                    append_only.parent.resolve(),
+                    mutable.parent.resolve(),
+                    memory_objects.parent.resolve(),
+                }
+            )
+            == 3,
         }
 
     def useful_negatives() -> tuple[bool, dict[str, Any]]:
@@ -349,6 +372,7 @@ def run_companion_core_suite(
             "runs_root": str(runs_dir),
             "state_root": str(state_dir),
             "reports_root": str(reports_dir),
+            "memory_root": str(resolved_memory_dir),
         },
         report_path=str(report_path),
         network_required=False,
@@ -365,6 +389,7 @@ def run_suite(
     runs_dir: Path,
     state_dir: Path,
     reports_dir: Path,
+    memory_dir: Path | None = None,
     now: datetime | None = None,
 ) -> dict[str, Any]:
     normalized = suite_id.strip().lower()
@@ -373,6 +398,7 @@ def run_suite(
             runs_dir=runs_dir,
             state_dir=state_dir,
             reports_dir=reports_dir,
+            memory_dir=memory_dir,
             now=now,
         )
     raise ValueError(f"Unsupported eval suite: {suite_id!r}.")

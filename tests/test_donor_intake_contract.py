@@ -36,7 +36,12 @@ def test_donor_ledger_validates_and_has_unique_pinned_entries() -> None:
     statuses = {entry["id"]: entry["status"] for entry in entries}
     assert {
         entry_id for entry_id, status in statuses.items() if status == "adapted"
-    } == {"donor.aoa-evals", "donor.aoa-stats"}
+    } == {
+        "donor.aoa-evals",
+        "donor.aoa-kag",
+        "donor.aoa-stats",
+        "donor.aoa-memo",
+    }
 
     for entry in entries:
         assert re.fullmatch(r"[0-9a-f]{40}", entry["revision"])

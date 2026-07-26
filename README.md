@@ -12,7 +12,7 @@ The product is one installable modular monolith:
 `Perception -> Interpretation -> World/Memory -> Response/Plan -> optional Action/Voice -> Trace`
 
 `atm10_agent` owns the composition root and the
-`atm10 doctor|run|replay|eval|windows-acceptance|verify-windows-acceptance`
+`atm10 doctor|run|replay|eval|consolidate-memory|windows-acceptance|verify-windows-acceptance`
 CLI. Core install,
 deterministic turn, replay, and product eval need no model, service, sibling
 repository, `.aoa`, OS skill profile, shared validator, or network access.
@@ -44,6 +44,10 @@ repository, `.aoa`, OS skill profile, shared validator, or network access.
   the current physical run remains a separate release gate;
 - append-only run traces, mutable state, and eval reports use separate
   directories;
+- online memory capture keeps observed world state and player episodes
+  append-only, working context mutable, and consolidation explicit;
+- file world/KAG returns authored-source handles, derived relation context, and
+  bounded readiness without treating memory as world authority;
 - eval reports keep bounded claims, categorical verdicts, provenance, blind
   spots, portability, and measurement-only metrics explicit;
 - the legacy gateway/operator/pilot/service control plane is retired.

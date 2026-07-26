@@ -9,14 +9,16 @@ package, `atm10_agent`, owns:
 
 1. perception;
 2. interpretation;
-3. file-backed world recall and product KAG;
-4. cited response/plan;
-5. optional dry-run action and voice;
-6. append-only trace and deterministic replay.
+3. source-owned file world recall and product KAG;
+4. embedded temporal memory with explicit online capture and offline
+   consolidation;
+5. cited response/plan;
+6. optional dry-run action and voice;
+7. append-only trace and deterministic replay.
 
 The composition root is `atm10_agent.app.CompanionApp`. The supported command
 surface is
-`atm10 doctor|run|replay|eval|windows-acceptance|verify-windows-acceptance`.
+`atm10 doctor|run|replay|eval|consolidate-memory|windows-acceptance|verify-windows-acceptance`.
 
 ## Active capabilities
 
@@ -24,12 +26,17 @@ surface is
 - deterministic placeholder perception and replaceable VLM providers;
 - fixture or user-file retrieval with ranked citations;
 - local file KAG with optional Neo4j backend;
+- source-owned world knowledge with resolvable return handles, derived relation
+  context, and bounded readiness;
 - explicit hybrid degradation and useful negative evidence;
 - deterministic `M6.19` plans for `open_quest_book`,
   `check_inventory_tool`, and `open_world_map`;
 - hard dry-run action fence with `executed=false`;
 - explicit no-provider voice degradation;
-- separate mutable state, turn traces, action traces, and eval reports;
+- separate mutable state, append-only memory objects, mutable working context,
+  turn traces, action traces, and eval reports;
+- explicit five-kind memory canon with separate trust axes and
+  proposed-only offline semantic/procedural consolidation;
 - Windows ATM10 session discovery plus package-owned DXcam-first capture with
   Pillow fallback evidence;
 - owner-typed live Windows receipt collection with source revision, OS/shell,

@@ -15,6 +15,8 @@ def test_installable_package_is_the_only_source_package() -> None:
     assert (REPO_ROOT / "src" / "atm10_agent" / "app.py").is_file()
     assert (REPO_ROOT / "src" / "atm10_agent" / "action" / "__init__.py").is_file()
     assert (REPO_ROOT / "src" / "atm10_agent" / "evals" / "__init__.py").is_file()
+    assert (REPO_ROOT / "src" / "atm10_agent" / "memory" / "model.py").is_file()
+    assert (REPO_ROOT / "src" / "atm10_agent" / "world" / "knowledge.py").is_file()
     assert not (REPO_ROOT / "src" / "__init__.py").exists()
 
 

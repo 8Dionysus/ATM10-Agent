@@ -9,6 +9,7 @@ from typing import Any, ContextManager
 
 from atm10_agent.kag import build_kag_graph, query_kag_graph
 from atm10_agent.rag.retrieval import load_docs, retrieve_top_k
+from atm10_agent.world.knowledge import build_world_knowledge_view
 
 
 def _world_path(path: Path | None) -> ContextManager[Path]:
@@ -43,6 +44,12 @@ def recall(*, query: str, topk: int, world_docs: Path | None) -> dict[str, Any]:
         citations.append(citation)
 
     degraded = not retrieval
+    knowledge = build_world_knowledge_view(
+        docs=docs,
+        retrieval=retrieval,
+        graph_results=graph_results,
+        citations=citations,
+    )
     return {
         "schema_version": "atm10_world_v1",
         "status": "degraded" if degraded else "ok",
@@ -54,4 +61,5 @@ def recall(*, query: str, topk: int, world_docs: Path | None) -> dict[str, Any]:
         "retrieval": retrieval,
         "product_kag": graph_results,
         "citations": citations,
+        "knowledge": knowledge,
     }

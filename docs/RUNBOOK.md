@@ -60,7 +60,8 @@ atm10 run `
   --query "steel tools" `
   --action-intent open_quest_book `
   --runs-dir runs\local `
-  --state-dir .atm10-state
+  --state-dir .atm10-state `
+  --memory-dir .atm10-memory
 ```
 
 The command traverses every product stage and prints an
@@ -69,7 +70,9 @@ The command traverses every product stage and prints an
 - `runs/local/<turn>/turn.json`;
 - `runs/local/<turn>/action.json`;
 - append-only trace records under `runs/local/`;
-- mutable state under `.atm10-state/`.
+- mutable state under `.atm10-state/`;
+- append-only memory objects and mutable working context under
+  `.atm10-memory/`.
 
 Use `--world-docs <path-to-world-jsonl>` for a different file-backed world,
 `--image <path-to-image>` for an existing image, or `--voice` to exercise the
@@ -80,7 +83,8 @@ explicit no-provider degradation path.
 ```powershell
 atm10 replay <path-to-turn-json> `
   --runs-dir runs\replay `
-  --state-dir .atm10-state
+  --state-dir .atm10-state `
+  --memory-dir .atm10-memory
 ```
 
 Replay checks the saved turn schema and writes new trace evidence with
@@ -94,7 +98,8 @@ atm10 eval `
   --suite companion-core `
   --runs-dir runs\eval `
   --state-dir .atm10-state\eval `
-  --reports-dir eval-results
+  --reports-dir eval-results `
+  --memory-dir .atm10-memory\eval
 ```
 
 The seven deterministic cases cover stub execution, cited file world/KAG,
@@ -103,6 +108,20 @@ negatives, and replay. The v2 report records a bounded claim, categorical
 verdict, scope, provenance, blind spots, portability limits, and
 measurement-only metrics. The command returns non-zero unless the suite
 supports its full bounded claim.
+
+## Consolidate captured memory candidates
+
+```powershell
+atm10 consolidate-memory `
+  --memory-dir .atm10-memory
+```
+
+Online turns append observed world state and player episodes while replacing
+only `working-context.json`. Consolidation is a separate offline step: it
+derives idempotent `proposed` semantic-game-knowledge and procedural-gameplay
+candidates. It never confirms, freezes, or promotes them, and a dry-run action
+episode does not establish gameplay effectiveness. `.atm10-memory/` is ignored
+local product data; do not commit personal queries or captured play history.
 
 ## M6.19 rollout records
 
