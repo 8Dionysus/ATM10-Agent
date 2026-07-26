@@ -35,6 +35,14 @@ This file defines the roles of the repository documents so the public surface st
   * Its JSON ledgers are executable transition inputs; they do not prove a gate
     until the referenced tests and acceptance commands pass.
 
+* `docs/intake/README.md`
+  * Canonical one-way donor authority map, review sequence, stop line, and
+    claim limit.
+  * `docs/intake/donor-ledger.json` owns immutable revisions, selected paths,
+    license review, transformations, target surfaces, rejected surfaces, and
+    admission/adaptation status.
+  * Admission proves neither implementation nor product benefit.
+
 * `docs/PRODUCT_EDGE_POSTURE.md`
   * Public release cadence, supported and preliminary profile claims, CI/test tiers, and the explicit `ATM10-Agent` x `abyss-stack` contract.
   * Short public boundary for product-edge support claims.
@@ -108,6 +116,7 @@ This file defines the roles of the repository documents so the public surface st
   * `MANIFEST.md`
   * `ROADMAP.md`
   * `docs/autonomy/README.md`
+  * `docs/intake/README.md`
   * `docs/PRODUCT_EDGE_POSTURE.md`
   * `docs/RUNBOOK.md`
   * `docs/ARCHIVED_TRACKS.md`
@@ -125,6 +134,9 @@ This file defines the roles of the repository documents so the public surface st
 * If the autonomy boundary, dependency disposition, protected behavior, or
   migration gate changed -> update `docs/autonomy/`, its contract tests, and
   any affected canonical public docs.
+* If donor authority, revision, selected paths, license, transformation,
+  target, rejection, or admission status changed -> update `docs/intake/`,
+  its schema, and its contract tests.
 * If a public durable decision needs rationale -> add a canonical `docs/decisions/ATM10-D-####-*.md` record and regenerate decision indexes.
 * If active commands/setup changed -> update `docs/RUNBOOK.md`.
 * If archived or recoverable command/reference changed -> update `docs/ARCHIVED_TRACKS.md`.

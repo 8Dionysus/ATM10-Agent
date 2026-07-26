@@ -27,7 +27,9 @@ Abyss runtime authority, and none of those surfaces may be required.
 - action stays dry-run with `executed=false`;
 - missing optional providers degrade at the use site;
 - mutable state and append-only traces stay distinct;
-- donor intake stays closed until standalone and Windows gates are green.
+- donor intake starts only after the portable standalone gate, follows
+  `docs/intake/donor-ledger.json`, and never depends on the separate Windows
+  evidence lane.
 
 ## Verify
 

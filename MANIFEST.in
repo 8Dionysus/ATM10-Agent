@@ -1,3 +1,4 @@
 include pylock.toml
+recursive-include docs/intake *.json *.md
 recursive-include examples *.json
 recursive-include schemas *.json

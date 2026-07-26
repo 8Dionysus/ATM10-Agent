@@ -42,8 +42,10 @@ def _write_wheel(path: Path, *, requires_dist: list[str] | None = None, extra_ro
 
 def _write_sdist(path: Path, *, omit: str | None = None) -> None:
     required = {
+        "docs/intake/donor-ledger.json",
         "pylock.toml",
         "pyproject.toml",
+        "schemas/donor_intake_ledger_v1.json",
         "schemas/windows_live_acceptance_v2.json",
         "schemas/windows_live_acceptance_verification_v1.json",
         "src/atm10_agent/app.py",
@@ -92,7 +94,7 @@ def test_inspect_wheel_rejects_nonstandalone_boundaries(
         inspect_wheel(wheel)
 
 
-def test_inspect_sdist_requires_windows_acceptance_contracts(tmp_path: Path) -> None:
+def test_inspect_sdist_requires_public_contracts(tmp_path: Path) -> None:
     complete = tmp_path / "complete.tar.gz"
     _write_sdist(complete)
 
@@ -103,6 +105,8 @@ def test_inspect_sdist_requires_windows_acceptance_contracts(tmp_path: Path) -> 
         "schemas/windows_live_acceptance_verification_v1.json"
         in result["required_source_paths"]
     )
+    assert "schemas/donor_intake_ledger_v1.json" in result["required_source_paths"]
+    assert "docs/intake/donor-ledger.json" in result["required_source_paths"]
 
     incomplete = tmp_path / "incomplete.tar.gz"
     _write_sdist(

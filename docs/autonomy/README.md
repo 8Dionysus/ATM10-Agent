@@ -47,7 +47,8 @@ hidden control plane.
 No `import_once` item may become a live runtime, build, test, or release
 dependency. Donor intake is one-way and must record source repository, immutable
 revision, selected paths, local destination, transformation, license review,
-and acceptance evidence.
+and acceptance evidence. The executable admission record is
+`docs/intake/donor-ledger.json`.
 
 ## Protected behavior
 
@@ -106,7 +107,13 @@ behavioral regressions reviewable.
 - Dependency declarations now have one authority, the core lock resolves only
   the local package, and release verification builds wheel/sdist then exercises
   the installed wheel without dependencies outside the checkout.
-- Wave 6 remains open for final fresh-clone/merged-main proof and current live
-  Windows 11 + PowerShell 7 session, capture, trace, and dry-run evidence.
-  The collector exists but has not passed on a physical Windows edge in this
-  migration session. Donor intake remains blocked until both lanes are green.
+- The portable Wave 6 gate passed on merged `main` at
+  `3a724cb0f0dd12ffc03713448cd9cc21dba2fc3f` through fresh-clone install,
+  full deterministic tests, build, installed-wheel doctor/turn/replay/eval,
+  and repository-owned checks.
+- Live Windows 11 + PowerShell 7 session, capture, trace, and dry-run evidence
+  remains unfinished and is carried in a separate session. It limits Windows
+  and complete-release claims, but it is not part of the portable donor
+  admission gate.
+- Wave 7 is open through `docs/intake/donor-ledger.json`. Admitted entries are
+  provenance-reviewed candidates, not implemented or validated foundations.

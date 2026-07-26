@@ -43,6 +43,11 @@ runtime, validator, configuration, or release surfaces. Any accepted donor
 material must be pinned, path-bounded, license-reviewed, transformed into
 ATM10-owned code/data, receipt-backed, and one-way.
 
+The portable Linux gate is green and the admitted sources live in
+`docs/intake/donor-ledger.json`. Live Windows acceptance remains unfinished and
+separate: it still gates physical Windows and complete-release claims, but it
+does not gate this one-way research and reimplementation lane.
+
 ## Release cadence
 
 `main` is rolling integration, not a release claim. A release checkpoint

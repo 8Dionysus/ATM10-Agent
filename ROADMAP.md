@@ -120,7 +120,7 @@ Exit: one in-process stub/replay turn exercises the complete product boundary.
 Exit: dependency audit, build, install-from-artifact, and negative optional
 provider checks are green.
 
-### Wave 6 — standalone and Windows proof
+### Wave 6 — portable standalone proof and separate Windows evidence
 
 - Prove fresh-clone core install, build, tests, deterministic stub/replay,
   cited retrieval/world behavior, dry-run action safety, degraded failures, and
@@ -130,7 +130,9 @@ provider checks are green.
 - Record Windows 11 + PowerShell 7 acceptance separately for session discovery,
   capture, launch, trace, and dry-run fences.
 
-Exit: all standalone acceptance gates are green. Stop here if any are not.
+Exit: all portable standalone acceptance gates are green. Windows remains an
+independent product-edge evidence lane: an unfinished Windows run blocks
+Windows and complete-release claims, but not controlled Wave 7 intake.
 
 ### Wave 7 — controlled donor intake
 
@@ -140,6 +142,8 @@ Exit: all standalone acceptance gates are green. Stop here if any are not.
 - Record license, transformation, local ownership, tests, and rejection
   reasons.
 - Vendor or reimplement only what improves the already autonomous product.
+- Keep admission and implementation status in
+  `docs/intake/donor-ledger.json`.
 
 Exit: imported material has no live donor dependency and passes the same local
 gates.
@@ -180,6 +184,12 @@ The rebuild is complete only when all of the following are true:
     on merged `main`.
 15. Pull requests are merged, the canonical worktree is clean/current, and
     remaining debt is reported explicitly.
+
+The current Linux session may close its bounded rebuild slice after items
+relevant to the portable core and donor foundations pass on merged `main`.
+Item 8 remains intentionally open for the separate Windows session; that
+bounded closeout must not be reported as complete Windows acceptance or a full
+release.
 
 ## Principal risks
 
