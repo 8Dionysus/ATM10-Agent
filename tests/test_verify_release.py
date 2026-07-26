@@ -28,6 +28,9 @@ def _write_wheel(path: Path, *, requires_dist: list[str] | None = None, extra_ro
             "atm10_agent/app.py",
             "atm10_agent/cli.py",
             "atm10_agent/data/default_world.jsonl",
+            "atm10_agent/proof/evals.py",
+            "atm10_agent/proof/measurements.py",
+            "atm10_agent/proof/provenance.py",
             "atm10_agent/windows_acceptance.py",
         ):
             archive.writestr(package_path, "")
@@ -43,6 +46,8 @@ def _write_wheel(path: Path, *, requires_dist: list[str] | None = None, extra_ro
 def _write_sdist(path: Path, *, omit: str | None = None) -> None:
     required = {
         "docs/intake/donor-ledger.json",
+        "evals/manifest.json",
+        "evals/suites/companion-core.json",
         "pylock.toml",
         "pyproject.toml",
         "schemas/donor_intake_ledger_v1.json",
@@ -50,6 +55,9 @@ def _write_sdist(path: Path, *, omit: str | None = None) -> None:
         "schemas/windows_live_acceptance_verification_v1.json",
         "src/atm10_agent/app.py",
         "src/atm10_agent/cli.py",
+        "src/atm10_agent/proof/evals.py",
+        "src/atm10_agent/proof/measurements.py",
+        "src/atm10_agent/proof/provenance.py",
     }
     with tarfile.open(path, "w:gz") as archive:
         for relative in sorted(required - {omit}):

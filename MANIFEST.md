@@ -36,6 +36,8 @@ surface is
   session, screenshot, explicit degraded no-audio posture, hashed turn
   artifacts, dry-run correlation checks, and bounded offline verification;
 - executable seven-case `companion-core` product eval;
+- bounded eval v2 reports with categorical support, named scope, provenance,
+  blind spots, portability limits, and measurement-only metrics;
 - Windows package tests/smoke and portable installed-package Linux smoke.
 
 ## Retired architecture

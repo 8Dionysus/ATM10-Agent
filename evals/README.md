@@ -7,6 +7,12 @@ local verdicts, and public-safe reports.
 existing fixture-first tests. An eval case becomes evidence only when its local
 test runs and passes; location alone is not a verdict.
 
+Executable reports use `atm10_eval_report_v2`. They name one bounded claim,
+in-scope and out-of-scope surfaces, categorical support, separate measurement
+observations, provenance handles, portability invariants, blind spots, and a
+claim limit. Metrics remain measurement-only signals; they do not become a
+proof score.
+
 ## Route
 
 - Put proposed companion cases in [intake](intake/).
@@ -18,4 +24,6 @@ test runs and passes; location alone is not a verdict.
 
 Active: `atm10-companion-core` protects the deterministic stub turn, cited
 retrieval, file product KAG, honest hybrid degradation, and dry-run action
-fence.
+fence. A passing report supports only that deterministic core claim and does
+not prove Windows acceptance, live-provider quality, gameplay correctness, or
+product benefit.

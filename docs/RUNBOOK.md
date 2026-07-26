@@ -99,7 +99,10 @@ atm10 eval `
 
 The seven deterministic cases cover stub execution, cited file world/KAG,
 canonical actions, voice degradation, state/trace separation, useful
-negatives, and replay. The command returns non-zero unless the suite passes.
+negatives, and replay. The v2 report records a bounded claim, categorical
+verdict, scope, provenance, blind spots, portability limits, and
+measurement-only metrics. The command returns non-zero unless the suite
+supports its full bounded claim.
 
 ## M6.19 rollout records
 

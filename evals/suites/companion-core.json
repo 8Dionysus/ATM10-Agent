@@ -9,14 +9,12 @@
       "protects": "PB-001"
     },
     {
-      "id": "cited-retrieval",
+      "id": "cited-file-world",
       "test_ref": "tests/test_companion_eval.py",
-      "protects": "PB-002"
-    },
-    {
-      "id": "file-product-kag",
-      "test_ref": "tests/test_companion_eval.py",
-      "protects": "PB-003"
+      "protects": [
+        "PB-002",
+        "PB-003"
+      ]
     },
     {
       "id": "dry-run-action-fence",
@@ -34,7 +32,12 @@
       "protects": "PB-008"
     },
     {
-      "id": "negative-and-replay-evidence",
+      "id": "useful-negative-cases",
+      "test_ref": "tests/test_companion_eval.py",
+      "protects": "PB-012"
+    },
+    {
+      "id": "provider-free-replay",
       "test_ref": "tests/test_companion_eval.py",
       "protects": "PB-012"
     }
