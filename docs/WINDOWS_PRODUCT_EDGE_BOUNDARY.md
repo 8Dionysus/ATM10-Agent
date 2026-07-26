@@ -18,9 +18,12 @@ The implementation anchors are:
 
 - `src/atm10_agent/agent_core/atm10_session_probe.py`;
 - `src/atm10_agent/perception/windows_capture.py`;
+- `src/atm10_agent/windows_acceptance.py`;
+- `schemas/windows_live_acceptance_v1.json`;
 - `tests/test_atm10_session_probe_adapters.py`;
 - `tests/test_windows_capture.py`;
-- `tests/test_windows_product_edge_contract.py`.
+- `tests/test_windows_product_edge_contract.py`;
+- `tests/test_windows_live_acceptance.py`.
 
 ## Dependency boundary
 
@@ -42,3 +45,8 @@ checkpoint needs separate Windows 11 + PowerShell 7 evidence for:
 
 No Linux run, provider smoke, or document statement substitutes for that live
 evidence.
+
+The executable route is `atm10 windows-acceptance`. It returns non-zero and
+writes a typed blocked/fail receipt when any required fact is absent. The
+receipt and screenshot are local evidence under ignored `runs/`; they are not
+committed release fixtures.

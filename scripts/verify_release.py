@@ -29,6 +29,7 @@ REQUIRED_WHEEL_PATHS = {
     "atm10_agent/app.py",
     "atm10_agent/cli.py",
     "atm10_agent/data/default_world.jsonl",
+    "atm10_agent/windows_acceptance.py",
 }
 FORBIDDEN_WHEEL_ROOTS = {"scripts", "tests", ".aoa"}
 

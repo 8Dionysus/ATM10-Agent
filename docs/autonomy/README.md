@@ -95,9 +95,10 @@ behavioral regressions reviewable.
   removed, and repository validation is local.
 - Waves 3-5 introduced `pyproject.toml`, the single
   `src/atm10_agent/` namespace, `CompanionApp`, and `atm10
-  doctor|run|replay|eval`. The package now owns deterministic intent planning,
-  action normalization, the no-input dry-run fence, trace correlation, and the
-  executable companion-core eval.
+  doctor|run|replay|eval|windows-acceptance`. The package now owns
+  deterministic intent planning, action normalization, the no-input dry-run
+  fence, trace correlation, the executable companion-core eval, and a typed
+  live Windows evidence collector.
 - The gateway/governance, operator/Streamlit, pilot-loop, separate HTTP
   voice/TTS service, and Fedora parallel-launcher control plane is removed.
   Windows capture is now package-owned and independently tested.
@@ -106,4 +107,5 @@ behavioral regressions reviewable.
   the installed wheel without dependencies outside the checkout.
 - Wave 6 remains open for final fresh-clone/merged-main proof and current live
   Windows 11 + PowerShell 7 session, capture, trace, and dry-run evidence.
-  Donor intake remains blocked until both lanes are green.
+  The collector exists but has not passed on a physical Windows edge in this
+  migration session. Donor intake remains blocked until both lanes are green.

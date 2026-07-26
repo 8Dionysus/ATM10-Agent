@@ -1,0 +1,45 @@
+{
+  "schema_version": "atm10_windows_live_acceptance_v1",
+  "status": "blocked",
+  "degraded": false,
+  "timestamp_utc": "2026-07-25T12:00:00+00:00",
+  "source_revision": null,
+  "package_version": "0.1.0",
+  "platform": {
+    "sys_platform": "linux",
+    "windows_build": null,
+    "powershell": null
+  },
+  "checks": {
+    "windows_11": false,
+    "powershell_7": false,
+    "source_revision_pinned": false,
+    "atm10_window_found": false,
+    "atm10_window_foreground": false,
+    "atm10_session_probable": false,
+    "capture_intersects_window": false,
+    "capture_backend_identified": false,
+    "screenshot_written": false,
+    "live_image_consumed": false,
+    "cited_response_present": false,
+    "companion_trace_written": false,
+    "action_trace_correlated": false,
+    "dry_run_true": false,
+    "input_not_executed": false
+  },
+  "warnings": [],
+  "errors": [
+    "platform_not_windows"
+  ],
+  "session": null,
+  "capture": null,
+  "turn": null,
+  "artifacts": {
+    "receipt": "windows_live_acceptance.json",
+    "screenshot": null,
+    "turn_json": null,
+    "append_only_trace": null
+  },
+  "mutable_state_separate": true,
+  "claim_limit": "One current local Windows session and dry-run companion turn; does not validate optional model, store, or voice providers."
+}

@@ -23,6 +23,10 @@ def test_antifragility_examples_validate_against_schemas() -> None:
             "schemas/adaptation_delta_v1.json",
             "examples/adaptation_delta.retrieval_only_fallback.example.json",
         ),
+        (
+            "schemas/windows_live_acceptance_v1.json",
+            "examples/windows_live_acceptance.blocked.example.json",
+        ),
     ]
 
     for schema_path, example_path in pairs:

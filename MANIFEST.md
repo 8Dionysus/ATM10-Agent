@@ -15,7 +15,7 @@ package, `atm10_agent`, owns:
 6. append-only trace and deterministic replay.
 
 The composition root is `atm10_agent.app.CompanionApp`. The supported command
-surface is `atm10 doctor|run|replay|eval`.
+surface is `atm10 doctor|run|replay|eval|windows-acceptance`.
 
 ## Active capabilities
 
@@ -31,6 +31,8 @@ surface is `atm10 doctor|run|replay|eval`.
 - separate mutable state, turn traces, action traces, and eval reports;
 - Windows ATM10 session discovery plus package-owned DXcam-first capture with
   Pillow fallback evidence;
+- owner-typed live Windows receipt collection with source revision, OS/shell,
+  session, screenshot, turn trace, and dry-run correlation checks;
 - executable seven-case `companion-core` product eval;
 - Windows package tests/smoke and portable installed-package Linux smoke.
 
@@ -59,6 +61,8 @@ Currently proven in source:
 - verified wheel/sdist structure and installed-wheel doctor, turn, replay, and
   eval from a clean environment outside the checkout;
 - Windows capture/session contracts through deterministic tests.
+- Linux execution of the live collector is explicitly blocked rather than
+  accepted as substitute evidence.
 
 Still required before the autonomy gate may be called complete:
 
