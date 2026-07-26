@@ -22,6 +22,7 @@ def _write_wheel(path: Path, *, requires_dist: list[str] | None = None, extra_ro
             "atm10_agent/app.py",
             "atm10_agent/cli.py",
             "atm10_agent/data/default_world.jsonl",
+            "atm10_agent/windows_acceptance.py",
         ):
             archive.writestr(package_path, "")
         archive.writestr("atm10_agent-0.1.0.dist-info/METADATA", "\n".join(metadata))

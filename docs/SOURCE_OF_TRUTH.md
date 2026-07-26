@@ -39,6 +39,12 @@ This file defines the roles of the repository documents so the public surface st
   * Public release cadence, supported and preliminary profile claims, CI/test tiers, and the explicit `ATM10-Agent` x `abyss-stack` contract.
   * Short public boundary for product-edge support claims.
 
+* `docs/WINDOWS_PRODUCT_EDGE_BOUNDARY.md`
+  * Defines the live Windows claim limit and routes the package-owned
+    `windows_live_acceptance_v1` collector.
+  * Source code, schema, or a blocked example does not replace a passing
+    receipt from a current physical ATM10 session.
+
 * `docs/RUNBOOK.md`
   * Active runnable commands and operational paths only.
   * This is where current setup, launch, smoke, and troubleshooting commands live.

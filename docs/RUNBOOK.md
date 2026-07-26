@@ -138,6 +138,34 @@ Live Windows acceptance is separate from these deterministic tests and must
 record the selected ATM10 window/session, capture source, screenshot metadata,
 turn trace, and dry-run action result.
 
+With an ATM10 world open and its window in the foreground:
+
+```powershell
+python -m pip install -e ".[windows]"
+$revision = git rev-parse HEAD
+atm10 windows-acceptance `
+  --repo-root . `
+  --source-revision $revision `
+  --settle-seconds 5 `
+  --evidence-dir runs\windows-live-acceptance `
+  --state-dir .atm10-state\windows-live-acceptance
+if ($LASTEXITCODE -ne 0) {
+  throw "ATM10 Windows live acceptance did not pass"
+}
+```
+
+After starting the command, return focus to ATM10 during the five-second
+settling window. The collector does not change foreground focus itself.
+
+The command writes `windows_live_acceptance.json`, the local screenshot, and
+turn artifacts under the ignored evidence directory. It verifies Windows 11,
+PowerShell 7, source revision, ATM10 window identity/foreground posture,
+capture intersection, a DXcam-first capture with explicit Pillow fallback,
+live-image consumption, cited response, turn trace correlation,
+`dry_run=true`, and `executed=false`. Pillow fallback may pass with
+`degraded=true`; missing platform/session/capture/trace facts fail the gate.
+Screenshots can contain private on-screen material and must not be committed.
+
 ## Focused data and provider tools
 
 The remaining `scripts/` directory contains maintainer tools, not another

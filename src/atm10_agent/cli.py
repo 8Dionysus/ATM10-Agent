@@ -12,6 +12,7 @@ from atm10_agent import __version__
 from atm10_agent.app import CompanionApp
 from atm10_agent.contracts import TurnRequest
 from atm10_agent.evals import run_suite
+from atm10_agent.windows_acceptance import run_windows_live_acceptance
 
 
 def _timestamp(value: str) -> datetime:
@@ -61,6 +62,23 @@ def _parser() -> argparse.ArgumentParser:
     eval_parser.add_argument("--now", type=_timestamp)
 
     subparsers.add_parser("doctor", help="show the dependency-light core posture")
+    windows_parser = subparsers.add_parser(
+        "windows-acceptance",
+        help="collect one live Windows 11 ATM10 acceptance receipt",
+    )
+    windows_parser.add_argument(
+        "--evidence-dir",
+        type=Path,
+        default=Path("runs/windows-live-acceptance"),
+    )
+    windows_parser.add_argument(
+        "--state-dir",
+        type=Path,
+        default=Path(".atm10-state/windows-live-acceptance"),
+    )
+    windows_parser.add_argument("--repo-root", type=Path, default=Path("."))
+    windows_parser.add_argument("--source-revision")
+    windows_parser.add_argument("--settle-seconds", type=float, default=5.0)
     return parser
 
 
@@ -81,6 +99,28 @@ def main(argv: Sequence[str] | None = None) -> int:
             )
         )
         return 0
+
+    if args.command == "windows-acceptance":
+        payload, receipt_path = run_windows_live_acceptance(
+            evidence_root=args.evidence_dir,
+            state_dir=args.state_dir,
+            repo_root=args.repo_root,
+            source_revision=args.source_revision,
+            settle_seconds=args.settle_seconds,
+        )
+        print(
+            json.dumps(
+                {
+                    "status": payload["status"],
+                    "receipt": str(receipt_path),
+                    "degraded": payload["degraded"],
+                    "errors": payload["errors"],
+                },
+                indent=2,
+                ensure_ascii=False,
+            )
+        )
+        return 0 if payload["status"] == "pass" else 2
 
     if args.command == "eval":
         result = run_suite(
