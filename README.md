@@ -48,6 +48,11 @@ repository, `.aoa`, OS skill profile, shared validator, or network access.
   append-only, working context mutable, and consolidation explicit;
 - file world/KAG returns authored-source handles, derived relation context, and
   bounded readiness without treating memory as world authority;
+- every deterministic turn records selected providers, failed attempts,
+  fallback reasons, return handles, and rejected/unavailable/degraded posture
+  without a global router;
+- provider benchmarks can create review candidates, but activation,
+  post-activation verification, and rollback remain separate explicit records;
 - eval reports keep bounded claims, categorical verdicts, provenance, blind
   spots, portability, and measurement-only metrics explicit;
 - the legacy gateway/operator/pilot/service control plane is retired.

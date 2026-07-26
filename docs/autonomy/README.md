@@ -116,5 +116,7 @@ behavioral regressions reviewable.
   remains unfinished and is carried in a separate session. It limits Windows
   and complete-release claims, but it is not part of the portable donor
   admission gate.
-- Wave 7 is open through `docs/intake/donor-ledger.json`. Admitted entries are
-  provenance-reviewed candidates, not implemented or validated foundations.
+- Wave 7 now has ATM10-owned proof/provenance/measurement, memory/world, and
+  provider-routing/promotion foundations. All six pinned donor entries are
+  adapted without donor runtime dependencies or auto-sync; the final Linux
+  fresh-clone/merged-main audit remains separate acceptance evidence.

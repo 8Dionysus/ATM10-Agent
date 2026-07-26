@@ -5,6 +5,7 @@
 ## architecture
 
 - [ATM10-D-0003 - Autonomous Modular Monolith](../ATM10-D-0003-autonomous-modular-monolith.md) (`docs/decisions/ATM10-D-0003-autonomous-modular-monolith.md`)
+- [ATM10-D-0004 - Local Provider Routing and Reviewed Promotion](../ATM10-D-0004-local-provider-routing-and-reviewed-promotion.md) (`docs/decisions/ATM10-D-0004-local-provider-routing-and-reviewed-promotion.md`)
 
 ## dependency law
 
@@ -26,6 +27,15 @@
 
 - [ATM10-D-0002 - OS Skill Profile Boundary](../ATM10-D-0002-os-skill-profile-boundary.md) (`docs/decisions/ATM10-D-0002-os-skill-profile-boundary.md`)
 - [ATM10-D-0003 - Autonomous Modular Monolith](../ATM10-D-0003-autonomous-modular-monolith.md) (`docs/decisions/ATM10-D-0003-autonomous-modular-monolith.md`)
+- [ATM10-D-0004 - Local Provider Routing and Reviewed Promotion](../ATM10-D-0004-local-provider-routing-and-reviewed-promotion.md) (`docs/decisions/ATM10-D-0004-local-provider-routing-and-reviewed-promotion.md`)
+
+## provider selection
+
+- [ATM10-D-0004 - Local Provider Routing and Reviewed Promotion](../ATM10-D-0004-local-provider-routing-and-reviewed-promotion.md) (`docs/decisions/ATM10-D-0004-local-provider-routing-and-reviewed-promotion.md`)
+
+## runtime promotion
+
+- [ATM10-D-0004 - Local Provider Routing and Reviewed Promotion](../ATM10-D-0004-local-provider-routing-and-reviewed-promotion.md) (`docs/decisions/ATM10-D-0004-local-provider-routing-and-reviewed-promotion.md`)
 
 ## runtime topology
 

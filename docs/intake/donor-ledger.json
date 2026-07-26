@@ -298,7 +298,7 @@
         "tests/test_provider_routing.py",
         "tests/test_companion_app.py"
       ],
-      "status": "admitted_for_implementation",
+      "status": "adapted",
       "runtime_dependency": false,
       "auto_sync": false,
       "rejected_surfaces": [
@@ -351,7 +351,7 @@
         "tests/test_provider_promotion.py",
         "tests/test_provider_routing.py"
       ],
-      "status": "admitted_for_implementation",
+      "status": "adapted",
       "runtime_dependency": false,
       "auto_sync": false,
       "rejected_surfaces": [

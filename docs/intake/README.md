@@ -36,6 +36,12 @@ Each admitted entry records:
 - runtime and synchronization prohibitions;
 - a claim limit.
 
+All six current entries now have `status=adapted`: proof/evals, source-first
+world knowledge, measurement semantics, memory, turn-local provider routing,
+and reviewed provider-promotion discipline. This status means the named
+ATM10-owned targets and local tests exist; it does not prove live optional
+provider quality, product benefit, or Windows acceptance.
+
 ## Intake sequence
 
 1. Re-read only the pinned selected paths and their owner guidance.

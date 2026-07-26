@@ -7,6 +7,7 @@ tracks belong in `docs/ARCHIVED_TRACKS.md`.
 
 - Python 3.11 or newer;
 - Git;
+- Linux for the portable core build, test, run, and release lane;
 - Windows 11 + PowerShell 7 for product-edge acceptance.
 
 The deterministic core does not need a model, service, game window, database,
@@ -14,19 +15,19 @@ network connection, or sibling repository.
 
 ## Install
 
-From PowerShell:
+From a Linux shell:
 
-```powershell
+```bash
 cd <repo-root>
-py -3.12 -m venv .venv
-.\.venv\Scripts\Activate.ps1
+python3 -m venv .venv
+source .venv/bin/activate
 python -m pip install --upgrade pip
 python -m pip install . --no-deps
 ```
 
 For repository development:
 
-```powershell
+```bash
 python -m pip install -e ".[dev]"
 ```
 
@@ -38,14 +39,14 @@ python -m pip install -e ".[windows]"
 
 OpenVINO and voice providers are explicit extras:
 
-```powershell
+```bash
 python -m pip install -e ".[openvino]"
 python -m pip install -e ".[voice]"
 ```
 
 ## Verify the core posture
 
-```powershell
+```bash
 atm10 doctor
 ```
 
@@ -54,13 +55,13 @@ provider, and `dry_run_only` action default.
 
 ## Run one complete deterministic turn
 
-```powershell
-atm10 run `
-  --prompt "Describe actionable ATM10 context." `
-  --query "steel tools" `
-  --action-intent open_quest_book `
-  --runs-dir runs\local `
-  --state-dir .atm10-state `
+```bash
+atm10 run \
+  --prompt "Describe actionable ATM10 context." \
+  --query "steel tools" \
+  --action-intent open_quest_book \
+  --runs-dir runs/local \
+  --state-dir .atm10-state \
   --memory-dir .atm10-memory
 ```
 
@@ -80,10 +81,10 @@ explicit no-provider degradation path.
 
 ## Replay without providers
 
-```powershell
-atm10 replay <path-to-turn-json> `
-  --runs-dir runs\replay `
-  --state-dir .atm10-state `
+```bash
+atm10 replay <path-to-turn-json> \
+  --runs-dir runs/replay \
+  --state-dir .atm10-state \
   --memory-dir .atm10-memory
 ```
 
@@ -93,26 +94,26 @@ models, voice, or action providers.
 
 ## Run the product eval
 
-```powershell
-atm10 eval `
-  --suite companion-core `
-  --runs-dir runs\eval `
-  --state-dir .atm10-state\eval `
-  --reports-dir eval-results `
-  --memory-dir .atm10-memory\eval
+```bash
+atm10 eval \
+  --suite companion-core \
+  --runs-dir runs/eval \
+  --state-dir .atm10-state/eval \
+  --reports-dir eval-results \
+  --memory-dir .atm10-memory/eval
 ```
 
-The seven deterministic cases cover stub execution, cited file world/KAG,
-canonical actions, voice degradation, state/trace separation, useful
-negatives, and replay. The v2 report records a bounded claim, categorical
-verdict, scope, provenance, blind spots, portability limits, and
-measurement-only metrics. The command returns non-zero unless the suite
-supports its full bounded claim.
+The eight deterministic cases cover stub execution, cited file world/KAG,
+turn-local provider routing, canonical actions, voice degradation,
+state/trace separation, useful negatives, and replay. The v2 report records a
+bounded claim, categorical verdict, scope, provenance, blind spots,
+portability limits, and measurement-only metrics. The command returns non-zero
+unless the suite supports its full bounded claim.
 
 ## Consolidate captured memory candidates
 
-```powershell
-atm10 consolidate-memory `
+```bash
+atm10 consolidate-memory \
   --memory-dir .atm10-memory
 ```
 
@@ -122,6 +123,23 @@ derives idempotent `proposed` semantic-game-knowledge and procedural-gameplay
 candidates. It never confirms, freezes, or promotes them, and a dry-run action
 episode does not establish gameplay effectiveness. `.atm10-memory/` is ignored
 local product data; do not commit personal queries or captured play history.
+
+## Inspect provider routes and promotion posture
+
+Every new turn carries `stages.providers.routes`. Each capability record names
+the selected provider, ordered attempts, fallback reason, return handle, and a
+decision ID correlated to the turn trace. `not_requested` means the capability
+was not probed. `unavailable`, `degraded`, and `rejected` remain distinct. The
+bundle is explicitly turn-local and never discovers or dispatches through an
+AoA/global router.
+
+`atm10_agent.providers.promotion` is a source contract, not an automatic
+operator command. Comparable machine-fit and benchmark evidence may create a
+`candidate`; explicit review still leaves it `approved_not_active`. An
+activation record requires an external configuration evidence ref, then a
+separate post-activation check. Failure yields `rollback_required`; restoring
+the prior provider requires a separate rollback record. None of these helpers
+mutates runtime configuration.
 
 ## M6.19 rollout records
 
@@ -207,8 +225,8 @@ and must not be committed.
 The remaining `scripts/` directory contains maintainer tools, not another
 application. Common source-owned tools include:
 
-```powershell
-python -m scripts.discover_instance --runs-dir runs\instance-discovery
+```bash
+python -m scripts.discover_instance --runs-dir runs/instance-discovery
 python -m scripts.normalize_ftbquests --help
 python -m scripts.retrieve_demo --help
 python -m scripts.kag_build_baseline --help
@@ -223,8 +241,8 @@ authorizes mutation.
 
 Neo4j examples must use an operator-provided local credential:
 
-```powershell
-$env:NEO4J_PASSWORD = "<set-local-neo4j-password>"
+```bash
+export NEO4J_PASSWORD="<set-local-neo4j-password>"
 ```
 
 No active command uses `ATM10_SERVICE_TOKEN`; the old local HTTP service plane
@@ -232,7 +250,7 @@ has been retired.
 
 ## Repository validation
 
-```powershell
+```bash
 python -m scripts.validate_local_evals
 python -m scripts.generate_decision_indexes --check
 python -m scripts.validate_decision_records
@@ -244,7 +262,7 @@ Release validation additionally builds an sdist and wheel, installs the wheel
 without dependencies outside the checkout, runs `atm10 doctor`, and executes
 the deterministic turn, replay, and `companion-core` eval:
 
-```powershell
+```bash
 python -m build
 python -m scripts.verify_release --dist-dir dist
 ```

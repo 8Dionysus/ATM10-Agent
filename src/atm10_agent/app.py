@@ -14,6 +14,7 @@ from atm10_agent.contracts import TURN_SCHEMA_VERSION, TurnRequest, TurnResult
 from atm10_agent.interpretation import interpret
 from atm10_agent.memory import EmbeddedMemoryStore, capture_turn_memory
 from atm10_agent.perception import perceive
+from atm10_agent.providers import build_turn_provider_routes
 from atm10_agent.response import compose
 from atm10_agent.trace import record_turn, write_json
 from atm10_agent.voice import render
@@ -108,6 +109,14 @@ class CompanionApp:
             trace_id=turn_id,
         )
         voice = render(requested=request.voice, text=response["answer"])
+        providers = build_turn_provider_routes(
+            turn_id=turn_id,
+            perception=perception,
+            world=world,
+            response=response,
+            action=action,
+            voice=voice,
+        )
 
         pre_memory_reasons = tuple(
             reason
@@ -156,6 +165,7 @@ class CompanionApp:
                 "perception": perception,
                 "interpretation": interpretation,
                 "world": world,
+                "providers": providers,
                 "memory": memory,
             },
             citations=tuple(world["citations"]),
@@ -196,6 +206,15 @@ class CompanionApp:
             replay_stages["memory"] = {
                 **replay_stages["memory"],
                 "replay_capture_performed": False,
+                "replay_source_turn_id": source_turn_id,
+            }
+        if isinstance(replay_stages, dict) and isinstance(
+            replay_stages.get("providers"),
+            dict,
+        ):
+            replay_stages["providers"] = {
+                **replay_stages["providers"],
+                "replay_routing_performed": False,
                 "replay_source_turn_id": source_turn_id,
             }
         replay_fingerprint = hashlib.sha256(

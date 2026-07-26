@@ -30,8 +30,8 @@ def test_companion_core_eval_is_standalone_and_writes_separate_evidence(
     assert report["suite_id"] == "atm10-companion-core"
     assert report["status"] == "pass"
     assert report["verdict"] == "supports_bounded_claim"
-    assert report["case_count"] == 7
-    assert report["passed_count"] == 7
+    assert report["case_count"] == 8
+    assert report["passed_count"] == 8
     assert report["failed_count"] == 0
     assert report["network_required"] is False
     assert report["live_services_required"] is False

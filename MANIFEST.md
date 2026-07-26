@@ -12,9 +12,10 @@ package, `atm10_agent`, owns:
 3. source-owned file world recall and product KAG;
 4. embedded temporal memory with explicit online capture and offline
    consolidation;
-5. cited response/plan;
-6. optional dry-run action and voice;
-7. append-only trace and deterministic replay.
+5. turn-local provider selection evidence;
+6. cited response/plan;
+7. optional dry-run action and voice;
+8. append-only trace and deterministic replay.
 
 The composition root is `atm10_agent.app.CompanionApp`. The supported command
 surface is
@@ -37,12 +38,17 @@ surface is
   turn traces, action traces, and eval reports;
 - explicit five-kind memory canon with separate trust axes and
   proposed-only offline semantic/procedural consolidation;
+- explicit turn-local route results for capture/input, VLM, embedded world and
+  relation stores, text response, ASR/TTS, and dry-run game tools;
+- bounded machine-fit/benchmark comparison, review, externally evidenced
+  activation, separate post-check, and rollback records with no automatic
+  promotion;
 - Windows ATM10 session discovery plus package-owned DXcam-first capture with
   Pillow fallback evidence;
 - owner-typed live Windows receipt collection with source revision, OS/shell,
   session, screenshot, explicit degraded no-audio posture, hashed turn
   artifacts, dry-run correlation checks, and bounded offline verification;
-- executable seven-case `companion-core` product eval;
+- executable eight-case `companion-core` product eval;
 - bounded eval v2 reports with categorical support, named scope, provenance,
   blind spots, portability limits, and measurement-only metrics;
 - Windows package tests/smoke and portable installed-package Linux smoke.
@@ -75,6 +81,9 @@ Currently proven in source:
   `3a724cb0f0dd12ffc03713448cd9cc21dba2fc3f`;
 - admitted, immutable-revision-pinned donor candidates in
   `docs/intake/donor-ledger.json`, with no live donor dependency;
+- ATM10-owned proof, provenance, measurement, memory, world knowledge,
+  provider-routing, and provider-promotion foundations adapted from the pinned
+  donor ledger without auto-sync;
 - Windows capture/session contracts through deterministic tests;
 - Linux execution of the live collector is explicitly blocked rather than
   accepted as substitute evidence.
@@ -82,8 +91,6 @@ Currently proven in source:
 Still required before the full rebuild and release may be called complete:
 
 - live Windows 11 + PowerShell 7 session, capture, trace, and dry-run evidence;
-- ATM10-owned implementation and local validation of the admitted donor
-  foundations;
 - final fresh-clone and merged-main Linux verification after those slices.
 
 The Linux standalone gate admits controlled donor intake. Windows product-edge

@@ -41,6 +41,8 @@ def test_donor_ledger_validates_and_has_unique_pinned_entries() -> None:
         "donor.aoa-kag",
         "donor.aoa-stats",
         "donor.aoa-memo",
+        "donor.aoa-routing",
+        "donor.abyss-stack",
     }
 
     for entry in entries:

@@ -35,6 +35,7 @@ def test_deterministic_turn_covers_the_full_companion_boundary(tmp_path: Path) -
         "perception",
         "interpretation",
         "world",
+        "providers",
         "memory",
     ]
     assert result["stages"]["perception"]["provider"] == "deterministic_stub_v1"
@@ -49,6 +50,18 @@ def test_deterministic_turn_covers_the_full_companion_boundary(tmp_path: Path) -
     )
     assert result["stages"]["memory"]["status"] == "ok"
     assert len(result["stages"]["memory"]["durable_object_ids"]) == 2
+    provider_routes = result["stages"]["providers"]
+    assert provider_routes["status"] == "ok"
+    assert provider_routes["global_router"] is False
+    assert provider_routes["routes"]["perception.vlm"]["selected_provider"] == (
+        "deterministic_stub_v1"
+    )
+    assert provider_routes["routes"]["world.store"]["selected_provider"] == (
+        "embedded_file_world"
+    )
+    assert provider_routes["routes"]["action.game_tool"]["selected_provider"] == (
+        "dry_run_game_tool_planner"
+    )
     assert result["response"]["mode"] == "grounded_file_world"
     assert result["action"]["dry_run"] is True
     assert result["action"]["executed"] is False
@@ -69,6 +82,7 @@ def test_deterministic_turn_covers_the_full_companion_boundary(tmp_path: Path) -
     assert trace_record["memory"]["durable_object_ids"] == (
         result["stages"]["memory"]["durable_object_ids"]
     )
+    assert trace_record["providers"] == provider_routes
 
 
 def test_replay_preserves_response_and_citations_without_running_providers(
@@ -96,6 +110,10 @@ def test_replay_preserves_response_and_citations_without_running_providers(
     assert replay["citations"] == original["citations"]
     assert replay["stages"]["memory"]["replay_capture_performed"] is False
     assert replay["stages"]["memory"]["replay_source_turn_id"] == original["turn_id"]
+    assert replay["stages"]["providers"]["replay_routing_performed"] is False
+    assert replay["stages"]["providers"]["replay_source_turn_id"] == (
+        original["turn_id"]
+    )
     assert Path(replay["trace"]["turn_json"]).is_file()
 
 
@@ -111,6 +129,9 @@ def test_missing_optional_voice_provider_is_honest_degradation(tmp_path: Path) -
     assert result["degraded"] is True
     assert result["degradation_reasons"] == ["voice_provider_not_configured"]
     assert result["voice"]["audio_written"] is False
+    assert result["stages"]["providers"]["routes"]["voice.tts"]["status"] == (
+        "unavailable"
+    )
 
 
 def test_unsupported_action_never_executes_input(tmp_path: Path) -> None:
@@ -135,6 +156,9 @@ def test_unsupported_action_never_executes_input(tmp_path: Path) -> None:
     assert result["action"]["degradation_reason"] == "unsupported_action_intent"
     assert result["action"]["intent_id"].startswith("intent:")
     assert result["action"]["trace_id"] == result["turn_id"]
+    assert result["stages"]["providers"]["routes"]["action.game_tool"]["status"] == (
+        "rejected"
+    )
 
 
 def test_cli_doctor_and_run_are_dependency_light(

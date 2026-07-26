@@ -35,6 +35,8 @@ REQUIRED_WHEEL_PATHS = {
     "atm10_agent/proof/evals.py",
     "atm10_agent/proof/measurements.py",
     "atm10_agent/proof/provenance.py",
+    "atm10_agent/providers/promotion.py",
+    "atm10_agent/providers/routing.py",
     "atm10_agent/world/knowledge.py",
     "atm10_agent/windows_acceptance.py",
 }
@@ -145,6 +147,8 @@ def inspect_sdist(sdist_path: Path) -> dict[str, Any]:
         "src/atm10_agent/proof/evals.py",
         "src/atm10_agent/proof/measurements.py",
         "src/atm10_agent/proof/provenance.py",
+        "src/atm10_agent/providers/promotion.py",
+        "src/atm10_agent/providers/routing.py",
         "src/atm10_agent/world/knowledge.py",
     }
     missing = sorted(required - relative_names)
@@ -307,7 +311,12 @@ def smoke_installed_wheel(wheel_path: Path) -> dict[str, Any]:
             [
                 str(python_path),
                 "-c",
-                "import atm10_agent, pathlib; print(pathlib.Path(atm10_agent.__file__).resolve())",
+                (
+                    "import atm10_agent, pathlib; "
+                    "from atm10_agent.providers import ProviderEvidence, select_provider; "
+                    "print(pathlib.Path(atm10_agent.__file__).resolve(), "
+                    "ProviderEvidence.__name__, select_provider.__name__)"
+                ),
             ],
             cwd=work_dir,
             env=env,
