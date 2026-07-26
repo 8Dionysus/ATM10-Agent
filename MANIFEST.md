@@ -77,8 +77,12 @@ Currently proven in source:
 - a single `pyproject.toml` dependency authority plus dependency-free core lock;
 - verified wheel/sdist structure and installed-wheel doctor, turn, replay, and
   eval from a clean environment outside the checkout;
-- fresh-clone and merged-main Linux proof at
-  `3a724cb0f0dd12ffc03713448cd9cc21dba2fc3f`;
+- final fresh-clone and merged-main Linux proof at
+  `cac3a43e2647cf049bd3a9c3760643e63a344951`: dependency-free core and
+  declared development dependencies install in isolated environments, the
+  full deterministic suite passes with `313 passed, 1 skipped` without
+  network access, repository-owned validators pass, and wheel/sdist plus
+  installed-wheel verification pass outside the checkout;
 - admitted, immutable-revision-pinned donor candidates in
   `docs/intake/donor-ledger.json`, with no live donor dependency;
 - ATM10-owned proof, provenance, measurement, memory, world knowledge,
@@ -88,13 +92,14 @@ Currently proven in source:
 - Linux execution of the live collector is explicitly blocked rather than
   accepted as substitute evidence.
 
-Still required before the full rebuild and release may be called complete:
+Still required before the full cross-platform rebuild and release may be
+called complete:
 
 - live Windows 11 + PowerShell 7 session, capture, trace, and dry-run evidence;
-- final fresh-clone and merged-main Linux verification after those slices.
 
-The Linux standalone gate admits controlled donor intake. Windows product-edge
-acceptance remains unfinished and moves independently in a separate session.
+The bounded Linux rebuild and donor-adaptation slice is complete. Windows
+product-edge acceptance remains unfinished and moves independently in a
+separate session.
 
 ## Canonical routes
 

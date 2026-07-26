@@ -118,5 +118,9 @@ behavioral regressions reviewable.
   admission gate.
 - Wave 7 now has ATM10-owned proof/provenance/measurement, memory/world, and
   provider-routing/promotion foundations. All six pinned donor entries are
-  adapted without donor runtime dependencies or auto-sync; the final Linux
-  fresh-clone/merged-main audit remains separate acceptance evidence.
+  adapted without donor runtime dependencies or auto-sync.
+- The final Linux fresh-clone/merged-main audit passed at
+  `cac3a43e2647cf049bd3a9c3760643e63a344951` from an isolated checkout with
+  network disabled after dependency preparation. The bounded Linux rebuild
+  slice is complete; live Windows evidence remains a separate unfinished
+  product-edge lane and the only open cross-platform release gate.

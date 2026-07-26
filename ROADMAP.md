@@ -188,11 +188,12 @@ The rebuild is complete only when all of the following are true:
 15. Pull requests are merged, the canonical worktree is clean/current, and
     remaining debt is reported explicitly.
 
-The current Linux session may close its bounded rebuild slice after items
-relevant to the portable core and donor foundations pass on merged `main`.
-Item 8 remains intentionally open for the separate Windows session; that
-bounded closeout must not be reported as complete Windows acceptance or a full
-release.
+The bounded Linux rebuild slice is closed on merged `main` at
+`cac3a43e2647cf049bd3a9c3760643e63a344951`: the portable core, donor
+foundations, deterministic negative paths, and artifact gates pass without a
+live sibling or federation runtime. Item 8 remains intentionally open for the
+separate Windows session; this bounded closeout is not complete Windows
+acceptance or a full cross-platform release.
 
 ## Principal risks
 

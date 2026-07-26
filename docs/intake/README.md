@@ -26,6 +26,11 @@ research and local reimplementation. Live Windows 11 + PowerShell 7 acceptance
 is still unfinished and is assigned to a separate session; it is not evidence
 for this gate and is not a prerequisite for donor intake.
 
+After all six adaptations landed, the final isolated Linux audit passed on
+merged `main` at `cac3a43e2647cf049bd3a9c3760643e63a344951`. This closes the
+bounded Linux intake and rebuild slice without changing the original admission
+basis or widening any donor's authority.
+
 Each admitted entry records:
 
 - immutable repository revision and selected authored paths;
