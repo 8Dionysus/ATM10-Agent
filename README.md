@@ -12,7 +12,8 @@ The product is one installable modular monolith:
 `Perception -> Interpretation -> World/Memory -> Response/Plan -> optional Action/Voice -> Trace`
 
 `atm10_agent` owns the composition root and the
-`atm10 doctor|run|replay|eval|windows-acceptance` CLI. Core install,
+`atm10 doctor|run|replay|eval|windows-acceptance|verify-windows-acceptance`
+CLI. Core install,
 deterministic turn, replay, and product eval need no model, service, sibling
 repository, `.aoa`, OS skill profile, shared validator, or network access.
 
@@ -37,8 +38,9 @@ repository, `.aoa`, OS skill profile, shared validator, or network access.
 - optional voice degrades explicitly when no provider is configured;
 - Windows capture is package-owned, DXcam-first for monitor/region capture,
   and records Pillow fallback failures;
-- live Windows acceptance has a package-owned receipt collector, while the
-  current physical run remains a separate release gate;
+- live Windows acceptance has a package-owned v2 receipt collector with
+  explicit degraded no-audio posture and an offline artifact verifier, while
+  the current physical run remains a separate release gate;
 - append-only run traces, mutable state, and eval reports use separate
   directories;
 - the legacy gateway/operator/pilot/service control plane is retired.

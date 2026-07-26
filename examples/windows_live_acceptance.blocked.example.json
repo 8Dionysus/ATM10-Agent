@@ -1,5 +1,5 @@
 {
-  "schema_version": "atm10_windows_live_acceptance_v1",
+  "schema_version": "atm10_windows_live_acceptance_v2",
   "status": "blocked",
   "degraded": false,
   "timestamp_utc": "2026-07-25T12:00:00+00:00",
@@ -20,6 +20,7 @@
     "capture_intersects_window": false,
     "capture_backend_identified": false,
     "screenshot_written": false,
+    "audio_posture_explicit": false,
     "live_image_consumed": false,
     "cited_response_present": false,
     "companion_trace_written": false,
@@ -33,6 +34,7 @@
   ],
   "session": null,
   "capture": null,
+  "audio": null,
   "turn": null,
   "artifacts": {
     "receipt": "windows_live_acceptance.json",

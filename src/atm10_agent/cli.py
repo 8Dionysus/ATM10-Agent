@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Sequence
@@ -12,7 +13,10 @@ from atm10_agent import __version__
 from atm10_agent.app import CompanionApp
 from atm10_agent.contracts import TurnRequest
 from atm10_agent.evals import run_suite
-from atm10_agent.windows_acceptance import run_windows_live_acceptance
+from atm10_agent.windows_acceptance import (
+    run_windows_live_acceptance,
+    verify_windows_live_acceptance,
+)
 
 
 def _timestamp(value: str) -> datetime:
@@ -21,6 +25,16 @@ def _timestamp(value: str) -> datetime:
     except ValueError as exc:
         raise argparse.ArgumentTypeError("timestamp must be ISO-8601") from exc
     return parsed if parsed.tzinfo is not None else parsed.replace(tzinfo=timezone.utc)
+
+
+def _positive_float(value: str) -> float:
+    try:
+        parsed = float(value)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError("value must be a number") from exc
+    if not math.isfinite(parsed) or parsed <= 0:
+        raise argparse.ArgumentTypeError("value must be a positive finite number")
+    return parsed
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -79,6 +93,17 @@ def _parser() -> argparse.ArgumentParser:
     windows_parser.add_argument("--repo-root", type=Path, default=Path("."))
     windows_parser.add_argument("--source-revision")
     windows_parser.add_argument("--settle-seconds", type=float, default=5.0)
+    verify_windows_parser = subparsers.add_parser(
+        "verify-windows-acceptance",
+        help="verify a transferred Windows acceptance receipt and artifact bundle",
+    )
+    verify_windows_parser.add_argument("receipt", type=Path)
+    verify_windows_parser.add_argument("--source-revision", required=True)
+    verify_windows_parser.add_argument(
+        "--max-age-hours",
+        type=_positive_float,
+        default=24.0,
+    )
     return parser
 
 
@@ -121,6 +146,15 @@ def main(argv: Sequence[str] | None = None) -> int:
             )
         )
         return 0 if payload["status"] == "pass" else 2
+
+    if args.command == "verify-windows-acceptance":
+        result = verify_windows_live_acceptance(
+            receipt_path=args.receipt,
+            expected_revision=args.source_revision,
+            max_age_hours=args.max_age_hours,
+        )
+        print(json.dumps(result, indent=2, ensure_ascii=False))
+        return 0 if result["status"] == "pass" else 2
 
     if args.command == "eval":
         result = run_suite(

@@ -136,35 +136,49 @@ at the use site:
 
 Live Windows acceptance is separate from these deterministic tests and must
 record the selected ATM10 window/session, capture source, screenshot metadata,
-turn trace, and dry-run action result.
+explicit audio posture, turn trace, and dry-run action result.
 
 With an ATM10 world open and its window in the foreground:
 
 ```powershell
 python -m pip install -e ".[windows]"
 $revision = git rev-parse HEAD
-atm10 windows-acceptance `
+$acceptance = atm10 windows-acceptance `
   --repo-root . `
   --source-revision $revision `
   --settle-seconds 5 `
   --evidence-dir runs\windows-live-acceptance `
-  --state-dir .atm10-state\windows-live-acceptance
+  --state-dir .atm10-state\windows-live-acceptance | ConvertFrom-Json
 if ($LASTEXITCODE -ne 0) {
   throw "ATM10 Windows live acceptance did not pass"
+}
+atm10 verify-windows-acceptance `
+  $acceptance.receipt `
+  --source-revision $revision `
+  --max-age-hours 24
+if ($LASTEXITCODE -ne 0) {
+  throw "ATM10 Windows evidence bundle did not verify"
 }
 ```
 
 After starting the command, return focus to ATM10 during the five-second
 settling window. The collector does not change foreground focus itself.
 
-The command writes `windows_live_acceptance.json`, the local screenshot, and
-turn artifacts under the ignored evidence directory. It verifies Windows 11,
-PowerShell 7, source revision, ATM10 window identity/foreground posture,
-capture intersection, a DXcam-first capture with explicit Pillow fallback,
-live-image consumption, cited response, turn trace correlation,
-`dry_run=true`, and `executed=false`. Pillow fallback may pass with
-`degraded=true`; missing platform/session/capture/trace facts fail the gate.
-Screenshots can contain private on-screen material and must not be committed.
+The collector writes a `windows_live_acceptance_v2` receipt, local screenshot,
+and hashed turn artifacts under the ignored evidence directory. It verifies
+Windows 11, PowerShell 7, source revision, ATM10 window
+identity/foreground posture, capture intersection, a DXcam-first capture with
+explicit Pillow fallback, live-image consumption, cited response, turn trace
+correlation, `dry_run=true`, and `executed=false`. Until push-to-talk is
+exercised by this lane, the receipt passes only with
+`audio.mode=degraded_no_audio`, `degraded=true`, and an explicit warning.
+
+The second command recomputes semantics and hashes from the complete receipt
+directory, requires the exact source revision, and rejects evidence older than
+24 hours. It is a consistency verifier, not independent physical-host
+attestation. Keep the entire receipt directory together when moving evidence
+between trusted machines. Screenshots can contain private on-screen material
+and must not be committed.
 
 ## Focused data and provider tools
 

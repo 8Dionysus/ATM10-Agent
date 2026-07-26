@@ -1,0 +1,213 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://atm10.local/schemas/windows_live_acceptance_v2.json",
+  "title": "atm10_windows_live_acceptance_v2",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "status",
+    "degraded",
+    "timestamp_utc",
+    "source_revision",
+    "package_version",
+    "platform",
+    "checks",
+    "warnings",
+    "errors",
+    "session",
+    "capture",
+    "audio",
+    "turn",
+    "artifacts",
+    "mutable_state_separate",
+    "claim_limit"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "atm10_windows_live_acceptance_v2"
+    },
+    "status": {
+      "enum": ["started", "blocked", "fail", "pass"]
+    },
+    "degraded": {
+      "type": "boolean"
+    },
+    "timestamp_utc": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "source_revision": {
+      "type": ["string", "null"],
+      "pattern": "^[0-9a-f]{40}$"
+    },
+    "package_version": {
+      "type": "string",
+      "minLength": 1
+    },
+    "platform": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["sys_platform", "windows_build", "powershell"],
+      "properties": {
+        "sys_platform": {
+          "type": "string",
+          "minLength": 1
+        },
+        "windows_build": {
+          "type": ["integer", "null"]
+        },
+        "powershell": {
+          "oneOf": [
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["command", "version", "major", "returncode"],
+              "properties": {
+                "command": {"const": "pwsh"},
+                "version": {"type": ["string", "null"]},
+                "major": {"type": ["integer", "null"]},
+                "returncode": {"type": "integer"}
+              }
+            },
+            {"type": "null"}
+          ]
+        }
+      }
+    },
+    "checks": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "windows_11",
+        "powershell_7",
+        "source_revision_pinned",
+        "atm10_window_found",
+        "atm10_window_foreground",
+        "atm10_session_probable",
+        "capture_intersects_window",
+        "capture_backend_identified",
+        "screenshot_written",
+        "audio_posture_explicit",
+        "live_image_consumed",
+        "cited_response_present",
+        "companion_trace_written",
+        "action_trace_correlated",
+        "dry_run_true",
+        "input_not_executed"
+      ],
+      "properties": {
+        "windows_11": {"type": "boolean"},
+        "powershell_7": {"type": "boolean"},
+        "source_revision_pinned": {"type": "boolean"},
+        "atm10_window_found": {"type": "boolean"},
+        "atm10_window_foreground": {"type": "boolean"},
+        "atm10_session_probable": {"type": "boolean"},
+        "capture_intersects_window": {"type": "boolean"},
+        "capture_backend_identified": {"type": "boolean"},
+        "screenshot_written": {"type": "boolean"},
+        "audio_posture_explicit": {"type": "boolean"},
+        "live_image_consumed": {"type": "boolean"},
+        "cited_response_present": {"type": "boolean"},
+        "companion_trace_written": {"type": "boolean"},
+        "action_trace_correlated": {"type": "boolean"},
+        "dry_run_true": {"type": "boolean"},
+        "input_not_executed": {"type": "boolean"}
+      }
+    },
+    "warnings": {
+      "type": "array",
+      "items": {"type": "string", "minLength": 1}
+    },
+    "errors": {
+      "type": "array",
+      "items": {"type": "string", "minLength": 1}
+    },
+    "session": {
+      "type": ["object", "null"]
+    },
+    "capture": {
+      "type": ["object", "null"]
+    },
+    "audio": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "mode",
+            "status",
+            "push_to_talk_exercised",
+            "reason"
+          ],
+          "properties": {
+            "mode": {"enum": ["push_to_talk", "degraded_no_audio"]},
+            "status": {"enum": ["pass", "degraded"]},
+            "push_to_talk_exercised": {"type": "boolean"},
+            "reason": {"type": ["string", "null"]}
+          }
+        },
+        {"type": "null"}
+      ]
+    },
+    "turn": {
+      "type": ["object", "null"]
+    },
+    "artifacts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "receipt",
+        "screenshot",
+        "turn_json",
+        "append_only_trace"
+      ],
+      "properties": {
+        "receipt": {"const": "windows_live_acceptance.json"},
+        "screenshot": {
+          "oneOf": [
+            {"$ref": "#/$defs/artifact"},
+            {"type": "null"}
+          ]
+        },
+        "turn_json": {
+          "oneOf": [
+            {"$ref": "#/$defs/artifact"},
+            {"type": "null"}
+          ]
+        },
+        "append_only_trace": {
+          "oneOf": [
+            {"$ref": "#/$defs/artifact"},
+            {"type": "null"}
+          ]
+        }
+      }
+    },
+    "mutable_state_separate": {
+      "const": true
+    },
+    "claim_limit": {
+      "type": "string",
+      "minLength": 1
+    }
+  },
+  "$defs": {
+    "artifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "sha256"],
+      "properties": {
+        "path": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^[^\\\\:]+$"
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        }
+      }
+    }
+  }
+}

@@ -1,11 +1,17 @@
 from __future__ import annotations
 
+import io
+import tarfile
 import zipfile
 from pathlib import Path
 
 import pytest
 
-from scripts.verify_release import ReleaseVerificationError, inspect_wheel
+from scripts.verify_release import (
+    ReleaseVerificationError,
+    inspect_sdist,
+    inspect_wheel,
+)
 
 
 def _write_wheel(path: Path, *, requires_dist: list[str] | None = None, extra_root: str | None = None) -> None:
@@ -32,6 +38,23 @@ def _write_wheel(path: Path, *, requires_dist: list[str] | None = None, extra_ro
         )
         if extra_root is not None:
             archive.writestr(f"{extra_root}/leak.py", "")
+
+
+def _write_sdist(path: Path, *, omit: str | None = None) -> None:
+    required = {
+        "pylock.toml",
+        "pyproject.toml",
+        "schemas/windows_live_acceptance_v2.json",
+        "schemas/windows_live_acceptance_verification_v1.json",
+        "src/atm10_agent/app.py",
+        "src/atm10_agent/cli.py",
+    }
+    with tarfile.open(path, "w:gz") as archive:
+        for relative in sorted(required - {omit}):
+            content = b"{}\n" if relative.endswith(".json") else b"\n"
+            member = tarfile.TarInfo(f"atm10-agent-0.1.0/{relative}")
+            member.size = len(content)
+            archive.addfile(member, io.BytesIO(content))
 
 
 def test_inspect_wheel_accepts_dependency_free_core_with_optional_extras(tmp_path: Path) -> None:
@@ -67,3 +90,24 @@ def test_inspect_wheel_rejects_nonstandalone_boundaries(
 
     with pytest.raises(ReleaseVerificationError, match=message):
         inspect_wheel(wheel)
+
+
+def test_inspect_sdist_requires_windows_acceptance_contracts(tmp_path: Path) -> None:
+    complete = tmp_path / "complete.tar.gz"
+    _write_sdist(complete)
+
+    result = inspect_sdist(complete)
+
+    assert "schemas/windows_live_acceptance_v2.json" in result["required_source_paths"]
+    assert (
+        "schemas/windows_live_acceptance_verification_v1.json"
+        in result["required_source_paths"]
+    )
+
+    incomplete = tmp_path / "incomplete.tar.gz"
+    _write_sdist(
+        incomplete,
+        omit="schemas/windows_live_acceptance_verification_v1.json",
+    )
+    with pytest.raises(ReleaseVerificationError, match="sdist boundary failed"):
+        inspect_sdist(incomplete)

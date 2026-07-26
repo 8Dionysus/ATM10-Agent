@@ -21,7 +21,7 @@ service is required.
 | Portable core | `.github/workflows/portable-core-linux.yml` | core wheel behavior is portable and does not import Windows extras |
 | Optional store | `.github/workflows/kag-neo4j-guardrail-nightly.yml` | Neo4j adapter quality only; it does not promote Neo4j into core |
 | Security | `.github/workflows/security-nightly.yml` | declared dependency audit at the scheduled revision |
-| Live Windows acceptance | `atm10 windows-acceptance` local receipt | current ATM10 session, DXcam/Pillow source, trace, and dry-run fence on Windows 11 + PowerShell 7; a source-owned collector is not evidence until it passes on the real edge |
+| Live Windows acceptance | `atm10 windows-acceptance` local receipt plus `atm10 verify-windows-acceptance` artifact verification | current ATM10 session, DXcam/Pillow source, explicit degraded no-audio posture, trace, artifact hashes, and dry-run fence on Windows 11 + PowerShell 7; neither a source-owned collector nor an offline consistency pass is evidence until collection passes on the real edge |
 
 A support claim may not exceed the evidence tier that actually ran.
 
