@@ -5,28 +5,38 @@
   "cases": [
     {
       "id": "deterministic-stub-turn",
-      "test_ref": "tests/test_phase_a_smoke.py",
+      "test_ref": "tests/test_companion_eval.py",
       "protects": "PB-001"
     },
     {
       "id": "cited-retrieval",
-      "test_ref": "tests/test_retrieval_demo.py",
+      "test_ref": "tests/test_companion_eval.py",
       "protects": "PB-002"
     },
     {
       "id": "file-product-kag",
-      "test_ref": "tests/test_eval_kag_file.py",
+      "test_ref": "tests/test_companion_eval.py",
       "protects": "PB-003"
     },
     {
-      "id": "honest-hybrid-degradation",
-      "test_ref": "tests/test_hybrid_query_demo.py",
-      "protects": "PB-004"
+      "id": "dry-run-action-fence",
+      "test_ref": "tests/test_action_contract.py",
+      "protects": "PB-005"
     },
     {
-      "id": "dry-run-action-fence",
-      "test_ref": "tests/test_automation_intent_chain_smoke.py",
-      "protects": "PB-005"
+      "id": "optional-provider-honesty",
+      "test_ref": "tests/test_companion_eval.py",
+      "protects": "PB-007"
+    },
+    {
+      "id": "state-trace-separation",
+      "test_ref": "tests/test_companion_eval.py",
+      "protects": "PB-008"
+    },
+    {
+      "id": "negative-and-replay-evidence",
+      "test_ref": "tests/test_companion_eval.py",
+      "protects": "PB-012"
     }
   ]
 }

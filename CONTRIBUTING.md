@@ -40,7 +40,7 @@ Examples:
 
 ```powershell
 python scripts/phase_a_smoke.py
-python scripts/automation_intent_chain_smoke.py --intent-json tests/fixtures/intent_open_quest_book.json --runs-dir runs\smoke-intent
+atm10 eval --suite companion-core --runs-dir runs\eval --state-dir .atm10-state\eval --reports-dir eval-results
 ```
 
 ## Preferred PR scope

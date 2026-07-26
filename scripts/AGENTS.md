@@ -19,7 +19,9 @@ Representative surfaces include:
 - `gateway_v1_local.py`, `gateway_v1_http_service.py`, `gateway_v1_http_smoke.py`
 - `retrieve_demo.py`, `eval_retrieval.py`, `normalize_ftbquests.py`, `ingest_qdrant.py`
 - `kag_build_baseline.py`, `kag_sync_neo4j.py`, `kag_query_demo.py`, `kag_query_neo4j.py`
-- `automation_dry_run.py`, `intent_to_automation_plan.py`, `automation_intent_chain_smoke.py`
+- thin package-compatibility wrappers `automation_dry_run.py` and
+  `intent_to_automation_plan.py`, plus the transitional
+  `automation_intent_chain_smoke.py`
 - `cross_service_benchmark_suite.py`, `run_combo_a_operating_cycle.py`
 - `pilot_runtime_loop.py`, `operator_product_snapshot.py`, `streamlit_operator_panel.py`
 
@@ -60,7 +62,7 @@ cd <repo-root>
 python -m pytest
 python -m scripts.phase_a_smoke --vlm-provider stub --runs-dir runs\smoke-phase-a
 python -m scripts.retrieve_demo --in tests/fixtures/retrieval_docs_sample.jsonl --query "mekanism steel" --topk 3 --candidate-k 10 --reranker none --runs-dir runs\smoke-retrieve
-python -m scripts.automation_intent_chain_smoke --intent-json tests/fixtures/intent_open_quest_book.json --runs-dir runs\smoke-intent
+atm10 eval --suite companion-core --runs-dir runs\eval --state-dir .atm10-state\eval --reports-dir eval-results
 python -m scripts.generate_decision_indexes --check
 python -m scripts.validate_decision_records
 ```

@@ -1,3 +1,5 @@
+"""Compatibility CLI for package-owned ATM10 dry-run action contracts."""
+
 from __future__ import annotations
 
 import argparse
@@ -6,41 +8,18 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Mapping
 
-_ALLOWED_ACTION_TYPES = {
-    "key_tap",
-    "key_hold",
-    "mouse_move",
-    "mouse_click",
-    "mouse_scroll",
-    "wait",
-}
-_ALLOWED_MOUSE_BUTTONS = {"left", "right", "middle"}
-_ACTION_PLAN_SCHEMA_VERSION = "automation_plan_v1"
-_ALLOWED_INTENT_PRIORITIES = {"low", "normal", "high"}
-_PLANNING_STRING_FIELDS = {
-    "intent_type",
-    "intent_id",
-    "trace_id",
-    "intent_schema_version",
-    "adapter_name",
-    "adapter_version",
-}
+from atm10_agent.action import build_dry_run_execution, normalize_plan
 
 
 def _create_run_dir(runs_dir: Path, now: datetime) -> Path:
-    base_name = now.strftime("%Y%m%d_%H%M%S-automation-dry-run")
-    run_dir = runs_dir / base_name
-    if not run_dir.exists():
-        run_dir.mkdir(parents=True, exist_ok=False)
-        return run_dir
-
+    base = runs_dir / now.strftime("%Y%m%d_%H%M%S-automation-dry-run")
+    candidate = base
     suffix = 1
-    while True:
-        candidate = runs_dir / f"{base_name}_{suffix:02d}"
-        if not candidate.exists():
-            candidate.mkdir(parents=True, exist_ok=False)
-            return candidate
+    while candidate.exists():
+        candidate = runs_dir / f"{base.name}_{suffix:02d}"
         suffix += 1
+    candidate.mkdir(parents=True)
+    return candidate
 
 
 def _write_json(path: Path, payload: Mapping[str, Any]) -> None:
@@ -48,7 +27,7 @@ def _write_json(path: Path, payload: Mapping[str, Any]) -> None:
     path.write_text(json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8")
 
 
-def _load_plan_payload(path: Path) -> dict[str, Any]:
+def _load_plan(path: Path) -> dict[str, Any]:
     if not path.exists():
         raise FileNotFoundError(f"Plan JSON path does not exist: {path}")
     if not path.is_file():
@@ -56,220 +35,10 @@ def _load_plan_payload(path: Path) -> dict[str, Any]:
     raw = path.read_text(encoding="utf-8")
     if not raw.strip():
         raise ValueError(f"Plan JSON file is empty: {path}")
-    parsed = json.loads(raw)
-    if not isinstance(parsed, dict):
+    payload = json.loads(raw)
+    if not isinstance(payload, dict):
         raise ValueError(f"Plan JSON root must be object: {path}")
-    return parsed
-
-
-def _coerce_int(name: str, value: Any, *, min_value: int | None = None) -> int:
-    if isinstance(value, bool) or not isinstance(value, int):
-        raise ValueError(f"{name} must be integer.")
-    if min_value is not None and value < min_value:
-        raise ValueError(f"{name} must be >= {min_value}.")
-    return value
-
-
-def _normalize_action(action: Mapping[str, Any], *, default_id: str) -> dict[str, Any]:
-    action_type = str(action.get("type", "")).strip().lower()
-    if action_type not in _ALLOWED_ACTION_TYPES:
-        raise ValueError(f"Unsupported action type: {action_type!r}")
-
-    action_id = str(action.get("id", default_id)).strip() or default_id
-    repeats = _coerce_int("repeats", action.get("repeats", 1), min_value=1)
-    params: dict[str, Any] = {}
-    base_duration_ms = 0
-
-    if action_type == "key_tap":
-        key = str(action.get("key", "")).strip()
-        if not key:
-            raise ValueError("key_tap action requires non-empty key.")
-        params["key"] = key
-        base_duration_ms = 50
-    elif action_type == "key_hold":
-        key = str(action.get("key", "")).strip()
-        if not key:
-            raise ValueError("key_hold action requires non-empty key.")
-        hold_ms = _coerce_int("hold_ms", action.get("hold_ms"), min_value=1)
-        params["key"] = key
-        params["hold_ms"] = hold_ms
-        base_duration_ms = hold_ms
-    elif action_type == "mouse_move":
-        x = _coerce_int("x", action.get("x"))
-        y = _coerce_int("y", action.get("y"))
-        params["x"] = x
-        params["y"] = y
-        base_duration_ms = 30
-    elif action_type == "mouse_click":
-        button = str(action.get("button", "left")).strip().lower()
-        if button not in _ALLOWED_MOUSE_BUTTONS:
-            raise ValueError(f"mouse_click button must be one of {_ALLOWED_MOUSE_BUTTONS}.")
-        params["button"] = button
-        if "x" in action:
-            params["x"] = _coerce_int("x", action.get("x"))
-        if "y" in action:
-            params["y"] = _coerce_int("y", action.get("y"))
-        base_duration_ms = 40
-    elif action_type == "mouse_scroll":
-        delta = _coerce_int("delta", action.get("delta"))
-        if delta == 0:
-            raise ValueError("mouse_scroll delta must not be 0.")
-        params["delta"] = delta
-        base_duration_ms = 30
-    else:
-        duration_ms = _coerce_int("duration_ms", action.get("duration_ms"), min_value=1)
-        params["duration_ms"] = duration_ms
-        base_duration_ms = duration_ms
-
-    estimated_duration_ms = base_duration_ms * repeats
-    return {
-        "id": action_id,
-        "type": action_type,
-        "params": params,
-        "repeats": repeats,
-        "estimated_duration_ms": estimated_duration_ms,
-    }
-
-
-def _normalize_schema_version(raw_payload: Mapping[str, Any]) -> str:
-    raw_schema_version = raw_payload.get("schema_version", _ACTION_PLAN_SCHEMA_VERSION)
-    schema_version = str(raw_schema_version).strip()
-    if not schema_version:
-        raise ValueError("schema_version must be non-empty string when provided.")
-    if schema_version != _ACTION_PLAN_SCHEMA_VERSION:
-        raise ValueError(
-            f"Unsupported schema_version: {schema_version!r}. "
-            f"Expected {_ACTION_PLAN_SCHEMA_VERSION!r}."
-        )
-    return schema_version
-
-
-def _normalize_intent(raw_payload: Mapping[str, Any]) -> dict[str, Any]:
-    raw_intent = raw_payload.get("intent")
-    if raw_intent is None:
-        return {
-            "goal": "unspecified",
-            "priority": "normal",
-            "tags": [],
-            "constraints": ["dry_run_only"],
-        }
-    if not isinstance(raw_intent, Mapping):
-        raise ValueError("intent must be JSON object when provided.")
-
-    goal = str(raw_intent.get("goal", "")).strip()
-    if not goal:
-        raise ValueError("intent.goal must be non-empty string.")
-
-    priority = str(raw_intent.get("priority", "normal")).strip().lower()
-    if priority not in _ALLOWED_INTENT_PRIORITIES:
-        raise ValueError(
-            f"intent.priority must be one of {sorted(_ALLOWED_INTENT_PRIORITIES)}."
-        )
-
-    raw_tags = raw_intent.get("tags", [])
-    if raw_tags is None:
-        raw_tags = []
-    if not isinstance(raw_tags, list):
-        raise ValueError("intent.tags must be array when provided.")
-    tags = [str(tag).strip() for tag in raw_tags if str(tag).strip()]
-
-    raw_constraints = raw_intent.get("constraints", ["dry_run_only"])
-    if raw_constraints is None:
-        raw_constraints = ["dry_run_only"]
-    if not isinstance(raw_constraints, list):
-        raise ValueError("intent.constraints must be array when provided.")
-    constraints = [str(item).strip() for item in raw_constraints if str(item).strip()]
-    if "dry_run_only" not in constraints:
-        constraints.insert(0, "dry_run_only")
-
-    return {
-        "goal": goal,
-        "priority": priority,
-        "tags": tags,
-        "constraints": constraints,
-    }
-
-
-def _normalize_planning(raw_payload: Mapping[str, Any]) -> dict[str, Any] | None:
-    raw_planning = raw_payload.get("planning")
-    if raw_planning is None:
-        return None
-    if not isinstance(raw_planning, Mapping):
-        raise ValueError("planning must be JSON object when provided.")
-
-    planning: dict[str, Any] = dict(raw_planning)
-    for key in _PLANNING_STRING_FIELDS:
-        if key not in planning:
-            continue
-        value = str(planning[key]).strip()
-        if not value:
-            raise ValueError(f"planning.{key} must be non-empty string when provided.")
-        planning[key] = value
-    return planning
-
-
-def _normalize_plan_payload(raw_payload: Mapping[str, Any]) -> dict[str, Any]:
-    schema_version = _normalize_schema_version(raw_payload)
-    intent = _normalize_intent(raw_payload)
-    planning = _normalize_planning(raw_payload)
-    raw_actions = raw_payload.get("actions")
-    if not isinstance(raw_actions, list) or not raw_actions:
-        raise ValueError("Plan payload must contain non-empty actions list.")
-
-    normalized_actions: list[dict[str, Any]] = []
-    action_ids: set[str] = set()
-    for index, action in enumerate(raw_actions, start=1):
-        if not isinstance(action, Mapping):
-            raise ValueError(f"Action #{index} must be JSON object.")
-        normalized_action = _normalize_action(action, default_id=f"a{index:03d}")
-        action_id = str(normalized_action["id"])
-        if action_id in action_ids:
-            raise ValueError(f"Action id must be unique: {action_id!r}")
-        action_ids.add(action_id)
-        normalized_actions.append(normalized_action)
-
-    context = raw_payload.get("context", {})
-    if context is None:
-        context = {}
-    if not isinstance(context, Mapping):
-        raise ValueError("context must be JSON object when provided.")
-
-    normalized_payload: dict[str, Any] = {
-        "schema_version": schema_version,
-        "dry_run": True,
-        "intent": intent,
-        "context": dict(context),
-        "actions": normalized_actions,
-    }
-    if planning is not None:
-        normalized_payload["planning"] = planning
-    return normalized_payload
-
-
-def _build_execution_plan(normalized_payload: Mapping[str, Any]) -> dict[str, Any]:
-    actions = normalized_payload["actions"]
-    steps: list[dict[str, Any]] = []
-    step_index = 0
-    for action in actions:
-        repeats = int(action["repeats"])
-        for iteration in range(1, repeats + 1):
-            step_index += 1
-            steps.append(
-                {
-                    "step_index": step_index,
-                    "action_id": str(action["id"]),
-                    "action_type": str(action["type"]),
-                    "iteration": iteration,
-                    "params": dict(action["params"]),
-                    "dry_run_message": f"DRY-RUN: would execute {action['type']} ({iteration}/{repeats})",
-                }
-            )
-    return {
-        "dry_run": True,
-        "step_count": len(steps),
-        "estimated_total_duration_ms": sum(int(action["estimated_duration_ms"]) for action in actions),
-        "steps": steps,
-    }
+    return payload
 
 
 def run_automation_dry_run(
@@ -278,50 +47,44 @@ def run_automation_dry_run(
     runs_dir: Path = Path("runs"),
     now: datetime | None = None,
 ) -> dict[str, Any]:
-    if now is None:
-        now = datetime.now(timezone.utc)
-
-    run_dir = _create_run_dir(runs_dir, now=now)
+    observed_at = now or datetime.now(timezone.utc)
+    run_dir = _create_run_dir(runs_dir, observed_at)
     run_json_path = run_dir / "run.json"
-    actions_normalized_path = run_dir / "actions_normalized.json"
-    execution_plan_path = run_dir / "execution_plan.json"
-
+    normalized_path = run_dir / "actions_normalized.json"
+    execution_path = run_dir / "execution_plan.json"
     run_payload: dict[str, Any] = {
-        "timestamp_utc": now.astimezone(timezone.utc).isoformat(),
+        "timestamp_utc": observed_at.astimezone(timezone.utc).isoformat(),
         "mode": "automation_dry_run",
         "status": "started",
         "request": {"plan_json": str(plan_json)},
         "paths": {
             "run_dir": str(run_dir),
             "run_json": str(run_json_path),
-            "actions_normalized_json": str(actions_normalized_path),
-            "execution_plan_json": str(execution_plan_path),
+            "actions_normalized_json": str(normalized_path),
+            "execution_plan_json": str(execution_path),
         },
     }
     _write_json(run_json_path, run_payload)
 
     try:
-        raw_payload = _load_plan_payload(plan_json)
-        normalized_payload = _normalize_plan_payload(raw_payload)
-        execution_plan = _build_execution_plan(normalized_payload)
-
-        _write_json(actions_normalized_path, normalized_payload)
-        _write_json(execution_plan_path, execution_plan)
-
+        normalized = normalize_plan(_load_plan(plan_json))
+        execution = build_dry_run_execution(normalized)
+        _write_json(normalized_path, normalized)
+        _write_json(execution_path, execution)
         run_payload["status"] = "ok"
         run_payload["result"] = {
             "dry_run": True,
-            "action_count": len(normalized_payload["actions"]),
-            "step_count": int(execution_plan["step_count"]),
-            "estimated_total_duration_ms": int(execution_plan["estimated_total_duration_ms"]),
+            "action_count": len(normalized["actions"]),
+            "step_count": execution["step_count"],
+            "estimated_total_duration_ms": execution["estimated_total_duration_ms"],
         }
         _write_json(run_json_path, run_payload)
         return {
             "ok": True,
             "run_dir": run_dir,
             "run_payload": run_payload,
-            "normalized_payload": normalized_payload,
-            "execution_plan": execution_plan,
+            "normalized_payload": normalized,
+            "execution_plan": execution,
         }
     except Exception as exc:
         run_payload["status"] = "error"
@@ -344,10 +107,10 @@ def run_automation_dry_run(
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Automation dry-run: validate/normalize action plan and write execution plan artifacts."
+        description="Validate an action plan through the package-owned dry-run fence."
     )
-    parser.add_argument("--plan-json", type=Path, required=True, help="Path to action plan JSON.")
-    parser.add_argument("--runs-dir", type=Path, default=Path("runs"), help="Run artifact base directory.")
+    parser.add_argument("--plan-json", type=Path, required=True)
+    parser.add_argument("--runs-dir", type=Path, default=Path("runs"))
     return parser.parse_args()
 
 

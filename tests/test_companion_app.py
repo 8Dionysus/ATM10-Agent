@@ -103,15 +103,15 @@ def test_unsupported_action_never_executes_input(tmp_path: Path) -> None:
     )
 
     assert result["status"] == "degraded"
-    assert result["action"] == {
-        "schema_version": "atm10_action_plan_v1",
-        "status": "degraded",
-        "dry_run": True,
-        "executed": False,
-        "intent": "destroy_world",
-        "actions": [],
-        "degradation_reason": "unsupported_action_intent",
-    }
+    assert result["action"]["schema_version"] == "atm10_action_plan_v1"
+    assert result["action"]["status"] == "degraded"
+    assert result["action"]["dry_run"] is True
+    assert result["action"]["executed"] is False
+    assert result["action"]["intent"] == "destroy_world"
+    assert result["action"]["actions"] == []
+    assert result["action"]["degradation_reason"] == "unsupported_action_intent"
+    assert result["action"]["intent_id"].startswith("intent:")
+    assert result["action"]["trace_id"] == result["turn_id"]
 
 
 def test_cli_doctor_and_run_are_dependency_light(
