@@ -11,7 +11,7 @@ permissions:
 
 jobs:
   test:
-    name: Windows tests
+    name: test
     runs-on: windows-latest
     steps:
       - name: Checkout
@@ -31,7 +31,7 @@ jobs:
         run: python -m pytest
 
   smoke:
-    name: Windows installed-package smoke
+    name: smoke
     runs-on: windows-latest
     steps:
       - name: Checkout
