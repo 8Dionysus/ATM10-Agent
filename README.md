@@ -23,6 +23,7 @@ repository, `.aoa`, OS skill profile, shared validator, or network access.
 - direction and definition of done: `ROADMAP.md`
 - active commands: `docs/RUNBOOK.md`
 - autonomy law and dependency dispositions: `docs/autonomy/README.md`
+- controlled donor intake and provenance: `docs/intake/README.md`
 - Windows acceptance boundary: `docs/WINDOWS_PRODUCT_EDGE_BOUNDARY.md`
 - bounded hybrid degradation receipts: `docs/ANTIFRAGILITY_FIRST_WAVE.md`
 - public document roles: `docs/SOURCE_OF_TRUTH.md`
@@ -49,8 +50,9 @@ The useful `M6.19` intent vocabulary remains protected through the package:
 `open_quest_book`, `check_inventory_tool`, and `open_world_map`. All three
 produce plans and dry-run evidence; none emits keyboard or mouse input.
 
-Donor intake remains closed until the standalone and Windows acceptance gates
-in `ROADMAP.md` are green.
+The portable Linux autonomy gate is green, so bounded one-way donor intake is
+open through `docs/intake/donor-ledger.json`. Live Windows acceptance remains
+unfinished in a separate lane and is not claimed by that gate.
 
 ## Project links
 

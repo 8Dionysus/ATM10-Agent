@@ -1,0 +1,364 @@
+{
+  "schema_version": "atm10_donor_intake_ledger_v1",
+  "intake_owner": "ATM10-Agent",
+  "reviewed_at": "2026-07-25",
+  "standalone_gate": {
+    "platform": "linux",
+    "status": "passed",
+    "source_revision": "3a724cb0f0dd12ffc03713448cd9cc21dba2fc3f",
+    "evidence": [
+      "fresh clone at 3a724cb0f0dd12ffc03713448cd9cc21dba2fc3f: 268 passed, 1 skipped",
+      "https://github.com/8Dionysus/ATM10-Agent/actions/runs/30187638098/job/89755076063",
+      "https://github.com/8Dionysus/ATM10-Agent/actions/runs/30187638097/job/89755076010",
+      "https://github.com/8Dionysus/ATM10-Agent/actions/runs/30187638092/job/89755076112",
+      "https://github.com/8Dionysus/ATM10-Agent/actions/runs/30187638092/job/89755076127"
+    ],
+    "claim_limit": "This admits one-way donor research for the portable Linux core; it does not prove Windows capture or a complete ATM10 release."
+  },
+  "windows_lane": {
+    "status": "deferred_to_separate_session",
+    "required_for_intake": false,
+    "claim_limit": "No passing live Windows 11 and PowerShell 7 receipt exists in this migration session; Windows product-edge acceptance remains unfinished."
+  },
+  "review_rules": [
+    "Read donors at the recorded immutable revision and only through selected paths.",
+    "Treat authored owner sources as authoritative for donor meaning and generated or runtime views as weaker.",
+    "Reimplement or transform semantics into ATM10-owned source; never add a donor checkout or runtime dependency.",
+    "Keep donor repositories read-only and prohibit automatic synchronization.",
+    "Require local deterministic tests before changing an entry status to adapted.",
+    "Preserve license and provenance records without claiming donor authority for ATM10 behavior.",
+    "Record rejected nearest-wrong surfaces and keep optional provider failure explicit.",
+    "Do not widen a claim from provenance, schema validation, or green tests into demonstrated product benefit."
+  ],
+  "entries": [
+    {
+      "id": "donor.aoa-evals",
+      "owner_repo": "aoa-evals",
+      "repository_url": "https://github.com/8Dionysus/aoa-evals",
+      "revision": "98358215cb540dd1bc457fcff7796645153905c3",
+      "license": {
+        "spdx": "Apache-2.0",
+        "source_path": "LICENSE",
+        "reviewed": true
+      },
+      "authority": {
+        "donor_role": "authoritative_for_selected_donor_meaning",
+        "atm10_role": "ATM10_owned_sources_remain_authoritative_for_product_behavior"
+      },
+      "selected_paths": [
+        {
+          "path": "docs/guides/EVAL_PHILOSOPHY.md",
+          "reason": "Bounded claim, scope, repeatability, verdict, regression, and blind-spot semantics."
+        },
+        {
+          "path": "docs/guides/BLIND_SPOT_DISCLOSURE_GUIDE.md",
+          "reason": "Explicit false-pass, false-fail, fixture, environment, scorer, and portability limits."
+        },
+        {
+          "path": "docs/guides/PORTABLE_EVAL_BOUNDARY_GUIDE.md",
+          "reason": "Separates invariant claim meaning from replaceable runner and fixture details."
+        },
+        {
+          "path": "docs/guides/REGRESSION_PROOF_SURFACES.md",
+          "reason": "Names reviewable regression evidence without treating a metric as proof."
+        },
+        {
+          "path": "evals/workflow/aoa-bounded-change-quality/EVAL.md",
+          "reason": "Concrete categorical bounded-workflow verdict shape."
+        },
+        {
+          "path": "evals/workflow/aoa-bounded-change-quality/reports/summary.schema.json",
+          "reason": "Machine-readable report concepts to re-express in an ATM10-owned contract."
+        }
+      ],
+      "transformation": {
+        "mode": "conceptual_reimplementation",
+        "summary": "Create ATM10-local eval specifications and reports with bounded claims, explicit scope, categorical verdicts, provenance, regression notes, blind spots, and portability limits."
+      },
+      "target_surfaces": [
+        "src/atm10_agent/proof/evals.py",
+        "src/atm10_agent/evals/__init__.py"
+      ],
+      "required_local_tests": [
+        "tests/test_proof_contract.py",
+        "tests/test_companion_eval.py"
+      ],
+      "status": "admitted_for_implementation",
+      "runtime_dependency": false,
+      "auto_sync": false,
+      "rejected_surfaces": [
+        "donor eval runners and shared validators",
+        "generated donor catalogs and reports",
+        "federation-wide proof canon or quality claims"
+      ],
+      "claim_limit": "The selected sources justify the local contract design only; they do not show that an ATM10 eval is correct, portable, or beneficial until local cases run."
+    },
+    {
+      "id": "donor.aoa-kag",
+      "owner_repo": "aoa-kag",
+      "repository_url": "https://github.com/8Dionysus/aoa-kag",
+      "revision": "cdd2286c5ad4a345fe704ca065036945f6ba4353",
+      "license": {
+        "spdx": "Apache-2.0",
+        "source_path": "LICENSE",
+        "reviewed": true
+      },
+      "authority": {
+        "donor_role": "authoritative_for_selected_donor_meaning",
+        "atm10_role": "ATM10_owned_sources_remain_authoritative_for_product_behavior"
+      },
+      "selected_paths": [
+        {
+          "path": "docs/KAG_MODEL.md",
+          "reason": "Source-first retrieval, provenance, relation views, bounded readiness, and return-to-owner posture."
+        },
+        {
+          "path": "docs/SOURCE_POLICY.md",
+          "reason": "Derived-not-authored boundary and provenance requirements."
+        },
+        {
+          "path": "mechanics/boundary-bridge/parts/source-owned-export/CONTRACT.md",
+          "reason": "Primary owner source remains primary while supporting inputs stay supporting."
+        },
+        {
+          "path": "mechanics/boundary-bridge/parts/source-owned-export/README.md",
+          "reason": "Compact owner/export role and activation limits."
+        }
+      ],
+      "transformation": {
+        "mode": "conceptual_reimplementation",
+        "summary": "Strengthen the ATM10 file world as a source-owned knowledge layer whose derived retrieval views preserve source handles, citations, relation context, and bounded readiness."
+      },
+      "target_surfaces": [
+        "src/atm10_agent/world/knowledge.py",
+        "src/atm10_agent/rag/retrieval.py",
+        "src/atm10_agent/kag/baseline.py"
+      ],
+      "required_local_tests": [
+        "tests/test_world_knowledge.py",
+        "tests/test_retrieval_demo.py",
+        "tests/test_kag_build_baseline.py"
+      ],
+      "status": "admitted_for_implementation",
+      "runtime_dependency": false,
+      "auto_sync": false,
+      "rejected_surfaces": [
+        "donor KAG indexes, shards, catalogs, and generated read models",
+        "donor MCP, graph runtime, or federation routes",
+        "replacement of ATM10-authored world sources by derived retrieval output"
+      ],
+      "claim_limit": "Source-first structure and citations do not prove factual correctness, completeness, or retrieval quality beyond the local fixture cases."
+    },
+    {
+      "id": "donor.aoa-stats",
+      "owner_repo": "aoa-stats",
+      "repository_url": "https://github.com/8Dionysus/aoa-stats",
+      "revision": "504571995cc36905cc886259c0a19be6e8e35045",
+      "license": {
+        "spdx": "Apache-2.0",
+        "source_path": "LICENSE",
+        "reviewed": true
+      },
+      "authority": {
+        "donor_role": "authoritative_for_selected_donor_meaning",
+        "atm10_role": "ATM10_owned_sources_remain_authoritative_for_product_behavior"
+      },
+      "selected_paths": [
+        {
+          "path": "stats/measurement-contract/README.md",
+          "reason": "Separates metric, measure, statistic, view, signal, score, and proof."
+        },
+        {
+          "path": "stats/measurement-contract/AGENTS.md",
+          "reason": "Owner boundary for measurement packets and authority ceilings."
+        },
+        {
+          "path": "stats/measurement-contract/measurement-contract.schema.json",
+          "reason": "Missingness, observed-zero, provenance, and authority-ceiling concepts."
+        },
+        {
+          "path": "stats/measurement-contract/measurement-packet.schema.json",
+          "reason": "Observed, missing, unknown, and stale value posture with evidence refs."
+        }
+      ],
+      "transformation": {
+        "mode": "conceptual_reimplementation",
+        "summary": "Define ATM10-local metric observations with units, windows, missingness, observed-zero policy, provenance, source revision, and an explicit non-proof authority ceiling."
+      },
+      "target_surfaces": [
+        "src/atm10_agent/proof/measurements.py"
+      ],
+      "required_local_tests": [
+        "tests/test_measurement_contract.py",
+        "tests/test_proof_contract.py"
+      ],
+      "status": "admitted_for_implementation",
+      "runtime_dependency": false,
+      "auto_sync": false,
+      "rejected_surfaces": [
+        "shared stats ports, validators, and event buses",
+        "numeric substitution for missing, unknown, or stale observations",
+        "measurement packets as proof, routing, memory, or runtime authority"
+      ],
+      "claim_limit": "A well-formed measurement reports a bounded observation; it does not establish causality, product benefit, or a proof verdict."
+    },
+    {
+      "id": "donor.aoa-memo",
+      "owner_repo": "aoa-memo",
+      "repository_url": "https://github.com/8Dionysus/aoa-memo",
+      "revision": "551b15f371a6a3c59db055e37aa23221d69ab47c",
+      "license": {
+        "spdx": "Apache-2.0",
+        "source_path": "LICENSE",
+        "reviewed": true
+      },
+      "authority": {
+        "donor_role": "authoritative_for_selected_donor_meaning",
+        "atm10_role": "ATM10_owned_sources_remain_authoritative_for_product_behavior"
+      },
+      "selected_paths": [
+        {
+          "path": "docs/memory/MEMORY_MODEL.md",
+          "reason": "Working, episodic, semantic, procedural, associative, and audit functions plus two-speed lifecycle."
+        },
+        {
+          "path": "docs/posture/MEMORY_TRUST_POSTURE.md",
+          "reason": "Keeps confidence, authority, freshness, salience, and temperature separate."
+        },
+        {
+          "path": "schemas/memory-objects/memory_object.schema.json",
+          "reason": "Explicit temporal, provenance, lifecycle, and recall fields to narrow for ATM10."
+        }
+      ],
+      "transformation": {
+        "mode": "conceptual_reimplementation",
+        "summary": "Build an embedded ATM10 memory model for observed world state, player episodes, semantic game knowledge, procedural gameplay, and working context with separate trust axes and online/offline paths."
+      },
+      "target_surfaces": [
+        "src/atm10_agent/memory/model.py",
+        "src/atm10_agent/memory/store.py",
+        "src/atm10_agent/memory/consolidation.py"
+      ],
+      "required_local_tests": [
+        "tests/test_memory_model.py",
+        "tests/test_memory_store.py",
+        "tests/test_memory_consolidation.py"
+      ],
+      "status": "admitted_for_implementation",
+      "runtime_dependency": false,
+      "auto_sync": false,
+      "rejected_surfaces": [
+        "global user, ecosystem, or transcript memory",
+        "donor database, recall service, or lifecycle runtime",
+        "confidence, freshness, temperature, or salience as truth scores"
+      ],
+      "claim_limit": "Stored or consolidated memory remains temporal and provenance-bound; it is not proof and must not replace current observed state or authored world knowledge."
+    },
+    {
+      "id": "donor.aoa-routing",
+      "owner_repo": "aoa-routing",
+      "repository_url": "https://github.com/8Dionysus/aoa-routing",
+      "revision": "97f60de1b5992ef6bf5ff0f051bd452d940d9a85",
+      "license": {
+        "spdx": "Apache-2.0",
+        "source_path": "LICENSE",
+        "reviewed": true
+      },
+      "authority": {
+        "donor_role": "authoritative_for_selected_donor_meaning",
+        "atm10_role": "ATM10_owned_sources_remain_authoritative_for_product_behavior"
+      },
+      "selected_paths": [
+        {
+          "path": "docs/decisions/AOA-RT-D-0003-owner-capability-routing.md",
+          "reason": "Thin routing preserves typed owner refs and rejects a second selector or persistent execution graph."
+        },
+        {
+          "path": "mechanics/antifragility/parts/degraded-route-hints/docs/degraded-route-hints.md",
+          "reason": "Bounded degraded navigation with explicit evidence, suppression, expiry, and next hops."
+        },
+        {
+          "path": "mechanics/antifragility/parts/degraded-route-hints/schemas/stress_navigation_hint_v1.json",
+          "reason": "Typed affected surface, posture, next-hop, evidence, and suppression concepts."
+        },
+        {
+          "path": "mechanics/antifragility/parts/rollback-routing/schemas/rollback_route_signal_v1.json",
+          "reason": "Explicit rejected, blocked, failed, and rolled-back route outcomes."
+        }
+      ],
+      "transformation": {
+        "mode": "conceptual_reimplementation",
+        "summary": "Create an in-process ATM10 provider route result with selected provider, unavailable/degraded/rejected status, fallback reason, return handle, and traceable decision."
+      },
+      "target_surfaces": [
+        "src/atm10_agent/providers/routing.py"
+      ],
+      "required_local_tests": [
+        "tests/test_provider_routing.py",
+        "tests/test_companion_app.py"
+      ],
+      "status": "admitted_for_implementation",
+      "runtime_dependency": false,
+      "auto_sync": false,
+      "rejected_surfaces": [
+        "global AoA router, federation dispatch, or cross-owner selector",
+        "skills catalog, capability graph, or persistent task DAG",
+        "degraded hints that silently mutate or outlive their evidence"
+      ],
+      "claim_limit": "A typed route result makes selection and failure inspectable; it does not prove provider quality, availability, or optimality."
+    },
+    {
+      "id": "donor.abyss-stack",
+      "owner_repo": "abyss-stack",
+      "repository_url": "https://github.com/8Dionysus/abyss-stack",
+      "revision": "e3f35444e4b527f26eeb9118f4bfeffff6c695d6",
+      "license": {
+        "spdx": "Apache-2.0",
+        "source_path": "LICENSE",
+        "reviewed": true
+      },
+      "authority": {
+        "donor_role": "authoritative_for_selected_donor_meaning",
+        "atm10_role": "ATM10_owned_sources_remain_authoritative_for_product_behavior"
+      },
+      "selected_paths": [
+        {
+          "path": "mechanics/machine-fit/parts/fit-record/docs/MACHINE_FIT_POLICY.md",
+          "reason": "Separates host facts, machine-fit posture, benchmark evidence, and reviewed promotion."
+        },
+        {
+          "path": "mechanics/inference-pilots/parts/local-trials/docs/RUNTIME_BENCH_POLICY.md",
+          "reason": "Bounded comparable runtime evidence, context, non-claims, and measurement hygiene."
+        },
+        {
+          "path": "mechanics/inference-pilots/parts/promotion-loop/docs/RUNTIME_WINNER_PROMOTION_LOOP.md",
+          "reason": "Explicit candidate, reviewed decision, live repoint, and separate re-check sequence."
+        },
+        {
+          "path": "mechanics/inference-pilots/README.md",
+          "reason": "Owner boundary between runtime evidence, candidate posture, and portable eval truth."
+        }
+      ],
+      "transformation": {
+        "mode": "conceptual_reimplementation",
+        "summary": "Define ATM10-local provider fit evidence, bounded comparison, promotion candidate, explicit reviewed activation, post-promotion verification, degraded posture, and rollback."
+      },
+      "target_surfaces": [
+        "src/atm10_agent/providers/promotion.py"
+      ],
+      "required_local_tests": [
+        "tests/test_provider_promotion.py",
+        "tests/test_provider_routing.py"
+      ],
+      "status": "admitted_for_implementation",
+      "runtime_dependency": false,
+      "auto_sync": false,
+      "rejected_surfaces": [
+        "systemd, Podman, compose, deployment, ports, and host lifecycle wrappers",
+        "machine-local runtime records and private benchmark artifacts",
+        "automatic production promotion from one benchmark or source card"
+      ],
+      "claim_limit": "A bounded candidate comparison may support review; it cannot activate a provider or establish general model quality without an explicit ATM10-owned decision and post-activation verification."
+    }
+  ]
+}

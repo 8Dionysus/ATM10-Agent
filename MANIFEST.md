@@ -62,21 +62,28 @@ Currently proven in source:
 - a single `pyproject.toml` dependency authority plus dependency-free core lock;
 - verified wheel/sdist structure and installed-wheel doctor, turn, replay, and
   eval from a clean environment outside the checkout;
-- Windows capture/session contracts through deterministic tests.
+- fresh-clone and merged-main Linux proof at
+  `3a724cb0f0dd12ffc03713448cd9cc21dba2fc3f`;
+- admitted, immutable-revision-pinned donor candidates in
+  `docs/intake/donor-ledger.json`, with no live donor dependency;
+- Windows capture/session contracts through deterministic tests;
 - Linux execution of the live collector is explicitly blocked rather than
   accepted as substitute evidence.
 
-Still required before the autonomy gate may be called complete:
+Still required before the full rebuild and release may be called complete:
 
-- clean-environment/fresh-clone proof from the final tree;
 - live Windows 11 + PowerShell 7 session, capture, trace, and dry-run evidence;
-- merged-main verification after all migration slices.
+- ATM10-owned implementation and local validation of the admitted donor
+  foundations;
+- final fresh-clone and merged-main Linux verification after those slices.
 
-Donor intake is blocked until those gates are green.
+The Linux standalone gate admits controlled donor intake. Windows product-edge
+acceptance remains unfinished and moves independently in a separate session.
 
 ## Canonical routes
 
 - architecture and dependency law: `docs/autonomy/README.md`
+- donor provenance and admission status: `docs/intake/README.md`
 - direction and definition of done: `ROADMAP.md`
 - active commands: `docs/RUNBOOK.md`
 - product-edge claims: `docs/PRODUCT_EDGE_POSTURE.md`

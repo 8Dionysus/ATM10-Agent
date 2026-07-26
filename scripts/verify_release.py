@@ -122,8 +122,10 @@ def inspect_sdist(sdist_path: Path) -> dict[str, Any]:
         if "/" in name
     }
     required = {
+        "docs/intake/donor-ledger.json",
         "pylock.toml",
         "pyproject.toml",
+        "schemas/donor_intake_ledger_v1.json",
         "schemas/windows_live_acceptance_v2.json",
         "schemas/windows_live_acceptance_verification_v1.json",
         "src/atm10_agent/app.py",

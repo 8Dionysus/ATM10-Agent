@@ -1,0 +1,265 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://aoa.local/ATM10-Agent/schemas/donor_intake_ledger_v1.json",
+  "title": "ATM10 donor intake ledger v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "intake_owner",
+    "reviewed_at",
+    "standalone_gate",
+    "windows_lane",
+    "review_rules",
+    "entries"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "atm10_donor_intake_ledger_v1"
+    },
+    "intake_owner": {
+      "const": "ATM10-Agent"
+    },
+    "reviewed_at": {
+      "type": "string",
+      "format": "date"
+    },
+    "standalone_gate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "platform",
+        "status",
+        "source_revision",
+        "evidence",
+        "claim_limit"
+      ],
+      "properties": {
+        "platform": {
+          "const": "linux"
+        },
+        "status": {
+          "const": "passed"
+        },
+        "source_revision": {
+          "$ref": "#/$defs/gitRevision"
+        },
+        "evidence": {
+          "$ref": "#/$defs/nonEmptyStrings"
+        },
+        "claim_limit": {
+          "$ref": "#/$defs/nonEmptyString"
+        }
+      }
+    },
+    "windows_lane": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "required_for_intake",
+        "claim_limit"
+      ],
+      "properties": {
+        "status": {
+          "const": "deferred_to_separate_session"
+        },
+        "required_for_intake": {
+          "const": false
+        },
+        "claim_limit": {
+          "$ref": "#/$defs/nonEmptyString"
+        }
+      }
+    },
+    "review_rules": {
+      "type": "array",
+      "minItems": 6,
+      "uniqueItems": true,
+      "items": {
+        "$ref": "#/$defs/nonEmptyString"
+      }
+    },
+    "entries": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/intakeEntry"
+      }
+    }
+  },
+  "$defs": {
+    "nonEmptyString": {
+      "type": "string",
+      "minLength": 1
+    },
+    "nonEmptyStrings": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "$ref": "#/$defs/nonEmptyString"
+      }
+    },
+    "gitRevision": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{40}$"
+    },
+    "repoPath": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^(?!/)(?!.*(?:^|/)\\.\\.(?:/|$))(?!.*\\\\).+$"
+    },
+    "intakeEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "owner_repo",
+        "repository_url",
+        "revision",
+        "license",
+        "authority",
+        "selected_paths",
+        "transformation",
+        "target_surfaces",
+        "required_local_tests",
+        "status",
+        "runtime_dependency",
+        "auto_sync",
+        "rejected_surfaces",
+        "claim_limit"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^donor\\.[a-z0-9-]+$"
+        },
+        "owner_repo": {
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        "repository_url": {
+          "type": "string",
+          "format": "uri",
+          "pattern": "^https://github\\.com/"
+        },
+        "revision": {
+          "$ref": "#/$defs/gitRevision"
+        },
+        "license": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "spdx",
+            "source_path",
+            "reviewed"
+          ],
+          "properties": {
+            "spdx": {
+              "const": "Apache-2.0"
+            },
+            "source_path": {
+              "$ref": "#/$defs/repoPath"
+            },
+            "reviewed": {
+              "const": true
+            }
+          }
+        },
+        "authority": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "donor_role",
+            "atm10_role"
+          ],
+          "properties": {
+            "donor_role": {
+              "const": "authoritative_for_selected_donor_meaning"
+            },
+            "atm10_role": {
+              "const": "ATM10_owned_sources_remain_authoritative_for_product_behavior"
+            }
+          }
+        },
+        "selected_paths": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "path",
+              "reason"
+            ],
+            "properties": {
+              "path": {
+                "$ref": "#/$defs/repoPath"
+              },
+              "reason": {
+                "$ref": "#/$defs/nonEmptyString"
+              }
+            }
+          }
+        },
+        "transformation": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "mode",
+            "summary"
+          ],
+          "properties": {
+            "mode": {
+              "enum": [
+                "conceptual_reimplementation",
+                "transformed_derivative",
+                "bounded_data_projection"
+              ]
+            },
+            "summary": {
+              "$ref": "#/$defs/nonEmptyString"
+            }
+          }
+        },
+        "target_surfaces": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/repoPath"
+          }
+        },
+        "required_local_tests": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/repoPath"
+          }
+        },
+        "status": {
+          "enum": [
+            "reviewed_candidate",
+            "admitted_for_implementation",
+            "adapted",
+            "rejected",
+            "superseded"
+          ]
+        },
+        "runtime_dependency": {
+          "const": false
+        },
+        "auto_sync": {
+          "const": false
+        },
+        "rejected_surfaces": {
+          "$ref": "#/$defs/nonEmptyStrings"
+        },
+        "claim_limit": {
+          "$ref": "#/$defs/nonEmptyString"
+        }
+      }
+    }
+  }
+}

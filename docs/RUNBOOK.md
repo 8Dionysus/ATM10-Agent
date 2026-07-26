@@ -247,5 +247,6 @@ If capture fails:
    success;
 4. keep live evidence distinct from deterministic unit-test evidence.
 
-Do not start donor intake, add sibling checkout requirements, or restore the
-retired control plane to repair an optional provider.
+Do not bypass `docs/intake/donor-ledger.json`, add sibling checkout
+requirements, or restore the retired control plane to repair an optional
+provider.
