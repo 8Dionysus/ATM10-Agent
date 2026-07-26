@@ -17,10 +17,12 @@ def test_companion_core_eval_is_standalone_and_writes_separate_evidence(
     runs_dir = tmp_path / "runs"
     state_dir = tmp_path / "state"
     reports_dir = tmp_path / "eval-results"
+    memory_dir = tmp_path / "memory"
     report = run_companion_core_suite(
         runs_dir=runs_dir,
         state_dir=state_dir,
         reports_dir=reports_dir,
+        memory_dir=memory_dir,
         now=FIXED_NOW,
     )
 
@@ -39,7 +41,19 @@ def test_companion_core_eval_is_standalone_and_writes_separate_evidence(
     assert runs_dir.is_dir()
     assert state_dir.is_dir()
     assert reports_dir.is_dir()
-    assert len({runs_dir.resolve(), state_dir.resolve(), reports_dir.resolve()}) == 3
+    assert memory_dir.is_dir()
+    assert (
+        len(
+            {
+                runs_dir.resolve(),
+                state_dir.resolve(),
+                reports_dir.resolve(),
+                memory_dir.resolve(),
+            }
+        )
+        == 4
+    )
+    assert report["storage"]["memory_root"] == str(memory_dir)
     assert {case["status"] for case in report["cases"]} == {"pass"}
     assert report["claim"]["authority"] == "ATM10-Agent"
     assert report["scope"]["out"]
@@ -65,6 +79,8 @@ def test_cli_eval_supports_a_fixed_clock_and_nonzero_contract(
             str(tmp_path / "state"),
             "--reports-dir",
             str(tmp_path / "reports"),
+            "--memory-dir",
+            str(tmp_path / "memory"),
             "--now",
             "2026-07-25T13:00:00Z",
         ]

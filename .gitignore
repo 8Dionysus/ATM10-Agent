@@ -3,6 +3,7 @@
 /runs/
 /eval-results/
 .atm10-state/
+.atm10-memory/
 .atm10-ci-state/
 # Local maintainer planning docs are intentionally not public.
 /TODO.md

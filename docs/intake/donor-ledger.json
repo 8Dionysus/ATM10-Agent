@@ -140,7 +140,7 @@
         "tests/test_retrieval_demo.py",
         "tests/test_kag_build_baseline.py"
       ],
-      "status": "admitted_for_implementation",
+      "status": "adapted",
       "runtime_dependency": false,
       "auto_sync": false,
       "rejected_surfaces": [
@@ -245,7 +245,7 @@
         "tests/test_memory_store.py",
         "tests/test_memory_consolidation.py"
       ],
-      "status": "admitted_for_implementation",
+      "status": "adapted",
       "runtime_dependency": false,
       "auto_sync": false,
       "rejected_surfaces": [

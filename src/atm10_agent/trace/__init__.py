@@ -40,6 +40,11 @@ def record_turn(
             "status": turn["status"],
             "degraded": turn["degraded"],
             "citations": turn["citations"],
+            "memory": (
+                turn.get("stages", {}).get("memory")
+                if isinstance(turn.get("stages"), Mapping)
+                else None
+            ),
             "run_artifact": str(turn_path),
             "replay_of": turn.get("replay_of"),
         },

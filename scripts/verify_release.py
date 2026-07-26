@@ -29,9 +29,13 @@ REQUIRED_WHEEL_PATHS = {
     "atm10_agent/app.py",
     "atm10_agent/cli.py",
     "atm10_agent/data/default_world.jsonl",
+    "atm10_agent/memory/consolidation.py",
+    "atm10_agent/memory/model.py",
+    "atm10_agent/memory/store.py",
     "atm10_agent/proof/evals.py",
     "atm10_agent/proof/measurements.py",
     "atm10_agent/proof/provenance.py",
+    "atm10_agent/world/knowledge.py",
     "atm10_agent/windows_acceptance.py",
 }
 FORBIDDEN_WHEEL_ROOTS = {"scripts", "tests", ".aoa"}
@@ -135,9 +139,13 @@ def inspect_sdist(sdist_path: Path) -> dict[str, Any]:
         "schemas/windows_live_acceptance_verification_v1.json",
         "src/atm10_agent/app.py",
         "src/atm10_agent/cli.py",
+        "src/atm10_agent/memory/consolidation.py",
+        "src/atm10_agent/memory/model.py",
+        "src/atm10_agent/memory/store.py",
         "src/atm10_agent/proof/evals.py",
         "src/atm10_agent/proof/measurements.py",
         "src/atm10_agent/proof/provenance.py",
+        "src/atm10_agent/world/knowledge.py",
     }
     missing = sorted(required - relative_names)
     forbidden = sorted(
@@ -276,6 +284,20 @@ def smoke_installed_wheel(wheel_path: Path) -> dict[str, Any]:
                     "eval-state",
                     "--reports-dir",
                     "eval-reports",
+                ],
+                cwd=work_dir,
+                env=env,
+            )
+        )
+        commands.append(
+            _run_checked(
+                [
+                    str(atm10_path),
+                    "consolidate-memory",
+                    "--memory-dir",
+                    ".atm10-memory",
+                    "--now",
+                    "2026-07-25T13:00:00Z",
                 ],
                 cwd=work_dir,
                 env=env,
