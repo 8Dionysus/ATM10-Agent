@@ -9,12 +9,9 @@ from time import perf_counter
 from typing import Any, Mapping
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-if str(REPO_ROOT) not in sys.path:
-    sys.path.insert(0, str(REPO_ROOT))
-
-from src.rag.retrieval import load_docs, retrieve_top_k, retrieve_top_k_qdrant
-from src.rag.retrieval_profiles import list_profile_names, resolve_profile
-from src.agent_core.service_sla import build_common_metrics, build_service_sla_summary
+from atm10_agent.rag.retrieval import load_docs, retrieve_top_k, retrieve_top_k_qdrant
+from atm10_agent.rag.retrieval_profiles import list_profile_names, resolve_profile
+from atm10_agent.agent_core.service_sla import build_common_metrics, build_service_sla_summary
 
 
 EVAL_RESULTS_SCHEMA_VERSION = "retrieval_eval_results_v1"

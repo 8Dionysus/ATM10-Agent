@@ -8,10 +8,7 @@ from pathlib import Path
 from typing import Any, Mapping
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-if str(REPO_ROOT) not in sys.path:
-    sys.path.insert(0, str(REPO_ROOT))
-
-from src.agent_core.combo_a_profile import (
+from atm10_agent.agent_core.combo_a_profile import (
     COMBO_A_PROFILE,
     DEFAULT_COMBO_A_NEO4J_DATABASE,
     DEFAULT_COMBO_A_NEO4J_URL,
@@ -25,7 +22,7 @@ from src.agent_core.combo_a_profile import (
     profile_backends,
     resolve_neo4j_password,
 )
-from src.hybrid import execute_hybrid_query
+from atm10_agent.hybrid import execute_hybrid_query
 
 
 def _create_run_dir(runs_dir: Path, now: datetime) -> Path:

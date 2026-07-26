@@ -24,6 +24,7 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements-dev.txt
+          python -m pip install -e . --no-deps
 
       - name: Restore cache - Gateway SLA history
         uses: actions/cache/restore@668228422ae6a00e4ad889ee87cd7109ec5666a7
@@ -45,46 +46,46 @@ jobs:
 
       - name: Smoke - Gateway v1 HTTP (core scenario)
         run: |
-          python scripts/gateway_v1_http_smoke.py --scenario core --runs-dir runs/nightly-gateway-http-core --summary-json runs/nightly-gateway-http-core/gateway_http_smoke_summary.json
+          python -m scripts.gateway_v1_http_smoke --scenario core --runs-dir runs/nightly-gateway-http-core --summary-json runs/nightly-gateway-http-core/gateway_http_smoke_summary.json
 
       - name: Smoke - Gateway SLA check (signal_only)
         run: |
-          python scripts/check_gateway_sla.py --http-summary-json runs/nightly-gateway-http-core/gateway_http_smoke_summary.json --summary-json runs/nightly-gateway-sla-history/gateway_sla_summary.json --profile conservative --policy signal_only --runs-dir runs/nightly-gateway-sla-history
+          python -m scripts.check_gateway_sla --http-summary-json runs/nightly-gateway-http-core/gateway_http_smoke_summary.json --summary-json runs/nightly-gateway-sla-history/gateway_sla_summary.json --profile conservative --policy signal_only --runs-dir runs/nightly-gateway-sla-history
 
       - name: Smoke - Gateway SLA trend snapshot (signal_only)
         run: |
-          python scripts/gateway_sla_trend_snapshot.py --sla-runs-dir runs/nightly-gateway-sla-history --history-limit 30 --baseline-window 5 --critical-policy signal_only --runs-dir runs/nightly-gateway-sla-trend-history
+          python -m scripts.gateway_sla_trend_snapshot --sla-runs-dir runs/nightly-gateway-sla-history --history-limit 30 --baseline-window 5 --critical-policy signal_only --runs-dir runs/nightly-gateway-sla-trend-history
 
       - name: Readiness - Gateway SLA fail_nightly (report_only)
         run: |
-          python scripts/check_gateway_sla_fail_nightly_readiness.py --trend-runs-dir runs/nightly-gateway-sla-trend-history --history-limit 30 --readiness-window 14 --required-baseline-count 5 --max-warn-ratio 0.20 --policy report_only --runs-dir runs/nightly-gateway-sla-readiness --summary-json runs/nightly-gateway-sla-readiness/readiness_summary.json
+          python -m scripts.check_gateway_sla_fail_nightly_readiness --trend-runs-dir runs/nightly-gateway-sla-trend-history --history-limit 30 --readiness-window 14 --required-baseline-count 5 --max-warn-ratio 0.20 --policy report_only --runs-dir runs/nightly-gateway-sla-readiness --summary-json runs/nightly-gateway-sla-readiness/readiness_summary.json
 
       - name: Governance - Gateway SLA fail_nightly go/no-go (report_only)
         run: |
-          python scripts/check_gateway_sla_fail_nightly_governance.py --readiness-runs-dir runs/nightly-gateway-sla-readiness --history-limit 60 --required-ready-streak 3 --expected-readiness-window 14 --expected-required-baseline-count 5 --expected-max-warn-ratio 0.20 --policy report_only --runs-dir runs/nightly-gateway-sla-governance --summary-json runs/nightly-gateway-sla-governance/governance_summary.json
+          python -m scripts.check_gateway_sla_fail_nightly_governance --readiness-runs-dir runs/nightly-gateway-sla-readiness --history-limit 60 --required-ready-streak 3 --expected-readiness-window 14 --expected-required-baseline-count 5 --expected-max-warn-ratio 0.20 --policy report_only --runs-dir runs/nightly-gateway-sla-governance --summary-json runs/nightly-gateway-sla-governance/governance_summary.json
 
       - name: Progress - Gateway SLA fail_nightly decision progress (report_only)
         run: |
-          python scripts/check_gateway_sla_fail_nightly_progress.py --readiness-runs-dir runs/nightly-gateway-sla-readiness --governance-runs-dir runs/nightly-gateway-sla-governance --readiness-history-limit 60 --governance-history-limit 60 --expected-readiness-window 14 --expected-required-baseline-count 5 --expected-max-warn-ratio 0.20 --required-ready-streak 3 --policy report_only --runs-dir runs/nightly-gateway-sla-progress --summary-json runs/nightly-gateway-sla-progress/progress_summary.json
+          python -m scripts.check_gateway_sla_fail_nightly_progress --readiness-runs-dir runs/nightly-gateway-sla-readiness --governance-runs-dir runs/nightly-gateway-sla-governance --readiness-history-limit 60 --governance-history-limit 60 --expected-readiness-window 14 --expected-required-baseline-count 5 --expected-max-warn-ratio 0.20 --required-ready-streak 3 --policy report_only --runs-dir runs/nightly-gateway-sla-progress --summary-json runs/nightly-gateway-sla-progress/progress_summary.json
 
       - name: Transition - Gateway SLA fail_nightly switch gate (report_only)
         run: |
-          python scripts/check_gateway_sla_fail_nightly_transition.py --readiness-runs-dir runs/nightly-gateway-sla-readiness --governance-runs-dir runs/nightly-gateway-sla-governance --progress-runs-dir runs/nightly-gateway-sla-progress --readiness-history-limit 60 --governance-history-limit 60 --progress-history-limit 60 --expected-readiness-window 14 --expected-required-baseline-count 5 --expected-max-warn-ratio 0.20 --required-ready-streak 3 --policy report_only --runs-dir runs/nightly-gateway-sla-transition --summary-json runs/nightly-gateway-sla-transition/transition_summary.json
+          python -m scripts.check_gateway_sla_fail_nightly_transition --readiness-runs-dir runs/nightly-gateway-sla-readiness --governance-runs-dir runs/nightly-gateway-sla-governance --progress-runs-dir runs/nightly-gateway-sla-progress --readiness-history-limit 60 --governance-history-limit 60 --progress-history-limit 60 --expected-readiness-window 14 --expected-required-baseline-count 5 --expected-max-warn-ratio 0.20 --required-ready-streak 3 --policy report_only --runs-dir runs/nightly-gateway-sla-transition --summary-json runs/nightly-gateway-sla-transition/transition_summary.json
 
       - name: Remediation - Gateway SLA fail_nightly snapshot (report_only)
         if: always()
         run: |
-          python scripts/check_gateway_sla_fail_nightly_remediation.py --runs-dir runs --policy report_only --summary-json runs/nightly-gateway-sla-remediation/remediation_summary.json
+          python -m scripts.check_gateway_sla_fail_nightly_remediation --runs-dir runs --policy report_only --summary-json runs/nightly-gateway-sla-remediation/remediation_summary.json
 
       - name: Integrity - Gateway SLA fail_nightly invariants (report_only)
         if: always()
         run: |
-          python scripts/check_gateway_sla_fail_nightly_integrity.py --runs-dir runs --policy report_only --summary-json runs/nightly-gateway-sla-integrity/integrity_summary.json
+          python -m scripts.check_gateway_sla_fail_nightly_integrity --runs-dir runs --policy report_only --summary-json runs/nightly-gateway-sla-integrity/integrity_summary.json
 
       - name: Operating cycle - Gateway SLA policy decision surface (report_only)
         if: always()
         run: |
-          python scripts/run_gateway_sla_operating_cycle.py --runs-dir runs --policy report_only --summary-json runs/nightly-gateway-sla-operating-cycle/operating_cycle_summary.json --brief-md runs/nightly-gateway-sla-operating-cycle/triage_brief.md
+          python -m scripts.run_gateway_sla_operating_cycle --runs-dir runs --policy report_only --summary-json runs/nightly-gateway-sla-operating-cycle/operating_cycle_summary.json --brief-md runs/nightly-gateway-sla-operating-cycle/triage_brief.md
 
       - name: Resolve - Gateway SLA effective policy
         if: always()
@@ -103,7 +104,7 @@ jobs:
       - name: Smoke - Gateway SLA trend snapshot (promoted fail_nightly strict gate)
         if: env.GATEWAY_SLA_EFFECTIVE_POLICY == 'fail_nightly'
         run: |
-          python scripts/gateway_sla_trend_snapshot.py --sla-runs-dir runs/nightly-gateway-sla-history --history-limit 30 --baseline-window 5 --critical-policy fail_nightly --runs-dir runs/nightly-gateway-sla-trend-strict
+          python -m scripts.gateway_sla_trend_snapshot --sla-runs-dir runs/nightly-gateway-sla-history --history-limit 30 --baseline-window 5 --critical-policy fail_nightly --runs-dir runs/nightly-gateway-sla-trend-strict
 
       - name: Summary - Gateway SLA fail_nightly readiness
         if: always()

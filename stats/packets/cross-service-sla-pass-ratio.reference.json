@@ -52,7 +52,7 @@
       },
       {
         "kind": "service-sla-contract",
-        "ref": "src/agent_core/service_sla.py"
+        "ref": "src/atm10_agent/agent_core/service_sla.py"
       },
       {
         "kind": "public-fixture-set",

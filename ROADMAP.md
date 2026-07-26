@@ -76,7 +76,7 @@ Exit: direction cannot drift back to a gateway/federation center unnoticed.
 
 - Replace external KAG action and stats checkout in `Repo Validation`.
 - Remove root repo-self KAG from the active product and required CI plane while
-  retaining `src/kag` product behavior.
+  retaining `src/atm10_agent/kag` product behavior.
 - Replace the eval skeleton and stats delegate with owner-local tests or delete
   them when they add no product signal.
 - Remove `.aoa`, global-skill, sibling-validator, and shared-runtime assumptions

@@ -107,7 +107,7 @@
       ],
       "evidence_refs": [
         "scripts/cross_service_benchmark_suite.py",
-        "src/agent_core/service_sla.py",
+        "src/atm10_agent/agent_core/service_sla.py",
         "tests/fixtures/"
       ]
     }

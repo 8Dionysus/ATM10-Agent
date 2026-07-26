@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from src.agent_core.tts_runtime import (
+from atm10_agent.agent_core.tts_runtime import (
     CallbackTTSEngine,
     PhraseCache,
     TTSRequest,

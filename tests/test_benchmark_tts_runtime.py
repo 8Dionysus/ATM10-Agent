@@ -8,7 +8,7 @@ import pytest
 
 import scripts.benchmark_tts_runtime as benchmark_tts_runtime
 from scripts.benchmark_tts_runtime import run_benchmark_tts_runtime
-from src.agent_core.tts_runtime import CallbackTTSEngine, TTSRuntimeService, make_silence_wav_bytes
+from atm10_agent.agent_core.tts_runtime import CallbackTTSEngine, TTSRuntimeService, make_silence_wav_bytes
 
 
 def _write_manifest(path: Path) -> None:

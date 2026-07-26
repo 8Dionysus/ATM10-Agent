@@ -6,7 +6,7 @@ import json
 from pathlib import Path
 
 import scripts.cross_service_benchmark_suite as suite
-from src.agent_core.service_sla import derive_cross_service_sla_pass_ratio
+from atm10_agent.agent_core.service_sla import derive_cross_service_sla_pass_ratio
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]

@@ -8,7 +8,9 @@
       "name": "deterministic_stub_turn",
       "contract": "A dependency-light perception request produces deterministic structured output and run artifacts without a live model.",
       "evidence": [
+        "src/atm10_agent/app.py",
         "scripts/phase_a_smoke.py",
+        "tests/test_companion_app.py",
         "tests/test_phase_a_smoke.py",
         "tests/test_vlm_provider.py"
       ]
@@ -18,8 +20,10 @@
       "name": "cited_fixture_retrieval",
       "contract": "Fixture-backed retrieval is reproducible and returns ranked source-linked evidence.",
       "evidence": [
-        "src/rag/retrieval.py",
+        "src/atm10_agent/world/__init__.py",
+        "src/atm10_agent/rag/retrieval.py",
         "tests/fixtures/retrieval_docs_sample.jsonl",
+        "tests/test_companion_app.py",
         "tests/test_retrieval_demo.py",
         "tests/test_eval_retrieval.py"
       ]
@@ -29,7 +33,9 @@
       "name": "file_product_kag",
       "contract": "The product graph can be built and queried locally with explicit provenance and citations; Neo4j is not required.",
       "evidence": [
-        "src/kag/baseline.py",
+        "src/atm10_agent/world/__init__.py",
+        "src/atm10_agent/kag/baseline.py",
+        "tests/test_companion_app.py",
         "tests/test_kag_build_baseline.py",
         "tests/test_kag_query_demo.py",
         "tests/test_eval_kag_file.py"
@@ -40,7 +46,7 @@
       "name": "honest_hybrid_degradation",
       "contract": "A failed or empty graph stage yields an explicit bounded fallback, warnings, source evidence, and a traceable stressor receipt rather than false success.",
       "evidence": [
-        "src/hybrid/planner.py",
+        "src/atm10_agent/hybrid/planner.py",
         "scripts/hybrid_query_demo.py",
         "tests/test_hybrid_query_demo.py",
         "tests/test_antifragility_public_surface.py"
@@ -51,9 +57,11 @@
       "name": "dry_run_action_fence",
       "contract": "Intent-to-plan-to-action is deterministic, preserves intent and trace correlation, and emits no keyboard or mouse input by default.",
       "evidence": [
+        "src/atm10_agent/action/__init__.py",
         "scripts/intent_to_automation_plan.py",
         "scripts/automation_dry_run.py",
         "scripts/automation_intent_chain_smoke.py",
+        "tests/test_companion_app.py",
         "tests/test_automation_intent_chain_smoke.py"
       ]
     },
@@ -62,7 +70,7 @@
       "name": "windows_session_and_capture_evidence",
       "contract": "Windows acceptance can identify an ATM10 session, prefer DXcam capture, and artifact the selected source and degraded fallback.",
       "evidence": [
-        "src/agent_core/atm10_session_probe.py",
+        "src/atm10_agent/agent_core/atm10_session_probe.py",
         "scripts/pilot_runtime_loop.py",
         "tests/test_atm10_session_probe_adapters.py",
         "tests/test_pilot_runtime_loop.py"
@@ -73,9 +81,12 @@
       "name": "optional_provider_honesty",
       "contract": "Unavailable model, store, voice, UI, or hardware providers fail at the use site and preserve a usable stub/replay or explicitly degraded turn.",
       "evidence": [
-        "src/agent_core/vlm_stub.py",
-        "src/agent_core/grounded_reply_openvino.py",
-        "src/agent_core/io_voice.py",
+        "src/atm10_agent/app.py",
+        "src/atm10_agent/voice/__init__.py",
+        "src/atm10_agent/agent_core/vlm_stub.py",
+        "src/atm10_agent/agent_core/grounded_reply_openvino.py",
+        "src/atm10_agent/agent_core/io_voice.py",
+        "tests/test_companion_app.py",
         "tests/test_grounded_reply_openvino.py",
         "tests/test_tts_runtime.py"
       ]
@@ -85,6 +96,8 @@
       "name": "state_trace_separation",
       "contract": "Mutable companion state is not used as a substitute for append-only turn and action evidence.",
       "evidence": [
+        "src/atm10_agent/trace/__init__.py",
+        "tests/test_companion_app.py",
         "scripts/operator_return_recovery.py",
         "tests/test_operator_return_recovery.py"
       ]
@@ -103,10 +116,10 @@
       "name": "provider_replaceability",
       "contract": "Provider selection is explicit, optional dependencies are not loaded at core import time, and a provider can be replaced without changing the turn contract.",
       "evidence": [
-        "src/agent_core/vlm.py",
-        "src/agent_core/vlm_stub.py",
-        "src/agent_core/vlm_openai.py",
-        "src/agent_core/vlm_openvino.py",
+        "src/atm10_agent/agent_core/vlm.py",
+        "src/atm10_agent/agent_core/vlm_stub.py",
+        "src/atm10_agent/agent_core/vlm_openai.py",
+        "src/atm10_agent/agent_core/vlm_openvino.py",
         "tests/test_vlm_provider.py"
       ]
     },
@@ -124,6 +137,7 @@
       "name": "negative_and_replay_evidence",
       "contract": "Useful failure cases and prior trace shapes remain fixture-testable without live services, models, game windows, or network access.",
       "evidence": [
+        "tests/test_companion_app.py",
         "tests/fixtures",
         "tests/test_gateway_v1_contract_parity_matrix.py",
         "tests/test_check_pilot_runtime_readiness.py"

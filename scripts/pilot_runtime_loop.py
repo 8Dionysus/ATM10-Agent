@@ -23,36 +23,33 @@ from urllib.request import Request, urlopen
 import numpy as np
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-if str(REPO_ROOT) not in sys.path:
-    sys.path.insert(0, str(REPO_ROOT))
-
-from src.agent_core.grounded_reply_openvino import (  # noqa: E402
+from atm10_agent.agent_core.grounded_reply_openvino import (  # noqa: E402
     DeterministicGroundedReplyStub,
     OpenVINOGroundedReplyClient,
     sanitize_grounded_reply_answer_text,
 )
-from src.agent_core.host_profiles import (  # noqa: E402
+from atm10_agent.agent_core.host_profiles import (  # noqa: E402
     DEFAULT_HOST_PROFILE_ID,
     get_host_profile,
     host_profile_payload,
     list_host_profile_ids,
 )
-from src.agent_core.atm10_session_probe import (  # noqa: E402
+from atm10_agent.agent_core.atm10_session_probe import (  # noqa: E402
     ATM10_SESSION_PROBE_SCHEMA,
     find_best_atm10_window,
     probe_atm10_session,
 )
-from src.agent_core.io_voice import (  # noqa: E402
+from atm10_agent.agent_core.io_voice import (  # noqa: E402
     VoiceRuntimeUnavailableError,
     play_audio,
     write_wav_pcm16,
 )
-from src.agent_core.live_hud_state import (  # noqa: E402
+from atm10_agent.agent_core.live_hud_state import (  # noqa: E402
     LIVE_HUD_STATE_SCHEMA,
     build_live_hud_state,
 )
-from src.agent_core.vlm_openvino import OpenVINOVLMClient, sanitize_vlm_summary_text  # noqa: E402
-from src.agent_core.vlm_stub import DeterministicStubVLM  # noqa: E402
+from atm10_agent.agent_core.vlm_openvino import OpenVINOVLMClient, sanitize_vlm_summary_text  # noqa: E402
+from atm10_agent.agent_core.vlm_stub import DeterministicStubVLM  # noqa: E402
 from scripts.operator_return_recovery import (  # noqa: E402
     SAFE_STOP_AFTER_DEFAULT,
     advance_return_loop_state,

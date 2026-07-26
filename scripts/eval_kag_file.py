@@ -9,18 +9,15 @@ from time import perf_counter
 from typing import Any, Mapping
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-if str(REPO_ROOT) not in sys.path:
-    sys.path.insert(0, str(REPO_ROOT))
-
 from scripts.eval_kag_neo4j import (  # noqa: E402
     EVAL_RESULTS_SCHEMA_VERSION,
     _case_metrics,
     _load_eval_cases,
     _write_summary_md,
 )
-from src.agent_core.service_sla import build_common_metrics, build_service_sla_summary
-from src.kag import build_kag_graph, query_kag_graph
-from src.rag.retrieval import load_docs
+from atm10_agent.agent_core.service_sla import build_common_metrics, build_service_sla_summary
+from atm10_agent.kag import build_kag_graph, query_kag_graph
+from atm10_agent.rag.retrieval import load_docs
 
 
 def _create_run_dir(runs_dir: Path, now: datetime) -> Path:

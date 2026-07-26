@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from src.agent_core.service_sla import build_common_metrics, build_service_sla_summary, build_suite_summary_row, degraded_services
+from atm10_agent.agent_core.service_sla import build_common_metrics, build_service_sla_summary, build_suite_summary_row, degraded_services
 
 
 def test_build_common_metrics_aggregates_latency_and_error_rate() -> None:

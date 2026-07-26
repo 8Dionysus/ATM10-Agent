@@ -1,8 +1,8 @@
 import json
 from pathlib import Path
 
-import src.rag.retrieval as retrieval
-from src.rag.retrieval import load_docs, retrieve_top_k
+import atm10_agent.rag.retrieval as retrieval
+from atm10_agent.rag.retrieval import load_docs, retrieve_top_k
 
 
 def test_retrieve_top_k_returns_citations_with_path(tmp_path: Path) -> None:

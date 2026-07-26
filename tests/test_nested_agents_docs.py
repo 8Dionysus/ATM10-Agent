@@ -5,10 +5,10 @@ from pathlib import Path
 
 NESTED_AGENTS = [
     Path("src/AGENTS.md"),
-    Path("src/agent_core/AGENTS.md"),
-    Path("src/rag/AGENTS.md"),
-    Path("src/kag/AGENTS.md"),
-    Path("src/hybrid/AGENTS.md"),
+    Path("src/atm10_agent/agent_core/AGENTS.md"),
+    Path("src/atm10_agent/rag/AGENTS.md"),
+    Path("src/atm10_agent/kag/AGENTS.md"),
+    Path("src/atm10_agent/hybrid/AGENTS.md"),
     Path("stats/AGENTS.md"),
     Path("tests/AGENTS.md"),
     Path("scripts/AGENTS.md"),
@@ -25,27 +25,27 @@ DISALLOWED_LITERALS = [
 
 REQUIRED_MARKERS = {
     Path("src/AGENTS.md"): [
-        "src/agent_core/AGENTS.md",
-        "src/rag/AGENTS.md",
-        "src/kag/AGENTS.md",
-        "src/hybrid/AGENTS.md",
+        "src/atm10_agent/agent_core/AGENTS.md",
+        "src/atm10_agent/rag/AGENTS.md",
+        "src/atm10_agent/kag/AGENTS.md",
+        "src/atm10_agent/hybrid/AGENTS.md",
     ],
-    Path("src/agent_core/AGENTS.md"): [
+    Path("src/atm10_agent/agent_core/AGENTS.md"): [
         "ops_policy.py",
         "service_sla.py",
         "combo_a_profile.py",
     ],
-    Path("src/rag/AGENTS.md"): [
+    Path("src/atm10_agent/rag/AGENTS.md"): [
         "doc_contract.py",
         "ftbquests_ingest.py",
         "retrieval_profiles.py",
     ],
-    Path("src/kag/AGENTS.md"): [
+    Path("src/atm10_agent/kag/AGENTS.md"): [
         "baseline.py",
         "neo4j_backend.py",
         "NEO4J_PASSWORD",
     ],
-    Path("src/hybrid/AGENTS.md"): [
+    Path("src/atm10_agent/hybrid/AGENTS.md"): [
         "planner.py",
         "baseline_first",
         "combo_a",
@@ -70,7 +70,7 @@ REQUIRED_MARKERS = {
         "ATM10-D-####",
         "Companion layers",
         "Operator surfaces",
-        "python scripts/generate_decision_indexes.py --check",
+        "python -m scripts.generate_decision_indexes --check",
     ],
 }
 

@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 import scripts.cross_service_benchmark_suite as suite
-from src.agent_core.service_sla import build_common_metrics, build_service_sla_summary
+from atm10_agent.agent_core.service_sla import build_common_metrics, build_service_sla_summary
 
 
 def _write_json(path: Path, payload: dict) -> None:

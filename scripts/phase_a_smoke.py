@@ -10,12 +10,9 @@ from pathlib import Path
 from typing import Any
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-if str(REPO_ROOT) not in sys.path:
-    sys.path.insert(0, str(REPO_ROOT))
-
-from src.agent_core.vlm import VLMClient
-from src.agent_core.vlm_openai import DEFAULT_VLM_MODEL, OpenAIResponsesVLM
-from src.agent_core.vlm_stub import DeterministicStubVLM
+from atm10_agent.agent_core.vlm import VLMClient
+from atm10_agent.agent_core.vlm_openai import DEFAULT_VLM_MODEL, OpenAIResponsesVLM
+from atm10_agent.agent_core.vlm_stub import DeterministicStubVLM
 
 
 # 1x1 PNG (transparent) to keep smoke deterministic and dependency-free.

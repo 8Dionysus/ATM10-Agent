@@ -6,7 +6,11 @@ Read the root `AGENTS.md` first. This file only adds local rules for runnable en
 
 ## Scope
 
-This directory is the operational shell of the repo. It owns smoke paths, demos, operator startup, gateway flows, retrieval and KAG runners, audits, policy checks, export helpers, and PowerShell launchers.
+This directory is the transitional compatibility and maintainer-tool shell of
+the repo. It still contains smoke paths, demos, legacy operator startup,
+gateway flows, retrieval and KAG runners, audits, policy checks, export
+helpers, and PowerShell launchers while protected behavior moves into the
+installable `atm10_agent` package.
 
 Representative surfaces include:
 
@@ -25,7 +29,13 @@ entirely from repository-owned files; keep measurement meaning under `stats/`.
 
 ## Local contract
 
-- Treat these scripts as canonical runnable surfaces. Keep CLI flags, artifact paths, and public-facing behavior stable unless the task explicitly changes the contract.
+- The product composition root is `atm10_agent.app.CompanionApp`; scripts may
+  expose compatibility or focused maintainer operations but may not become a
+  second application.
+- Do not add new product semantics here. Move reusable behavior into its owning
+  package module and keep any proven-consumer wrapper thin.
+- Keep proven compatibility CLI flags, artifact paths, and public-facing
+  behavior stable until their consumer is migrated or explicitly retired.
 - Prefer `pathlib`, explicit arguments, and `--runs-dir` driven artifacts over hidden local defaults.
 - Keep dry-run or report-only behavior as the default for automation and policy surfaces unless the task explicitly requires stronger behavior.
 - Preserve baseline defaults and keep `combo_a` additive.
@@ -48,9 +58,9 @@ Useful commands:
 cd <repo-root>
 .\.venv\Scripts\Activate.ps1
 python -m pytest
-python scripts/phase_a_smoke.py --vlm-provider stub --runs-dir runs\smoke-phase-a
-python scripts/retrieve_demo.py --in tests/fixtures/retrieval_docs_sample.jsonl --query "mekanism steel" --topk 3 --candidate-k 10 --reranker none --runs-dir runs\smoke-retrieve
-python scripts/automation_intent_chain_smoke.py --intent-json tests/fixtures/intent_open_quest_book.json --runs-dir runs\smoke-intent
-python scripts/generate_decision_indexes.py --check
-python scripts/validate_decision_records.py
+python -m scripts.phase_a_smoke --vlm-provider stub --runs-dir runs\smoke-phase-a
+python -m scripts.retrieve_demo --in tests/fixtures/retrieval_docs_sample.jsonl --query "mekanism steel" --topk 3 --candidate-k 10 --reranker none --runs-dir runs\smoke-retrieve
+python -m scripts.automation_intent_chain_smoke --intent-json tests/fixtures/intent_open_quest_book.json --runs-dir runs\smoke-intent
+python -m scripts.generate_decision_indexes --check
+python -m scripts.validate_decision_records
 ```

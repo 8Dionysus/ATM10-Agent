@@ -28,6 +28,7 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements-linux-dev.txt
+          python -m pip install -e . --no-deps
 
       - name: Run portable-core Linux tests
         run: |
@@ -43,11 +44,11 @@ jobs:
 
       - name: Smoke - Instance discovery artifact
         run: |
-          python scripts/discover_instance.py --runs-dir runs/ci-linux-discover-instance
+          python -m scripts.discover_instance --runs-dir runs/ci-linux-discover-instance
 
       - name: Smoke - Fedora startup wrapper print-only
         run: |
-          python scripts/start_operator_fedora_dev.py \
+          python -m scripts.start_operator_fedora_dev \
             --print-only \
             --runs-dir runs/ci-fedora-startup-print-only \
             --no-voice-runtime \
@@ -57,7 +58,7 @@ jobs:
 
       - name: Smoke - Fedora companion milestone receipt
         run: |
-          python scripts/write_fedora_companion_receipt.py \
+          python -m scripts.write_fedora_companion_receipt \
             --runs-dir runs/ci-fedora-companion-receipt \
             --capture-region 0,0,1920,1080 \
             --allow-missing-atm10-dir \

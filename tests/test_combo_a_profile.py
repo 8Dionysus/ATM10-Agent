@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-import src.agent_core.combo_a_profile as combo_a_profile
+import atm10_agent.agent_core.combo_a_profile as combo_a_profile
 
 
 def test_profile_backends_and_docs_path_requirement() -> None:

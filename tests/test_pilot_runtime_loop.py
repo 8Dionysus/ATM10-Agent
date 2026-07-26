@@ -14,9 +14,9 @@ from PIL import Image
 
 import scripts.pilot_runtime_loop as pilot_runtime
 import scripts.pilot_turn_smoke as pilot_turn_smoke
-from src.agent_core.grounded_reply_openvino import DeterministicGroundedReplyStub
-from src.agent_core.io_voice import write_wav_pcm16
-from src.agent_core.vlm_stub import DeterministicStubVLM
+from atm10_agent.agent_core.grounded_reply_openvino import DeterministicGroundedReplyStub
+from atm10_agent.agent_core.io_voice import write_wav_pcm16
+from atm10_agent.agent_core.vlm_stub import DeterministicStubVLM
 
 
 def _write_audio_fixture(path: Path, *, sample_rate: int = 16000) -> dict[str, Any]:

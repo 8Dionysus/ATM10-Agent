@@ -23,7 +23,7 @@
     {
       "id": "core.file-world",
       "surface": "file-backed retrieval, product KAG, mutable state, append-only traces",
-      "current_owner": "src/rag, src/kag, runs artifacts",
+      "current_owner": "src/atm10_agent/rag, src/atm10_agent/kag, runs artifacts",
       "target_owner": "atm10_agent.world and atm10_agent.trace",
       "disposition": "rewrite",
       "required_for_core": true,
@@ -95,7 +95,7 @@
     {
       "id": "adapter.neo4j",
       "surface": "Neo4j product graph store",
-      "current_owner": "src/kag and combo_a scripts",
+      "current_owner": "src/atm10_agent/kag and combo_a scripts",
       "target_owner": "atm10_agent.adapters.stores",
       "disposition": "optionalize",
       "required_for_core": false,
@@ -141,7 +141,7 @@
       "id": "federation.repo-self-kag",
       "surface": "root kag/ provider and generated repository index family",
       "current_owner": "aoa-kag action and registry",
-      "target_owner": "none; src/kag product graph remains separate",
+      "target_owner": "none; src/atm10_agent/kag product graph remains separate",
       "disposition": "cut",
       "required_for_core": false,
       "reason": "Repository self-indexing is not the companion world model and currently requires an external owner."

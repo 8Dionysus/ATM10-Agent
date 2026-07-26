@@ -86,3 +86,17 @@ last known green pre-rebuild state:
 
 This baseline does not make the old topology the target. It makes removals and
 behavioral regressions reviewable.
+
+## Current migration progress
+
+- Waves 0-2 are landed through source revision
+  `43c801fc57b07515783b31c5b246e360344f5f4c`: the autonomy
+  decision and behavior fence are source-owned, required federation edges are
+  removed, and repository validation is local.
+- The first Wave 3 slice introduces `pyproject.toml`, the single
+  `src/atm10_agent/` namespace, `CompanionApp`, and `atm10
+  doctor|run|replay`. Package and compatibility entrypoints no longer inject
+  repository paths.
+- Wave 3 remains open while reusable behavior and proven consumers still live
+  in the transitional `scripts/` shell. It closes only when product code never
+  imports that shell and scripts can no longer act as a second application.

@@ -868,7 +868,7 @@ def test_start_operator_product_print_plan_json(capsys) -> None:
 def test_start_operator_product_script_entrypoint_print_plan_json() -> None:
     repo_root = Path(__file__).resolve().parents[1]
     result = subprocess.run(
-        [sys.executable, "scripts/start_operator_product.py", "--print-plan-json"],
+        [sys.executable, "-m", "scripts.start_operator_product", "--print-plan-json"],
         cwd=repo_root,
         capture_output=True,
         text=True,

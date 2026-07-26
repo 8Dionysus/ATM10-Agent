@@ -12,7 +12,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 import scripts.tts_runtime_service as tts_runtime_service
-from src.agent_core.tts_runtime import TTSChunk
+from atm10_agent.agent_core.tts_runtime import TTSChunk
 
 
 class _FakeStreamingRequest:

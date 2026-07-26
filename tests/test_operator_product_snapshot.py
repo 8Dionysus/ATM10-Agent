@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 
 import scripts.operator_product_snapshot as operator_snapshot
-from src.agent_core.host_profiles import host_profile_payload
+from atm10_agent.agent_core.host_profiles import host_profile_payload
 
 
 def _write_json(path: Path, payload: dict) -> None:

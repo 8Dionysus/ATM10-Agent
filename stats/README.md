@@ -19,7 +19,7 @@ makes the statistic unknown. Four complete breaches remain an observed zero.
 ## Evidence posture
 
 `scripts/cross_service_benchmark_suite.py` produces live-capable suite
-artifacts, and `src/agent_core/service_sla.py` derives the ratio without
+artifacts, and `src/atm10_agent/agent_core/service_sla.py` derives the ratio without
 combining heterogeneous child metrics. The committed packet is a public
 reference observation over sanitized fixtures; live run artifacts remain
 outside Git and are not copied into the packet.

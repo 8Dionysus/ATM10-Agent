@@ -9,9 +9,6 @@ from pathlib import Path
 from typing import Any, Mapping
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-if str(REPO_ROOT) not in sys.path:
-    sys.path.insert(0, str(REPO_ROOT))
-
 from scripts.automation_dry_run import run_automation_dry_run
 from scripts.gateway_artifact_policy import REDACTION_CHECKLIST_VERSION, redact_payload
 from scripts.hybrid_query_demo import run_hybrid_query
@@ -23,7 +20,7 @@ from scripts.operator_product_safe_actions import (
     run_safe_action,
     safe_action_reads_live_runs_root,
 )
-from src.agent_core.combo_a_profile import (
+from atm10_agent.agent_core.combo_a_profile import (
     COMBO_A_PROFILE,
     DEFAULT_COMBO_A_NEO4J_DATABASE,
     DEFAULT_COMBO_A_NEO4J_URL,
@@ -37,7 +34,7 @@ from src.agent_core.combo_a_profile import (
     docs_path_required,
     profile_backends,
 )
-from src.rag.retrieval import load_docs, retrieve_top_k, retrieve_top_k_qdrant
+from atm10_agent.rag.retrieval import load_docs, retrieve_top_k, retrieve_top_k_qdrant
 
 REQUEST_SCHEMA_VERSION = "gateway_request_v1"
 RESPONSE_SCHEMA_VERSION = "gateway_response_v1"

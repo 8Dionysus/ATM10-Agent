@@ -12,9 +12,6 @@ from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-if str(REPO_ROOT) not in sys.path:
-    sys.path.insert(0, str(REPO_ROOT))
-
 _SERVICE_TOKEN_HEADER = "X-ATM10-Token"
 _SERVICE_TOKEN_ENV = "ATM10_SERVICE_TOKEN"
 

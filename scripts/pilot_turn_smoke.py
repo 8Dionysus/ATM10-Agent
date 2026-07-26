@@ -11,13 +11,10 @@ import numpy as np
 from PIL import Image, ImageDraw
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-if str(REPO_ROOT) not in sys.path:
-    sys.path.insert(0, str(REPO_ROOT))
-
-from src.agent_core.grounded_reply_openvino import DeterministicGroundedReplyStub
-from src.agent_core.host_profiles import host_profile_payload
-from src.agent_core.io_voice import write_wav_pcm16
-from src.agent_core.vlm_stub import DeterministicStubVLM
+from atm10_agent.agent_core.grounded_reply_openvino import DeterministicGroundedReplyStub
+from atm10_agent.agent_core.host_profiles import host_profile_payload
+from atm10_agent.agent_core.io_voice import write_wav_pcm16
+from atm10_agent.agent_core.vlm_stub import DeterministicStubVLM
 from scripts.pilot_runtime_loop import (
     PilotRuntimeStatusHandle,
     _create_run_dir,

@@ -8,10 +8,7 @@ from pathlib import Path
 from typing import Any, Mapping
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-if str(REPO_ROOT) not in sys.path:
-    sys.path.insert(0, str(REPO_ROOT))
-
-from src.agent_core.combo_a_profile import COMBO_A_PROFILE
+from atm10_agent.agent_core.combo_a_profile import COMBO_A_PROFILE
 
 _SCHEMA_VERSION = "combo_a_operating_cycle_v1"
 _POLICIES: tuple[str, ...] = ("report_only", "fail_on_hold")

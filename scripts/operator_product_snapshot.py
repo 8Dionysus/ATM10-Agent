@@ -7,7 +7,7 @@ from typing import Any, Mapping
 from urllib import error as url_error
 from urllib import request
 
-from src.agent_core.combo_a_profile import (
+from atm10_agent.agent_core.combo_a_profile import (
     COMBO_A_PROFILE,
     DEFAULT_PROFILE,
     DEFAULT_COMBO_A_NEO4J_DATABASE,

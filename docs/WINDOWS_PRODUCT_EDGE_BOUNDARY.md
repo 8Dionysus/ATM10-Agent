@@ -14,7 +14,7 @@ The Windows edge is intentionally explicit:
 - Windows dependency pack: `requirements-win-edge.txt`
 - portable core dependency pack: `requirements-core.txt`
 
-The contract is represented by `src/agent_core/windows_product_edge_contract.py` and covered by `tests/test_windows_product_edge_contract.py`.
+The contract is represented by `src/atm10_agent/agent_core/windows_product_edge_contract.py` and covered by `tests/test_windows_product_edge_contract.py`.
 
 ## Why this exists
 

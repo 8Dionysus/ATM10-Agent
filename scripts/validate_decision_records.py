@@ -5,7 +5,12 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from generate_decision_indexes import REPO_ROOT, collect_decision_records, validate_decision_lane_surfaces, validate_index_contract
+from scripts.generate_decision_indexes import (
+    REPO_ROOT,
+    collect_decision_records,
+    validate_decision_lane_surfaces,
+    validate_index_contract,
+)
 
 
 def validate_decision_records(repo_root: Path = REPO_ROOT) -> list[tuple[str, str]]:

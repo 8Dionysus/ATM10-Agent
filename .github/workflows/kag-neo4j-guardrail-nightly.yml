@@ -35,6 +35,7 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements-dev.txt
+          python -m pip install -e . --no-deps
 
       - name: Wait for Neo4j HTTP
         run: |
@@ -50,7 +51,7 @@ jobs:
 
       - name: Build KAG graph from fixture docs
         run: |
-          python scripts/kag_build_baseline.py --in tests/fixtures/kag_neo4j_docs_sample.jsonl --runs-dir runs/nightly-kag-build
+          python -m scripts.kag_build_baseline --in tests/fixtures/kag_neo4j_docs_sample.jsonl --runs-dir runs/nightly-kag-build
 
       - name: Resolve graph path
         run: |
@@ -63,7 +64,7 @@ jobs:
 
       - name: Sync graph to Neo4j
         run: |
-          python scripts/kag_sync_neo4j.py \
+          python -m scripts.kag_sync_neo4j \
             --graph "$GRAPH_JSON" \
             --neo4j-url http://127.0.0.1:7474 \
             --neo4j-database neo4j \
@@ -73,7 +74,7 @@ jobs:
 
       - name: Eval KAG Neo4j (sample profile)
         run: |
-          python scripts/eval_kag_neo4j.py \
+          python -m scripts.eval_kag_neo4j \
             --eval tests/fixtures/kag_neo4j_eval_sample.jsonl \
             --topk 5 \
             --warmup-runs 1 \
@@ -84,7 +85,7 @@ jobs:
 
       - name: Eval KAG Neo4j (hard profile)
         run: |
-          python scripts/eval_kag_neo4j.py \
+          python -m scripts.eval_kag_neo4j \
             --eval tests/fixtures/kag_neo4j_eval_hard.jsonl \
             --topk 5 \
             --warmup-runs 1 \
@@ -106,15 +107,15 @@ jobs:
 
       - name: Guardrail check (sample)
         run: |
-          python scripts/check_kag_neo4j_guardrail.py --profile sample --eval-results-json "$SAMPLE_EVAL_JSON"
+          python -m scripts.check_kag_neo4j_guardrail --profile sample --eval-results-json "$SAMPLE_EVAL_JSON"
 
       - name: Guardrail check (hard)
         run: |
-          python scripts/check_kag_neo4j_guardrail.py --profile hard --eval-results-json "$HARD_EVAL_JSON"
+          python -m scripts.check_kag_neo4j_guardrail --profile hard --eval-results-json "$HARD_EVAL_JSON"
 
       - name: Build guardrail trend snapshot
         run: |
-          python scripts/kag_guardrail_trend_snapshot.py \
+          python -m scripts.kag_guardrail_trend_snapshot \
             --sample-runs-dir runs/nightly-kag-eval-sample \
             --hard-runs-dir runs/nightly-kag-eval-hard \
             --history-limit 10 \

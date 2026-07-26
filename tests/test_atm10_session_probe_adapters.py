@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 
 import pytest
 
-import src.agent_core.atm10_session_probe as session_probe
+import atm10_agent.agent_core.atm10_session_probe as session_probe
 
 _FIXED_NOW = datetime(2026, 4, 21, 12, 0, tzinfo=timezone.utc)
 

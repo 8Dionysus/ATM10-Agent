@@ -4,6 +4,12 @@ This file defines the roles of the repository documents so the public surface st
 
 ## Canonical Roles
 
+* `pyproject.toml`
+  * Canonical installable-project metadata, package discovery, supported Python
+    floor, CLI entry point, and optional dependency groups.
+  * Requirements files may temporarily support compatibility tooling, but they
+    do not define a second product package.
+
 * `README.md`
   * Short human-facing entrypoint.
   * Link-first and non-operational.

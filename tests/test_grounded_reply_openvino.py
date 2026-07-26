@@ -3,8 +3,8 @@ from __future__ import annotations
 from pathlib import Path
 from types import SimpleNamespace
 
-import src.agent_core.grounded_reply_openvino as grounded_reply_openvino
-from src.agent_core.grounded_reply_openvino import (
+import atm10_agent.agent_core.grounded_reply_openvino as grounded_reply_openvino
+from atm10_agent.agent_core.grounded_reply_openvino import (
     DeterministicGroundedReplyStub,
     OpenVINOGroundedReplyClient,
     sanitize_grounded_reply_answer_text,

@@ -1,0 +1,166 @@
+"""Single composition root for the autonomous ATM10 companion."""
+
+from __future__ import annotations
+
+import hashlib
+import json
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Any, Mapping
+
+from atm10_agent.action import plan
+from atm10_agent.contracts import TURN_SCHEMA_VERSION, TurnRequest, TurnResult
+from atm10_agent.interpretation import interpret
+from atm10_agent.perception import perceive
+from atm10_agent.response import compose
+from atm10_agent.trace import record_turn, write_json
+from atm10_agent.voice import render
+from atm10_agent.world import recall
+
+
+def _iso_utc(now: datetime) -> str:
+    return now.astimezone(timezone.utc).isoformat()
+
+
+def _turn_fingerprint(request: TurnRequest) -> str:
+    seed = json.dumps(
+        {
+            "prompt": request.prompt,
+            "query": request.query,
+            "image_path": str(request.image_path) if request.image_path else None,
+            "world_docs": str(request.world_docs) if request.world_docs else None,
+            "topk": request.topk,
+            "action_intent": request.action_intent,
+            "voice": request.voice,
+        },
+        ensure_ascii=False,
+        sort_keys=True,
+    )
+    return hashlib.sha256(seed.encode("utf-8")).hexdigest()[:16]
+
+
+def _create_run_dir(runs_dir: Path, now: datetime, fingerprint: str) -> Path:
+    runs_dir.mkdir(parents=True, exist_ok=True)
+    base = f"{now.astimezone(timezone.utc):%Y%m%d_%H%M%S}-turn-{fingerprint[:8]}"
+    candidate = runs_dir / base
+    suffix = 1
+    while candidate.exists():
+        candidate = runs_dir / f"{base}-{suffix:02d}"
+        suffix += 1
+    candidate.mkdir(parents=True)
+    return candidate
+
+
+class CompanionApp:
+    """In-process composition root; adapters enrich this boundary, not replace it."""
+
+    def __init__(self, *, runs_dir: Path, state_dir: Path) -> None:
+        self.runs_dir = runs_dir
+        self.state_dir = state_dir
+
+    def run(self, request: TurnRequest, *, now: datetime | None = None) -> dict[str, Any]:
+        request.validate()
+        observed_at = now or datetime.now(timezone.utc)
+        fingerprint = _turn_fingerprint(request)
+        run_dir = _create_run_dir(self.runs_dir, observed_at, fingerprint)
+        turn_id = f"turn:{run_dir.name}"
+
+        perception = perceive(
+            image_path=request.image_path,
+            prompt=request.prompt,
+            run_dir=run_dir,
+        )
+        interpretation = interpret(
+            perception=perception,
+            query=request.query,
+            action_intent=request.action_intent,
+        )
+        world = recall(
+            query=interpretation["world_query"],
+            topk=request.topk,
+            world_docs=request.world_docs,
+        )
+        response = compose(perception=perception, world=world)
+        action = plan(request.action_intent)
+        voice = render(requested=request.voice, text=response["answer"])
+
+        reasons = tuple(
+            reason
+            for reason in (
+                world.get("degradation_reason"),
+                action.get("degradation_reason"),
+                voice.get("degradation_reason"),
+            )
+            if isinstance(reason, str) and reason
+        )
+        result = TurnResult(
+            turn_id=turn_id,
+            timestamp_utc=_iso_utc(observed_at),
+            status="degraded" if reasons else "ok",
+            degraded=bool(reasons),
+            degradation_reasons=reasons,
+            stages={
+                "perception": perception,
+                "interpretation": interpretation,
+                "world": world,
+            },
+            citations=tuple(world["citations"]),
+            response=response,
+            action=action,
+            voice=voice,
+        ).to_dict()
+        trace_paths = record_turn(
+            runs_dir=self.runs_dir,
+            run_dir=run_dir,
+            state_dir=self.state_dir,
+            turn=result,
+        )
+        result["trace"] = trace_paths
+        # Rewrite the turn artifact once so it carries its own trace pointers.
+        write_json(Path(trace_paths["turn_json"]), result)
+        return result
+
+    def replay(
+        self,
+        turn_path: Path,
+        *,
+        now: datetime | None = None,
+    ) -> dict[str, Any]:
+        source = json.loads(turn_path.read_text(encoding="utf-8"))
+        if not isinstance(source, dict) or source.get("schema_version") != TURN_SCHEMA_VERSION:
+            raise ValueError("replay source is not an atm10_companion_turn_v1 artifact")
+
+        observed_at = now or datetime.now(timezone.utc)
+        source_turn_id = str(source.get("turn_id", "")).strip()
+        if not source_turn_id:
+            raise ValueError("replay source is missing turn_id")
+        replay_fingerprint = hashlib.sha256(
+            f"{source_turn_id}:replay".encode("utf-8")
+        ).hexdigest()[:16]
+        run_dir = _create_run_dir(self.runs_dir, observed_at, replay_fingerprint)
+        replay = {
+            **source,
+            "turn_id": f"turn:{run_dir.name}",
+            "timestamp_utc": _iso_utc(observed_at),
+            "replay_of": source_turn_id,
+            "trace": {},
+        }
+        trace_paths = record_turn(
+            runs_dir=self.runs_dir,
+            run_dir=run_dir,
+            state_dir=self.state_dir,
+            turn=replay,
+        )
+        replay["trace"] = trace_paths
+        write_json(Path(trace_paths["turn_json"]), replay)
+        return replay
+
+
+def run_companion_turn(
+    request: TurnRequest,
+    *,
+    runs_dir: Path,
+    state_dir: Path,
+    now: datetime | None = None,
+) -> dict[str, Any]:
+    return CompanionApp(runs_dir=runs_dir, state_dir=state_dir).run(request, now=now)

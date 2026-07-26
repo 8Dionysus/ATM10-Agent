@@ -8,9 +8,6 @@ from pathlib import Path
 from typing import Any, Mapping
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-if str(REPO_ROOT) not in sys.path:
-    sys.path.insert(0, str(REPO_ROOT))
-
 from scripts.check_gateway_sla_fail_nightly_integrity import run_gateway_sla_fail_nightly_integrity
 from scripts.check_gateway_sla_fail_nightly_remediation import run_gateway_sla_fail_nightly_remediation
 from scripts.check_gateway_sla_manual_cadence_brief import run_gateway_sla_manual_cadence_brief

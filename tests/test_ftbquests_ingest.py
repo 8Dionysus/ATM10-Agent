@@ -2,7 +2,7 @@ import json
 from datetime import datetime, timezone
 from pathlib import Path
 
-from src.rag.ftbquests_ingest import (
+from atm10_agent.rag.ftbquests_ingest import (
     candidate_quests_dirs,
     discover_quests_dir,
     ingest_ftbquests_dir,

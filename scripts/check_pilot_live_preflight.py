@@ -12,9 +12,6 @@ from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-if str(REPO_ROOT) not in sys.path:
-    sys.path.insert(0, str(REPO_ROOT))
-
 from scripts.operator_product_snapshot import PILOT_RUNTIME_STATUS_SCHEMA, load_json_object
 from scripts.pilot_runtime_loop import (
     DEFAULT_PILOT_ASR_LANGUAGE,

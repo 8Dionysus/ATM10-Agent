@@ -27,6 +27,6 @@ python -m pytest tests/test_public_repo_hardening.py tests/test_build_runbook_li
 For decision-rationale changes, also run:
 
 ```powershell
-python scripts/generate_decision_indexes.py --check
-python scripts/validate_decision_records.py
+python -m scripts.generate_decision_indexes --check
+python -m scripts.validate_decision_records
 ```

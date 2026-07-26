@@ -10,11 +10,8 @@ from time import perf_counter
 from typing import Any, Mapping
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-if str(REPO_ROOT) not in sys.path:
-    sys.path.insert(0, str(REPO_ROOT))
-
-from src.kag import query_kag_neo4j
-from src.agent_core.service_sla import build_common_metrics, build_service_sla_summary
+from atm10_agent.kag import query_kag_neo4j
+from atm10_agent.agent_core.service_sla import build_common_metrics, build_service_sla_summary
 
 
 EVAL_RESULTS_SCHEMA_VERSION = "kag_eval_results_v1"

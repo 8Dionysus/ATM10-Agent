@@ -2,7 +2,7 @@ import json
 from datetime import datetime, timezone
 from pathlib import Path
 
-from src.rag.doc_contract import REQUIRED_FIELDS, ensure_valid_doc, normalize_doc
+from atm10_agent.rag.doc_contract import REQUIRED_FIELDS, ensure_valid_doc, normalize_doc
 
 
 def test_fixture_records_follow_contract() -> None:

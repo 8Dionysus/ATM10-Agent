@@ -19,7 +19,7 @@ companion.
 1. Root `AGENTS.md`, `MANIFEST.md`, and `docs/SOURCE_OF_TRUTH.md`.
 2. `stats/README.md` and `stats/port.manifest.json`.
 3. `scripts/cross_service_benchmark_suite.py` and
-   `src/agent_core/service_sla.py`.
+   `src/atm10_agent/agent_core/service_sla.py`.
 4. `scripts/validate_local_stats_port.py` and the focused tests.
 
 ## Boundaries

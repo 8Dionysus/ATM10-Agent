@@ -19,8 +19,8 @@ REQUIRED_AGENTS_DOCS: dict[str, tuple[str, ...]] = {
         'runnable entrypoints and operator tooling',
         'dry-run or report-only behavior as the default',
         'ATM10_SERVICE_TOKEN',
-        'python scripts/phase_a_smoke.py',
-        'python scripts/generate_decision_indexes.py --check',
+        'python -m scripts.phase_a_smoke',
+        'python -m scripts.generate_decision_indexes --check',
     ),
     '.github/AGENTS.md': (
         "repository's GitHub platform surface",
@@ -36,22 +36,22 @@ REQUIRED_AGENTS_DOCS: dict[str, tuple[str, ...]] = {
     ),
     'src/AGENTS.md': (
         'Nearest-file precedence',
-        'src/agent_core/AGENTS.md',
+        'src/atm10_agent/agent_core/AGENTS.md',
         'Keep module imports cheap',
         'python -m pytest',
     ),
-    'src/agent_core/AGENTS.md': (
+    'src/atm10_agent/agent_core/AGENTS.md': (
         'shared runtime and policy surface',
         'Never silently turn a dry-run or safe-action path into real input behavior',
         'combo_a` stays additive',
         'python -m pytest tests/test_service_sla.py',
     ),
-    'src/rag/AGENTS.md': (
+    'src/atm10_agent/rag/AGENTS.md': (
         'document and evaluation schema',
         'Do not bake maintainer-local filesystem assumptions',
         'tests/test_rag_doc_contract.py',
     ),
-    'src/kag/AGENTS.md': (
+    'src/atm10_agent/kag/AGENTS.md': (
         'file baseline as the easiest local default',
         'Neo4j remains additive',
         'NEO4J_PASSWORD',
@@ -70,7 +70,7 @@ REQUIRED_AGENTS_DOCS: dict[str, tuple[str, ...]] = {
         'source-owned validator',
         'validate_local_stats_port.py',
     ),
-    'src/hybrid/AGENTS.md': (
+    'src/atm10_agent/hybrid/AGENTS.md': (
         '`baseline_first`',
         '`combo_a` additive',
         'explicit fallback behavior on KAG degradation',
@@ -90,8 +90,8 @@ REQUIRED_AGENTS_DOCS: dict[str, tuple[str, ...]] = {
         'Operator surfaces',
         'generated indexes',
         'Keep ignored `docs/DECISIONS.md` local-only',
-        'python scripts/generate_decision_indexes.py --check',
-        'python scripts/validate_decision_records.py',
+        'python -m scripts.generate_decision_indexes --check',
+        'python -m scripts.validate_decision_records',
     ),
     'schemas/AGENTS.md': (
         'operator and antifragility contracts',

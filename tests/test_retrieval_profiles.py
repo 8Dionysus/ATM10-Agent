@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from src.rag.retrieval_profiles import list_profile_names, resolve_profile
+from atm10_agent.rag.retrieval_profiles import list_profile_names, resolve_profile
 
 
 def test_resolve_profile_returns_ov_production_defaults() -> None:

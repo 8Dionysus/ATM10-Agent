@@ -1,0 +1,64 @@
+[build-system]
+requires = ["setuptools>=80,<82", "wheel>=0.45,<1"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "atm10-agent"
+version = "0.1.0"
+description = "Autonomous local-first ATM10 companion"
+readme = "README.md"
+requires-python = ">=3.11"
+license = "Apache-2.0"
+license-files = ["LICENSE"]
+authors = [{ name = "8Dionysus" }]
+dependencies = []
+
+[project.optional-dependencies]
+windows = [
+  "dxcam>=0.3.0,<1.0.0",
+]
+openvino = [
+  "numpy>=2.0.0,<3.0.0",
+  "openvino==2025.4.1",
+  "openvino-genai>=2025.4.0,<2026.0.0",
+  "pillow>=10.0.0,<13.0.0",
+]
+gateway = [
+  "fastapi>=0.116.0,<1.0.0",
+  "httpx>=0.28.0,<1.0.0",
+  "uvicorn>=0.35.0,<1.0.0",
+]
+ui = [
+  "streamlit>=1.41.0,<2.0.0",
+]
+voice = [
+  "librosa>=0.10.0,<0.12.0",
+  "numpy>=2.0.0,<3.0.0",
+  "sounddevice>=0.4.6,<0.6.0",
+]
+dev = [
+  "fastapi>=0.116.0,<1.0.0",
+  "httpx>=0.28.0,<1.0.0",
+  "jsonschema>=4.23.0,<5.0.0",
+  "numpy>=2.0.0,<3.0.0",
+  "openvino==2025.4.1",
+  "pillow>=10.0.0,<13.0.0",
+  "pytest>=8.0.0,<10.0.0",
+  "sounddevice>=0.4.6,<0.6.0",
+  "streamlit>=1.41.0,<2.0.0",
+  "uvicorn>=0.35.0,<1.0.0",
+]
+
+[project.scripts]
+atm10 = "atm10_agent.cli:main"
+
+[tool.setuptools]
+package-dir = { "" = "src" }
+include-package-data = true
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["atm10_agent*"]
+
+[tool.setuptools.package-data]
+atm10_agent = ["data/*.jsonl"]
