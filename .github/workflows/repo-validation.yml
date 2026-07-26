@@ -51,6 +51,11 @@ jobs:
           atm10 replay "$TURN_JSON" \
             --runs-dir runs/ci-package-core \
             --state-dir .atm10-ci-state
+          atm10 eval \
+            --suite companion-core \
+            --runs-dir runs/ci-package-eval \
+            --state-dir .atm10-ci-state/eval \
+            --reports-dir eval-results/ci-package-core
 
       - name: Run portable-core Linux tests
         run: |

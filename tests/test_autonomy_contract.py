@@ -108,6 +108,7 @@ def test_repo_validation_has_no_sibling_checkout_or_owner_action() -> None:
     assert "atm10 doctor" in workflow
     assert "atm10 run" in workflow
     assert "atm10 replay" in workflow
+    assert "atm10 eval" in workflow
 
 
 def test_repo_self_kag_is_removed_but_product_kag_remains() -> None:

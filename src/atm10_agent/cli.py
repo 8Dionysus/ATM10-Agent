@@ -4,12 +4,22 @@ from __future__ import annotations
 
 import argparse
 import json
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Sequence
 
 from atm10_agent import __version__
 from atm10_agent.app import CompanionApp
 from atm10_agent.contracts import TurnRequest
+from atm10_agent.evals import run_suite
+
+
+def _timestamp(value: str) -> datetime:
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError("timestamp must be ISO-8601") from exc
+    return parsed if parsed.tzinfo is not None else parsed.replace(tzinfo=timezone.utc)
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -36,6 +46,20 @@ def _parser() -> argparse.ArgumentParser:
     replay_parser.add_argument("--runs-dir", type=Path, default=Path("runs"))
     replay_parser.add_argument("--state-dir", type=Path, default=Path(".atm10-state"))
 
+    eval_parser = subparsers.add_parser(
+        "eval",
+        help="run a dependency-light executable product eval",
+    )
+    eval_parser.add_argument(
+        "--suite",
+        default="companion-core",
+        choices=("companion-core",),
+    )
+    eval_parser.add_argument("--runs-dir", type=Path, default=Path("runs/eval"))
+    eval_parser.add_argument("--state-dir", type=Path, default=Path(".atm10-state/eval"))
+    eval_parser.add_argument("--reports-dir", type=Path, default=Path("eval-results"))
+    eval_parser.add_argument("--now", type=_timestamp)
+
     subparsers.add_parser("doctor", help="show the dependency-light core posture")
     return parser
 
@@ -57,6 +81,17 @@ def main(argv: Sequence[str] | None = None) -> int:
             )
         )
         return 0
+
+    if args.command == "eval":
+        result = run_suite(
+            args.suite,
+            runs_dir=args.runs_dir,
+            state_dir=args.state_dir,
+            reports_dir=args.reports_dir,
+            now=args.now,
+        )
+        print(json.dumps(result, indent=2, ensure_ascii=False))
+        return 0 if result["status"] == "pass" else 2
 
     app = CompanionApp(runs_dir=args.runs_dir, state_dir=args.state_dir)
     if args.command == "replay":

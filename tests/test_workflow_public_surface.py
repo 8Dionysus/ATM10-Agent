@@ -41,17 +41,21 @@ def test_pytest_workflow_public_summary_is_sanitized() -> None:
 
     trend_block = _extract_step_block(text, "Summary - Gateway SLA trend")
     cross_service_block = _extract_step_block(text, "Summary - Cross-service benchmark suite")
-    automation_block = _extract_step_block(text, "Summary - Automation smoke contracts")
-    smoke_artifact_block = _extract_step_block(text, "Upload artifact - Automation smoke summaries")
+    companion_eval_block = _extract_step_block(text, "Summary - ATM10 companion eval")
+    smoke_artifact_block = _extract_step_block(
+        text,
+        "Upload artifact - Product smoke and eval summaries",
+    )
     dependency_artifact_block = _extract_step_block(text, "Upload artifact - Dependency audit")
 
     for token in ("should_fail_nightly", "trend_snapshot_json", "trend_summary_md"):
         assert token not in trend_block
     for token in ("summary_json", "run_dir", "child_runs_root"):
         assert token not in cross_service_block
-    for token in ("trace_id", "intent_id"):
-        assert token not in automation_block
+    for token in ("trace_id", "intent_id", "report_path", "storage"):
+        assert token not in companion_eval_block
 
+    assert "atm10_eval_report.json" in smoke_artifact_block
     assert "gateway_sla_trend_snapshot.json" in smoke_artifact_block
     assert "cross_service_benchmark_suite.json" in smoke_artifact_block
     assert "service_sla_summary.json" in smoke_artifact_block

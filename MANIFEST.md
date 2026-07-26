@@ -16,7 +16,7 @@ Current as of: 2026-07-25
   Action/Voice -> Trace`.
 - The repository now contains an installable `atm10_agent` package, one
   `CompanionApp` composition root, and the dependency-light `atm10
-  doctor|run|replay` CLI. This is the primary product path for new work.
+  doctor|run|replay|eval` CLI. This is the primary product path for new work.
 - The accepted boundary and current migration ledger live in
   `docs/autonomy/README.md`. The old gateway + Streamlit + pilot shell remains
   present as migration compatibility and protected-behavior evidence, not as
@@ -36,6 +36,13 @@ Current as of: 2026-07-25
   response, optional dry-run action/voice, and trace turn. `atm10 replay`
   reuses the recorded response and citations without invoking providers;
   mutable state and append-only trace evidence use separate directories.
+- Package-owned action and eval contracts:
+  `atm10_agent.action` owns deterministic intent templates, validation,
+  normalization, trace-correlated dry-run expansion, and the hard
+  `executed=false` fence. `atm10 eval --suite companion-core` exercises the
+  stub turn, citations, file product KAG, all canonical action intents,
+  optional-provider degradation, state/trace separation, useful negatives,
+  and provider-free replay without live services or network access.
 
 The remaining entries describe the green pre-rebuild compatibility baseline.
 They are protected only where `docs/autonomy/protected-behavior.json` names
@@ -54,7 +61,10 @@ removed.
 - KAG nightly guardrail: `.github/workflows/kag-neo4j-guardrail-nightly.yml`.
 - Combo A live parity workflow: `.github/workflows/combo-a-profile-smoke.yml` (`workflow_dispatch` + nightly schedule, external `Qdrant`/`Neo4j`, live operator snapshot capture, combo_a gateway smoke, combo_a cross-service suite, combo_a nightly operating-cycle decision surface, promoted strict `fail_on_hold` only when eligible).
 - Trend snapshot: `scripts/kag_guardrail_trend_snapshot.py` (rolling-baseline + severity flags + `critical_policy`).
-- Automation: dry-run stack (`automation_dry_run`, `intent_to_automation_plan`, `automation_intent_chain_smoke`, `check_automation_smoke_contract`).
+- Automation compatibility: `automation_dry_run` and
+  `intent_to_automation_plan` are thin file-artifact wrappers over
+  `atm10_agent.action`; the remaining chain/check scripts exist only for the
+  gateway-era compatibility consumer and are not the product owner.
 - Automation intents: canonical templates include `open_quest_book`, `check_inventory_tool`, `open_world_map`; the public intent -> plan -> dry-run chain has rollout records for all three under `M6.19`.
 - CI core smoke summaries: `scripts/collect_smoke_run_summary.py` (`phase_a_smoke|retrieve_demo|eval_retrieval` -> `smoke_summary.json`).
 - Gateway SLA trend: `scripts/gateway_sla_trend_snapshot.py` (`gateway_sla_summary_v1` history -> `gateway_sla_trend_snapshot_v1`).

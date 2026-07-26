@@ -19,6 +19,7 @@ python -m pip install -e .
 
 atm10 doctor
 atm10 run --prompt "Describe the current ATM10 context." --query "steel tools" --action-intent open_quest_book --runs-dir runs --state-dir .atm10-state
+atm10 eval --suite companion-core --runs-dir runs\eval --state-dir .atm10-state\eval --reports-dir eval-results
 
 $turn = Get-ChildItem .\runs -Recurse -Filter turn.json |
   Sort-Object LastWriteTimeUtc -Descending |
@@ -34,7 +35,9 @@ breaking the text companion.
 
 Execution evidence is append-only under `runs/`; current mutable state is
 stored separately under `.atm10-state/`. Neither directory is an implicit
-IPC channel.
+IPC channel. Eval verdict evidence is separate again under `eval-results/`.
+The `companion-core` suite runs without pytest, live services, model downloads,
+or network access and returns non-zero if any product contract case fails.
 
 The milestone and gateway commands below remain migration-compatibility paths
 while their protected behavior moves behind the package boundary. They are not
@@ -103,14 +106,7 @@ python scripts/retrieve_demo.py --in tests/fixtures/retrieval_docs_sample.jsonl 
 python scripts/collect_smoke_run_summary.py --runs-dir runs/ci-smoke-retrieve --expected-mode retrieve_demo --summary-json runs/ci-smoke-retrieve/smoke_summary.json
 python scripts/eval_retrieval.py --docs tests/fixtures/retrieval_docs_sample.jsonl --eval tests/fixtures/retrieval_eval_sample.jsonl --topk 3 --candidate-k 10 --reranker none --runs-dir runs/ci-smoke-eval
 python scripts/collect_smoke_run_summary.py --runs-dir runs/ci-smoke-eval --expected-mode eval_retrieval --summary-json runs/ci-smoke-eval/smoke_summary.json
-python scripts/automation_dry_run.py --plan-json tests/fixtures/automation_plan_quest_book.json --runs-dir runs/ci-smoke-automation-dry-run
-python scripts/check_automation_smoke_contract.py --mode dry_run --runs-dir runs/ci-smoke-automation-dry-run --min-action-count 3 --min-step-count 4 --summary-json runs/ci-smoke-automation-dry-run/contract_summary.json
-python scripts/automation_intent_chain_smoke.py --intent-json tests/fixtures/intent_open_quest_book.json --runs-dir runs/ci-smoke-automation-chain
-python scripts/check_automation_smoke_contract.py --mode intent_chain --runs-dir runs/ci-smoke-automation-chain --min-action-count 3 --min-step-count 4 --expected-intent-type open_quest_book --require-trace-id --require-intent-id --summary-json runs/ci-smoke-automation-chain/contract_summary.json
-python scripts/automation_intent_chain_smoke.py --intent-json tests/fixtures/intent_check_inventory_tool.json --runs-dir runs/ci-smoke-automation-chain-inventory
-python scripts/check_automation_smoke_contract.py --mode intent_chain --runs-dir runs/ci-smoke-automation-chain-inventory --min-action-count 3 --min-step-count 4 --expected-intent-type check_inventory_tool --require-trace-id --require-intent-id --summary-json runs/ci-smoke-automation-chain-inventory/contract_summary.json
-python scripts/automation_intent_chain_smoke.py --intent-json tests/fixtures/intent_open_world_map.json --runs-dir runs/ci-smoke-automation-chain-open-world-map
-python scripts/check_automation_smoke_contract.py --mode intent_chain --runs-dir runs/ci-smoke-automation-chain-open-world-map --min-action-count 3 --min-step-count 4 --expected-intent-type open_world_map --require-trace-id --require-intent-id --summary-json runs/ci-smoke-automation-chain-open-world-map/contract_summary.json
+atm10 eval --suite companion-core --runs-dir runs/ci-companion-core --state-dir .atm10-state/ci-companion-core --reports-dir eval-results/ci-companion-core
 python scripts/gateway_v1_smoke.py --scenario core --runs-dir runs/ci-smoke-gateway-core --summary-json runs/ci-smoke-gateway-core/gateway_smoke_summary.json
 python scripts/gateway_v1_smoke.py --scenario hybrid --runs-dir runs/ci-smoke-gateway-hybrid --summary-json runs/ci-smoke-gateway-hybrid/gateway_smoke_summary.json
 python scripts/gateway_v1_smoke.py --scenario automation --runs-dir runs/ci-smoke-gateway-automation --summary-json runs/ci-smoke-gateway-automation/gateway_smoke_summary.json
@@ -129,11 +125,10 @@ Expected result:
   * `runs/ci-smoke-phase-a/smoke_summary.json`
   * `runs/ci-smoke-retrieve/smoke_summary.json`
   * `runs/ci-smoke-eval/smoke_summary.json`
-* For automation smoke steps, contract summaries are created:
-  * `runs/ci-smoke-automation-dry-run/contract_summary.json`
-  * `runs/ci-smoke-automation-chain/contract_summary.json`
-  * `runs/ci-smoke-automation-chain-inventory/contract_summary.json`
-  * `runs/ci-smoke-automation-chain-open-world-map/contract_summary.json`
+* The package-owned companion eval writes one
+  `eval-results/ci-companion-core/<timestamp>-companion-core/atm10_eval_report.json`
+  verdict; raw turns remain under `runs/ci-companion-core` and mutable state
+  remains under `.atm10-state/ci-companion-core`.
 * Machine-readable summaries are created for gateway smoke steps:
   * `runs/ci-smoke-gateway-core/gateway_smoke_summary.json`
   * `runs/ci-smoke-gateway-hybrid/gateway_smoke_summary.json`
@@ -2478,9 +2473,12 @@ Expected result:
 * Inside there are `run.json`, `summary.json`, `summary.md`.
 * `summary.json.delta.p95_improvement_ms > 0` means that the candidate profile is faster than the baseline according to p95.
 
-## M6: Automation scaffold (dry-run only)
+## M6: Automation compatibility scaffold (dry-run only)
 
-Important: this entrypoint does not execute real keyboard/mouse events. It only validates the plan and writes dry-run artifacts.
+The product owner is `atm10_agent.action`, exercised by `atm10 run` and
+`atm10 eval --suite companion-core`. The commands in M6 are temporary
+file-artifact compatibility wrappers for the still-present gateway consumer.
+They do not execute real keyboard/mouse events.
 
 ```powershell
 cd <repo-root>
@@ -2583,7 +2581,10 @@ Expected result:
   * `child_runs/` (adapter + dry-run child artifacts)
 * `run.json.result.dry_run_only=true`.
 
-## M6.6: CI acceptance thresholds for automation smoke
+## M6.6: Legacy gateway compatibility thresholds
+
+Primary CI uses `atm10 eval --suite companion-core`. The following checks are
+retained only while the gateway-era artifact consumer remains in the tree.
 
 Dry-run smoke contract:
 
@@ -2614,25 +2615,23 @@ Expected result:
 * In `--summary-json`, the `observed` field includes optional trace-correlation metadata:
   * `trace_id`, `intent_id` (if they are in `planning` action-plan metadata).
 * For intent-chain canonical fixtures, `--require-trace-id` and `--require-intent-id` are used; the absence of any of the id is considered a contract violation.
-* In CI, these ids stay in the machine-readable contract summaries; the public `Automation Smoke Contracts` step summary remains coarse and does not display `trace_id/intent_id`.
+* When these compatibility checks are run, ids stay in their machine-readable
+  summaries; do not expose them in public step summaries.
 * Any violation of the contract (missing artifact/metrics below the threshold/intent mismatch) gives a non-zero exit code.
 
-## M6.19: New intent template rollout policy (CI)
+## M6.19: New intent template rollout policy
 
 Policy checklist for each new `intent_type`:
 
 1. Add canonical fixture:
    * `tests/fixtures/intent_<new_intent_type>.json`
    * fixture must include `intent_id` and `trace_id`.
-2. Add smoke run step:
-   * `python scripts/automation_intent_chain_smoke.py --intent-json tests/fixtures/intent_<new_intent_type>.json --runs-dir runs/ci-smoke-automation-chain-<new_intent_type>`
-3. Add contract-check step:
-   * `python scripts/check_automation_smoke_contract.py --mode intent_chain --runs-dir runs/ci-smoke-automation-chain-<new_intent_type> --min-action-count 3 --min-step-count 4 --expected-intent-type <new_intent_type> --require-trace-id --require-intent-id --summary-json runs/ci-smoke-automation-chain-<new_intent_type>/contract_summary.json`
-4. Add summary/artifact wiring:
-   * new line in `Automation Smoke Contracts` summary table;
-   * new `contract_summary.json` in upload artifact path.
-5. Add regression test:
-   * at least 1 pytest on e2e dry-run chain for a new fixture.
+2. Add the deterministic template to `atm10_agent.action`.
+3. Add action-contract coverage for payload shape, trace correlation,
+   normalization, dry-run expansion, and `executed=false`.
+4. Add the intent to the package-owned `companion-core` executable eval.
+5. Run `atm10 eval --suite companion-core`; CI publishes its single bounded
+   `atm10_eval_report_v1` verdict instead of one workflow branch per intent.
 
 ## M6.19 rollout records
 
@@ -2642,9 +2641,18 @@ The public intent -> plan -> dry-run chain has now been exercised on three canon
 * `check_inventory_tool`
 * `open_world_map`
 
-`open_world_map` is the latest added template and the clearest example of the checklist-complete rollout path. Each record uses the same public-safe sequence: canonical fixture -> smoke run -> contract check.
+`open_world_map` is the latest added template and the clearest example of the
+checklist-complete rollout path. Each record remains useful public heritage.
+Its current acceptance sequence is package template -> action contract ->
+executable companion eval; the public intent -> plan -> dry-run chain remains
+deterministic and trace-correlated.
 
-## M6.8: Troubleshooting automation smoke contract failures (CI)
+## M6.8: Troubleshooting legacy automation smoke contract failures
+
+Use this section only for the temporary gateway compatibility shell. For the
+primary product path, inspect the failing case in
+`eval-results/**/atm10_eval_report.json` and rerun `atm10 eval --suite
+companion-core`.
 
 Quick checklist when `check_automation_smoke_contract` crashes:
 

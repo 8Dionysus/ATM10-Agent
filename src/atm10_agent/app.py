@@ -81,7 +81,11 @@ class CompanionApp:
             world_docs=request.world_docs,
         )
         response = compose(perception=perception, world=world)
-        action = plan(request.action_intent)
+        action = plan(
+            request.action_intent,
+            intent_id=f"intent:{fingerprint}",
+            trace_id=turn_id,
+        )
         voice = render(requested=request.voice, text=response["answer"])
 
         reasons = tuple(

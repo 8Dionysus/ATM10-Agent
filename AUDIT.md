@@ -102,7 +102,7 @@ Common public examples already documented in the repository:
 ```powershell
 python scripts/phase_a_smoke.py
 python scripts/start_operator_product.py --runs-dir runs
-python scripts/automation_intent_chain_smoke.py --intent-json tests/fixtures/intent_open_quest_book.json --runs-dir runs\smoke-intent
+atm10 eval --suite companion-core --runs-dir runs\eval --state-dir .atm10-state\eval --reports-dir eval-results
 python scripts/cross_service_benchmark_suite.py --runs-dir runs\cross-service-suite --smoke-stub-voice-asr
 python scripts/run_combo_a_operating_cycle.py --runs-dir runs --policy report_only --summary-json runs\nightly-combo-a-operating-cycle\operating_cycle_summary.json --summary-md runs\nightly-combo-a-operating-cycle\summary.md
 ```

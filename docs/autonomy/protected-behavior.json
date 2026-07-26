@@ -58,11 +58,12 @@
       "contract": "Intent-to-plan-to-action is deterministic, preserves intent and trace correlation, and emits no keyboard or mouse input by default.",
       "evidence": [
         "src/atm10_agent/action/__init__.py",
+        "src/atm10_agent/evals/__init__.py",
         "scripts/intent_to_automation_plan.py",
         "scripts/automation_dry_run.py",
-        "scripts/automation_intent_chain_smoke.py",
         "tests/test_companion_app.py",
-        "tests/test_automation_intent_chain_smoke.py"
+        "tests/test_action_contract.py",
+        "tests/test_companion_eval.py"
       ]
     },
     {
@@ -98,6 +99,7 @@
       "evidence": [
         "src/atm10_agent/trace/__init__.py",
         "tests/test_companion_app.py",
+        "tests/test_companion_eval.py",
         "scripts/operator_return_recovery.py",
         "tests/test_operator_return_recovery.py"
       ]
@@ -137,7 +139,9 @@
       "name": "negative_and_replay_evidence",
       "contract": "Useful failure cases and prior trace shapes remain fixture-testable without live services, models, game windows, or network access.",
       "evidence": [
+        "src/atm10_agent/evals/__init__.py",
         "tests/test_companion_app.py",
+        "tests/test_companion_eval.py",
         "tests/fixtures",
         "tests/test_gateway_v1_contract_parity_matrix.py",
         "tests/test_check_pilot_runtime_readiness.py"
