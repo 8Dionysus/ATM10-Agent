@@ -11,7 +11,11 @@ Do not encode sibling-repo doctrine, private workspace assumptions, or hidden re
 ## Platform sync
 
 Keep `.github/CODEOWNERS`, PR templates, and workflow names aligned with the root route card.
-`Repo Validation` checks canonical repo-local KAG family parity and the repository validation lanes. If that check is added, renamed, or its meaning changes, update the root route, PR expectations, and this file in the same change.
+`Repo Validation` must be repository-owned and standalone. It may use ordinary
+public GitHub platform actions, but it must not require sibling repository
+checkouts, external owner actions, shared validators, or hidden host state. If
+that check is added, renamed, or its meaning changes, update the root route, PR
+expectations, and this file in the same change.
 
 When workflow or repository-policy files change, report:
 

@@ -11,8 +11,8 @@ Everything under `stats/`.
 ## Role
 
 This directory owns questions, populations, evidence routes, privacy posture,
-and authority ceilings whose meaning belongs to the local companion. Shared
-measurement grammar and cross-owner composition remain owned by `aoa-stats`.
+schemas, validation, and authority ceilings whose meaning belongs to the local
+companion.
 
 ## Read before editing
 
@@ -20,7 +20,7 @@ measurement grammar and cross-owner composition remain owned by `aoa-stats`.
 2. `stats/README.md` and `stats/port.manifest.json`.
 3. `scripts/cross_service_benchmark_suite.py` and
    `src/agent_core/service_sla.py`.
-4. The central measurement and packet contracts under `aoa-stats/stats/`.
+4. `scripts/validate_local_stats_port.py` and the focused tests.
 
 ## Boundaries
 
@@ -39,7 +39,8 @@ measurement grammar and cross-owner composition remain owned by `aoa-stats`.
 
 ## Validation
 
-Inspect the producer artifact and packet first, then run:
+Inspect the producer artifact and packet first, then run the source-owned
+validator:
 
 ```powershell
 python scripts/validate_local_stats_port.py

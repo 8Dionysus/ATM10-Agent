@@ -9,3 +9,7 @@
 ## 2026-07-23
 
 - [ATM10-D-0002 - OS Skill Profile Boundary](../ATM10-D-0002-os-skill-profile-boundary.md) (`docs/decisions/ATM10-D-0002-os-skill-profile-boundary.md`)
+
+## 2026-07-25
+
+- [ATM10-D-0003 - Autonomous Modular Monolith](../ATM10-D-0003-autonomous-modular-monolith.md) (`docs/decisions/ATM10-D-0003-autonomous-modular-monolith.md`)

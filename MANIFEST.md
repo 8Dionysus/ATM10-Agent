@@ -1,6 +1,6 @@
 # MANIFEST.md
 
-Current as of: 2026-04-07
+Current as of: 2026-07-25
 
 ## Snapshot
 
@@ -11,11 +11,26 @@ Current as of: 2026-04-07
 
 ## Architecture posture
 
-- `ATM10-Agent` is a local-first ATM10 companion with active operator interaction and an internal agent stack under the hood.
-- The current public operator entrypoints are `gateway + Streamlit + pilot runtime`, but the repo boundary already includes perception, memory, routing, evals, dry-run automation, and artifacted worker-style processes behind those surfaces.
-- The canonical runtime path on the current repo host is an Intel-machine `OpenVINO-first` profile; future `NVIDIA`/`Ollama` or other runtime paths should land as explicit additive host profiles with their own validation/eval posture instead of replacing this baseline by implication.
+- `ATM10-Agent` is transitioning to an autonomous modular monolith around
+  `Perception -> Interpretation -> World/Memory -> Response/Plan -> optional
+  Action/Voice -> Trace`.
+- The accepted boundary and current migration ledger live in
+  `docs/autonomy/README.md`. The old gateway + Streamlit + pilot shell remains
+  present as a green source baseline, not as the target architecture.
+- The deterministic core must install, build, test, run, and release without
+  sibling repositories, `.aoa`, OS skill profiles, shared validators, shared
+  runtimes, live services, models, or hidden workstation configuration.
+- Windows capture, OpenVINO, remote models, Qdrant, Neo4j, FastAPI, Streamlit,
+  and voice remain candidate optional adapters. Windows 11 + PowerShell 7
+  acceptance remains first-class and separate from the portable stub/replay
+  gate.
 
 ## Active capabilities
+
+The entries below describe the green pre-rebuild source baseline. They are
+protected only where `docs/autonomy/protected-behavior.json` names their
+semantics; scripts, services, workflows, and topology may be replaced or
+removed.
 
 - Phase A: `scripts/phase_a_smoke.py` (screenshot -> run artifacts).
 - Phase B retrieval: `normalize -> retrieve -> eval` + profile layer `baseline|ov_production`.
@@ -23,7 +38,9 @@ Current as of: 2026-04-07
 - Hybrid planner: `scripts/hybrid_query_demo.py` + additive `hybrid_query` gateway flow with `baseline_first` default (`retrieval first -> file KAG expansion -> RRF merge`) and additive `combo_a` parity profile (`qdrant + neo4j`), with machine-readable degraded fallbacks (`retrieval_only_fallback|kag_only_fallback|grounding_unavailable`) instead of hard failure when grounding stages are unavailable.
 - Hybrid antifragility first wave: `scripts/hybrid_query_demo.py` now emits one source-owned `stressor_receipt_v1` for bounded `planner_status=retrieval_only_fallback`, while `schemas/adaptation_delta_v1.json` and `examples/` keep the reviewed-change companion surface explicit without auto-emitting deltas.
 - Cross-service SLA + benchmark suite: `scripts/cross_service_benchmark_suite.py` + normalized `service_sla_summary_v1` artifacts for `voice_asr`, `voice_tts`, `retrieval`, and `kag`, aggregated into `cross_service_benchmark_suite_v1`, with `baseline_first` default and additive `profile=combo_a` (`voice_runtime_service + tts_runtime_service + qdrant + neo4j`).
-- Owner-local stats port: `stats/` defines the live-capable cross-service SLA pass ratio over the exact expected lanes of one completed suite, while shared measurement grammar and cross-owner composition remain with `aoa-stats`.
+- Owner-local measurements: `stats/` defines and locally validates the
+  cross-service SLA pass ratio over the exact expected lanes of one completed
+  suite without a sibling schema or validator checkout.
 - KAG nightly guardrail: `.github/workflows/kag-neo4j-guardrail-nightly.yml`.
 - Combo A live parity workflow: `.github/workflows/combo-a-profile-smoke.yml` (`workflow_dispatch` + nightly schedule, external `Qdrant`/`Neo4j`, live operator snapshot capture, combo_a gateway smoke, combo_a cross-service suite, combo_a nightly operating-cycle decision surface, promoted strict `fail_on_hold` only when eligible).
 - Trend snapshot: `scripts/kag_guardrail_trend_snapshot.py` (rolling-baseline + severity flags + `critical_policy`).
@@ -56,6 +73,7 @@ Current as of: 2026-04-07
 
 - Current public status: `MANIFEST.md`
 - Public roadmap: `ROADMAP.md`
+- Autonomy and migration contract: `docs/autonomy/README.md`
 - Runnable commands: `docs/RUNBOOK.md`
 - Owner-local first-wave antifragility contract: `docs/ANTIFRAGILITY_FIRST_WAVE.md`
 - Machine/runtime host policy: `docs/QWEN3_MODEL_STACK.md`

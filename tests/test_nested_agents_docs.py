@@ -54,7 +54,7 @@ REQUIRED_MARKERS = {
         "owner-local statistical questions",
         "cross_service_benchmark_suite_v1",
         "missing expected lane",
-        "aoa-stats",
+        "source-owned",
     ],
     Path("tests/AGENTS.md"): [
         "tests/fixtures/",

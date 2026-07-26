@@ -16,12 +16,18 @@ This file defines the roles of the repository documents so the public surface st
 * `stats/README.md`
   * Owner-local statistical questions, populations, evidence routes, and
     authority ceilings for this companion.
-  * Uses the shared `aoa-stats` grammar without moving project evidence or
-    product meaning into the central organ.
+  * Routes to the repository-owned measurement contract, reference packet,
+    validator, and tests.
 
 * `ROADMAP.md`
   * Public direction, milestones, horizons, and high-level risks.
   * Public replacement for the old tracked `PLANS.md` role.
+
+* `docs/autonomy/README.md`
+  * Canonical autonomous-product boundary, dependency law, protected-behavior
+    route, migration gates, and standalone claim limit.
+  * Its JSON ledgers are executable transition inputs; they do not prove a gate
+    until the referenced tests and acceptance commands pass.
 
 * `docs/PRODUCT_EDGE_POSTURE.md`
   * Public release cadence, supported and preliminary profile claims, CI/test tiers, and the explicit `ATM10-Agent` x `abyss-stack` contract.
@@ -89,6 +95,7 @@ This file defines the roles of the repository documents so the public surface st
   * `MANIFEST.md`
   * `stats/README.md`
   * `ROADMAP.md`
+  * `docs/autonomy/README.md`
   * `docs/PRODUCT_EDGE_POSTURE.md`
   * `docs/RUNBOOK.md`
   * `docs/ARCHIVED_TRACKS.md`
@@ -103,6 +110,9 @@ This file defines the roles of the repository documents so the public surface st
 ## Update Rules
 
 * If behavior/architecture changed -> update any impacted canonical public docs, and local `docs/DECISIONS.md` when needed.
+* If the autonomy boundary, dependency disposition, protected behavior, or
+  migration gate changed -> update `docs/autonomy/`, its contract tests, and
+  any affected canonical public docs.
 * If a public durable decision needs rationale -> add a canonical `docs/decisions/ATM10-D-####-*.md` record and regenerate decision indexes.
 * If active commands/setup changed -> update `docs/RUNBOOK.md`.
 * If archived or recoverable command/reference changed -> update `docs/ARCHIVED_TRACKS.md`.

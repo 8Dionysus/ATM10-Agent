@@ -20,8 +20,8 @@ Representative surfaces include:
 - `pilot_runtime_loop.py`, `operator_product_snapshot.py`, `streamlit_operator_panel.py`
 
 `cross_service_benchmark_suite.py` owns the live evidence artifact used by the
-local stats port. `validate_local_stats_port.py` is only a thin delegate to the
-shared `aoa-stats` contract validator; keep measurement meaning under `stats/`.
+local stats surface. `validate_local_stats_port.py` validates that contract
+entirely from repository-owned files; keep measurement meaning under `stats/`.
 
 ## Local contract
 

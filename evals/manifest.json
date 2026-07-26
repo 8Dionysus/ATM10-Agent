@@ -1,0 +1,11 @@
+{
+  "schema_version": "atm10_eval_manifest_v1",
+  "owner_repo": "ATM10-Agent",
+  "status": "active",
+  "suite_refs": [
+    "evals/suites/companion-core.json"
+  ],
+  "verdict_authority": "ATM10-Agent",
+  "privacy": "public_safe_fixtures_only",
+  "validator_ref": "scripts/validate_local_evals.py"
+}

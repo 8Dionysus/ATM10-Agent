@@ -24,10 +24,10 @@ It does not own:
   grammar, role, progression, or self-agent policy
 - sibling repo ownership boundaries or hidden operational lore
 
-Shared and globally advertised skills arrive through the OS user profile;
-`.agents/skills` is not an ATM10 source home. A future ATM10-specific callable
-bundle must first earn an owner-local `skills/` home and must not duplicate a
-same-name global installation.
+Maintainers may use external tools, but no OS user profile, global skill,
+sibling repository, `.aoa` route, shared validator, or shared runtime is part
+of the ATM10 clone/build/test/run/release contract. A future ATM10-specific
+callable bundle must be source-owned here and optional to the product runtime.
 
 ## Start here
 
@@ -36,9 +36,10 @@ same-name global installation.
 3. `ROADMAP.md`
 4. `docs/RUNBOOK.md`
 5. `docs/SOURCE_OF_TRUTH.md`
-6. scripts, modules, tests, schemas, docs, or examples you will touch
-7. `docs/decisions/README.md` when durable route, boundary, validator, operator, host-profile, or public-surface rationale is in scope
-8. `docs/AGENTS_ROOT_REFERENCE.md` for preserved full root branches
+6. `docs/autonomy/README.md` for architecture, dependency, or migration work
+7. scripts, modules, tests, schemas, docs, or examples you will touch
+8. `docs/decisions/README.md` when durable route, boundary, validator, operator, host-profile, or public-surface rationale is in scope
+9. `docs/AGENTS_ROOT_REFERENCE.md` for preserved full root branches
 
 
 ## AGENTS stack law
@@ -50,13 +51,12 @@ same-name global installation.
 - Self-agency, recurrence, quest, progression, checkpoint, or growth language must stay bounded, reviewable, evidence-linked, and reversible.
 - Report what changed, what was verified, what was not verified, and where the next agent should resume.
 
-## Memory route
+## Continuity route
 
-For recall, continuity, compaction recovery, comparison with past work, or
-preserved lessons, start with `aoa-memo` and the workspace memory map. Session
-grounding routes through `.aoa`; local candidate writing routes through this
-project's `memo/` port when that port exists; durable reviewed memory lands
-through `aoa-memo`.
+Repository continuity is source-owned: start from canonical docs, decision
+records, tests, git history, and explicit local trace/state contracts. External
+memory or research tools may help a maintainer, but their availability or data
+must never be required to understand, build, test, run, or release ATM10.
 
 ## Operator rules
 
@@ -75,7 +75,10 @@ When the user asks to commit, push, and merge in this repository, use this route
 1. Start from a branch based on the current `origin/main`. If the worktree is already dirty, inventory it first and carry forward only the intended diff.
 2. Commit the intended change with a message that names the changed surface.
 3. Push the branch and open a pull request that states changed surfaces, validation run, skipped checks, and remaining risk.
-4. Wait for GitHub `Repo Validation`, including canonical repo-local KAG family parity, and any required GitHub checks. If a check fails, fix the branch and wait for the new result.
+4. Wait for GitHub `Repo Validation` and every required GitHub check. Required
+   checks must be executable from this repository without sibling checkouts or
+   external owner validators. If a check fails, fix the branch and wait for the
+   new result.
 5. Merge through GitHub after green validation. Use squash unless repository settings report a different required method; report the method that landed.
 6. Return to `main`, fast-forward from `origin/main`, and confirm the worktree is clean before closeout.
 

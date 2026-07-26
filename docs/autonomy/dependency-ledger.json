@@ -1,0 +1,186 @@
+{
+  "schema_version": "atm10_dependency_ledger_v1",
+  "as_of": "2026-07-25",
+  "source_revision": "f0108816981e81a5951ed0f74743982a46a8fad1",
+  "allowed_dispositions": [
+    "keep",
+    "rewrite",
+    "optionalize",
+    "cut",
+    "import_once"
+  ],
+  "standalone_rule": "Clone, core install, build, test, deterministic run, and release must not require sibling repositories, .aoa, OS skill profiles, shared validators, shared runtimes, or hidden host configuration.",
+  "entries": [
+    {
+      "id": "core.companion-loop",
+      "surface": "Perception -> Interpretation -> World/Memory -> Response/Plan -> optional Action/Voice -> Trace",
+      "current_owner": "ATM10-Agent",
+      "target_owner": "atm10_agent package",
+      "disposition": "keep",
+      "required_for_core": true,
+      "reason": "This is the product, composition, and acceptance boundary."
+    },
+    {
+      "id": "core.file-world",
+      "surface": "file-backed retrieval, product KAG, mutable state, append-only traces",
+      "current_owner": "src/rag, src/kag, runs artifacts",
+      "target_owner": "atm10_agent.world and atm10_agent.trace",
+      "disposition": "rewrite",
+      "required_for_core": true,
+      "reason": "Preserve citations and deterministic replay while separating state from evidence."
+    },
+    {
+      "id": "core.script-shell",
+      "surface": "scripts/*.py with sys.path injection and scripts.* imports",
+      "current_owner": "scripts",
+      "target_owner": "thin wrappers over atm10_agent.cli or deletion",
+      "disposition": "rewrite",
+      "required_for_core": false,
+      "reason": "Runnable behavior belongs behind one installable package and composition root."
+    },
+    {
+      "id": "core.gateway-governance",
+      "surface": "gateway SLA readiness, governance, progress, transition, remediation, integrity, and operating-cycle layers",
+      "current_owner": "scripts, docs/RUNBOOK.md, workflows, tests",
+      "target_owner": "none; retain only product-relevant degraded and trace semantics",
+      "disposition": "cut",
+      "required_for_core": false,
+      "reason": "This control plane became an architectural center unrelated to the companion turn."
+    },
+    {
+      "id": "core.requirements",
+      "surface": "nine requirements files without installable-project metadata",
+      "current_owner": "requirements*.txt",
+      "target_owner": "pyproject.toml plus reproducible resolved dependency artifact",
+      "disposition": "rewrite",
+      "required_for_core": true,
+      "reason": "The project needs one build contract and explicit optional extras."
+    },
+    {
+      "id": "adapter.windows-edge",
+      "surface": "ATM10 window identity, DXcam/Pillow capture, PowerShell launch",
+      "current_owner": "pilot runtime and host profile modules",
+      "target_owner": "atm10_agent.adapters.windows",
+      "disposition": "optionalize",
+      "required_for_core": false,
+      "reason": "Windows remains first-class acceptance evidence but cannot prevent stub/replay use elsewhere."
+    },
+    {
+      "id": "adapter.openvino",
+      "surface": "OpenVINO vision, grounded response, ASR, and device placement",
+      "current_owner": "agent_core providers and runtime scripts",
+      "target_owner": "provider extras behind explicit interfaces",
+      "disposition": "optionalize",
+      "required_for_core": false,
+      "reason": "OpenVINO is a validated provider, not the core architecture."
+    },
+    {
+      "id": "adapter.remote-model",
+      "surface": "OpenAI and future Gemini-compatible model providers",
+      "current_owner": "agent_core provider modules",
+      "target_owner": "provider extras behind explicit interfaces",
+      "disposition": "optionalize",
+      "required_for_core": false,
+      "reason": "Remote providers must be replaceable and absent from deterministic acceptance."
+    },
+    {
+      "id": "adapter.qdrant",
+      "surface": "Qdrant retrieval store",
+      "current_owner": "retrieval scripts and combo_a profile",
+      "target_owner": "atm10_agent.adapters.stores",
+      "disposition": "optionalize",
+      "required_for_core": false,
+      "reason": "The file-backed world remains the standalone default."
+    },
+    {
+      "id": "adapter.neo4j",
+      "surface": "Neo4j product graph store",
+      "current_owner": "src/kag and combo_a scripts",
+      "target_owner": "atm10_agent.adapters.stores",
+      "disposition": "optionalize",
+      "required_for_core": false,
+      "reason": "Product KAG semantics stay; the database backend is additive."
+    },
+    {
+      "id": "adapter.gateway-ui",
+      "surface": "FastAPI gateway and Streamlit panel",
+      "current_owner": "gateway and panel scripts",
+      "target_owner": "optional presentation adapters",
+      "disposition": "optionalize",
+      "required_for_core": false,
+      "reason": "HTTP and UI may expose a companion turn but may not own or multiply it."
+    },
+    {
+      "id": "adapter.voice",
+      "surface": "ASR, TTS, microphone, and audio playback",
+      "current_owner": "voice/TTS modules and services",
+      "target_owner": "optional input/output providers",
+      "disposition": "optionalize",
+      "required_for_core": false,
+      "reason": "Text and replay remain complete when voice is unavailable."
+    },
+    {
+      "id": "federation.os-skill-profile",
+      "surface": "OS user-profile skills as a repository operating dependency",
+      "current_owner": "host profile outside repository",
+      "target_owner": "none",
+      "disposition": "cut",
+      "required_for_core": false,
+      "reason": "Maintainer tools may be used, but ATM10 cannot require their presence or contracts."
+    },
+    {
+      "id": "federation.session-memory",
+      "surface": ".aoa and aoa-memo routes in repository guidance",
+      "current_owner": "external session/memo owners",
+      "target_owner": "repo docs, git history, local state, and local traces",
+      "disposition": "cut",
+      "required_for_core": false,
+      "reason": "Continuity of the product and its maintenance must be source-owned."
+    },
+    {
+      "id": "federation.repo-self-kag",
+      "surface": "root kag/ provider and generated repository index family",
+      "current_owner": "aoa-kag action and registry",
+      "target_owner": "none; src/kag product graph remains separate",
+      "disposition": "cut",
+      "required_for_core": false,
+      "reason": "Repository self-indexing is not the companion world model and currently requires an external owner."
+    },
+    {
+      "id": "federation.stats-validator",
+      "surface": "aoa-stats checkout, schemas, and validate_local_stats_port delegate",
+      "current_owner": "aoa-stats",
+      "target_owner": "owner-local measurements and tests, if retained",
+      "disposition": "rewrite",
+      "required_for_core": false,
+      "reason": "Useful measurement meaning can stay without a required sibling validator."
+    },
+    {
+      "id": "federation.eval-port",
+      "surface": "skeleton eval port routed to aoa-evals",
+      "current_owner": "aoa-evals",
+      "target_owner": "ATM10 fixture-first eval and regression lane",
+      "disposition": "rewrite",
+      "required_for_core": false,
+      "reason": "ATM10 needs local verdicts over its own companion contract."
+    },
+    {
+      "id": "donor.evals",
+      "surface": "selected eval cases, scoring ideas, or validators",
+      "current_owner": "approved donor revision",
+      "target_owner": "ATM10-local eval implementation",
+      "disposition": "import_once",
+      "required_for_core": false,
+      "reason": "Allowed only after standalone autonomy is green and intake is pinned and reviewed."
+    },
+    {
+      "id": "donor.memory-world-routing",
+      "surface": "selected KAG, memo, world, routing, stats, or runtime discipline",
+      "current_owner": "approved donor revision",
+      "target_owner": "ATM10-owned implementation",
+      "disposition": "import_once",
+      "required_for_core": false,
+      "reason": "Donors inform the monolith; they never become live dependencies."
+    }
+  ]
+}

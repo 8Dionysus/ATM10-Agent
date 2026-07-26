@@ -1,13 +1,10 @@
 {
-  "schema_version": "aoa_stats_local_port_v1",
+  "schema_version": "atm10_stats_port_v1",
   "contract_version": "1.0.0",
   "owner_repo": "ATM10-Agent",
   "status": "active",
   "owner_boundary_ref": "AGENTS.md",
-  "central_contract_refs": [
-    "aoa-stats:stats/measurement-contract/measurement-contract.schema.json",
-    "aoa-stats:stats/measurement-contract/measurement-packet.schema.json"
-  ],
+  "validator_ref": "scripts/validate_local_stats_port.py",
   "evidence_posture": {
     "live_state": "mixed",
     "privacy": "public",
@@ -26,7 +23,7 @@
   ],
   "measurements": [
     {
-      "schema_version": "aoa_stats_measurement_contract_v1",
+      "schema_version": "atm10_measurement_contract_v1",
       "measurement_id": "ATM10-Agent/cross-service-sla-pass-ratio",
       "contract_version": "1.0.0",
       "owner_repo": "ATM10-Agent",

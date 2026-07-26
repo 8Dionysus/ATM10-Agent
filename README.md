@@ -5,14 +5,19 @@
 [![KAG Neo4j Guardrail Nightly](https://github.com/8Dionysus/ATM10-Agent/actions/workflows/kag-neo4j-guardrail-nightly.yml/badge.svg)](https://github.com/8Dionysus/ATM10-Agent/actions/workflows/kag-neo4j-guardrail-nightly.yml)
 [![Security Nightly](https://github.com/8Dionysus/ATM10-Agent/actions/workflows/security-nightly.yml/badge.svg)](https://github.com/8Dionysus/ATM10-Agent/actions/workflows/security-nightly.yml)
 
-Local-first ATM10 companion with an active operator loop and an internal agent stack for Windows 11 + PowerShell 7.
+Autonomous local-first ATM10 companion for Windows 11 + PowerShell 7.
 
-`ATM10-Agent` combines perception (screen and HUD), memory (RAG + KAG), safe automation (dry-run by default), voice, routing and evals, and gateway-backed operator surfaces into one reproducible local companion stack.
+`ATM10-Agent` is being rebuilt as one installable modular monolith around
+`Perception -> Interpretation -> World/Memory -> Response/Plan -> optional
+Action/Voice -> Trace`. The current gateway, panel, store, model, and voice
+surfaces are migration inputs or optional adapters, not required architecture.
 
 ## Start here
 
 - current public status and active capabilities: `MANIFEST.md`
 - direction, milestones, and risks: `ROADMAP.md`
+- autonomy boundary, dependency ledger, and protected behavior:
+  `docs/autonomy/README.md`
 - active runnable commands and operator paths: `docs/RUNBOOK.md`
 - recurrence and operator recovery: `docs/RECURRENCE_OPERATOR_RECOVERY.md`
 - validated host and runtime baseline: `docs/QWEN3_MODEL_STACK.md`
@@ -38,8 +43,15 @@ Local-first ATM10 companion with an active operator loop and an internal agent s
 
 ## Current highlights
 
-- Gateway + Streamlit operator surfaces, pilot runtime, and the primary local launcher remain the active public operator entrypoints.
-- Retrieval, KAG, hybrid grounding, and cross-service benchmark and governance flows remain part of the current public stack.
+- The accepted target is an autonomous `atm10_agent` package with one
+  composition root and CLI; the pre-rebuild script and service shell remains
+  present while protected behavior is moved behind that boundary.
+- Clone, core install, build, deterministic run, test, and release must not
+  require sibling repositories, `.aoa`, OS skill profiles, shared validators,
+  shared runtimes, or hidden workstation configuration.
+- Retrieval, product KAG, citations, dry-run safety, provider replaceability,
+  degraded honesty, Windows product-edge behavior, and trace evidence are
+  protected during the rebuild.
 - The hybrid-query runner now exposes a first-wave source-owned `stressor_receipt_v1` when the run lands in bounded `planner_status=retrieval_only_fallback`, without widening runtime authority or adding auto-repair.
 - Safe automation remains dry-run by default, with public `M6.19` rollout records for `open_quest_book`, `check_inventory_tool`, and `open_world_map`.
 - The validated repo-host baseline is the Intel-machine `OpenVINO-first` path. Future host profiles stay additive instead of silently replacing it.
@@ -49,6 +61,8 @@ Local-first ATM10 companion with an active operator loop and an internal agent s
 - `README.md` stays the short human entrypoint
 - `MANIFEST.md` carries current public status
 - `ROADMAP.md` carries direction and milestone posture
+- `docs/autonomy/README.md` carries the standalone product boundary,
+  dependency law, migration gates, and protected-behavior route
 - `docs/PRODUCT_EDGE_POSTURE.md` carries public release cadence, supported profiles, CI/test tiers, and the `ATM10-Agent` x `abyss-stack` boundary
 - `docs/RUNBOOK.md` carries runnable commands and setup paths
 - `docs/SOURCE_OF_TRUTH.md` defines document roles and boundary discipline

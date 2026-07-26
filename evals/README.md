@@ -1,22 +1,21 @@
-# Local Eval Port
+# ATM10 companion eval lane
 
-This skeleton `evals/` port preserves ATM10 companion eval pressure such as
-perception cases, retrieval and project-KAG questions, safe-automation fixtures,
-operator recovery cues, and public-doc regression pressure.
+This directory owns deterministic ATM10 companion eval cases, suite membership,
+local verdicts, and public-safe reports.
 
-`aoa-evals` owns central verdict, scoring, regression, and proof doctrine
-authority. Local files here may shape evidence, suites, reports, and intake
-packets, but they do not become bounded proof by location alone.
+`manifest.json` and `suites/companion-core.json` route the first active suite to
+existing fixture-first tests. An eval case becomes evidence only when its local
+test runs and passes; location alone is not a verdict.
 
 ## Route
 
-- Put pre-bundle proof pressure in [intake](intake/).
-- Put deterministic local suite notes in [suites](suites/).
+- Put proposed companion cases in [intake](intake/).
+- Put accepted deterministic suites in [suites](suites/).
 - Put local run or review reports in [reports](reports/).
-- Route central proof adoption, portable eval bundles, verdicts, scoring,
-  regression, and proof doctrine to `aoa-evals`.
+- Validate the lane with `python scripts/validate_local_evals.py`.
 
 ## Current Status
 
-Skeleton only. No active local intake packets, suites, reports, or draft bundles
-have been accepted here yet.
+Active: `atm10-companion-core` protects the deterministic stub turn, cited
+retrieval, file product KAG, honest hybrid degradation, and dry-run action
+fence.

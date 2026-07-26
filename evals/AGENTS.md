@@ -6,35 +6,31 @@ This card applies to `ATM10-Agent/evals/` and every file below it.
 
 ## Role
 
-This skeleton port captures ATM10 companion eval pressure before it is accepted,
-rejected, or normalized by `aoa-evals`.
-
-`aoa-evals` owns central verdict, scoring, regression, and proof doctrine
-authority. This port owns only project-local intake, cases, fixtures, suites,
-reports, and source refs.
+This companion eval lane owns deterministic ATM10 cases, suite membership,
+ATM10-owned verdicts, reports, and source refs.
 
 ## Read before editing
 
-Read the root `AGENTS.md`, then this card, `README.md`, `PORT.yaml`, and the
-nearest intake, suites, or reports surface you will touch. For central proof
-adoption rules, read the local eval-port standard in `aoa-evals`.
+Read the root `AGENTS.md`, then this card, `README.md`, `manifest.json`, and the
+nearest intake, deterministic cases, suites, or reports surface you will touch.
 
 ## Boundaries
 
 - Keep perception, retrieval, project KAG, safe automation, operator panel,
   voice, and recovery behavior in `ATM10-Agent`.
-- Keep proof doctrine, verdicts, scoring, and regression authority in
-  `aoa-evals`.
-- Do not treat an intake packet as proof acceptance or a central eval verdict.
+- Keep verdict and regression authority for the ATM10 product inside this
+  repository.
+- Do not treat an intake packet as proof acceptance or a test result.
 - Do not place private traces, secrets, or unreduced operator evidence here.
 
 ## Validation
 
-```bash
-python ../aoa-evals/scripts/validate_local_eval_port.py --target-root .
+```powershell
+cd <repo-root>
+python scripts/validate_local_evals.py
 ```
 
 ## Closeout
 
-Report changed eval surfaces, current `PORT.yaml` status, validation run, any
-skipped central proof adoption, and the next route into `aoa-evals` when needed.
+Report changed eval surfaces, current manifest/suite status, validation run,
+tests actually executed, and uncovered protected behavior.

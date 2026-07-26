@@ -1,0 +1,32 @@
+{
+  "schema_version": "atm10_eval_suite_v1",
+  "suite_id": "atm10-companion-core",
+  "status": "active",
+  "cases": [
+    {
+      "id": "deterministic-stub-turn",
+      "test_ref": "tests/test_phase_a_smoke.py",
+      "protects": "PB-001"
+    },
+    {
+      "id": "cited-retrieval",
+      "test_ref": "tests/test_retrieval_demo.py",
+      "protects": "PB-002"
+    },
+    {
+      "id": "file-product-kag",
+      "test_ref": "tests/test_eval_kag_file.py",
+      "protects": "PB-003"
+    },
+    {
+      "id": "honest-hybrid-degradation",
+      "test_ref": "tests/test_hybrid_query_demo.py",
+      "protects": "PB-004"
+    },
+    {
+      "id": "dry-run-action-fence",
+      "test_ref": "tests/test_automation_intent_chain_smoke.py",
+      "protects": "PB-005"
+    }
+  ]
+}
