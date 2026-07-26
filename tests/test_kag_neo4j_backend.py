@@ -4,7 +4,7 @@ from typing import Any
 
 import pytest
 
-import src.kag.neo4j_backend as neo4j_backend
+import atm10_agent.kag.neo4j_backend as neo4j_backend
 
 
 def test_sync_kag_graph_neo4j_batches_rows(monkeypatch) -> None:

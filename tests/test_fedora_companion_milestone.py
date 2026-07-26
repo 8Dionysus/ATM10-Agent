@@ -6,10 +6,10 @@ from pathlib import Path
 
 from scripts.start_operator_fedora_dev import build_start_command_payload
 from scripts.write_fedora_companion_receipt import build_receipt_payload, write_receipt
-from src.agent_core.atm10_session_probe import probe_atm10_session
-from src.agent_core.fedora_companion_milestone import evaluate_fedora_companion_milestone
-from src.agent_core.host_profiles import FEDORA_LOCAL_DEV_PROFILE_ID
-from src.agent_core.readiness_scopes import evaluate_host_profile_session_readiness
+from atm10_agent.agent_core.atm10_session_probe import probe_atm10_session
+from atm10_agent.agent_core.fedora_companion_milestone import evaluate_fedora_companion_milestone
+from atm10_agent.agent_core.host_profiles import FEDORA_LOCAL_DEV_PROFILE_ID
+from atm10_agent.agent_core.readiness_scopes import evaluate_host_profile_session_readiness
 
 
 def _startup_payload(**overrides):

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from src.agent_core.host_profiles import (
+from atm10_agent.agent_core.host_profiles import (
     DEFAULT_HOST_PROFILE_ID,
     FEDORA_LOCAL_DEV_PROFILE_ID,
     get_host_profile,

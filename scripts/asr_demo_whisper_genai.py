@@ -12,10 +12,7 @@ from typing import Any, Mapping
 import numpy as np
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-if str(REPO_ROOT) not in sys.path:
-    sys.path.insert(0, str(REPO_ROOT))
-
-from src.agent_core.io_voice import VoiceRuntimeUnavailableError, record_audio_to_wav
+from atm10_agent.agent_core.io_voice import VoiceRuntimeUnavailableError, record_audio_to_wav
 
 
 def _create_run_dir(runs_dir: Path, now: datetime) -> Path:

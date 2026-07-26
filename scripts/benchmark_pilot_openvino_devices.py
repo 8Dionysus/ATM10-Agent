@@ -11,14 +11,11 @@ from typing import Any, Callable, Mapping
 from PIL import Image, ImageDraw
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-if str(REPO_ROOT) not in sys.path:
-    sys.path.insert(0, str(REPO_ROOT))
-
-from src.agent_core.grounded_reply_openvino import (  # noqa: E402
+from atm10_agent.agent_core.grounded_reply_openvino import (  # noqa: E402
     DEFAULT_GROUNDED_REPLY_MODEL_DIR,
     OpenVINOGroundedReplyClient,
 )
-from src.agent_core.vlm_openvino import (  # noqa: E402
+from atm10_agent.agent_core.vlm_openvino import (  # noqa: E402
     DEFAULT_OPENVINO_VLM_MODEL_DIR,
     OpenVINOVLMClient,
 )

@@ -8,11 +8,8 @@ from pathlib import Path
 from typing import Any, Mapping
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-if str(REPO_ROOT) not in sys.path:
-    sys.path.insert(0, str(REPO_ROOT))
-
-from src.rag.retrieval import load_docs, retrieve_top_k, retrieve_top_k_qdrant
-from src.rag.retrieval_profiles import list_profile_names, resolve_profile
+from atm10_agent.rag.retrieval import load_docs, retrieve_top_k, retrieve_top_k_qdrant
+from atm10_agent.rag.retrieval_profiles import list_profile_names, resolve_profile
 
 
 def _create_run_dir(runs_dir: Path, now: datetime) -> Path:

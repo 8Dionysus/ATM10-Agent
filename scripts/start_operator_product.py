@@ -12,16 +12,13 @@ from urllib import error as url_error
 from urllib import request
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-if str(REPO_ROOT) not in sys.path:
-    sys.path.insert(0, str(REPO_ROOT))
-
-from src.agent_core.combo_a_profile import (
+from atm10_agent.agent_core.combo_a_profile import (
     DEFAULT_COMBO_A_NEO4J_DATABASE,
     DEFAULT_COMBO_A_NEO4J_URL,
     DEFAULT_COMBO_A_NEO4J_USER,
     DEFAULT_COMBO_A_QDRANT_URL,
 )
-from src.agent_core.host_profiles import (
+from atm10_agent.agent_core.host_profiles import (
     DEFAULT_HOST_PROFILE_ID,
     get_host_profile,
     host_profile_payload,

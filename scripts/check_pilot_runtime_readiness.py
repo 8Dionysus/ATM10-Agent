@@ -8,9 +8,6 @@ from pathlib import Path
 from typing import Any, Mapping
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-if str(REPO_ROOT) not in sys.path:
-    sys.path.insert(0, str(REPO_ROOT))
-
 from scripts.operator_product_snapshot import (  # noqa: E402
     OPERATOR_PRODUCT_STARTUP_SCHEMA,
     PILOT_RUNTIME_STATUS_FILENAME,
@@ -19,9 +16,9 @@ from scripts.operator_product_snapshot import (  # noqa: E402
     load_json_object,
     load_latest_operator_startup_status,
 )
-from src.agent_core.atm10_session_probe import ATM10_SESSION_PROBE_SCHEMA  # noqa: E402
-from src.agent_core.combo_a_profile import COMBO_A_PROFILE  # noqa: E402
-from src.agent_core.live_hud_state import LIVE_HUD_STATE_SCHEMA  # noqa: E402
+from atm10_agent.agent_core.atm10_session_probe import ATM10_SESSION_PROBE_SCHEMA  # noqa: E402
+from atm10_agent.agent_core.combo_a_profile import COMBO_A_PROFILE  # noqa: E402
+from atm10_agent.agent_core.live_hud_state import LIVE_HUD_STATE_SCHEMA  # noqa: E402
 
 SCHEMA_VERSION = "pilot_runtime_readiness_v1"
 READINESS_ROOT_SUBDIR = "pilot-runtime-readiness"

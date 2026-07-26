@@ -5,8 +5,8 @@ from pathlib import Path
 import pytest
 
 import scripts.phase_a_smoke as phase_a_smoke
-import src.agent_core.vlm_openai as vlm_openai
-from src.agent_core.vlm_openai import OpenAIResponsesVLM
+import atm10_agent.agent_core.vlm_openai as vlm_openai
+from atm10_agent.agent_core.vlm_openai import OpenAIResponsesVLM
 
 
 def _write_placeholder_png(path: Path) -> None:

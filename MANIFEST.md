@@ -14,9 +14,13 @@ Current as of: 2026-07-25
 - `ATM10-Agent` is transitioning to an autonomous modular monolith around
   `Perception -> Interpretation -> World/Memory -> Response/Plan -> optional
   Action/Voice -> Trace`.
+- The repository now contains an installable `atm10_agent` package, one
+  `CompanionApp` composition root, and the dependency-light `atm10
+  doctor|run|replay` CLI. This is the primary product path for new work.
 - The accepted boundary and current migration ledger live in
   `docs/autonomy/README.md`. The old gateway + Streamlit + pilot shell remains
-  present as a green source baseline, not as the target architecture.
+  present as migration compatibility and protected-behavior evidence, not as
+  the target architecture or a second product.
 - The deterministic core must install, build, test, run, and release without
   sibling repositories, `.aoa`, OS skill profiles, shared validators, shared
   runtimes, live services, models, or hidden workstation configuration.
@@ -27,9 +31,15 @@ Current as of: 2026-07-25
 
 ## Active capabilities
 
-The entries below describe the green pre-rebuild source baseline. They are
-protected only where `docs/autonomy/protected-behavior.json` names their
-semantics; scripts, services, workflows, and topology may be replaced or
+- Autonomous package core: `atm10_agent.app.CompanionApp` executes a
+  deterministic in-process perception, interpretation, file-world/product-KAG,
+  response, optional dry-run action/voice, and trace turn. `atm10 replay`
+  reuses the recorded response and citations without invoking providers;
+  mutable state and append-only trace evidence use separate directories.
+
+The remaining entries describe the green pre-rebuild compatibility baseline.
+They are protected only where `docs/autonomy/protected-behavior.json` names
+their semantics; scripts, services, workflows, and topology may be replaced or
 removed.
 
 - Phase A: `scripts/phase_a_smoke.py` (screenshot -> run artifacts).
@@ -66,7 +76,9 @@ removed.
 - Operator snapshot and Streamlit pilot surfaces: `scripts/operator_product_snapshot.py` and `scripts/streamlit_operator_panel.py` additively publish `operator_context.pilot_runtime`, `operator_context.last_turn_summary`, `operator_context.pilot_readiness`, `operator_context.returning`, ATM10 session/HUD evidence summaries, active `host_profile`, provider/tts-engine visibility, provider warmup rollups, transcript-quality state, reply-mode visibility, and `Piper` readiness diagnostics (`preferred_tts_engine`, `active_tts_engine_last_turn`, `piper_available`, `piper_prewarm_ok`, `tts_degraded_reason`) in the `Pilot runtime` / `Pilot readiness` / `Return / Recovery` sections of `Stack Health`.
 - Current pilot live-debug note: `DXcam` + windowed ATM10 fixed the earlier stale-screen capture problem, and the repo now artifacts `push-to-talk` capture diagnostics plus restored parallel `ASR + vision` staging; current manual acceptance is still blocked by unacceptable live latency and intermittent `No audio frames were captured during push-to-talk.` turns, so reopen should begin from the latest `pilot_turn.json` evidence rather than adding new routing shortcuts.
 - Active-stack device benchmark: `scripts/benchmark_pilot_openvino_devices.py`, writing artifacted `vision` (`Qwen2.5-VL-7B`) and `grounded_reply` (`Qwen3-8B`) device-comparison runs plus aggregate `vision + grounded_reply` wall-time summaries without mutating runtime defaults automatically.
-- Dependency profiles: `requirements-voice.txt`, `requirements-llm.txt`, `requirements-export.txt`, `requirements-audit.txt`.
+- Package dependency profiles: optional extras in `pyproject.toml`; the
+  `requirements*.txt` family remains transitional compatibility input until
+  dependency/release normalization is complete.
 - Dependency audit: `scripts/dependency_audit.py` + report-only CI step with uploaded `dependency-audit-report` artifact.
 
 ## Canonical docs

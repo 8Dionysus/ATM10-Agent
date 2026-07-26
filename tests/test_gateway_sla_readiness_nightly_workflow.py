@@ -18,11 +18,11 @@ def test_gateway_sla_readiness_nightly_contains_transition_wiring() -> None:
     workflow_path = Path(".github/workflows/gateway-sla-readiness-nightly.yml")
     text = workflow_path.read_text(encoding="utf-8")
 
-    assert "check_gateway_sla_fail_nightly_progress.py" in text
-    assert "check_gateway_sla_fail_nightly_transition.py" in text
-    assert "check_gateway_sla_fail_nightly_remediation.py" in text
-    assert "check_gateway_sla_fail_nightly_integrity.py" in text
-    assert "run_gateway_sla_operating_cycle.py" in text
+    assert "scripts.check_gateway_sla_fail_nightly_progress" in text
+    assert "scripts.check_gateway_sla_fail_nightly_transition" in text
+    assert "scripts.check_gateway_sla_fail_nightly_remediation" in text
+    assert "scripts.check_gateway_sla_fail_nightly_integrity" in text
+    assert "scripts.run_gateway_sla_operating_cycle" in text
     assert "Resolve - Gateway SLA effective policy" in text
     assert "Summary - Gateway SLA fail_nightly progress" in text
     assert "Summary - Gateway SLA fail_nightly transition" in text

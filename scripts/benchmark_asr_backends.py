@@ -11,16 +11,13 @@ from time import perf_counter
 from typing import Any, Callable, Iterable, Mapping
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-if str(REPO_ROOT) not in sys.path:
-    sys.path.insert(0, str(REPO_ROOT))
-
-from src.agent_core.io_voice import (  # noqa: E402
+from atm10_agent.agent_core.io_voice import (  # noqa: E402
     DEFAULT_QWEN3_ASR_MODEL,
     DEFAULT_WHISPER_GENAI_MODEL_DIR,
     QwenASRClient,
     WhisperGenAIASRClient,
 )
-from src.agent_core.service_sla import build_common_metrics, build_service_sla_summary
+from atm10_agent.agent_core.service_sla import build_common_metrics, build_service_sla_summary
 
 
 SUPPORTED_BACKENDS = ("qwen_asr", "whisper_genai")

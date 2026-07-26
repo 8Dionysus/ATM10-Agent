@@ -43,9 +43,10 @@ surfaces are migration inputs or optional adapters, not required architecture.
 
 ## Current highlights
 
-- The accepted target is an autonomous `atm10_agent` package with one
-  composition root and CLI; the pre-rebuild script and service shell remains
-  present while protected behavior is moved behind that boundary.
+- The first autonomous package slice is present: `pyproject.toml`,
+  `src/atm10_agent/`, `atm10_agent.app.CompanionApp`, and the `atm10
+  doctor|run|replay` CLI. The pre-rebuild script and service shell remains a
+  migration surface while protected behavior is moved behind that boundary.
 - Clone, core install, build, deterministic run, test, and release must not
   require sibling repositories, `.aoa`, OS skill profiles, shared validators,
   shared runtimes, or hidden workstation configuration.

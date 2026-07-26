@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from src.agent_core.host_profiles import FEDORA_LOCAL_DEV_PROFILE_ID
-from src.agent_core.readiness_scopes import (
+from atm10_agent.agent_core.host_profiles import FEDORA_LOCAL_DEV_PROFILE_ID
+from atm10_agent.agent_core.readiness_scopes import (
     DEV_COMPANION_SCOPE,
     PRODUCT_EDGE_SCOPE,
     evaluate_host_profile_session_readiness,

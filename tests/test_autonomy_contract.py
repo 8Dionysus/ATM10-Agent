@@ -102,11 +102,16 @@ def test_repo_validation_has_no_sibling_checkout_or_owner_action() -> None:
     assert "8Dionysus/" not in workflow
     assert "repository:" not in workflow
     assert "AOA_" not in workflow
-    assert "validate_local_evals.py" in workflow
-    assert "validate_local_stats_port.py" in workflow
+    assert "scripts.validate_local_evals" in workflow
+    assert "scripts.validate_local_stats_port" in workflow
+    assert "Smoke - Autonomous companion package" in workflow
+    assert "atm10 doctor" in workflow
+    assert "atm10 run" in workflow
+    assert "atm10 replay" in workflow
 
 
 def test_repo_self_kag_is_removed_but_product_kag_remains() -> None:
     assert not (REPO_ROOT / "kag").exists()
-    assert (REPO_ROOT / "src" / "kag" / "baseline.py").is_file()
-    assert (REPO_ROOT / "src" / "kag" / "neo4j_backend.py").is_file()
+    product_kag = REPO_ROOT / "src" / "atm10_agent" / "kag"
+    assert (product_kag / "baseline.py").is_file()
+    assert (product_kag / "neo4j_backend.py").is_file()

@@ -6,14 +6,16 @@ Read the root `AGENTS.md` first. This file only adds local rules for source modu
 
 ## Scope
 
-This directory is the library surface behind the runnable scripts and tests.
+This directory contains the single installable `atm10_agent` product package.
+`pyproject.toml` and the `atm10` CLI own package discovery and composition;
+repository-path injection is forbidden.
 
 Nearest-file precedence applies here:
 
-- `src/agent_core/AGENTS.md`
-- `src/rag/AGENTS.md`
-- `src/kag/AGENTS.md`
-- `src/hybrid/AGENTS.md`
+- `src/atm10_agent/agent_core/AGENTS.md`
+- `src/atm10_agent/rag/AGENTS.md`
+- `src/atm10_agent/kag/AGENTS.md`
+- `src/atm10_agent/hybrid/AGENTS.md`
 
 When a deeper file exists, follow that deeper file for work inside that subtree.
 
@@ -28,6 +30,9 @@ When a deeper file exists, follow that deeper file for work inside that subtree.
 ## Change rules
 
 - Put domain-specific logic in the owning package instead of leaking it across packages.
+- Product orchestration enters through `atm10_agent.app.CompanionApp`; optional
+  gateways, UIs, stores, voice, or hardware adapters may not create a second
+  product composition root.
 - Keep optional dependency handling graceful. Missing voice, OpenVINO, Neo4j, or Qdrant extras should fail clearly at the use site, not at import time.
 - Do not hide semantic contract changes behind refactors or formatting-only wording.
 

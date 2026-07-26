@@ -40,6 +40,7 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements-dev.txt
           pip install -r requirements-voice.txt
+          python -m pip install -e . --no-deps
 
       - name: Wait for Qdrant HTTP
         run: |
@@ -68,7 +69,7 @@ jobs:
       - name: Start Voice Runtime Service
         run: |
           mkdir -p runs/nightly-combo-a-voice-runtime
-          nohup python scripts/voice_runtime_service.py \
+          nohup python -m scripts.voice_runtime_service \
             --host 127.0.0.1 \
             --port 8765 \
             --runs-dir runs/nightly-combo-a-voice-runtime \
@@ -79,7 +80,7 @@ jobs:
       - name: Start TTS Runtime Service
         run: |
           mkdir -p runs/nightly-combo-a-tts-runtime
-          nohup python scripts/tts_runtime_service.py \
+          nohup python -m scripts.tts_runtime_service \
             --host 127.0.0.1 \
             --port 8780 \
             --runs-dir runs/nightly-combo-a-tts-runtime \
@@ -89,7 +90,7 @@ jobs:
       - name: Start Gateway Operator Service
         run: |
           mkdir -p runs/nightly-combo-a-gateway-http-live
-          nohup python scripts/gateway_v1_http_service.py \
+          nohup python -m scripts.gateway_v1_http_service \
             --host 127.0.0.1 \
             --port 8770 \
             --runs-dir runs/nightly-combo-a-gateway-http-live \
@@ -137,7 +138,7 @@ jobs:
 
       - name: Smoke - Gateway v1 (combo_a scenario)
         run: |
-          python scripts/gateway_v1_smoke.py \
+          python -m scripts.gateway_v1_smoke \
             --scenario combo_a \
             --runs-dir runs/ci-smoke-gateway-combo-a \
             --summary-json runs/ci-smoke-gateway-combo-a/gateway_smoke_summary.json \
@@ -148,7 +149,7 @@ jobs:
 
       - name: Smoke - Gateway v1 HTTP (combo_a scenario)
         run: |
-          python scripts/gateway_v1_http_smoke.py \
+          python -m scripts.gateway_v1_http_smoke \
             --scenario combo_a \
             --runs-dir runs/ci-smoke-gateway-http-combo-a \
             --summary-json runs/ci-smoke-gateway-http-combo-a/gateway_http_smoke_summary.json \
@@ -159,7 +160,7 @@ jobs:
 
       - name: Smoke - Cross-service benchmark suite (combo_a)
         run: |
-          python scripts/cross_service_benchmark_suite.py \
+          python -m scripts.cross_service_benchmark_suite \
             --profile combo_a \
             --runs-dir runs/nightly-combo-a-cross-service-suite \
             --summary-json runs/nightly-combo-a-cross-service-suite/cross_service_benchmark_suite.json \
@@ -172,7 +173,7 @@ jobs:
 
       - name: Operating cycle - Combo A policy decision surface (report_only)
         run: |
-          python scripts/run_combo_a_operating_cycle.py \
+          python -m scripts.run_combo_a_operating_cycle \
             --runs-dir runs \
             --policy report_only \
             --summary-json runs/nightly-combo-a-operating-cycle/operating_cycle_summary.json \
@@ -197,7 +198,7 @@ jobs:
       - name: Strict gate - Combo A policy decision surface (promoted fail_on_hold)
         if: env.COMBO_A_EFFECTIVE_POLICY == 'promoted_nightly'
         run: |
-          python scripts/run_combo_a_operating_cycle.py \
+          python -m scripts.run_combo_a_operating_cycle \
             --runs-dir runs \
             --policy fail_on_hold \
             --summary-json runs/nightly-combo-a-operating-cycle/operating_cycle_summary.json \

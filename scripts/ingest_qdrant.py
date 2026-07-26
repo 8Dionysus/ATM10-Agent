@@ -8,10 +8,7 @@ from pathlib import Path
 from typing import Any, Mapping
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-if str(REPO_ROOT) not in sys.path:
-    sys.path.insert(0, str(REPO_ROOT))
-
-from src.rag.retrieval import ingest_docs_qdrant, load_docs
+from atm10_agent.rag.retrieval import ingest_docs_qdrant, load_docs
 
 
 def _create_run_dir(runs_dir: Path, now: datetime) -> Path:

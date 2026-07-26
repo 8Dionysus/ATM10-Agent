@@ -6,8 +6,8 @@ from types import SimpleNamespace
 from PIL import Image
 import pytest
 
-import src.agent_core.vlm_openvino as vlm_openvino
-from src.agent_core.vlm_openvino import OpenVINOVLMClient, sanitize_vlm_summary_text
+import atm10_agent.agent_core.vlm_openvino as vlm_openvino
+from atm10_agent.agent_core.vlm_openvino import OpenVINOVLMClient, sanitize_vlm_summary_text
 
 
 class _FakeGenerationConfig:

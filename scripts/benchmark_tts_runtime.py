@@ -9,16 +9,13 @@ from time import perf_counter
 from typing import Any, Callable, Mapping
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-if str(REPO_ROOT) not in sys.path:
-    sys.path.insert(0, str(REPO_ROOT))
-
 from scripts.tts_runtime_service import (  # noqa: E402
     _build_piper_engine,
     _build_silero_engine,
     _build_xtts_engine,
 )
-from src.agent_core.service_sla import build_common_metrics, build_service_sla_summary
-from src.agent_core.tts_runtime import (
+from atm10_agent.agent_core.service_sla import build_common_metrics, build_service_sla_summary
+from atm10_agent.agent_core.tts_runtime import (
     CallbackTTSEngine,
     PhraseCache,
     TTSRequest,

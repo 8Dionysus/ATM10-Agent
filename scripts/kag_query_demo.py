@@ -8,10 +8,7 @@ from pathlib import Path
 from typing import Any, Mapping
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-if str(REPO_ROOT) not in sys.path:
-    sys.path.insert(0, str(REPO_ROOT))
-
-from src.kag import query_kag_graph
+from atm10_agent.kag import query_kag_graph
 
 
 def _create_run_dir(runs_dir: Path, now: datetime) -> Path:

@@ -9,19 +9,16 @@ from pathlib import Path
 from typing import Mapping, Sequence
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-if str(REPO_ROOT) not in sys.path:
-    sys.path.insert(0, str(REPO_ROOT))
-
 from scripts.discover_instance import build_report
 from scripts.start_operator_fedora_dev import build_start_command_payload
-from src.agent_core.atm10_session_probe import probe_atm10_session
-from src.agent_core.fedora_companion_milestone import (
+from atm10_agent.agent_core.atm10_session_probe import probe_atm10_session
+from atm10_agent.agent_core.fedora_companion_milestone import (
     FEDORA_COMPANION_MILESTONE_RECEIPT_SCHEMA,
     evaluate_fedora_companion_milestone,
     parse_capture_region,
 )
-from src.agent_core.host_profiles import FEDORA_LOCAL_DEV_PROFILE_ID
-from src.agent_core.readiness_scopes import evaluate_host_profile_session_readiness
+from atm10_agent.agent_core.host_profiles import FEDORA_LOCAL_DEV_PROFILE_ID
+from atm10_agent.agent_core.readiness_scopes import evaluate_host_profile_session_readiness
 
 
 def _create_run_dir(runs_dir: Path, now: datetime) -> Path:

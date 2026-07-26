@@ -13,9 +13,6 @@ from typing import Any, Mapping
 from urllib import request
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-if str(REPO_ROOT) not in sys.path:
-    sys.path.insert(0, str(REPO_ROOT))
-
 from scripts.streamlit_operator_panel import (
     TAB_NAMES,
     canonical_fail_nightly_integrity_source,

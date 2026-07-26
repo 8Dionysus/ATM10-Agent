@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-import src.rag.retrieval as retrieval
+import atm10_agent.rag.retrieval as retrieval
 
 
 def _sample_docs() -> list[dict[str, Any]]:

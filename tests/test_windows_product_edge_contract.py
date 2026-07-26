@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from src.agent_core.host_profiles import DEFAULT_HOST_PROFILE_ID, FEDORA_LOCAL_DEV_PROFILE_ID
-from src.agent_core.windows_product_edge_contract import (
+from atm10_agent.agent_core.host_profiles import DEFAULT_HOST_PROFILE_ID, FEDORA_LOCAL_DEV_PROFILE_ID
+from atm10_agent.agent_core.windows_product_edge_contract import (
     evaluate_windows_dependency_boundary,
     evaluate_windows_product_edge_contract,
     evaluate_windows_product_edge_profile,

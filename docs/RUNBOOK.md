@@ -6,12 +6,46 @@ Path placeholders in this document:
 * Use `<path-to-...>` placeholders for local files on your workstation.
 * Use env vars or local secret managers for tokens/passwords; do not paste reusable literals into commands.
 
+## Autonomous companion CLI (primary)
+
+From PowerShell 7:
+
+```powershell
+cd <repo-root>
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install --upgrade pip
+python -m pip install -e .
+
+atm10 doctor
+atm10 run --prompt "Describe the current ATM10 context." --query "steel tools" --action-intent open_quest_book --runs-dir runs --state-dir .atm10-state
+
+$turn = Get-ChildItem .\runs -Recurse -Filter turn.json |
+  Sort-Object LastWriteTimeUtc -Descending |
+  Select-Object -First 1
+atm10 replay $turn.FullName --runs-dir runs --state-dir .atm10-state
+```
+
+The core install has no mandatory third-party runtime dependencies. `run`
+uses the deterministic stub, embedded file-backed world, product KAG,
+citations, and dry-run-only action planner. Requesting `--voice` without a
+configured provider yields a machine-readable degraded result rather than
+breaking the text companion.
+
+Execution evidence is append-only under `runs/`; current mutable state is
+stored separately under `.atm10-state/`. Neither directory is an implicit
+IPC channel.
+
+The milestone and gateway commands below remain migration-compatibility paths
+while their protected behavior moves behind the package boundary. They are not
+a second composition root for new product work.
+
 ## M0: Instance discovery
 
 ```powershell
 cd <repo-root>
 .\.venv\Scripts\Activate.ps1
-python scripts/discover_instance.py
+python -m scripts.discover_instance
 ```
 
 Expected result:
@@ -22,28 +56,34 @@ Expected result:
 ## Tests
 
 ```powershell
-python -m pip install -r requirements-dev.txt
+python -m pip install -e ".[dev]"
 python -m pytest
 ```
 
 ## Dependency Profiles
 
 ```powershell
-# Base runtime + tests
-python -m pip install -r requirements.txt
-python -m pip install -r requirements-dev.txt
+# Dependency-light autonomous core
+python -m pip install -e .
 
-# Optional profiles
-python -m pip install -r requirements-voice.txt
-python -m pip install -r requirements-llm.txt
-python -m pip install -r requirements-export.txt
+# Development and Windows product-edge compatibility
+python -m pip install -e ".[dev,windows]"
 
-# Dependency audit
+# Focused optional adapters
+python -m pip install -e ".[openvino]"
+python -m pip install -e ".[gateway]"
+python -m pip install -e ".[ui]"
+python -m pip install -e ".[voice]"
+```
+
+The legacy requirements files and dependency-audit shell remain transitional
+inputs until the Wave 5 lock/reproducibility and release cleanup. To review
+that compatibility surface:
+
+```powershell
 python -m pip install -r requirements-audit.txt
-python scripts/dependency_audit.py --runs-dir runs --policy report_only --with-security-scan true --security-requirements-files requirements.txt requirements-voice.txt requirements-llm.txt requirements-dev.txt
-
-# Nightly/security gate profile
-python scripts/dependency_audit.py --runs-dir runs/nightly-security-audit --policy fail_on_critical --with-security-scan true --security-requirements-files requirements.txt requirements-voice.txt requirements-llm.txt requirements-dev.txt
+python -m scripts.dependency_audit --runs-dir runs --policy report_only --with-security-scan true --security-requirements-files requirements.txt requirements-voice.txt requirements-llm.txt requirements-dev.txt
+python -m scripts.dependency_audit --runs-dir runs/nightly-security-audit --policy fail_on_critical --with-security-scan true --security-requirements-files requirements.txt requirements-voice.txt requirements-llm.txt requirements-dev.txt
 ```
 
 CI note:

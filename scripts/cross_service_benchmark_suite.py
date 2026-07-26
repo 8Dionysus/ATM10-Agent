@@ -15,15 +15,12 @@ from urllib import error as url_error
 from urllib import request
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-if str(REPO_ROOT) not in sys.path:
-    sys.path.insert(0, str(REPO_ROOT))
-
 from scripts.benchmark_asr_backends import run_asr_backend_benchmark
 from scripts.benchmark_tts_runtime import run_benchmark_tts_runtime
 from scripts.eval_kag_file import run_eval_kag_file
 from scripts.eval_kag_neo4j import run_eval_kag_neo4j
 from scripts.eval_retrieval import run_eval_retrieval
-from src.agent_core.combo_a_profile import (
+from atm10_agent.agent_core.combo_a_profile import (
     COMBO_A_PROFILE,
     DEFAULT_COMBO_A_NEO4J_DATABASE,
     DEFAULT_COMBO_A_NEO4J_URL,
@@ -33,7 +30,7 @@ from src.agent_core.combo_a_profile import (
     qdrant_host_port_from_url,
     seed_combo_a_fixture_data,
 )
-from src.agent_core.service_sla import (
+from atm10_agent.agent_core.service_sla import (
     CROSS_SERVICE_BENCHMARK_SUITE_SCHEMA,
     build_common_metrics,
     build_service_sla_summary,

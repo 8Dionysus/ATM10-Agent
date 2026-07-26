@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 
 import scripts.hybrid_query_demo as hybrid_query_demo
-from src.hybrid.planner import execute_hybrid_baseline_query, execute_hybrid_query, merge_hybrid_results
+from atm10_agent.hybrid.planner import execute_hybrid_baseline_query, execute_hybrid_query, merge_hybrid_results
 
 
 def _fixture_path(name: str) -> Path:
@@ -183,7 +183,7 @@ def test_execute_hybrid_baseline_query_kag_failure_degrades(
     def _boom(*args, **kwargs):
         raise RuntimeError("kag boom")
 
-    monkeypatch.setattr("src.hybrid.planner.build_kag_graph", _boom)
+    monkeypatch.setattr("atm10_agent.hybrid.planner.build_kag_graph", _boom)
     result = execute_hybrid_baseline_query(
         query="steel tools",
         docs_path=_fixture_path("retrieval_docs_sample.jsonl"),
@@ -224,8 +224,8 @@ def test_execute_hybrid_query_retrieval_failure_degrades_to_kag_only(
             }
         ]
 
-    monkeypatch.setattr("src.hybrid.planner.retrieve_top_k_qdrant", _boom_retrieval)
-    monkeypatch.setattr("src.hybrid.planner.query_kag_neo4j", _fake_query_kag_neo4j)
+    monkeypatch.setattr("atm10_agent.hybrid.planner.retrieve_top_k_qdrant", _boom_retrieval)
+    monkeypatch.setattr("atm10_agent.hybrid.planner.query_kag_neo4j", _fake_query_kag_neo4j)
 
     result = execute_hybrid_query(
         query="steel tools",
@@ -261,8 +261,8 @@ def test_execute_hybrid_query_retrieval_failure_without_kag_results_marks_ground
     def _empty_query_kag_neo4j(**kwargs):
         return []
 
-    monkeypatch.setattr("src.hybrid.planner.retrieve_top_k_qdrant", _boom_retrieval)
-    monkeypatch.setattr("src.hybrid.planner.query_kag_neo4j", _empty_query_kag_neo4j)
+    monkeypatch.setattr("atm10_agent.hybrid.planner.retrieve_top_k_qdrant", _boom_retrieval)
+    monkeypatch.setattr("atm10_agent.hybrid.planner.query_kag_neo4j", _empty_query_kag_neo4j)
 
     result = execute_hybrid_query(
         query="steel tools",

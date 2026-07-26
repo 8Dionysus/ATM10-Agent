@@ -91,11 +91,12 @@ Minimum validation after code changes:
 ```powershell
 cd <repo>
 .\.venv\Scripts\Activate.ps1
+python -m pip install -e ".[dev]"
 python -m pytest
 ```
 
 If a runnable entrypoint changes, run the nearest smoke path or add targeted tests. Operational examples remain in `docs/RUNBOOK.md`.
-If durable decision rationale changes, run `python scripts/generate_decision_indexes.py --check`, `python scripts/validate_decision_records.py`, and the owning targeted tests.
+If durable decision rationale changes, run `python -m scripts.generate_decision_indexes --check`, `python -m scripts.validate_decision_records`, and the owning targeted tests.
 For `stats/` or its cross-service producer, also run `python scripts/validate_local_stats_port.py`.
 
 ## Report

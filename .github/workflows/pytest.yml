@@ -26,10 +26,11 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements-dev.txt
           pip install -r requirements-audit.txt
+          python -m pip install -e . --no-deps
 
       - name: Report - Dependency audit (report_only)
         run: |
-          python scripts/dependency_audit.py --runs-dir runs/ci-dependency-audit --policy report_only --with-security-scan true --security-requirements-files requirements.txt requirements-voice.txt requirements-llm.txt requirements-dev.txt
+          python -m scripts.dependency_audit --runs-dir runs/ci-dependency-audit --policy report_only --with-security-scan true --security-requirements-files requirements.txt requirements-voice.txt requirements-llm.txt requirements-dev.txt
 
       - name: Run pytest
         run: python -m pytest
@@ -50,102 +51,103 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements-dev.txt
           pip install -r requirements-audit.txt
+          python -m pip install -e . --no-deps
 
       - name: Report - Dependency audit (report_only)
         run: |
-          python scripts/dependency_audit.py --runs-dir runs/ci-dependency-audit --policy report_only --with-security-scan true --security-requirements-files requirements.txt requirements-voice.txt requirements-llm.txt requirements-dev.txt
+          python -m scripts.dependency_audit --runs-dir runs/ci-dependency-audit --policy report_only --with-security-scan true --security-requirements-files requirements.txt requirements-voice.txt requirements-llm.txt requirements-dev.txt
 
       - name: Smoke - Phase A (stub)
         run: |
-          python scripts/phase_a_smoke.py --vlm-provider stub --runs-dir runs/ci-smoke-phase-a
+          python -m scripts.phase_a_smoke --vlm-provider stub --runs-dir runs/ci-smoke-phase-a
 
       - name: Validate - Smoke summary (Phase A)
         run: |
-          python scripts/collect_smoke_run_summary.py --runs-dir runs/ci-smoke-phase-a --expected-mode phase_a_smoke --summary-json runs/ci-smoke-phase-a/smoke_summary.json
+          python -m scripts.collect_smoke_run_summary --runs-dir runs/ci-smoke-phase-a --expected-mode phase_a_smoke --summary-json runs/ci-smoke-phase-a/smoke_summary.json
 
       - name: Smoke - Retrieval demo (in-memory)
         run: |
-          python scripts/retrieve_demo.py --in tests/fixtures/retrieval_docs_sample.jsonl --query "mekanism steel" --topk 3 --candidate-k 10 --reranker none --runs-dir runs/ci-smoke-retrieve
+          python -m scripts.retrieve_demo --in tests/fixtures/retrieval_docs_sample.jsonl --query "mekanism steel" --topk 3 --candidate-k 10 --reranker none --runs-dir runs/ci-smoke-retrieve
 
       - name: Validate - Smoke summary (Retrieve demo)
         run: |
-          python scripts/collect_smoke_run_summary.py --runs-dir runs/ci-smoke-retrieve --expected-mode retrieve_demo --summary-json runs/ci-smoke-retrieve/smoke_summary.json
+          python -m scripts.collect_smoke_run_summary --runs-dir runs/ci-smoke-retrieve --expected-mode retrieve_demo --summary-json runs/ci-smoke-retrieve/smoke_summary.json
 
       - name: Smoke - Retrieval eval (fixtures)
         run: |
-          python scripts/eval_retrieval.py --docs tests/fixtures/retrieval_docs_sample.jsonl --eval tests/fixtures/retrieval_eval_sample.jsonl --topk 3 --candidate-k 10 --reranker none --runs-dir runs/ci-smoke-eval
+          python -m scripts.eval_retrieval --docs tests/fixtures/retrieval_docs_sample.jsonl --eval tests/fixtures/retrieval_eval_sample.jsonl --topk 3 --candidate-k 10 --reranker none --runs-dir runs/ci-smoke-eval
 
       - name: Validate - Smoke summary (Retrieval eval)
         run: |
-          python scripts/collect_smoke_run_summary.py --runs-dir runs/ci-smoke-eval --expected-mode eval_retrieval --summary-json runs/ci-smoke-eval/smoke_summary.json
+          python -m scripts.collect_smoke_run_summary --runs-dir runs/ci-smoke-eval --expected-mode eval_retrieval --summary-json runs/ci-smoke-eval/smoke_summary.json
 
       - name: Smoke - Automation dry-run (fixture)
         run: |
-          python scripts/automation_dry_run.py --plan-json tests/fixtures/automation_plan_quest_book.json --runs-dir runs/ci-smoke-automation-dry-run
+          python -m scripts.automation_dry_run --plan-json tests/fixtures/automation_plan_quest_book.json --runs-dir runs/ci-smoke-automation-dry-run
 
       - name: Validate - Automation dry-run contract
         run: |
-          python scripts/check_automation_smoke_contract.py --mode dry_run --runs-dir runs/ci-smoke-automation-dry-run --min-action-count 3 --min-step-count 4 --summary-json runs/ci-smoke-automation-dry-run/contract_summary.json
+          python -m scripts.check_automation_smoke_contract --mode dry_run --runs-dir runs/ci-smoke-automation-dry-run --min-action-count 3 --min-step-count 4 --summary-json runs/ci-smoke-automation-dry-run/contract_summary.json
 
       - name: Smoke - Automation intent chain (fixture)
         run: |
-          python scripts/automation_intent_chain_smoke.py --intent-json tests/fixtures/intent_open_quest_book.json --runs-dir runs/ci-smoke-automation-chain
+          python -m scripts.automation_intent_chain_smoke --intent-json tests/fixtures/intent_open_quest_book.json --runs-dir runs/ci-smoke-automation-chain
 
       - name: Validate - Automation intent chain contract
         run: |
-          python scripts/check_automation_smoke_contract.py --mode intent_chain --runs-dir runs/ci-smoke-automation-chain --min-action-count 3 --min-step-count 4 --expected-intent-type open_quest_book --require-trace-id --require-intent-id --summary-json runs/ci-smoke-automation-chain/contract_summary.json
+          python -m scripts.check_automation_smoke_contract --mode intent_chain --runs-dir runs/ci-smoke-automation-chain --min-action-count 3 --min-step-count 4 --expected-intent-type open_quest_book --require-trace-id --require-intent-id --summary-json runs/ci-smoke-automation-chain/contract_summary.json
 
       - name: Smoke - Automation intent chain (inventory fixture)
         run: |
-          python scripts/automation_intent_chain_smoke.py --intent-json tests/fixtures/intent_check_inventory_tool.json --runs-dir runs/ci-smoke-automation-chain-inventory
+          python -m scripts.automation_intent_chain_smoke --intent-json tests/fixtures/intent_check_inventory_tool.json --runs-dir runs/ci-smoke-automation-chain-inventory
 
       - name: Validate - Automation intent chain contract (inventory fixture)
         run: |
-          python scripts/check_automation_smoke_contract.py --mode intent_chain --runs-dir runs/ci-smoke-automation-chain-inventory --min-action-count 3 --min-step-count 4 --expected-intent-type check_inventory_tool --require-trace-id --require-intent-id --summary-json runs/ci-smoke-automation-chain-inventory/contract_summary.json
+          python -m scripts.check_automation_smoke_contract --mode intent_chain --runs-dir runs/ci-smoke-automation-chain-inventory --min-action-count 3 --min-step-count 4 --expected-intent-type check_inventory_tool --require-trace-id --require-intent-id --summary-json runs/ci-smoke-automation-chain-inventory/contract_summary.json
 
       - name: Smoke - Automation intent chain (world map fixture)
         run: |
-          python scripts/automation_intent_chain_smoke.py --intent-json tests/fixtures/intent_open_world_map.json --runs-dir runs/ci-smoke-automation-chain-open-world-map
+          python -m scripts.automation_intent_chain_smoke --intent-json tests/fixtures/intent_open_world_map.json --runs-dir runs/ci-smoke-automation-chain-open-world-map
 
       - name: Validate - Automation intent chain contract (world map fixture)
         run: |
-          python scripts/check_automation_smoke_contract.py --mode intent_chain --runs-dir runs/ci-smoke-automation-chain-open-world-map --min-action-count 3 --min-step-count 4 --expected-intent-type open_world_map --require-trace-id --require-intent-id --summary-json runs/ci-smoke-automation-chain-open-world-map/contract_summary.json
+          python -m scripts.check_automation_smoke_contract --mode intent_chain --runs-dir runs/ci-smoke-automation-chain-open-world-map --min-action-count 3 --min-step-count 4 --expected-intent-type open_world_map --require-trace-id --require-intent-id --summary-json runs/ci-smoke-automation-chain-open-world-map/contract_summary.json
 
       - name: Smoke - Gateway v1 (core scenario)
         run: |
-          python scripts/gateway_v1_smoke.py --scenario core --runs-dir runs/ci-smoke-gateway-core --summary-json runs/ci-smoke-gateway-core/gateway_smoke_summary.json
+          python -m scripts.gateway_v1_smoke --scenario core --runs-dir runs/ci-smoke-gateway-core --summary-json runs/ci-smoke-gateway-core/gateway_smoke_summary.json
 
       - name: Smoke - Gateway v1 (hybrid scenario)
         run: |
-          python scripts/gateway_v1_smoke.py --scenario hybrid --runs-dir runs/ci-smoke-gateway-hybrid --summary-json runs/ci-smoke-gateway-hybrid/gateway_smoke_summary.json
+          python -m scripts.gateway_v1_smoke --scenario hybrid --runs-dir runs/ci-smoke-gateway-hybrid --summary-json runs/ci-smoke-gateway-hybrid/gateway_smoke_summary.json
 
       - name: Smoke - Gateway v1 (automation scenario)
         run: |
-          python scripts/gateway_v1_smoke.py --scenario automation --runs-dir runs/ci-smoke-gateway-automation --summary-json runs/ci-smoke-gateway-automation/gateway_smoke_summary.json
+          python -m scripts.gateway_v1_smoke --scenario automation --runs-dir runs/ci-smoke-gateway-automation --summary-json runs/ci-smoke-gateway-automation/gateway_smoke_summary.json
 
       - name: Smoke - Gateway v1 HTTP (core scenario)
         run: |
-          python scripts/gateway_v1_http_smoke.py --scenario core --runs-dir runs/ci-smoke-gateway-http-core --summary-json runs/ci-smoke-gateway-http-core/gateway_http_smoke_summary.json
+          python -m scripts.gateway_v1_http_smoke --scenario core --runs-dir runs/ci-smoke-gateway-http-core --summary-json runs/ci-smoke-gateway-http-core/gateway_http_smoke_summary.json
 
       - name: Smoke - Gateway v1 HTTP (hybrid scenario)
         run: |
-          python scripts/gateway_v1_http_smoke.py --scenario hybrid --runs-dir runs/ci-smoke-gateway-http-hybrid --summary-json runs/ci-smoke-gateway-http-hybrid/gateway_http_smoke_summary.json
+          python -m scripts.gateway_v1_http_smoke --scenario hybrid --runs-dir runs/ci-smoke-gateway-http-hybrid --summary-json runs/ci-smoke-gateway-http-hybrid/gateway_http_smoke_summary.json
 
       - name: Smoke - Gateway v1 HTTP (automation scenario)
         run: |
-          python scripts/gateway_v1_http_smoke.py --scenario automation --runs-dir runs/ci-smoke-gateway-http-automation --summary-json runs/ci-smoke-gateway-http-automation/gateway_http_smoke_summary.json
+          python -m scripts.gateway_v1_http_smoke --scenario automation --runs-dir runs/ci-smoke-gateway-http-automation --summary-json runs/ci-smoke-gateway-http-automation/gateway_http_smoke_summary.json
 
       - name: Smoke - Gateway SLA check (signal_only)
         run: |
-          python scripts/check_gateway_sla.py --http-summary-json runs/ci-smoke-gateway-http-core/gateway_http_smoke_summary.json --summary-json runs/ci-smoke-gateway-sla/gateway_sla_summary.json --profile conservative --policy signal_only --runs-dir runs/ci-smoke-gateway-sla
+          python -m scripts.check_gateway_sla --http-summary-json runs/ci-smoke-gateway-http-core/gateway_http_smoke_summary.json --summary-json runs/ci-smoke-gateway-sla/gateway_sla_summary.json --profile conservative --policy signal_only --runs-dir runs/ci-smoke-gateway-sla
 
       - name: Smoke - Gateway SLA trend snapshot
         run: |
-          python scripts/gateway_sla_trend_snapshot.py --sla-runs-dir runs/ci-smoke-gateway-sla --history-limit 10 --baseline-window 5 --critical-policy signal_only --runs-dir runs/ci-smoke-gateway-sla-trend
+          python -m scripts.gateway_sla_trend_snapshot --sla-runs-dir runs/ci-smoke-gateway-sla --history-limit 10 --baseline-window 5 --critical-policy signal_only --runs-dir runs/ci-smoke-gateway-sla-trend
 
       - name: Smoke - Cross-service benchmark suite
         run: |
-          python scripts/cross_service_benchmark_suite.py --runs-dir runs/ci-smoke-cross-service-suite --summary-json runs/ci-smoke-cross-service-suite/cross_service_benchmark_suite.json --smoke-stub-voice-asr
+          python -m scripts.cross_service_benchmark_suite --runs-dir runs/ci-smoke-cross-service-suite --summary-json runs/ci-smoke-cross-service-suite/cross_service_benchmark_suite.json --smoke-stub-voice-asr
 
       - name: Resolve - Gateway SLA trend paths
         shell: pwsh
@@ -167,7 +169,7 @@ jobs:
 
       - name: Smoke - Streamlit operator panel (no-crash)
         run: |
-          python scripts/streamlit_operator_panel_smoke.py --panel-runs-dir runs --runs-dir runs/ci-smoke-streamlit --summary-json runs/ci-smoke-streamlit/streamlit_smoke_summary.json --gateway-url http://127.0.0.1:8770 --startup-timeout-sec 45
+          python -m scripts.streamlit_operator_panel_smoke --panel-runs-dir runs --runs-dir runs/ci-smoke-streamlit --summary-json runs/ci-smoke-streamlit/streamlit_smoke_summary.json --gateway-url http://127.0.0.1:8770 --startup-timeout-sec 45
 
       - name: Summary - Core smoke summaries
         shell: pwsh
@@ -310,7 +312,7 @@ jobs:
           $chainQuest = Get-Content "runs/ci-smoke-automation-chain/contract_summary.json" | ConvertFrom-Json
           $chainInventory = Get-Content "runs/ci-smoke-automation-chain-inventory/contract_summary.json" | ConvertFrom-Json
           $chainWorldMap = Get-Content "runs/ci-smoke-automation-chain-open-world-map/contract_summary.json" | ConvertFrom-Json
-          $runbookUrl = python scripts/build_runbook_link.py --anchor "m68-troubleshooting-automation-smoke-contract-failures-ci"
+          $runbookUrl = python -m scripts.build_runbook_link --anchor "m68-troubleshooting-automation-smoke-contract-failures-ci"
           function FmtOpt([object]$value) {
             if ($null -eq $value) { return "-" }
             $text = "$value".Trim()

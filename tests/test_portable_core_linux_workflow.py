@@ -38,8 +38,8 @@ def test_portable_core_linux_workflow_exercises_wave_contracts() -> None:
     assert "tests/test_readiness_scopes.py" in text
     assert "tests/test_discover_instance.py" in text
     assert "tests/test_start_operator_fedora_dev.py" in text
-    assert "scripts/discover_instance.py --runs-dir runs/ci-linux-discover-instance" in text
-    assert "scripts/start_operator_fedora_dev.py" in text
+    assert "scripts.discover_instance --runs-dir runs/ci-linux-discover-instance" in text
+    assert "scripts.start_operator_fedora_dev" in text
     assert "--print-only" in text
 
 
@@ -48,7 +48,7 @@ def test_portable_core_linux_workflow_writes_fedora_companion_receipt() -> None:
     text = _workflow_text()
 
     assert "tests/test_fedora_companion_milestone.py" in text
-    assert "scripts/write_fedora_companion_receipt.py" in text
+    assert "scripts.write_fedora_companion_receipt" in text
     assert "--allow-missing-atm10-dir" in text
     assert "runs/ci-fedora-companion-receipt" in text
 

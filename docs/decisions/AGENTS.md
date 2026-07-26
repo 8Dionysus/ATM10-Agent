@@ -50,8 +50,8 @@ For decision-lane changes, run:
 
 ```powershell
 cd <repo-root>
-python scripts/generate_decision_indexes.py
-python scripts/generate_decision_indexes.py --check
-python scripts/validate_decision_records.py
+python -m scripts.generate_decision_indexes
+python -m scripts.generate_decision_indexes --check
+python -m scripts.validate_decision_records
 python -m pytest tests/test_decision_indexes.py tests/test_nested_agents_docs.py tests/test_validate_nested_agents.py
 ```

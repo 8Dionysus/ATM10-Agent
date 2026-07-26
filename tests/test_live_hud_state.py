@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-import src.agent_core.live_hud_state as live_hud_state
+import atm10_agent.agent_core.live_hud_state as live_hud_state
 
 
 def test_build_live_hud_state_preserves_error_when_ocr_fails_without_hook(
