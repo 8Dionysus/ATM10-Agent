@@ -93,12 +93,14 @@ behavioral regressions reviewable.
   `43c801fc57b07515783b31c5b246e360344f5f4c`: the autonomy
   decision and behavior fence are source-owned, required federation edges are
   removed, and repository validation is local.
-- The first two Wave 3 slices introduce `pyproject.toml`, the single
+- The first two Wave 3 slices introduced `pyproject.toml`, the single
   `src/atm10_agent/` namespace, `CompanionApp`, and `atm10
   doctor|run|replay|eval`. The package now owns deterministic intent planning,
   action normalization, the no-input dry-run fence, trace correlation, and the
-  executable companion-core eval. Compatibility action entrypoints are thin
-  artifact wrappers over package behavior.
-- Wave 3 remains open while reusable behavior and proven consumers still live
-  in the transitional `scripts/` shell. It closes only when product code never
-  imports that shell and scripts can no longer act as a second application.
+  executable companion-core eval.
+- The gateway/governance, operator/Streamlit, pilot-loop, separate HTTP
+  voice/TTS service, and Fedora parallel-launcher control plane is removed.
+  Windows capture is now package-owned and independently tested.
+- Wave 3 remains open while reusable provider and store behavior still lives
+  in the transitional maintainer-tool shell and dependency profiles remain to
+  be normalized. Product code never imports that shell.

@@ -1,11 +1,12 @@
 # AGENTS.md
 
 Local guidance for `examples/` in `ATM10-Agent`. Read the root `AGENTS.md` first.
-This directory carries sanitized contract examples for operator and antifragility surfaces.
+This directory carries sanitized contract examples for antifragility surfaces.
 
 ## Scope
 
-Examples here show minimal, public-safe shapes for stressor receipts, adaptation deltas, gateway operator return events, return summaries, and reason catalogs.
+Examples here show minimal, public-safe shapes for stressor receipts and
+adaptation deltas.
 They should help validation and docs stay grounded without leaking maintainer-local runtime detail.
 
 ## Local contract

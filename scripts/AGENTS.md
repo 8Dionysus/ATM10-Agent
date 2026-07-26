@@ -2,32 +2,22 @@
 
 Local guidance for `scripts/` in `ATM10-Agent`.
 
-Read the root `AGENTS.md` first. This file only adds local rules for runnable entrypoints and operator tooling.
+Read the root `AGENTS.md` first. This file only adds local rules for the
+transitional maintainer-tool shell.
 
 ## Scope
 
-This directory is the transitional compatibility and maintainer-tool shell of
-the repo. It still contains smoke paths, demos, legacy operator startup,
-gateway flows, retrieval and KAG runners, audits, policy checks, export
-helpers, and PowerShell launchers while protected behavior moves into the
-installable `atm10_agent` package.
+This directory is the transitional maintainer-tool shell of the repo. It
+contains focused demos, data preparation, provider diagnostics, audits,
+decision tooling, and export helpers. It is not a second application.
 
 Representative surfaces include:
 
 - `phase_a_smoke.py`
-- `start_operator_product.py`
-- `gateway_v1_local.py`, `gateway_v1_http_service.py`, `gateway_v1_http_smoke.py`
 - `retrieve_demo.py`, `eval_retrieval.py`, `normalize_ftbquests.py`, `ingest_qdrant.py`
 - `kag_build_baseline.py`, `kag_sync_neo4j.py`, `kag_query_demo.py`, `kag_query_neo4j.py`
-- thin package-compatibility wrappers `automation_dry_run.py` and
-  `intent_to_automation_plan.py`, plus the transitional
-  `automation_intent_chain_smoke.py`
-- `cross_service_benchmark_suite.py`, `run_combo_a_operating_cycle.py`
-- `pilot_runtime_loop.py`, `operator_product_snapshot.py`, `streamlit_operator_panel.py`
-
-`cross_service_benchmark_suite.py` owns the live evidence artifact used by the
-local stats surface. `validate_local_stats_port.py` validates that contract
-entirely from repository-owned files; keep measurement meaning under `stats/`.
+- `openvino_diag.py` and the explicit model export/probe helpers
+- `generate_decision_indexes.py` and `validate_decision_records.py`
 
 ## Local contract
 
@@ -36,12 +26,13 @@ entirely from repository-owned files; keep measurement meaning under `stats/`.
   second application.
 - Do not add new product semantics here. Move reusable behavior into its owning
   package module and keep any proven-consumer wrapper thin.
-- Keep proven compatibility CLI flags, artifact paths, and public-facing
-  behavior stable until their consumer is migrated or explicitly retired.
+- Retire obsolete compatibility entrypoints once package-owned behavior and
+  acceptance evidence replace their real consumers.
 - Prefer `pathlib`, explicit arguments, and `--runs-dir` driven artifacts over hidden local defaults.
 - Keep dry-run or report-only behavior as the default for automation and policy surfaces unless the task explicitly requires stronger behavior.
-- Preserve baseline defaults and keep `combo_a` additive.
-- Keep public examples loopback-safe and token-safe. Use env or config patterns such as `ATM10_SERVICE_TOKEN` and `NEO4J_PASSWORD`.
+- Preserve the file-backed baseline and keep external stores additive.
+- Keep public examples loopback-safe and token-safe. Use env or config patterns
+  such as `NEO4J_PASSWORD`.
 
 ## Change rules
 

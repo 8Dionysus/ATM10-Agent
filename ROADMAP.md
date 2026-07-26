@@ -48,8 +48,9 @@ The rebuild preserves behavior, not the old topology:
   `check_inventory_tool`, and `open_world_map`.
 
 Gateway endpoints, Streamlit panels, worker/service splits, Combo A, root
-repo-self KAG, cross-owner ports, and nightly promotion machinery survive only
-if they earn a smaller optional-adapter role through protected tests.
+repo-self KAG, cross-owner ports, and gateway nightly promotion machinery are
+retired. A future transport or UI must earn a smaller optional-adapter role
+through package-owned contracts and protected tests.
 
 ## Rebuild waves
 

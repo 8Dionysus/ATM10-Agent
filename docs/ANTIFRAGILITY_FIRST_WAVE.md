@@ -15,7 +15,8 @@ Wave 1 names one bounded family:
 
 ## What is live now
 
-The live first-wave emission point is only `scripts/hybrid_query_demo.py::run_hybrid_query`, surfaced through `scripts/gateway_v1_local.py` when:
+The live first-wave emission point is only
+`scripts/hybrid_query_demo.py::run_hybrid_query` when:
 
 - `planner_status == "retrieval_only_fallback"`
 - `degraded == true`
@@ -36,9 +37,9 @@ The schemas are intentionally broader than the first live trigger. They can desc
 `ATM10-Agent` owns the source event for wave 1.
 
 - `run_hybrid_query` is the only live emitter.
-- `gateway_v1_local` may surface receipt pointers, but it does not mint a second event.
-- `pilot_runtime_loop` stays consumer-only for degraded flags and operator context.
-- downstream eval, stats, and doctrine layers can read the receipt, but they do not become the source of truth for it.
+- callers may surface receipt pointers, but they do not mint a second event.
+- downstream evals or future adapters can read the receipt, but they do not
+  become the source of truth for it.
 
 ## Companion delta posture
 
@@ -55,7 +56,7 @@ Use it only when a real change cites earlier stressor receipts and explains:
 - do not replace the existing run artifacts
 - do not auto-repair or widen automation authority
 - do not treat degraded evidence as permission to mutate
-- do not let eval or stats layers overwrite source ownership
+- do not let eval or adapter layers overwrite source ownership
 - do not silently widen wave 1 to `kag_only_fallback` or `grounding_unavailable` without an explicit follow-up campaign
 
 ## Operator reading

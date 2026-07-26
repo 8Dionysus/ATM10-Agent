@@ -59,8 +59,6 @@
       "evidence": [
         "src/atm10_agent/action/__init__.py",
         "src/atm10_agent/evals/__init__.py",
-        "scripts/intent_to_automation_plan.py",
-        "scripts/automation_dry_run.py",
         "tests/test_companion_app.py",
         "tests/test_action_contract.py",
         "tests/test_companion_eval.py"
@@ -72,9 +70,9 @@
       "contract": "Windows acceptance can identify an ATM10 session, prefer DXcam capture, and artifact the selected source and degraded fallback.",
       "evidence": [
         "src/atm10_agent/agent_core/atm10_session_probe.py",
-        "scripts/pilot_runtime_loop.py",
+        "src/atm10_agent/perception/windows_capture.py",
         "tests/test_atm10_session_probe_adapters.py",
-        "tests/test_pilot_runtime_loop.py"
+        "tests/test_windows_capture.py"
       ]
     },
     {
@@ -99,9 +97,7 @@
       "evidence": [
         "src/atm10_agent/trace/__init__.py",
         "tests/test_companion_app.py",
-        "tests/test_companion_eval.py",
-        "scripts/operator_return_recovery.py",
-        "tests/test_operator_return_recovery.py"
+        "tests/test_companion_eval.py"
       ]
     },
     {
@@ -142,9 +138,7 @@
         "src/atm10_agent/evals/__init__.py",
         "tests/test_companion_app.py",
         "tests/test_companion_eval.py",
-        "tests/fixtures",
-        "tests/test_gateway_v1_contract_parity_matrix.py",
-        "tests/test_check_pilot_runtime_readiness.py"
+        "tests/fixtures"
       ]
     }
   ]

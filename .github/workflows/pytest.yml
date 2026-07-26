@@ -1,4 +1,4 @@
-name: Pytest
+name: Windows package
 
 on:
   push:
@@ -11,6 +11,7 @@ permissions:
 
 jobs:
   test:
+    name: test
     runs-on: windows-latest
     steps:
       - name: Checkout
@@ -21,21 +22,16 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Install dependencies
+      - name: Install development dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements-dev.txt
-          pip install -r requirements-audit.txt
-          python -m pip install -e . --no-deps
+          python -m pip install -e ".[dev]"
 
-      - name: Report - Dependency audit (report_only)
-        run: |
-          python -m scripts.dependency_audit --runs-dir runs/ci-dependency-audit --policy report_only --with-security-scan true --security-requirements-files requirements.txt requirements-voice.txt requirements-llm.txt requirements-dev.txt
-
-      - name: Run pytest
+      - name: Run tests
         run: python -m pytest
 
   smoke:
+    name: smoke
     runs-on: windows-latest
     steps:
       - name: Checkout
@@ -46,290 +42,37 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Install dependencies
+      - name: Install core package
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements-dev.txt
-          pip install -r requirements-audit.txt
-          python -m pip install -e . --no-deps
+          python -m pip install . --no-deps
 
-      - name: Report - Dependency audit (report_only)
+      - name: Doctor and deterministic turn
         run: |
-          python -m scripts.dependency_audit --runs-dir runs/ci-dependency-audit --policy report_only --with-security-scan true --security-requirements-files requirements.txt requirements-voice.txt requirements-llm.txt requirements-dev.txt
+          atm10 doctor
+          atm10 run `
+            --prompt "Describe ATM10 context." `
+            --query "steel tools" `
+            --action-intent open_quest_book `
+            --runs-dir runs/ci-package-core `
+            --state-dir .atm10-ci-state
 
-      - name: Smoke - Phase A (stub)
-        run: |
-          python -m scripts.phase_a_smoke --vlm-provider stub --runs-dir runs/ci-smoke-phase-a
-
-      - name: Validate - Smoke summary (Phase A)
-        run: |
-          python -m scripts.collect_smoke_run_summary --runs-dir runs/ci-smoke-phase-a --expected-mode phase_a_smoke --summary-json runs/ci-smoke-phase-a/smoke_summary.json
-
-      - name: Smoke - Retrieval demo (in-memory)
-        run: |
-          python -m scripts.retrieve_demo --in tests/fixtures/retrieval_docs_sample.jsonl --query "mekanism steel" --topk 3 --candidate-k 10 --reranker none --runs-dir runs/ci-smoke-retrieve
-
-      - name: Validate - Smoke summary (Retrieve demo)
-        run: |
-          python -m scripts.collect_smoke_run_summary --runs-dir runs/ci-smoke-retrieve --expected-mode retrieve_demo --summary-json runs/ci-smoke-retrieve/smoke_summary.json
-
-      - name: Smoke - Retrieval eval (fixtures)
-        run: |
-          python -m scripts.eval_retrieval --docs tests/fixtures/retrieval_docs_sample.jsonl --eval tests/fixtures/retrieval_eval_sample.jsonl --topk 3 --candidate-k 10 --reranker none --runs-dir runs/ci-smoke-eval
-
-      - name: Validate - Smoke summary (Retrieval eval)
-        run: |
-          python -m scripts.collect_smoke_run_summary --runs-dir runs/ci-smoke-eval --expected-mode eval_retrieval --summary-json runs/ci-smoke-eval/smoke_summary.json
-
-      - name: Eval - Autonomous companion core
-        run: |
-          atm10 eval --suite companion-core --runs-dir runs/ci-companion-core --state-dir .atm10-state/ci-companion-core --reports-dir eval-results/ci-companion-core
-
-      - name: Smoke - Gateway v1 (core scenario)
-        run: |
-          python -m scripts.gateway_v1_smoke --scenario core --runs-dir runs/ci-smoke-gateway-core --summary-json runs/ci-smoke-gateway-core/gateway_smoke_summary.json
-
-      - name: Smoke - Gateway v1 (hybrid scenario)
-        run: |
-          python -m scripts.gateway_v1_smoke --scenario hybrid --runs-dir runs/ci-smoke-gateway-hybrid --summary-json runs/ci-smoke-gateway-hybrid/gateway_smoke_summary.json
-
-      - name: Smoke - Gateway v1 (automation scenario)
-        run: |
-          python -m scripts.gateway_v1_smoke --scenario automation --runs-dir runs/ci-smoke-gateway-automation --summary-json runs/ci-smoke-gateway-automation/gateway_smoke_summary.json
-
-      - name: Smoke - Gateway v1 HTTP (core scenario)
-        run: |
-          python -m scripts.gateway_v1_http_smoke --scenario core --runs-dir runs/ci-smoke-gateway-http-core --summary-json runs/ci-smoke-gateway-http-core/gateway_http_smoke_summary.json
-
-      - name: Smoke - Gateway v1 HTTP (hybrid scenario)
-        run: |
-          python -m scripts.gateway_v1_http_smoke --scenario hybrid --runs-dir runs/ci-smoke-gateway-http-hybrid --summary-json runs/ci-smoke-gateway-http-hybrid/gateway_http_smoke_summary.json
-
-      - name: Smoke - Gateway v1 HTTP (automation scenario)
-        run: |
-          python -m scripts.gateway_v1_http_smoke --scenario automation --runs-dir runs/ci-smoke-gateway-http-automation --summary-json runs/ci-smoke-gateway-http-automation/gateway_http_smoke_summary.json
-
-      - name: Smoke - Gateway SLA check (signal_only)
-        run: |
-          python -m scripts.check_gateway_sla --http-summary-json runs/ci-smoke-gateway-http-core/gateway_http_smoke_summary.json --summary-json runs/ci-smoke-gateway-sla/gateway_sla_summary.json --profile conservative --policy signal_only --runs-dir runs/ci-smoke-gateway-sla
-
-      - name: Smoke - Gateway SLA trend snapshot
-        run: |
-          python -m scripts.gateway_sla_trend_snapshot --sla-runs-dir runs/ci-smoke-gateway-sla --history-limit 10 --baseline-window 5 --critical-policy signal_only --runs-dir runs/ci-smoke-gateway-sla-trend
-
-      - name: Smoke - Cross-service benchmark suite
-        run: |
-          python -m scripts.cross_service_benchmark_suite --runs-dir runs/ci-smoke-cross-service-suite --summary-json runs/ci-smoke-cross-service-suite/cross_service_benchmark_suite.json --smoke-stub-voice-asr
-
-      - name: Resolve - Gateway SLA trend paths
+      - name: Replay prior turn
         shell: pwsh
         run: |
-          function ToRepoRelative([string]$fullPath) {
-            $root = (Get-Location).Path
-            if ($fullPath.StartsWith($root, [System.StringComparison]::OrdinalIgnoreCase)) {
-              $fullPath = $fullPath.Substring($root.Length).TrimStart('\')
-            }
-            return ($fullPath -replace '\\', '/')
+          $turn = Get-ChildItem -Path "runs/ci-package-core" -Recurse -Filter "turn.json" |
+            Select-Object -First 1
+          if ($null -eq $turn) {
+            throw "turn.json was not produced"
           }
-          $trendSnapshot = Get-ChildItem -Path "runs/ci-smoke-gateway-sla-trend" -Recurse -Filter "gateway_sla_trend_snapshot.json" | Sort-Object FullName | Select-Object -Last 1
-          $trendSummary = Get-ChildItem -Path "runs/ci-smoke-gateway-sla-trend" -Recurse -Filter "summary.md" | Sort-Object FullName | Select-Object -Last 1
-          if ($null -eq $trendSnapshot -or $null -eq $trendSummary) {
-            throw "gateway SLA trend artifacts not found"
-          }
-          Add-Content -Path $env:GITHUB_ENV -Value "GATEWAY_SLA_TREND_SNAPSHOT_JSON=$(ToRepoRelative $trendSnapshot.FullName)"
-          Add-Content -Path $env:GITHUB_ENV -Value "GATEWAY_SLA_TREND_SUMMARY_MD=$(ToRepoRelative $trendSummary.FullName)"
+          atm10 replay $turn.FullName `
+            --runs-dir runs/ci-package-core `
+            --state-dir .atm10-ci-state
 
-      - name: Smoke - Streamlit operator panel (no-crash)
+      - name: Run companion-core eval
         run: |
-          python -m scripts.streamlit_operator_panel_smoke --panel-runs-dir runs --runs-dir runs/ci-smoke-streamlit --summary-json runs/ci-smoke-streamlit/streamlit_smoke_summary.json --gateway-url http://127.0.0.1:8770 --startup-timeout-sec 45
-
-      - name: Summary - Core smoke summaries
-        shell: pwsh
-        run: |
-          $phaseA = Get-Content "runs/ci-smoke-phase-a/smoke_summary.json" | ConvertFrom-Json
-          $retrieve = Get-Content "runs/ci-smoke-retrieve/smoke_summary.json" | ConvertFrom-Json
-          $eval = Get-Content "runs/ci-smoke-eval/smoke_summary.json" | ConvertFrom-Json
-          function FmtOpt([object]$value) {
-            if ($null -eq $value) { return "-" }
-            $text = "$value".Trim()
-            if ([string]::IsNullOrEmpty($text)) { return "-" }
-            return $text
-          }
-          $lines = @(
-            "## Core Smoke Summaries",
-            "",
-            "| mode | status | details |",
-            "|---|---|---|",
-            "| phase_a_smoke | $($phaseA.status) | vlm=$(FmtOpt $phaseA.observed.vlm_resolved), fallback=$(FmtOpt $phaseA.observed.vlm_fallback_used) |",
-            "| retrieve_demo | $($retrieve.status) | results_count=$(FmtOpt $retrieve.observed.results_count) |",
-            "| eval_retrieval | $($eval.status) | query_count=$(FmtOpt $eval.observed.query_count), mrr=$(FmtOpt $eval.observed.mean_mrr_at_k) |"
-          )
-          $lines -join "`n" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
-
-      - name: Summary - Gateway smoke summaries
-        shell: pwsh
-        run: |
-          $core = Get-Content "runs/ci-smoke-gateway-core/gateway_smoke_summary.json" | ConvertFrom-Json
-          $hybrid = Get-Content "runs/ci-smoke-gateway-hybrid/gateway_smoke_summary.json" | ConvertFrom-Json
-          $automation = Get-Content "runs/ci-smoke-gateway-automation/gateway_smoke_summary.json" | ConvertFrom-Json
-          $lines = @(
-            "## Gateway Smoke Summaries",
-            "",
-            "| scenario | status | request_count |",
-            "|---|---|---:|",
-            "| core | $($core.status) | $($core.request_count) |",
-            "| hybrid | $($hybrid.status) | $($hybrid.request_count) |",
-            "| automation | $($automation.status) | $($automation.request_count) |"
-          )
-          $lines -join "`n" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
-
-      - name: Summary - Gateway HTTP smoke summaries
-        shell: pwsh
-        run: |
-          $core = Get-Content "runs/ci-smoke-gateway-http-core/gateway_http_smoke_summary.json" | ConvertFrom-Json
-          $hybrid = Get-Content "runs/ci-smoke-gateway-http-hybrid/gateway_http_smoke_summary.json" | ConvertFrom-Json
-          $automation = Get-Content "runs/ci-smoke-gateway-http-automation/gateway_http_smoke_summary.json" | ConvertFrom-Json
-          $lines = @(
-            "## Gateway HTTP Smoke Summaries",
-            "",
-            "| scenario | status | request_count | failed_requests_count |",
-            "|---|---|---:|---:|",
-            "| core | $($core.status) | $($core.request_count) | $($core.failed_requests_count) |",
-            "| hybrid | $($hybrid.status) | $($hybrid.request_count) | $($hybrid.failed_requests_count) |",
-            "| automation | $($automation.status) | $($automation.request_count) | $($automation.failed_requests_count) |"
-          )
-          $lines -join "`n" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
-
-      - name: Summary - Gateway SLA
-        shell: pwsh
-        run: |
-          $sla = Get-Content "runs/ci-smoke-gateway-sla/gateway_sla_summary.json" | ConvertFrom-Json
-          $breachesCount = if ($null -eq $sla.breaches) { 0 } else { $sla.breaches.Count }
-          $lines = @(
-            "## Gateway SLA Summary",
-            "",
-            "| status | sla_status | request_count | failed_requests_count | error_rate | timeout_rate | latency_p95_ms | breaches_count |",
-            "|---|---|---:|---:|---:|---:|---:|---:|",
-            "| $($sla.status) | $($sla.sla_status) | $($sla.metrics.request_count) | $($sla.metrics.failed_requests_count) | $($sla.metrics.error_rate) | $($sla.metrics.timeout_rate) | $($sla.metrics.latency_p95_ms) | $breachesCount |"
-          )
-          $lines -join "`n" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
-
-      - name: Summary - Gateway SLA trend
-        shell: pwsh
-        run: |
-          $trend = Get-Content $env:GATEWAY_SLA_TREND_SNAPSHOT_JSON | ConvertFrom-Json
-          $rolling = $trend.rolling_baseline
-          function FmtOpt([object]$value) {
-            if ($null -eq $value) { return "-" }
-            $text = "$value".Trim()
-            if ([string]::IsNullOrEmpty($text)) { return "-" }
-            return $text
-          }
-          $lines = @(
-            "## Gateway SLA Trend Summary",
-            "",
-            "| status | latest_sla_status | baseline_count |",
-            "|---|---|---:|",
-            "| $($trend.status) | $(FmtOpt $trend.latest.sla_status) | $(FmtOpt $rolling.count) |",
-            "",
-            "- `trend_artifacts`: gateway_sla_trend_snapshot.json, summary.md"
-          )
-          $lines -join "`n" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
-
-      - name: Summary - Cross-service benchmark suite
-        shell: pwsh
-        run: |
-          $suite = Get-Content "runs/ci-smoke-cross-service-suite/cross_service_benchmark_suite.json" | ConvertFrom-Json
-          function FmtOpt([object]$value) {
-            if ($null -eq $value) { return "-" }
-            $text = "$value".Trim()
-            if ([string]::IsNullOrEmpty($text)) { return "-" }
-            return $text
-          }
-          $degradedCount = if ($null -eq $suite.degraded_services) { 0 } else { $suite.degraded_services.Count }
-          $lines = @(
-            "## Cross-Service Benchmark Suite",
-            "",
-            "| status | overall_sla_status | degraded_services_count |",
-            "|---|---|---:|",
-            "| $($suite.status) | $($suite.overall_sla_status) | $degradedCount |",
-            "",
-            "| service | status | sla_status | sample_count | latency_p95_ms |",
-            "|---|---|---|---:|---:|"
-          )
-          foreach ($row in @($suite.summary_matrix)) {
-            $lines += "| $($row.source) | $($row.status) | $($row.sla_status) | $(FmtOpt $row.sample_count) | $(FmtOpt $row.latency_p95_ms) |"
-          }
-          $lines -join "`n" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
-
-      - name: Summary - Streamlit smoke summary
-        shell: pwsh
-        run: |
-          $streamlit = Get-Content "runs/ci-smoke-streamlit/streamlit_smoke_summary.json" | ConvertFrom-Json
-          $tabsCount = if ($null -eq $streamlit.tabs_detected) { 0 } else { $streamlit.tabs_detected.Count }
-          $missingCount = if ($null -eq $streamlit.missing_sources) { 0 } else { $streamlit.missing_sources.Count }
-          $lines = @(
-            "## Streamlit Smoke Summary",
-            "",
-            "| status | startup_ok | tabs_detected_count | missing_sources_count |",
-            "|---|---|---:|---:|",
-            "| $($streamlit.status) | $($streamlit.startup_ok) | $tabsCount | $missingCount |"
-          )
-          $lines -join "`n" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
-
-      - name: Summary - ATM10 companion eval
-        shell: pwsh
-        run: |
-          $reportPath = Get-ChildItem -Path "eval-results/ci-companion-core" -Recurse -Filter "atm10_eval_report.json" | Sort-Object FullName | Select-Object -Last 1
-          if ($null -eq $reportPath) {
-            throw "ATM10 companion eval report not found"
-          }
-          $report = Get-Content $reportPath.FullName | ConvertFrom-Json
-          $lines = @(
-            "## ATM10 Companion Eval",
-            "",
-            "| suite | status | passed | failed |",
-            "|---|---|---:|---:|",
-            "| $($report.suite_id) | $($report.status) | $($report.passed_count) | $($report.failed_count) |",
-            "",
-            "| case | status |",
-            "|---|---|"
-          )
-          foreach ($case in @($report.cases)) {
-            $lines += "| $($case.id) | $($case.status) |"
-          }
-          $lines -join "`n" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
-
-      - name: Upload artifact - Product smoke and eval summaries
-        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f
-        with:
-          name: smoke-contract-summaries
-          path: |
-            runs/ci-smoke-phase-a/smoke_summary.json
-            runs/ci-smoke-retrieve/smoke_summary.json
-            runs/ci-smoke-eval/smoke_summary.json
-            eval-results/ci-companion-core/**/atm10_eval_report.json
-            runs/ci-smoke-gateway-core/gateway_smoke_summary.json
-            runs/ci-smoke-gateway-hybrid/gateway_smoke_summary.json
-            runs/ci-smoke-gateway-automation/gateway_smoke_summary.json
-            runs/ci-smoke-gateway-http-core/gateway_http_smoke_summary.json
-            runs/ci-smoke-gateway-http-hybrid/gateway_http_smoke_summary.json
-            runs/ci-smoke-gateway-http-automation/gateway_http_smoke_summary.json
-            runs/ci-smoke-gateway-sla/gateway_sla_summary.json
-            runs/ci-smoke-gateway-sla-trend/**/gateway_sla_trend_snapshot.json
-            runs/ci-smoke-gateway-sla-trend/**/summary.md
-            runs/ci-smoke-cross-service-suite/cross_service_benchmark_suite.json
-            runs/ci-smoke-cross-service-suite/**/service_sla_summary.json
-            runs/ci-smoke-cross-service-suite/**/summary.md
-            runs/ci-smoke-streamlit/streamlit_smoke_summary.json
-
-      - name: Upload artifact - Dependency audit
-        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f
-        with:
-          name: dependency-audit-report
-          path: |
-            runs/ci-dependency-audit/**/run.json
-            runs/ci-dependency-audit/**/dependency_inventory.json
-            runs/ci-dependency-audit/**/dependency_findings.json
-            runs/ci-dependency-audit/**/security_audit.json
-            runs/ci-dependency-audit/**/summary.md
+          atm10 eval `
+            --suite companion-core `
+            --runs-dir runs/ci-package-eval `
+            --state-dir .atm10-ci-state/eval `
+            --reports-dir eval-results/ci-package-core

@@ -43,4 +43,4 @@ def test_antifragility_docs_are_linked_from_public_surfaces() -> None:
     assert "stressor_receipt.json" in runbook_text
     assert "docs/ANTIFRAGILITY_FIRST_WAVE.md" in source_of_truth_text
     assert "run_hybrid_query" in antifragility_text
-    assert "pilot_runtime_loop" in antifragility_text
+    assert "pilot_runtime_loop" not in antifragility_text

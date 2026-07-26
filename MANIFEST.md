@@ -1,121 +1,77 @@
-# MANIFEST.md
+# ATM10-Agent manifest
 
 Current as of: 2026-07-25
 
-## Snapshot
+## Product
 
-- Project: `atm10-agent`
-- Target platform: Windows 11 + PowerShell 7
-- Target Python: 3.11+ (validated on 3.12.10)
-- Current repository validation is green (see CI for the executable evidence).
+`ATM10-Agent` is an autonomous local-first ATM10 companion. One installable
+package, `atm10_agent`, owns:
 
-## Architecture posture
+1. perception;
+2. interpretation;
+3. file-backed world recall and product KAG;
+4. cited response/plan;
+5. optional dry-run action and voice;
+6. append-only trace and deterministic replay.
 
-- `ATM10-Agent` is transitioning to an autonomous modular monolith around
-  `Perception -> Interpretation -> World/Memory -> Response/Plan -> optional
-  Action/Voice -> Trace`.
-- The repository now contains an installable `atm10_agent` package, one
-  `CompanionApp` composition root, and the dependency-light `atm10
-  doctor|run|replay|eval` CLI. This is the primary product path for new work.
-- The accepted boundary and current migration ledger live in
-  `docs/autonomy/README.md`. The old gateway + Streamlit + pilot shell remains
-  present as migration compatibility and protected-behavior evidence, not as
-  the target architecture or a second product.
-- The deterministic core must install, build, test, run, and release without
-  sibling repositories, `.aoa`, OS skill profiles, shared validators, shared
-  runtimes, live services, models, or hidden workstation configuration.
-- Windows capture, OpenVINO, remote models, Qdrant, Neo4j, FastAPI, Streamlit,
-  and voice remain candidate optional adapters. Windows 11 + PowerShell 7
-  acceptance remains first-class and separate from the portable stub/replay
-  gate.
+The composition root is `atm10_agent.app.CompanionApp`. The supported command
+surface is `atm10 doctor|run|replay|eval`.
 
 ## Active capabilities
 
-- Autonomous package core: `atm10_agent.app.CompanionApp` executes a
-  deterministic in-process perception, interpretation, file-world/product-KAG,
-  response, optional dry-run action/voice, and trace turn. `atm10 replay`
-  reuses the recorded response and citations without invoking providers;
-  mutable state and append-only trace evidence use separate directories.
-- Package-owned action and eval contracts:
-  `atm10_agent.action` owns deterministic intent templates, validation,
-  normalization, trace-correlated dry-run expansion, and the hard
-  `executed=false` fence. `atm10 eval --suite companion-core` exercises the
-  stub turn, citations, file product KAG, all canonical action intents,
-  optional-provider degradation, state/trace separation, useful negatives,
-  and provider-free replay without live services or network access.
+- dependency-free core metadata and import-safe package modules;
+- deterministic placeholder perception and replaceable VLM providers;
+- fixture or user-file retrieval with ranked citations;
+- local file KAG with optional Neo4j backend;
+- explicit hybrid degradation and useful negative evidence;
+- deterministic `M6.19` plans for `open_quest_book`,
+  `check_inventory_tool`, and `open_world_map`;
+- hard dry-run action fence with `executed=false`;
+- explicit no-provider voice degradation;
+- separate mutable state, turn traces, action traces, and eval reports;
+- Windows ATM10 session discovery plus package-owned DXcam-first capture with
+  Pillow fallback evidence;
+- executable seven-case `companion-core` product eval;
+- Windows package tests/smoke and portable installed-package Linux smoke.
 
-The remaining entries describe the green pre-rebuild compatibility baseline.
-They are protected only where `docs/autonomy/protected-behavior.json` names
-their semantics; scripts, services, workflows, and topology may be replaced or
-removed.
+## Retired architecture
 
-- Phase A: `scripts/phase_a_smoke.py` (screenshot -> run artifacts).
-- Phase B retrieval: `normalize -> retrieve -> eval` + profile layer `baseline|ov_production`.
-- KAG: file baseline + Neo4j (`build -> sync -> query -> eval`).
-- Hybrid planner: `scripts/hybrid_query_demo.py` + additive `hybrid_query` gateway flow with `baseline_first` default (`retrieval first -> file KAG expansion -> RRF merge`) and additive `combo_a` parity profile (`qdrant + neo4j`), with machine-readable degraded fallbacks (`retrieval_only_fallback|kag_only_fallback|grounding_unavailable`) instead of hard failure when grounding stages are unavailable.
-- Hybrid antifragility first wave: `scripts/hybrid_query_demo.py` now emits one source-owned `stressor_receipt_v1` for bounded `planner_status=retrieval_only_fallback`, while `schemas/adaptation_delta_v1.json` and `examples/` keep the reviewed-change companion surface explicit without auto-emitting deltas.
-- Cross-service SLA + benchmark suite: `scripts/cross_service_benchmark_suite.py` + normalized `service_sla_summary_v1` artifacts for `voice_asr`, `voice_tts`, `retrieval`, and `kag`, aggregated into `cross_service_benchmark_suite_v1`, with `baseline_first` default and additive `profile=combo_a` (`voice_runtime_service + tts_runtime_service + qdrant + neo4j`).
-- Owner-local measurements: `stats/` defines and locally validates the
-  cross-service SLA pass ratio over the exact expected lanes of one completed
-  suite without a sibling schema or validator checkout.
-- KAG nightly guardrail: `.github/workflows/kag-neo4j-guardrail-nightly.yml`.
-- Combo A live parity workflow: `.github/workflows/combo-a-profile-smoke.yml` (`workflow_dispatch` + nightly schedule, external `Qdrant`/`Neo4j`, live operator snapshot capture, combo_a gateway smoke, combo_a cross-service suite, combo_a nightly operating-cycle decision surface, promoted strict `fail_on_hold` only when eligible).
-- Trend snapshot: `scripts/kag_guardrail_trend_snapshot.py` (rolling-baseline + severity flags + `critical_policy`).
-- Automation compatibility: `automation_dry_run` and
-  `intent_to_automation_plan` are thin file-artifact wrappers over
-  `atm10_agent.action`; the remaining chain/check scripts exist only for the
-  gateway-era compatibility consumer and are not the product owner.
-- Automation intents: canonical templates include `open_quest_book`, `check_inventory_tool`, `open_world_map`; the public intent -> plan -> dry-run chain has rollout records for all three under `M6.19`.
-- CI core smoke summaries: `scripts/collect_smoke_run_summary.py` (`phase_a_smoke|retrieve_demo|eval_retrieval` -> `smoke_summary.json`).
-- Gateway SLA trend: `scripts/gateway_sla_trend_snapshot.py` (`gateway_sla_summary_v1` history -> `gateway_sla_trend_snapshot_v1`).
-- Gateway fail_nightly readiness: `scripts/check_gateway_sla_fail_nightly_readiness.py` (`gateway_sla_fail_nightly_readiness_v1`).
-- Gateway fail_nightly governance: `scripts/check_gateway_sla_fail_nightly_governance.py` (`gateway_sla_fail_nightly_governance_v1`).
-- Gateway fail_nightly progress: `scripts/check_gateway_sla_fail_nightly_progress.py` (`gateway_sla_fail_nightly_progress_v1`).
-- Gateway fail_nightly remediation: `scripts/check_gateway_sla_fail_nightly_remediation.py` (`gateway_sla_fail_nightly_remediation_v1`).
-- Gateway fail_nightly integrity: `scripts/check_gateway_sla_fail_nightly_integrity.py` (`gateway_sla_fail_nightly_integrity_v1`).
-- Gateway manual fallback loop: `scripts/run_gateway_sla_manual_nightly.py` + `scripts/check_gateway_sla_manual_cycle_summary.py` + `scripts/check_gateway_sla_manual_cadence_brief.py`.
-- Gateway single-cycle operator helper: `scripts/run_gateway_sla_operating_cycle.py` (`gateway_sla_operating_cycle_v1`, promoted-policy decision surface with `effective_policy/promotion_state/next_review_at_utc`, plus reuse-fresh-latest or manual-fallback execution).
-- Gateway SLA readiness nightly: `.github/workflows/gateway-sla-readiness-nightly.yml` with `readiness/governance/progress/transition/remediation/integrity/operating_cycle` summary/artifact wiring and promoted `fail_nightly` strict gate only when the operating cycle marks baseline eligible.
-- Gateway operator APIs: `GET /v1/operator/snapshot`, `GET /v1/operator/runs`, `GET /v1/operator/history`, `GET /v1/operator/safe-actions`, `POST /v1/operator/safe-actions/run` from `scripts/gateway_v1_http_service.py`, with additive `supported_profiles`, `operator_context.profiles.combo_a`, startup/governance surfaces, compact `operator_context.triage`, promoted baseline SLA policy posture, additive `combo_a` nightly policy posture, and `combo_a` smoke/suite/operating-cycle sources in run/history views.
-- Streamlit operator panel: `scripts/streamlit_operator_panel.py` + `scripts/streamlit_operator_panel_smoke.py`, with gateway-first `Stack Health`, `Run Explorer`, `Latest Metrics`, gateway-mediated smoke-only `Safe Actions`, scenario-first operator blocks for compact operator triage + dedicated `Return / Recovery` section + startup-session + baseline SLA policy posture, and profile-aware baseline vs `combo_a` rows/actions including `Combo A Promotion` in the existing tabs.
-- Observer pilot runtime slice: `scripts/pilot_runtime_loop.py` + `scripts/pilot_turn_smoke.py`, with local `F8` push-to-talk, `DXcam`-preferred Windows `monitor|region` screen capture (`Pillow` fallback), explicit `host_profile` contract (`ov_intel_core_ultra_local` as the current validated repo-host baseline), parallel `Whisper GenAI (NPU) + OpenVINO VLM (GPU)` staging before optional `gateway hybrid_query(profile=combo_a) -> OpenVINO grounded reply`, additive ATM10 evidence artifacts `atm10_session_probe_v1` and `live_hud_state_v1`, startup warmup rollups for live ASR/VLM/reply providers, quiet-input ASR preprocessing plus low-signal transcript gating for live turns, short player-facing one-sentence replies with Russian default language policy, transcript-quality / reply-mode surfacing, pilot-side opportunistic hybrid fast-fail, benchmark-backed `GPU/GPU` placement for the active VLM/reply pair on the repo host, and resilient degraded behavior when `combo_a` grounding or live TTS engines are unavailable, with `Piper` as the preferred live TTS engine when explicitly configured, using the in-process Python runtime before subprocess fallback and Windows-host audible fallback before last-resort silent audio.
-- Observer pilot readiness helper: `scripts/check_pilot_runtime_readiness.py`, publishing `pilot_runtime_readiness_v1` from the latest startup artifact, pilot runtime status, referenced pilot turn, ATM10 session probe, and live HUD artifact, with `ready|attention|blocked` acceptance posture and manual next-step guidance.
-- Pilot live preflight helper: `scripts/check_pilot_live_preflight.py`, publishing `pilot_live_preflight_v1` before ATM10 launches by checking pilot/runtime health endpoints, provider-init readiness, and an optional microphone + ASR probe using the same pilot input-device path.
-- Primary operator startup profile: `scripts/start_operator_product.py` (canonical local launch path for `gateway + Streamlit`, now with explicit `host_profile` resolution for launcher/pilot defaults, opt-in managed `voice_runtime_service` / `tts_runtime_service` / `pilot_runtime`, external `Qdrant` / `Neo4j` readiness URLs, `startup_plan.json`, session-state checkpoints, additive `last_return_event` / `return_loop_state`, artifact pointers for the operator surface, default `openvino` live providers, managed live ASR/pilot tuning defaults, and explicit `stub` passthrough for diagnostics only).
-- Operator recurrence recovery surfaces: `docs/RECURRENCE_OPERATOR_RECOVERY.md`, `scripts/operator_return_recovery.py`, `schemas/gateway_operator_return_event.schema.json`, `schemas/gateway_operator_return_summary.schema.json`, `schemas/operator_return_reason_catalog.schema.json`, and public examples under `examples/`, with startup + pilot emitters, additive `operator_context.returning`, existing gateway operator endpoints, and recommendation-only reuse of existing smoke safe actions.
-- Operator snapshot and Streamlit pilot surfaces: `scripts/operator_product_snapshot.py` and `scripts/streamlit_operator_panel.py` additively publish `operator_context.pilot_runtime`, `operator_context.last_turn_summary`, `operator_context.pilot_readiness`, `operator_context.returning`, ATM10 session/HUD evidence summaries, active `host_profile`, provider/tts-engine visibility, provider warmup rollups, transcript-quality state, reply-mode visibility, and `Piper` readiness diagnostics (`preferred_tts_engine`, `active_tts_engine_last_turn`, `piper_available`, `piper_prewarm_ok`, `tts_degraded_reason`) in the `Pilot runtime` / `Pilot readiness` / `Return / Recovery` sections of `Stack Health`.
-- Current pilot live-debug note: `DXcam` + windowed ATM10 fixed the earlier stale-screen capture problem, and the repo now artifacts `push-to-talk` capture diagnostics plus restored parallel `ASR + vision` staging; current manual acceptance is still blocked by unacceptable live latency and intermittent `No audio frames were captured during push-to-talk.` turns, so reopen should begin from the latest `pilot_turn.json` evidence rather than adding new routing shortcuts.
-- Active-stack device benchmark: `scripts/benchmark_pilot_openvino_devices.py`, writing artifacted `vision` (`Qwen2.5-VL-7B`) and `grounded_reply` (`Qwen3-8B`) device-comparison runs plus aggregate `vision + grounded_reply` wall-time summaries without mutating runtime defaults automatically.
-- Package dependency profiles: optional extras in `pyproject.toml`; the
-  `requirements*.txt` family remains transitional compatibility input until
-  dependency/release normalization is complete.
-- Dependency audit: `scripts/dependency_audit.py` + report-only CI step with uploaded `dependency-audit-report` artifact.
+The gateway, HTTP service, gateway-SLA promotion, cross-service benchmark,
+operator snapshot/recovery, Streamlit panel, pilot loop, separate HTTP
+voice/TTS services, and Fedora parallel launcher are not active product
+surfaces. Their protected semantics now live behind package contracts and
+tests; their process topology, schemas, workflows, and compatibility runners
+were removed.
 
-## Canonical docs
+FastAPI and Streamlit are no longer declared package dependencies. A future UI
+or transport must be a small optional adapter over `CompanionApp`, not a
+second owner of the turn.
 
-- Current public status: `MANIFEST.md`
-- Public roadmap: `ROADMAP.md`
-- Autonomy and migration contract: `docs/autonomy/README.md`
-- Runnable commands: `docs/RUNBOOK.md`
-- Owner-local first-wave antifragility contract: `docs/ANTIFRAGILITY_FIRST_WAVE.md`
-- Machine/runtime host policy: `docs/QWEN3_MODEL_STACK.md`
-- Operator recurrence landing: `docs/RECURRENCE_OPERATOR_RECOVERY.md`
-- Doc roles/policy: `docs/SOURCE_OF_TRUTH.md`
-- Durable public decision rationale: `docs/decisions/README.md`
-- Archived tracks: `docs/ARCHIVED_TRACKS.md`
+## Acceptance posture
 
-## Public docs boundary
+Currently proven in source:
 
-- Local maintainer working docs are ignored and intentionally not part of the public repo surface.
-- Future internal-only notes, session chronology, and PR/release scratch docs belong under ignored `docs/internal/**`.
-- Local session notes/templates and PR coordination docs are ignored and do not ship in the public repo tree.
+- package core behavior and product eval;
+- package boundary without `scripts.*` imports or repository path injection;
+- standalone repository-owned CI routes;
+- import-safe optional dependency boundaries;
+- Windows capture/session contracts through deterministic tests.
 
-## Data/commit policy (short)
+Still required before the autonomy gate may be called complete:
 
-Never commit:
+- reproducible dependency resolution and release artifact receipts;
+- clean-environment/fresh-clone proof from the final tree;
+- live Windows 11 + PowerShell 7 session, capture, trace, and dry-run evidence;
+- merged-main verification after all migration slices.
 
-- `models/**`
-- `data/**` dumps
-- `runs/**`
-- `.codex/**/logs/**`
-- secrets/tokens
+Donor intake is blocked until those gates are green.
+
+## Canonical routes
+
+- architecture and dependency law: `docs/autonomy/README.md`
+- direction and definition of done: `ROADMAP.md`
+- active commands: `docs/RUNBOOK.md`
+- product-edge claims: `docs/PRODUCT_EDGE_POSTURE.md`
+- document authority: `docs/SOURCE_OF_TRUTH.md`
+- durable decisions: `docs/decisions/README.md`
+- bounded hybrid degradation receipts: `docs/ANTIFRAGILITY_FIRST_WAVE.md`

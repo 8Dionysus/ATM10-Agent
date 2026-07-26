@@ -5,7 +5,8 @@ Root route card for `ATM10-Agent`.
 ## Purpose
 
 `ATM10-Agent` is a local-first ATM10 companion for Windows 11 and PowerShell 7.
-It combines perception, retrieval, KAG-in-project, safe automation, voice, gateway, operator-panel, public docs, artifacted runs, and regression coverage into one reproducible local companion stack.
+One installable package owns perception, interpretation, world/KAG,
+response/plan, optional dry-run action/voice, trace, and replay.
 It is an operator-facing project surface, not a federation-wide doctrine owner.
 
 ## Owner lane
@@ -14,9 +15,10 @@ This repository owns:
 
 - perception and HUD ingestion paths
 - retrieval and KAG paths inside this project
-- gateway, operator-panel, voice, service wrappers, safe automation intent to plan to dry-run flows
-- project-local recurrence, operator recovery, public docs, workflow hardening, tests, and explicitly defined stressor/adaptation receipts
-- owner-local statistical questions over companion service and operator evidence
+- provider interfaces, Windows capture/session evidence, and safe automation
+  intent-to-plan-to-dry-run flows
+- public docs, workflow hardening, tests, and explicitly defined
+  stressor/adaptation receipts
 
 It does not own:
 
@@ -97,7 +99,6 @@ python -m pytest
 
 If a runnable entrypoint changes, run the nearest smoke path or add targeted tests. Operational examples remain in `docs/RUNBOOK.md`.
 If durable decision rationale changes, run `python -m scripts.generate_decision_indexes --check`, `python -m scripts.validate_decision_records`, and the owning targeted tests.
-For `stats/` or its cross-service producer, also run `python scripts/validate_local_stats_port.py`.
 
 ## Report
 

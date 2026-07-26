@@ -38,20 +38,26 @@ def test_product_package_never_imports_the_scripts_shell() -> None:
         assert pattern.search(path.read_text(encoding="utf-8")) is None, path
 
 
-def test_legacy_action_commands_are_thin_package_wrappers() -> None:
-    dry_run = (REPO_ROOT / "scripts" / "automation_dry_run.py").read_text(
-        encoding="utf-8"
+def test_retired_action_and_control_plane_runners_are_absent() -> None:
+    retired = (
+        "automation_dry_run.py",
+        "automation_intent_chain_smoke.py",
+        "intent_to_automation_plan.py",
+        "gateway_v1_local.py",
+        "gateway_v1_http_service.py",
+        "pilot_runtime_loop.py",
+        "start_operator_product.py",
+        "streamlit_operator_panel.py",
     )
-    intent = (REPO_ROOT / "scripts" / "intent_to_automation_plan.py").read_text(
-        encoding="utf-8"
-    )
+    for name in retired:
+        assert not (REPO_ROOT / "scripts" / name).exists(), name
 
-    assert "from atm10_agent.action import build_dry_run_execution, normalize_plan" in dry_run
-    assert "from atm10_agent.action import build_plan_from_intent" in intent
-    for retired_duplicate in (
-        "def _normalize_action(",
-        "def _build_execution_plan(",
-        "def build_automation_plan_from_intent(",
-    ):
-        assert retired_duplicate not in dry_run
-        assert retired_duplicate not in intent
+
+def test_windows_capture_is_package_owned_and_import_safe() -> None:
+    capture_module = (
+        REPO_ROOT / "src" / "atm10_agent" / "perception" / "windows_capture.py"
+    )
+    assert capture_module.is_file()
+    text = capture_module.read_text(encoding="utf-8")
+    assert "import dxcam" in text
+    assert text.index("def _get_dxcam_camera") < text.index("import dxcam")

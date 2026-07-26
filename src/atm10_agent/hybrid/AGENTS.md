@@ -18,15 +18,16 @@ This directory currently centers on `planner.py`, the merge and orchestration la
 ## Change rules
 
 - Treat score fusion, citation ordering, and fallback policy as semantic changes.
-- If `planner.py` changes user-visible behavior, update the matching scripts, gateway surfaces, and tests in the same diff.
+- If `planner.py` changes user-visible behavior, update its package consumers,
+  focused scripts, and tests in the same diff.
 - Avoid burying policy decisions in convenience helpers without tests.
 
 ## Validate
 
-Run the nearest hybrid and gateway-contract coverage:
+Run the nearest hybrid coverage:
 
 ```powershell
 cd <repo-root>
 .\.venv\Scripts\Activate.ps1
-python -m pytest tests/test_hybrid_query_demo.py tests/test_gateway_v1_local.py tests/test_gateway_v1_contract_parity_matrix.py tests/test_cross_service_benchmark_suite.py
+python -m pytest tests/test_hybrid_query_demo.py tests/test_companion_app.py tests/test_companion_eval.py
 ```

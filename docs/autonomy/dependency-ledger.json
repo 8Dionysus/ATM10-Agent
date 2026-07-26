@@ -32,7 +32,7 @@
     {
       "id": "core.script-shell",
       "surface": "scripts/*.py with sys.path injection and scripts.* imports",
-      "current_owner": "scripts",
+      "current_owner": "focused maintainer tools in scripts",
       "target_owner": "thin wrappers over atm10_agent.cli or deletion",
       "disposition": "rewrite",
       "required_for_core": false,
@@ -41,7 +41,7 @@
     {
       "id": "core.gateway-governance",
       "surface": "gateway SLA readiness, governance, progress, transition, remediation, integrity, and operating-cycle layers",
-      "current_owner": "scripts, docs/RUNBOOK.md, workflows, tests",
+      "current_owner": "retired in source",
       "target_owner": "none; retain only product-relevant degraded and trace semantics",
       "disposition": "cut",
       "required_for_core": false,
@@ -59,8 +59,8 @@
     {
       "id": "adapter.windows-edge",
       "surface": "ATM10 window identity, DXcam/Pillow capture, PowerShell launch",
-      "current_owner": "pilot runtime and host profile modules",
-      "target_owner": "atm10_agent.adapters.windows",
+      "current_owner": "atm10_agent session probe and perception.windows_capture",
+      "target_owner": "atm10_agent package Windows adapter boundary",
       "disposition": "optionalize",
       "required_for_core": false,
       "reason": "Windows remains first-class acceptance evidence but cannot prevent stub/replay use elsewhere."
@@ -104,7 +104,7 @@
     {
       "id": "adapter.gateway-ui",
       "surface": "FastAPI gateway and Streamlit panel",
-      "current_owner": "gateway and panel scripts",
+      "current_owner": "retired legacy shell",
       "target_owner": "optional presentation adapters",
       "disposition": "optionalize",
       "required_for_core": false,
@@ -149,9 +149,9 @@
     {
       "id": "federation.stats-validator",
       "surface": "aoa-stats checkout, schemas, and validate_local_stats_port delegate",
-      "current_owner": "aoa-stats",
-      "target_owner": "owner-local measurements and tests, if retained",
-      "disposition": "rewrite",
+      "current_owner": "retired in source",
+      "target_owner": "none; future measurements must be package-local",
+      "disposition": "cut",
       "required_for_core": false,
       "reason": "Useful measurement meaning can stay without a required sibling validator."
     },
