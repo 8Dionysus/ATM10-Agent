@@ -24,9 +24,10 @@ def test_companion_core_eval_is_standalone_and_writes_separate_evidence(
         now=FIXED_NOW,
     )
 
-    assert report["schema_version"] == "atm10_eval_report_v1"
+    assert report["schema_version"] == "atm10_eval_report_v2"
     assert report["suite_id"] == "atm10-companion-core"
     assert report["status"] == "pass"
+    assert report["verdict"] == "supports_bounded_claim"
     assert report["case_count"] == 7
     assert report["passed_count"] == 7
     assert report["failed_count"] == 0
@@ -40,6 +41,13 @@ def test_companion_core_eval_is_standalone_and_writes_separate_evidence(
     assert reports_dir.is_dir()
     assert len({runs_dir.resolve(), state_dir.resolve(), reports_dir.resolve()}) == 3
     assert {case["status"] for case in report["cases"]} == {"pass"}
+    assert report["claim"]["authority"] == "ATM10-Agent"
+    assert report["scope"]["out"]
+    assert report["blind_spots"]
+    assert report["provenance"]
+    assert {
+        metric["definition"]["authority_ceiling"] for metric in report["metrics"]
+    } == {"measurement_only_not_proof"}
 
 
 def test_cli_eval_supports_a_fixed_clock_and_nonzero_contract(

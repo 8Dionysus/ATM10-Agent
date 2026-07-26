@@ -59,15 +59,25 @@ def validate_local_evals() -> list[str]:
                 continue
             case_id = str(case.get("id", "")).strip()
             test_ref = str(case.get("test_ref", "")).strip()
-            protects = str(case.get("protects", "")).strip()
+            raw_protects = case.get("protects")
+            protects = (
+                [str(item).strip() for item in raw_protects]
+                if isinstance(raw_protects, list)
+                else [str(raw_protects or "").strip()]
+            )
             if not case_id or case_id in case_ids:
                 issues.append(f"{raw_ref}: missing or duplicate case id {case_id!r}")
             case_ids.add(case_id)
             if not test_ref or not (REPO_ROOT / test_ref).is_file():
                 issues.append(f"{raw_ref}: missing test_ref {test_ref!r}")
-            if not protects.startswith("PB-"):
-                issues.append(f"{raw_ref}: invalid protected behavior ref {protects!r}")
-            protected_ids.add(protects)
+            if not protects:
+                issues.append(f"{raw_ref}: case {case_id!r} has no protected behavior refs")
+            for protects_ref in protects:
+                if not protects_ref.startswith("PB-"):
+                    issues.append(
+                        f"{raw_ref}: invalid protected behavior ref {protects_ref!r}"
+                    )
+                protected_ids.add(protects_ref)
 
     if len(protected_ids) < 5:
         issues.append("local eval suite must protect at least five behavior contracts")

@@ -76,6 +76,7 @@
         "summary": "Create ATM10-local eval specifications and reports with bounded claims, explicit scope, categorical verdicts, provenance, regression notes, blind spots, and portability limits."
       },
       "target_surfaces": [
+        "src/atm10_agent/proof/provenance.py",
         "src/atm10_agent/proof/evals.py",
         "src/atm10_agent/evals/__init__.py"
       ],
@@ -83,7 +84,7 @@
         "tests/test_proof_contract.py",
         "tests/test_companion_eval.py"
       ],
-      "status": "admitted_for_implementation",
+      "status": "adapted",
       "runtime_dependency": false,
       "auto_sync": false,
       "rejected_surfaces": [
@@ -192,7 +193,7 @@
         "tests/test_measurement_contract.py",
         "tests/test_proof_contract.py"
       ],
-      "status": "admitted_for_implementation",
+      "status": "adapted",
       "runtime_dependency": false,
       "auto_sync": false,
       "rejected_surfaces": [

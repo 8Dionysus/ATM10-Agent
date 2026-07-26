@@ -44,6 +44,8 @@ repository, `.aoa`, OS skill profile, shared validator, or network access.
   the current physical run remains a separate release gate;
 - append-only run traces, mutable state, and eval reports use separate
   directories;
+- eval reports keep bounded claims, categorical verdicts, provenance, blind
+  spots, portability, and measurement-only metrics explicit;
 - the legacy gateway/operator/pilot/service control plane is retired.
 
 The useful `M6.19` intent vocabulary remains protected through the package:

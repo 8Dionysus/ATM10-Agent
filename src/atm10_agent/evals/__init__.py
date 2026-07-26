@@ -9,11 +9,81 @@ from typing import Any, Callable
 from atm10_agent.action import available_intents, plan
 from atm10_agent.app import CompanionApp
 from atm10_agent.contracts import TurnRequest
+from atm10_agent.proof import (
+    EVAL_REPORT_SCHEMA_VERSION,
+    EvalCaseResult,
+    EvalSpec,
+    ProvenanceRef,
+    build_eval_report,
+)
 from atm10_agent.trace import write_json
 
 
-EVAL_REPORT_SCHEMA_VERSION = "atm10_eval_report_v1"
 COMPANION_CORE_SUITE_ID = "atm10-companion-core"
+COMPANION_CORE_SPEC = EvalSpec(
+    suite_id=COMPANION_CORE_SUITE_ID,
+    bounded_claim=(
+        "The dependency-free ATM10 core executes its deterministic companion "
+        "loop, cited file world, dry-run actions, explicit degradation, "
+        "separate state/trace storage, useful negatives, and replay."
+    ),
+    in_scope=(
+        "deterministic stub turn",
+        "file-backed cited world and product KAG",
+        "dry-run action fence",
+        "explicit optional-provider degradation",
+        "state and trace separation",
+        "negative cases and provider-free replay",
+    ),
+    out_of_scope=(
+        "live Windows session or capture",
+        "live model, voice, graph, vector, or remote provider quality",
+        "general gameplay correctness",
+        "real keyboard or mouse execution",
+    ),
+    case_ids=(
+        "deterministic-stub-turn",
+        "cited-file-world",
+        "dry-run-action-fence",
+        "optional-provider-honesty",
+        "state-trace-separation",
+        "useful-negative-cases",
+        "provider-free-replay",
+    ),
+    portability_invariants=(
+        "case meaning and categorical verdict mapping",
+        "dependency-free execution with no network or live service",
+        "dry-run no-input safety and cited evidence requirements",
+    ),
+    replaceable_surfaces=(
+        "clock and artifact directories",
+        "fixture content that preserves the named case contract",
+        "report sink and runner presentation",
+    ),
+    claim_limit=(
+        "A passing report supports only the named deterministic core claim; "
+        "it does not prove live providers, Windows acceptance, gameplay "
+        "quality, or product benefit."
+    ),
+)
+_CASE_EVIDENCE = {
+    "deterministic-stub-turn": "tests/test_companion_eval.py",
+    "cited-file-world": "tests/test_companion_eval.py",
+    "dry-run-action-fence": "tests/test_action_contract.py",
+    "optional-provider-honesty": "tests/test_companion_eval.py",
+    "state-trace-separation": "tests/test_companion_eval.py",
+    "useful-negative-cases": "tests/test_companion_eval.py",
+    "provider-free-replay": "tests/test_companion_eval.py",
+}
+_CASE_LIMITATIONS = {
+    "deterministic-stub-turn": "Does not exercise a live perception provider.",
+    "cited-file-world": "Covers fixture-backed sources, not general world truth.",
+    "dry-run-action-fence": "Proves no input emission, not successful game control.",
+    "optional-provider-honesty": "Covers the absent-provider path, not live audio quality.",
+    "state-trace-separation": "Checks local files, not crash durability or concurrency.",
+    "useful-negative-cases": "Covers named negatives, not every malformed request.",
+    "provider-free-replay": "Checks deterministic artifacts, not live-provider reproducibility.",
+}
 
 
 def _iso_utc(now: datetime) -> str:
@@ -233,28 +303,58 @@ def run_companion_core_suite(
         _case("useful-negative-cases", ("PB-012",), useful_negatives),
         _case("provider-free-replay", ("PB-012",), replay),
     ]
-    passed_count = sum(case["status"] == "pass" for case in cases)
     report_dir = _create_report_dir(reports_dir, observed_at)
     report_path = report_dir / "atm10_eval_report.json"
-    report = {
-        "schema_version": EVAL_REPORT_SCHEMA_VERSION,
-        "suite_id": COMPANION_CORE_SUITE_ID,
-        "status": "pass" if passed_count == len(cases) else "fail",
-        "observed_at_utc": _iso_utc(observed_at),
-        "case_count": len(cases),
-        "passed_count": passed_count,
-        "failed_count": len(cases) - passed_count,
-        "network_required": False,
-        "live_services_required": False,
-        "real_input_emitted": False,
-        "storage": {
+    case_results = tuple(
+        EvalCaseResult(
+            case_id=str(case["id"]),
+            status=str(case["status"]),
+            protects=tuple(str(item) for item in case["protects"]),
+            observed=case["observed"],
+            evidence=(
+                ProvenanceRef(
+                    kind="test",
+                    ref=_CASE_EVIDENCE[str(case["id"])],
+                    role="supporting",
+                ),
+            ),
+            limitation=_CASE_LIMITATIONS[str(case["id"])],
+            error=str(case["error"]) if "error" in case else None,
+        )
+        for case in cases
+    )
+    report = build_eval_report(
+        spec=COMPANION_CORE_SPEC,
+        cases=case_results,
+        observed_at_utc=_iso_utc(observed_at),
+        provenance=(
+            ProvenanceRef(
+                kind="source",
+                ref="atm10_agent.evals:run_companion_core_suite",
+                role="primary",
+            ),
+            ProvenanceRef(
+                kind="source",
+                ref="evals/suites/companion-core.json",
+                role="supporting",
+            ),
+        ),
+        blind_spots=(
+            "No live Windows 11 session, DXGI capture, or PowerShell edge is exercised.",
+            "No live model, voice, vector, graph, or remote provider quality is measured.",
+            "Fixture retrieval and citations do not establish general gameplay truth.",
+            "Dry-run action safety does not establish successful real input execution.",
+        ),
+        storage={
             "runs_root": str(runs_dir),
             "state_root": str(state_dir),
             "reports_root": str(reports_dir),
         },
-        "cases": cases,
-        "report_path": str(report_path),
-    }
+        report_path=str(report_path),
+        network_required=False,
+        live_services_required=False,
+        real_input_emitted=False,
+    )
     write_json(report_path, report)
     return report
 

@@ -29,6 +29,9 @@ REQUIRED_WHEEL_PATHS = {
     "atm10_agent/app.py",
     "atm10_agent/cli.py",
     "atm10_agent/data/default_world.jsonl",
+    "atm10_agent/proof/evals.py",
+    "atm10_agent/proof/measurements.py",
+    "atm10_agent/proof/provenance.py",
     "atm10_agent/windows_acceptance.py",
 }
 FORBIDDEN_WHEEL_ROOTS = {"scripts", "tests", ".aoa"}
@@ -123,6 +126,8 @@ def inspect_sdist(sdist_path: Path) -> dict[str, Any]:
     }
     required = {
         "docs/intake/donor-ledger.json",
+        "evals/manifest.json",
+        "evals/suites/companion-core.json",
         "pylock.toml",
         "pyproject.toml",
         "schemas/donor_intake_ledger_v1.json",
@@ -130,6 +135,9 @@ def inspect_sdist(sdist_path: Path) -> dict[str, Any]:
         "schemas/windows_live_acceptance_verification_v1.json",
         "src/atm10_agent/app.py",
         "src/atm10_agent/cli.py",
+        "src/atm10_agent/proof/evals.py",
+        "src/atm10_agent/proof/measurements.py",
+        "src/atm10_agent/proof/provenance.py",
     }
     missing = sorted(required - relative_names)
     forbidden = sorted(

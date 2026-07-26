@@ -33,6 +33,10 @@ def test_donor_ledger_validates_and_has_unique_pinned_entries() -> None:
     assert isinstance(entries, list)
     assert {entry["id"] for entry in entries} == EXPECTED_DONORS
     assert len({entry["owner_repo"] for entry in entries}) == len(entries)
+    statuses = {entry["id"]: entry["status"] for entry in entries}
+    assert {
+        entry_id for entry_id, status in statuses.items() if status == "adapted"
+    } == {"donor.aoa-evals", "donor.aoa-stats"}
 
     for entry in entries:
         assert re.fullmatch(r"[0-9a-f]{40}", entry["revision"])
@@ -41,7 +45,7 @@ def test_donor_ledger_validates_and_has_unique_pinned_entries() -> None:
             "source_path": "LICENSE",
             "reviewed": True,
         }
-        assert entry["status"] == "admitted_for_implementation"
+        assert entry["status"] in {"admitted_for_implementation", "adapted"}
         assert entry["runtime_dependency"] is False
         assert entry["auto_sync"] is False
         assert entry["selected_paths"]
