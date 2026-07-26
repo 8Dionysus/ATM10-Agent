@@ -25,8 +25,8 @@ The implementation anchors are:
 ## Dependency boundary
 
 `pyproject.toml` declares no core runtime dependency. The `windows` extra owns
-DXcam, NumPy, and Pillow. Compatibility requirements files must preserve the
-same direction until they are replaced by reproducible resolution artifacts.
+DXcam, NumPy, and Pillow. `pylock.toml` records the dependency-free core
+resolution; no parallel requirements-file graph exists.
 
 ## Claim limit
 

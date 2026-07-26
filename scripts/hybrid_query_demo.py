@@ -2,27 +2,33 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Mapping
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-from atm10_agent.agent_core.combo_a_profile import (
-    COMBO_A_PROFILE,
-    DEFAULT_COMBO_A_NEO4J_DATABASE,
-    DEFAULT_COMBO_A_NEO4J_URL,
-    DEFAULT_COMBO_A_NEO4J_USER,
-    DEFAULT_COMBO_A_QDRANT_COLLECTION,
-    DEFAULT_COMBO_A_QDRANT_HOST,
-    DEFAULT_COMBO_A_QDRANT_PORT,
-    DEFAULT_COMBO_A_QDRANT_VECTOR_SIZE,
-    DEFAULT_PROFILE,
+from atm10_agent.hybrid import (
+    DEFAULT_NEO4J_DATABASE,
+    DEFAULT_NEO4J_URL,
+    DEFAULT_NEO4J_USER,
+    DEFAULT_QDRANT_COLLECTION,
+    DEFAULT_QDRANT_HOST,
+    DEFAULT_QDRANT_PORT,
+    DEFAULT_QDRANT_VECTOR_SIZE,
     docs_path_required,
-    profile_backends,
-    resolve_neo4j_password,
+    execute_hybrid_query,
 )
-from atm10_agent.hybrid import execute_hybrid_query
+
+
+def _resolve_neo4j_password(password: str | None) -> str:
+    if password is not None and str(password).strip():
+        return str(password)
+    from_env = os.environ.get("NEO4J_PASSWORD", "").strip()
+    if from_env:
+        return from_env
+    raise ValueError("Neo4j password is required: pass neo4j_password or set NEO4J_PASSWORD.")
 
 
 def _create_run_dir(runs_dir: Path, now: datetime) -> Path:
@@ -75,7 +81,7 @@ def _infer_stressor_class(warnings: list[str]) -> str:
 def _build_stressor_receipt(
     *,
     now: datetime,
-    profile: str,
+    mode_before: str,
     run_dir: Path,
     run_json_path: Path,
     results_json_path: Path,
@@ -101,7 +107,7 @@ def _build_stressor_receipt(
             "value": str(run_dir),
             "notes": "hybrid query degraded but stayed bounded",
         },
-        "mode_before": f"{profile}_hybrid",
+        "mode_before": mode_before,
         "mode_after": mode_after,
         "degraded": bool(results_payload.get("degraded")),
         "fallback_taken": mode_after,
@@ -120,9 +126,8 @@ def run_hybrid_query(
     *,
     query: str,
     docs_path: Path | None = None,
-    profile: str = DEFAULT_PROFILE,
-    retrieval_backend: str | None = None,
-    kag_backend: str | None = None,
+    retrieval_backend: str = "in_memory",
+    kag_backend: str = "file",
     topk: int = 5,
     candidate_k: int = 10,
     reranker: str = "none",
@@ -131,14 +136,14 @@ def run_hybrid_query(
     reranker_device: str = "AUTO",
     reranker_max_length: int = 1024,
     max_entities_per_doc: int = 128,
-    qdrant_collection: str = DEFAULT_COMBO_A_QDRANT_COLLECTION,
-    qdrant_host: str = DEFAULT_COMBO_A_QDRANT_HOST,
-    qdrant_port: int = DEFAULT_COMBO_A_QDRANT_PORT,
-    qdrant_vector_size: int = DEFAULT_COMBO_A_QDRANT_VECTOR_SIZE,
+    qdrant_collection: str = DEFAULT_QDRANT_COLLECTION,
+    qdrant_host: str = DEFAULT_QDRANT_HOST,
+    qdrant_port: int = DEFAULT_QDRANT_PORT,
+    qdrant_vector_size: int = DEFAULT_QDRANT_VECTOR_SIZE,
     qdrant_timeout_sec: float = 10.0,
-    neo4j_url: str = DEFAULT_COMBO_A_NEO4J_URL,
-    neo4j_database: str = DEFAULT_COMBO_A_NEO4J_DATABASE,
-    neo4j_user: str = DEFAULT_COMBO_A_NEO4J_USER,
+    neo4j_url: str = DEFAULT_NEO4J_URL,
+    neo4j_database: str = DEFAULT_NEO4J_DATABASE,
+    neo4j_user: str = DEFAULT_NEO4J_USER,
     neo4j_password: str | None = None,
     neo4j_timeout_sec: float = 10.0,
     neo4j_dataset_tag: str | None = None,
@@ -148,12 +153,8 @@ def run_hybrid_query(
     if now is None:
         now = datetime.now(timezone.utc)
 
-    effective_retrieval_backend = (
-        str(retrieval_backend).strip().lower() if retrieval_backend is not None else profile_backends(profile)[0]
-    )
-    effective_kag_backend = (
-        str(kag_backend).strip().lower() if kag_backend is not None else profile_backends(profile)[1]
-    )
+    effective_retrieval_backend = str(retrieval_backend).strip().lower()
+    effective_kag_backend = str(kag_backend).strip().lower()
     docs_path_value = None if docs_path is None else Path(docs_path)
     if docs_path_required(
         retrieval_backend=effective_retrieval_backend,
@@ -171,7 +172,6 @@ def run_hybrid_query(
         "timestamp_utc": now.astimezone(timezone.utc).isoformat(),
         "mode": "hybrid_query_demo",
         "status": "started",
-        "profile": profile,
         "request": {
             "query": query,
             "docs_path": None if docs_path_value is None else str(docs_path_value),
@@ -206,7 +206,7 @@ def run_hybrid_query(
     try:
         resolved_neo4j_password = None
         if effective_kag_backend == "neo4j":
-            resolved_neo4j_password = resolve_neo4j_password(neo4j_password)
+            resolved_neo4j_password = _resolve_neo4j_password(neo4j_password)
 
         results_payload = execute_hybrid_query(
             query=query,
@@ -239,7 +239,6 @@ def run_hybrid_query(
         results_out_payload = {
             **results_payload,
             "query": query,
-            "profile": profile,
             "paths": {
                 "run_dir": str(run_dir),
                 "run_json": str(run_json_path),
@@ -253,7 +252,11 @@ def run_hybrid_query(
         if _should_emit_stressor_receipt(results_out_payload):
             stressor_receipt_payload = _build_stressor_receipt(
                 now=now,
-                profile=profile,
+                mode_before=(
+                    "external_store_hybrid"
+                    if effective_retrieval_backend == "qdrant" or effective_kag_backend == "neo4j"
+                    else "file_hybrid"
+                ),
                 run_dir=run_dir,
                 run_json_path=run_json_path,
                 results_json_path=results_json_path,
@@ -270,8 +273,7 @@ def run_hybrid_query(
             str(stressor_receipt_path) if stressor_receipt_payload is not None else None
         )
         run_payload["result"] = {
-            "backend": "hybrid_combo_a" if profile == COMBO_A_PROFILE else "hybrid_baseline",
-            "profile": profile,
+            "backend": "hybrid",
             "retrieval_backend": effective_retrieval_backend,
             "kag_backend": effective_kag_backend,
             "planner_mode": results_out_payload["planner_mode"],
@@ -315,22 +317,16 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--docs", dest="docs_path", type=Path, default=None, help="Optional path to JSONL docs input.")
     parser.add_argument("--query", required=True, help="User query.")
     parser.add_argument(
-        "--profile",
-        choices=(DEFAULT_PROFILE, COMBO_A_PROFILE),
-        default=DEFAULT_PROFILE,
-        help="Hybrid profile: baseline_first (default) or combo_a.",
-    )
-    parser.add_argument(
         "--retrieval-backend",
         choices=("in_memory", "qdrant"),
-        default=None,
-        help="Optional retrieval backend override.",
+        default="in_memory",
+        help="Retrieval backend (default: in_memory).",
     )
     parser.add_argument(
         "--kag-backend",
         choices=("file", "neo4j"),
-        default=None,
-        help="Optional KAG backend override.",
+        default="file",
+        help="KAG backend (default: file).",
     )
     parser.add_argument("--topk", type=int, default=5, help="Final merged top-k result count.")
     parser.add_argument(
@@ -368,19 +364,19 @@ def parse_args() -> argparse.Namespace:
         help="Max tokenized length for reranker input.",
     )
     parser.add_argument("--max-entities-per-doc", type=int, default=128, help="Entity cap per document.")
-    parser.add_argument("--qdrant-collection", default=DEFAULT_COMBO_A_QDRANT_COLLECTION, help="Qdrant collection.")
-    parser.add_argument("--qdrant-host", default=DEFAULT_COMBO_A_QDRANT_HOST, help="Qdrant host.")
-    parser.add_argument("--qdrant-port", type=int, default=DEFAULT_COMBO_A_QDRANT_PORT, help="Qdrant port.")
+    parser.add_argument("--qdrant-collection", default=DEFAULT_QDRANT_COLLECTION, help="Qdrant collection.")
+    parser.add_argument("--qdrant-host", default=DEFAULT_QDRANT_HOST, help="Qdrant host.")
+    parser.add_argument("--qdrant-port", type=int, default=DEFAULT_QDRANT_PORT, help="Qdrant port.")
     parser.add_argument(
         "--qdrant-vector-size",
         type=int,
-        default=DEFAULT_COMBO_A_QDRANT_VECTOR_SIZE,
+        default=DEFAULT_QDRANT_VECTOR_SIZE,
         help="Qdrant vector size.",
     )
     parser.add_argument("--qdrant-timeout-sec", type=float, default=10.0, help="Qdrant timeout in seconds.")
-    parser.add_argument("--neo4j-url", default=DEFAULT_COMBO_A_NEO4J_URL, help="Neo4j HTTP base URL.")
-    parser.add_argument("--neo4j-database", default=DEFAULT_COMBO_A_NEO4J_DATABASE, help="Neo4j database name.")
-    parser.add_argument("--neo4j-user", default=DEFAULT_COMBO_A_NEO4J_USER, help="Neo4j username.")
+    parser.add_argument("--neo4j-url", default=DEFAULT_NEO4J_URL, help="Neo4j HTTP base URL.")
+    parser.add_argument("--neo4j-database", default=DEFAULT_NEO4J_DATABASE, help="Neo4j database name.")
+    parser.add_argument("--neo4j-user", default=DEFAULT_NEO4J_USER, help="Neo4j username.")
     parser.add_argument("--neo4j-password", default=None, help="Neo4j password (or use NEO4J_PASSWORD env var).")
     parser.add_argument(
         "--neo4j-timeout-sec",
@@ -398,7 +394,6 @@ def main() -> int:
     result = run_hybrid_query(
         query=args.query,
         docs_path=args.docs_path,
-        profile=args.profile,
         retrieval_backend=args.retrieval_backend,
         kag_backend=args.kag_backend,
         topk=args.topk,

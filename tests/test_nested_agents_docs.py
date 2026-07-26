@@ -31,7 +31,7 @@ REQUIRED_MARKERS = {
     ],
     Path("src/atm10_agent/agent_core/AGENTS.md"): [
         "service_sla.py",
-        "combo_a_profile.py",
+        "atm10_session_probe.py",
     ],
     Path("src/atm10_agent/rag/AGENTS.md"): [
         "doc_contract.py",
@@ -45,8 +45,8 @@ REQUIRED_MARKERS = {
     ],
     Path("src/atm10_agent/hybrid/AGENTS.md"): [
         "planner.py",
-        "baseline_first",
-        "combo_a",
+        "in-memory retrieval",
+        "Qdrant and Neo4j",
     ],
     Path("tests/AGENTS.md"): [
         "tests/fixtures/",

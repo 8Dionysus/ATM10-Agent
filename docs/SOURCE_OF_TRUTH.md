@@ -7,8 +7,14 @@ This file defines the roles of the repository documents so the public surface st
 * `pyproject.toml`
   * Canonical installable-project metadata, package discovery, supported Python
     floor, CLI entry point, and optional dependency groups.
-  * Requirements files may temporarily support compatibility tooling, but they
-    do not define a second product package.
+  * Sole dependency authority; the repository does not maintain parallel
+    requirements-file dependency graphs.
+
+* `pylock.toml`
+  * Resolved lock evidence for the dependency-free core install.
+  * Optional provider environments are platform-specific and remain bounded by
+    the named `pyproject.toml` extras rather than pretending to be one portable
+    universal lock.
 
 * `README.md`
   * Short human-facing entrypoint.
@@ -43,8 +49,8 @@ This file defines the roles of the repository documents so the public surface st
   * Holds non-default rollback paths, blocked experiments, and restore guidance that should remain public-readable but not appear in the active runbook.
 
 * `docs/QWEN3_MODEL_STACK.md`
-  * Machine-specific model/runtime posture plus validated and preliminary host profiles.
-  * Records the current `OpenVINO-first` repo-host baseline and additive future runtime-path rules.
+  * Provider research posture and archived model-path evidence.
+  * Does not define a required host profile or the product's dependency graph.
 
 * `docs/RELEASE_WAVE6.md`
   * Scoped public engineering reference for one hardening/release wave.

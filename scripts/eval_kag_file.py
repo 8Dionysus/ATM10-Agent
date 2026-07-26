@@ -48,7 +48,7 @@ def run_eval_kag_file(
     topk: int = 5,
     max_entities_per_doc: int = 128,
     runs_dir: Path = Path("runs"),
-    profile: str = "baseline_first",
+    profile: str = "local_eval",
     policy: str = "signal_only",
     now: datetime | None = None,
 ) -> dict[str, Any]:
@@ -265,8 +265,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--profile",
         type=str,
-        default="baseline_first",
-        help="Profile label for normalized SLA summary (default: baseline_first).",
+        default="local_eval",
+        help="Evidence-scope label for normalized SLA summary (default: local_eval).",
     )
     parser.add_argument(
         "--policy",

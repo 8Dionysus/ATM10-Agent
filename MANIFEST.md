@@ -55,11 +55,13 @@ Currently proven in source:
 - package boundary without `scripts.*` imports or repository path injection;
 - standalone repository-owned CI routes;
 - import-safe optional dependency boundaries;
+- a single `pyproject.toml` dependency authority plus dependency-free core lock;
+- verified wheel/sdist structure and installed-wheel doctor, turn, replay, and
+  eval from a clean environment outside the checkout;
 - Windows capture/session contracts through deterministic tests.
 
 Still required before the autonomy gate may be called complete:
 
-- reproducible dependency resolution and release artifact receipts;
 - clean-environment/fresh-clone proof from the final tree;
 - live Windows 11 + PowerShell 7 session, capture, trace, and dry-run evidence;
 - merged-main verification after all migration slices.

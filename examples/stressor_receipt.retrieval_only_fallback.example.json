@@ -15,7 +15,7 @@
     "value": "runs/2026-04-07T14-12-33Z-hybrid-query",
     "notes": "retrieval completed, KAG stage failed"
   },
-  "mode_before": "combo_a_hybrid",
+  "mode_before": "external_store_hybrid",
   "mode_after": "retrieval_only_fallback",
   "degraded": true,
   "fallback_taken": "retrieval_only_fallback",

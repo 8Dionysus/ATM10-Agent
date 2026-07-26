@@ -1,2 +1,0 @@
-# Default install preserves the current Windows product-edge dependency surface.
--r requirements-win-edge.txt

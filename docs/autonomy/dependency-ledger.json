@@ -49,9 +49,9 @@
     },
     {
       "id": "core.requirements",
-      "surface": "nine requirements files without installable-project metadata",
-      "current_owner": "requirements*.txt",
-      "target_owner": "pyproject.toml plus reproducible resolved dependency artifact",
+      "surface": "core and optional provider dependency declarations",
+      "current_owner": "pyproject.toml",
+      "target_owner": "pyproject.toml plus reproducible release evidence",
       "disposition": "rewrite",
       "required_for_core": true,
       "reason": "The project needs one build contract and explicit optional extras."
@@ -86,7 +86,7 @@
     {
       "id": "adapter.qdrant",
       "surface": "Qdrant retrieval store",
-      "current_owner": "retrieval scripts and combo_a profile",
+      "current_owner": "atm10_agent.rag and explicit hybrid adapter parameters",
       "target_owner": "atm10_agent.adapters.stores",
       "disposition": "optionalize",
       "required_for_core": false,
@@ -95,7 +95,7 @@
     {
       "id": "adapter.neo4j",
       "surface": "Neo4j product graph store",
-      "current_owner": "src/atm10_agent/kag and combo_a scripts",
+      "current_owner": "atm10_agent.kag and explicit hybrid adapter parameters",
       "target_owner": "atm10_agent.adapters.stores",
       "disposition": "optionalize",
       "required_for_core": false,
@@ -122,7 +122,7 @@
     {
       "id": "federation.os-skill-profile",
       "surface": "OS user-profile skills as a repository operating dependency",
-      "current_owner": "host profile outside repository",
+      "current_owner": "retired; no repository runtime edge",
       "target_owner": "none",
       "disposition": "cut",
       "required_for_core": false,

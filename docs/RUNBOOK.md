@@ -178,7 +178,18 @@ python -m pytest
 
 Release validation additionally builds an sdist and wheel, installs the wheel
 without dependencies outside the checkout, runs `atm10 doctor`, and executes
-the `companion-core` eval.
+the deterministic turn, replay, and `companion-core` eval:
+
+```powershell
+python -m build
+python -m scripts.verify_release --dist-dir dist
+```
+
+The generated `dist/release_verification.json` records artifact hashes,
+dependency metadata, and command-result hashes. It proves only the
+dependency-free core; optional providers and live Windows capture remain
+separate gates. `pylock.toml` is the resolved core lock: because core has no
+third-party dependencies, it contains only the local `atm10-agent` package.
 
 ## Troubleshooting
 
