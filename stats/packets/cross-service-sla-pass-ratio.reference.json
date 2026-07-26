@@ -1,5 +1,5 @@
 {
-  "schema_version": "aoa_stats_measurement_packet_v1",
+  "schema_version": "atm10_measurement_packet_v1",
   "contract_ref": "stats/port.manifest.json#/measurements/0",
   "contract_version": "1.0.0",
   "measurement_id": "ATM10-Agent/cross-service-sla-pass-ratio",

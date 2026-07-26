@@ -1,159 +1,196 @@
-# ROADMAP.md — atm10-agent
+# ROADMAP.md — ATM10-Agent
 
-Public roadmap for `atm10-agent`.
+Public direction for rebuilding `ATM10-Agent` as an autonomous local companion.
+Execution detail stays in reviewable wave branches; the durable boundary and
+machine-readable ledgers live in `docs/autonomy/README.md`.
 
-This document is the public planning surface of the repository. It describes direction, milestones, horizons, and high-level risks without exposing maintainer-local execution notes.
+## Strategic baseline
 
-## Strategic Baseline
+The product is one modular monolith around:
 
-Selected strategic baseline:
+`Perception -> Interpretation -> World/Memory -> Response/Plan -> optional Action/Voice -> Trace`.
 
-* Production baseline: **Combo A**.
-* Operator surface: **Streamlit** operator panel + CLI fallback.
-* Agent-core path: FastAPI gateway + workers + Qdrant + Neo4j + file artifacts (`runs/...`).
-* Runtime policy: current validated repo-host baseline is `OpenVINO-first` on this Intel machine, with explicit `CPU/GPU/NPU` placement and additive future host profiles for other hardware.
-* Host-profile policy: Windows remains the first-class ATM10 product-edge path; `fedora_local_dev` is a preliminary Fedora-first development profile for portable-core and dev-companion stabilization, not a public product-edge support default.
-* Model policy: pragmatic hybrid by task:
-  * text/retrieval/rerank: Qwen3 stack,
-  * vision active pilot path: Qwen2.5-VL-7B,
-  * ASR active path: Whisper GenAI,
-  * archived paths remain recoverable via explicit opt-in.
-* Architecture posture: `ATM10-Agent` remains a companion with active operator interaction; current operator surfaces are the public entrypoint, while memory, evals, routing, and bounded worker/sub-agent roles stay under the hood inside the same local runtime boundary.
+The default proof path is deterministic, file-backed, dependency-light, and
+replayable. Windows capture, OpenVINO, remote models, Qdrant, Neo4j, FastAPI,
+Streamlit, ASR, and TTS are adapters or providers. They may enrich a turn but
+must not own the loop or block core install, build, tests, stub/replay, or
+release.
 
-## North Star
+The package target is `atm10_agent`, with one composition root and CLI. The
+source tree must not depend on repository-path injection or imports from
+`scripts.*`.
 
-Build a local-first ATM10 companion with a production-ready operator loop and an internal agent stack:
+## Autonomy law
 
-* Phase A: vision loop (screenshot -> VLM interface -> structured output + artifacts).
-* Phase B: memory (retrieval + KAG + citations + guardrails).
-* Phase C: voice (active ASR path + resilient TTS service/fallback).
-* Phase D: operator control plane (Streamlit) on top of a unified local API.
-* Automation: safe assistive path, dry-run by default, no real input events by default.
-* Agent stack under the hood: memory, routing, evals, and bounded worker/sub-agent roles should remain explicit internal layers rather than being reduced to a UI-only shell.
+- No required sibling repository, `.aoa`, OS skill profile, shared validator,
+  shared runtime, or hidden workstation configuration.
+- Mutable world state and append-only traces remain separate.
+- Safe automation stays dry-run by default.
+- Optional-provider failure is explicit degraded behavior, never false success.
+- Windows 11 + PowerShell 7 remains first-class product-edge evidence and is
+  validated separately from the portable deterministic gate.
+- Donor repositories remain read-only. Intake begins only after standalone
+  autonomy is green and is one-way, immutable-revision pinned, path-bounded,
+  license-reviewed, transformed, and receipt-backed.
 
-## Completed Foundations
+## Protected heritage
 
-* M0: Instance discovery + repo hygiene.
-* M1: Phase A vision loop baseline.
-* M2: Retrieval baseline + benchmark + profile defaults.
-* M3: Voice runtime operational path (active ASR + archived policy).
-* M3.1: OpenVINO rollout (text-core + retrieval profile).
-* M4: HUD baselines (OCR + mod-hook ingest).
-* M5: KAG baseline + Neo4j path + nightly guardrail + trend/severity policy.
-* M6.0-M6.19: Automation safe scaffold + intent-chain contract hardening.
-* M8.0-M8.1: Streamlit IA spec and operator panel baseline with smoke coverage.
-* M8.2: Observer pilot runtime slice (`F8` hotkey, local screen grounding/reply stack, additive operator snapshot and Streamlit surfaces).
-* M8.3: Observer pilot acceptance/readiness layer (`pilot_runtime_readiness_v1`, additive operator snapshot + Streamlit surfaces, manual live-acceptance contract).
-* M8.4: Operator recurrence recovery surface (`operator_context.returning`, bounded launcher/pilot return artifacts, gateway-safe-action recommendation posture, `Return / Recovery` inside the existing 4-tab IA).
+The rebuild preserves behavior, not the old topology:
 
-## Active Public Themes
+- deterministic stub and replay;
+- fixture-backed retrieval and product KAG with citations;
+- honest hybrid fallback and negative cases;
+- intent -> plan -> dry-run safety with trace correlation;
+- provider replaceability and use-site optional dependency failures;
+- ATM10 window/session and capture evidence on Windows;
+- public-safe paths, tokens, errors, and artifacts;
+- useful `M6.19` dry-run records for `open_quest_book`,
+  `check_inventory_tool`, and `open_world_map`.
 
-### G1 — Service Foundation
+Gateway endpoints, Streamlit panels, worker/service splits, Combo A, root
+repo-self KAG, cross-owner ports, and nightly promotion machinery survive only
+if they earn a smaller optional-adapter role through protected tests.
 
-Goal:
+## Rebuild waves
 
-* Move the script-per-task baseline to a unified local gateway without losing reproducibility.
+### Wave 0 — baseline and disposition
 
-Definition of Done:
+- Pin the last green source revision and full test result.
+- Record the dependency ledger and protected-behavior set.
+- Distinguish product KAG from the external repo-self KAG read model.
+- Classify each major surface as `keep`, `rewrite`, `optionalize`, `cut`, or
+  post-gate `import_once`.
 
-* A FastAPI gateway acts as a single entrypoint for health, retrieval, KAG query, and automation dry-run orchestration.
-* Gateway runs use a stable artifact contract.
-* Core gateway paths have stable smoke coverage.
+Exit: baseline and ledgers are source-owned, validated, and reviewable.
 
-### G2 — Operator Panel and Gateway Governance
+### Wave 1 — autonomy contract and behavior fence
 
-Goal:
+- Accept the autonomous modular-monolith decision.
+- Align canonical docs and repository guidance.
+- Add contract tests for dependency dispositions and behavior anchors.
+- State the no-donor stop line before the standalone gate.
 
-* Keep the Streamlit operator panel and gateway governance surfaces reliable, diagnosable, and reviewable.
+Exit: direction cannot drift back to a gateway/federation center unnoticed.
 
-Definition of Done:
+### Wave 2 — sever OS and federation dependencies
 
-* Streamlit remains a stable operator surface for health, run exploration, metrics, and smoke-only safe actions.
-* Gateway governance summaries remain machine-readable and publication-safe for nightly/operator workflows.
-* Operator recurrence recovery stays additive through existing snapshot/gateway/Streamlit seams without creating a new endpoint, a fifth tab, or auto-executed actions.
-* Current product-edge operator flows stay reproducible on Windows 11 + PowerShell 7.
-* Future Fedora operator flows land as explicit host-profile/runbook paths instead of silently changing the Windows baseline.
+- Replace external KAG action and stats checkout in `Repo Validation`.
+- Remove root repo-self KAG from the active product and required CI plane while
+  retaining `src/kag` product behavior.
+- Replace the eval skeleton and stats delegate with owner-local tests or delete
+  them when they add no product signal.
+- Remove `.aoa`, global-skill, sibling-validator, and shared-runtime assumptions
+  from active guidance and commands.
 
-### G3 — Automation Safe Loop
+Exit: repository validation is standalone and searches find no required
+federation edge.
 
-Goal:
+### Wave 3 — installable package and one composition root
 
-* Maintain a traceable intent -> plan -> dry-run loop as a first-class automation layer.
+- Add `pyproject.toml` and build metadata.
+- Move product code under `atm10_agent`.
+- Replace path injection and `scripts.*` imports with package imports.
+- Expose one CLI/composition root; keep any remaining scripts thin.
+- Normalize core and optional dependency groups.
 
-Definition of Done:
+Exit: clean environment install, import, CLI help, build, and tests pass without
+repository path tricks.
 
-* Every new `intent_type` follows checklist `M6.19`.
-* `automation_plan_v1` remains backward-compatible and test-covered.
-* Public rollout records exist for `open_quest_book`, `check_inventory_tool`, and `open_world_map`, proving the same intent -> plan -> dry-run contract is reusable under `M6.19`.
+### Wave 4 — companion-loop runtime
 
-### G4 — KAG Quality / Latency Guardrail
+- Implement explicit turn contracts across perception, interpretation,
+  world/memory, response/plan, optional action/voice, and trace.
+- Make file-backed state and deterministic replay the baseline.
+- Keep stores, live models, UI, gateway, hardware capture, and voice behind
+  provider interfaces.
+- Remove duplicated orchestration, service-only indirection, and gateway
+  governance that does not protect a turn.
 
-Goal:
+Exit: one in-process stub/replay turn exercises the complete product boundary.
 
-* Preserve a stable quality/latency baseline on sample+hard sets without silent regressions.
+### Wave 5 — dependency and artifact normalization
 
-Definition of Done:
+- Produce reproducible resolved dependency evidence.
+- Declare missing direct dependencies and remove unused or contradictory
+  profiles.
+- Keep optional extras import-light and use-site checked.
+- Define release artifacts and a clean source distribution/wheel boundary.
 
-* Nightly trend snapshots reliably expose rolling-baseline status.
-* Retrieval/KAG changes stay within agreed thresholds for quality and latency.
+Exit: dependency audit, build, install-from-artifact, and negative optional
+provider checks are green.
 
-### G5 — CI Smoke Expansion and Contract Uniformity
+### Wave 6 — standalone and Windows proof
 
-Goal:
+- Prove fresh-clone core install, build, tests, deterministic stub/replay,
+  cited retrieval/world behavior, dry-run action safety, degraded failures, and
+  release artifacts.
+- Run the proof without sibling checkouts, `.aoa`, OS skill profiles, shared
+  validators, live stores, or model downloads.
+- Record Windows 11 + PowerShell 7 acceptance separately for session discovery,
+  capture, launch, trace, and dry-run fences.
 
-* Expand coverage of runnable entrypoints without introducing flaky policy or contract drift.
+Exit: all standalone acceptance gates are green. Stop here if any are not.
 
-Definition of Done:
+### Wave 7 — controlled donor intake
 
-* New smoke entrypoints publish machine-readable summaries.
-* CI, runbook, and decisions stay aligned.
+- Review only explicit donor candidates for evals, KAG/world, stats, memo,
+  routing, and runtime discipline.
+- Pin immutable revisions and selected paths.
+- Record license, transformation, local ownership, tests, and rejection
+  reasons.
+- Vendor or reimplement only what improves the already autonomous product.
 
-### G6 — Host Profile Portability and Fedora Dev Companion
+Exit: imported material has no live donor dependency and passes the same local
+gates.
 
-Goal:
+### Wave 8 — landing and closeout
 
-* Introduce `fedora_local_dev` as an additive development profile that stabilizes portable core and operator-companion surfaces in the maintainer's Fedora-first workspace.
+- Land bounded, reviewable pull requests with required checks.
+- Remove superseded docs, workflows, scripts, tests, and compatibility shells.
+- Validate a clean merged `main`, release artifacts, and the full definition of
+  done.
+- Report residual debt without collapsing it into the green slice.
 
-Definition of Done:
+## Definition of done
 
-* Dependencies are split so Windows-only capture/input packages do not live in the portable core.
-* Fedora dev-companion work can validate gateway/operator/dry-run surfaces without claiming full ATM10 Windows parity.
-* Windows product-edge behavior remains intact, explicit, and separately validated.
+The rebuild is complete only when all of the following are true:
 
-## Roadmap Horizons
+1. One installable `atm10_agent` package owns the product.
+2. One composition root and CLI can execute the full deterministic companion
+   turn.
+3. Clone, core install, build, tests, stub/replay, and release require no
+   sibling repo, `.aoa`, OS skill profile, shared validator/runtime, service,
+   model, or hidden host configuration.
+4. Product KAG/world and cited retrieval remain useful without root repo-self
+   KAG, Qdrant, or Neo4j.
+5. Optional providers are replaceable, import-light, and honestly degraded.
+6. Automation remains dry-run by default with executable negative tests.
+7. Mutable state and append-only traces have distinct contracts.
+8. Windows 11 + PowerShell 7 acceptance is current and separate.
+9. No production code uses repository path injection or imports `scripts.*`.
+10. Dependency metadata, resolved evidence, source distribution, and wheel are
+    reproducible and installable.
+11. Required GitHub checks are repository-owned and standalone.
+12. Donor intake, if any, is pinned, path-bounded, licensed, transformed,
+    receipt-backed, and one-way.
+13. Obsolete gateway/governance/federation shells and their tests/docs are
+    removed.
+14. Full tests, focused smokes, negative cases, and release verification pass
+    on merged `main`.
+15. Pull requests are merged, the canonical worktree is clean/current, and
+    remaining debt is reported explicitly.
 
-### 0-30 days
+## Principal risks
 
-* Tighten `gateway_sla_summary_v1` from the signal-only baseline toward a managed stricter policy using accumulated history.
-* Extend Streamlit operator UX with the next operator scenarios on top of the existing metrics/history/audit foundations.
-* Harden recurrence recovery reason coverage around launcher and observer pilot evidence without widening the smoke-only action set.
-* Land first-wave Fedora host-profile policy docs and split dependency files so portable core is no longer coupled to Windows-only capture packages.
+- Preserving files instead of behavior and accidentally recreating the old
+  shell inside the new package.
+- Treating Windows hardware evidence as a reason to make the portable core
+  host-dependent.
+- Letting optional stores or UI become implicit required services.
+- Starting donor intake before autonomy and importing another owner's runtime
+  along with useful ideas.
+- Declaring completion from green unit tests while clean install, artifact,
+  negative, Windows, or merged-main evidence is still missing.
 
-### 30-60 days
-
-* Use `pilot_runtime_readiness_v1` to harden real manual acceptance cycles for the observer pilot runtime.
-* Evaluate when `combo_a` can move from additive parity profile to the operational default without weakening governance.
-* Extend operator UX around pilot-specific troubleshooting and optional overlay/hotkey ergonomics.
-* Fix the current Intel/OpenVINO host profile as the documented baseline while defining how future machine-specific runtime paths are introduced and validated.
-* Land the first runnable `fedora_local_dev` companion path with explicit capability limits, artifacted smoke evidence, and no Windows product-edge regression.
-
-### 60-90 days
-
-* Evaluate moving some automation from dry-run to supervised mode after security gates are in place.
-* Revisit archived R&D paths using the re-open criteria from `docs/ARCHIVED_TRACKS.md`.
-* Continue tightening operator guidance and release criteria around the live observer loop.
-* Pull compatible memory/evals/routing techniques from sibling repos into `ATM10-Agent` without breaking the single-repo local agent boundary or the validated `OpenVINO-first` host baseline.
-* Evaluate whether Fedora companion-mode evidence is strong enough to promote from preliminary development profile to a named supported profile.
-
-## Constraints and High-Level Risks
-
-* Windows 11 + PowerShell 7 remains the first-class ATM10 product-edge environment.
-* Fedora-first development is allowed as an explicit preliminary profile, but it is not a replacement support claim until docs, commands, and validation catch up.
-* Reproducibility beats convenience: small diffs, runnable commands, and test coverage stay mandatory.
-* Runtime remains `OpenVINO-first` on the current repo host until another host profile is explicitly validated and promoted; dependency and infrastructure sprawl stay constrained.
-* Security posture remains conservative: dry-run by default, bounded payloads, sanitized errors, and minimal trusted surfaces.
-* Risk of scope creep remains real; roadmap progress depends on milestone gates and disciplined prioritization.
-
-## Archived / Recoverable Tracks
-
-Archived directions and re-open criteria live in `docs/ARCHIVED_TRACKS.md`.
+Archived and recoverable implementation tracks remain in
+`docs/ARCHIVED_TRACKS.md`; they do not override this roadmap.

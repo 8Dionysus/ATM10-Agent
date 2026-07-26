@@ -16,7 +16,7 @@
 ## VERIFY
 <!--
 - `python -m pytest` status
-- GitHub `Repo Validation` status, including repo-local KAG family parity
+- GitHub `Repo Validation` status, including standalone autonomy checks
 - smoke commands actually run
 - what was not run
 -->

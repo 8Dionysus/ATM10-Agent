@@ -1,9 +1,8 @@
-# ATM10-Agent local stats port
+# ATM10-Agent local measurements
 
 This directory exposes statistical questions whose meaning belongs to the
-local companion and its operator-facing service evidence. It uses the shared
-`aoa-stats` grammar without moving service SLA or product authority into the
-central organ.
+local companion and its operator-facing service evidence. The contract,
+reference packet, validator, and tests are all owned by this repository.
 
 ## Measurement
 
@@ -30,7 +29,7 @@ outside Git and are not copied into the packet.
 The ratio reports only how many expected lanes carried `status=ok` and
 `sla_status=pass` in one internally consistent completed suite. It does not
 certify operator readiness, gameplay success, current host health, product
-support, causal service quality, or an `aoa-evals` verdict.
+support, causal service quality, or a companion-turn verdict.
 
 ## Surfaces
 
@@ -38,4 +37,5 @@ support, causal service quality, or an `aoa-evals` verdict.
 - `packets/cross-service-sla-pass-ratio.reference.json` records the public
   fixture observation.
 - `scripts/cross_service_benchmark_suite.py` remains the live evidence owner.
-- `aoa-stats` owns shared validation and cross-owner composition.
+- `scripts/validate_local_stats_port.py` validates the local contract without
+  sibling checkouts or shared schemas.

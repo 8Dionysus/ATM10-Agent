@@ -1,0 +1,133 @@
+{
+  "schema_version": "atm10_protected_behavior_v1",
+  "as_of": "2026-07-25",
+  "source_revision": "f0108816981e81a5951ed0f74743982a46a8fad1",
+  "behaviors": [
+    {
+      "id": "PB-001",
+      "name": "deterministic_stub_turn",
+      "contract": "A dependency-light perception request produces deterministic structured output and run artifacts without a live model.",
+      "evidence": [
+        "scripts/phase_a_smoke.py",
+        "tests/test_phase_a_smoke.py",
+        "tests/test_vlm_provider.py"
+      ]
+    },
+    {
+      "id": "PB-002",
+      "name": "cited_fixture_retrieval",
+      "contract": "Fixture-backed retrieval is reproducible and returns ranked source-linked evidence.",
+      "evidence": [
+        "src/rag/retrieval.py",
+        "tests/fixtures/retrieval_docs_sample.jsonl",
+        "tests/test_retrieval_demo.py",
+        "tests/test_eval_retrieval.py"
+      ]
+    },
+    {
+      "id": "PB-003",
+      "name": "file_product_kag",
+      "contract": "The product graph can be built and queried locally with explicit provenance and citations; Neo4j is not required.",
+      "evidence": [
+        "src/kag/baseline.py",
+        "tests/test_kag_build_baseline.py",
+        "tests/test_kag_query_demo.py",
+        "tests/test_eval_kag_file.py"
+      ]
+    },
+    {
+      "id": "PB-004",
+      "name": "honest_hybrid_degradation",
+      "contract": "A failed or empty graph stage yields an explicit bounded fallback, warnings, source evidence, and a traceable stressor receipt rather than false success.",
+      "evidence": [
+        "src/hybrid/planner.py",
+        "scripts/hybrid_query_demo.py",
+        "tests/test_hybrid_query_demo.py",
+        "tests/test_antifragility_public_surface.py"
+      ]
+    },
+    {
+      "id": "PB-005",
+      "name": "dry_run_action_fence",
+      "contract": "Intent-to-plan-to-action is deterministic, preserves intent and trace correlation, and emits no keyboard or mouse input by default.",
+      "evidence": [
+        "scripts/intent_to_automation_plan.py",
+        "scripts/automation_dry_run.py",
+        "scripts/automation_intent_chain_smoke.py",
+        "tests/test_automation_intent_chain_smoke.py"
+      ]
+    },
+    {
+      "id": "PB-006",
+      "name": "windows_session_and_capture_evidence",
+      "contract": "Windows acceptance can identify an ATM10 session, prefer DXcam capture, and artifact the selected source and degraded fallback.",
+      "evidence": [
+        "src/agent_core/atm10_session_probe.py",
+        "scripts/pilot_runtime_loop.py",
+        "tests/test_atm10_session_probe_adapters.py",
+        "tests/test_pilot_runtime_loop.py"
+      ]
+    },
+    {
+      "id": "PB-007",
+      "name": "optional_provider_honesty",
+      "contract": "Unavailable model, store, voice, UI, or hardware providers fail at the use site and preserve a usable stub/replay or explicitly degraded turn.",
+      "evidence": [
+        "src/agent_core/vlm_stub.py",
+        "src/agent_core/grounded_reply_openvino.py",
+        "src/agent_core/io_voice.py",
+        "tests/test_grounded_reply_openvino.py",
+        "tests/test_tts_runtime.py"
+      ]
+    },
+    {
+      "id": "PB-008",
+      "name": "state_trace_separation",
+      "contract": "Mutable companion state is not used as a substitute for append-only turn and action evidence.",
+      "evidence": [
+        "scripts/operator_return_recovery.py",
+        "tests/test_operator_return_recovery.py"
+      ]
+    },
+    {
+      "id": "PB-009",
+      "name": "public_safe_local_defaults",
+      "contract": "Default examples are loopback-safe, token-safe, free of workstation paths, and keep real automation disabled.",
+      "evidence": [
+        "tests/test_public_repo_hardening.py",
+        "tests/test_workflow_public_surface.py"
+      ]
+    },
+    {
+      "id": "PB-010",
+      "name": "provider_replaceability",
+      "contract": "Provider selection is explicit, optional dependencies are not loaded at core import time, and a provider can be replaced without changing the turn contract.",
+      "evidence": [
+        "src/agent_core/vlm.py",
+        "src/agent_core/vlm_stub.py",
+        "src/agent_core/vlm_openai.py",
+        "src/agent_core/vlm_openvino.py",
+        "tests/test_vlm_provider.py"
+      ]
+    },
+    {
+      "id": "PB-011",
+      "name": "powershell_product_edge",
+      "contract": "The supported Windows 11 lane remains launchable and verifiable from PowerShell 7 as separate acceptance evidence.",
+      "evidence": [
+        "docs/WINDOWS_PRODUCT_EDGE_BOUNDARY.md",
+        "tests/test_windows_product_edge_contract.py"
+      ]
+    },
+    {
+      "id": "PB-012",
+      "name": "negative_and_replay_evidence",
+      "contract": "Useful failure cases and prior trace shapes remain fixture-testable without live services, models, game windows, or network access.",
+      "evidence": [
+        "tests/fixtures",
+        "tests/test_gateway_v1_contract_parity_matrix.py",
+        "tests/test_check_pilot_runtime_readiness.py"
+      ]
+    }
+  ]
+}

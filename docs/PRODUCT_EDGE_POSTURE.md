@@ -1,6 +1,6 @@
 # PRODUCT_EDGE_POSTURE.md
 
-Current as of: 2026-04-21
+Current as of: 2026-07-25
 
 This document defines the public product-edge contract for `ATM10-Agent`.
 It keeps release cadence, supported profiles, CI/test tiers, and the `ATM10-Agent` x `abyss-stack` boundary short and explicit.
@@ -36,16 +36,25 @@ As of 2026-04-21, the portable-core Linux lane is development validation only. I
 
 ## ATM10-Agent x abyss-stack boundary
 
-- `ATM10-Agent` remains a Windows 11 product-edge repository with its own runnable scripts, docs, tests, and operator surfaces.
+- `ATM10-Agent` remains a Windows 11 product-edge repository, but its
+  deterministic core and release contract are autonomous and source-owned.
 - `fedora_local_dev` may be used as a Fedora-first development profile for portable core and operator-companion stabilization. It does not by itself prove ATM10/Minecraft parity, Windows-edge replacement, or broad `abyss-stack` deployment support.
-- `abyss-stack` is the broader infrastructure substrate in the ecosystem. This repository may consume or align with that substrate, but its current public validation does not prove Fedora-first stack parity or broad deployment support across `abyss-stack` profiles.
-- A future explicit supported-profile bridge to `abyss-stack` must be additive, named here, and reflected in `MANIFEST.md` and `ROADMAP.md` when it becomes a real public claim.
+- `abyss-stack` may be researched as a donor or optional deployment substrate
+  only after standalone autonomy is green. It is never a required clone,
+  build, test, runtime, validator, or release dependency.
+- A future bridge must be an explicit optional adapter or a pinned one-way
+  import, named here and reflected in `MANIFEST.md`, `ROADMAP.md`, and the
+  autonomy dependency ledger.
 
 ## Boundary hardening
 
 - `ATM10-Agent` owns product-edge behavior, public docs, workflow hardening, and tests in this repository.
 - It does not replace global AoA doctrine, sibling-repo ownership, or `abyss-stack` runtime authority.
-- The internal agent stack remains bounded inside one local product/runtime boundary; public docs should not let that convenience read like a hidden federation center or monolith claim.
+- It does not consume those external authorities as required product
+  dependencies.
+- The modular monolith is an explicit product boundary: internal modules stay
+  replaceable and testable, while deployment services and federation are not
+  allowed to become the center of the companion loop.
 
 ## Related surfaces
 
