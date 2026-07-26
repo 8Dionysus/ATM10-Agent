@@ -41,7 +41,8 @@ This file defines the roles of the repository documents so the public surface st
 
 * `docs/WINDOWS_PRODUCT_EDGE_BOUNDARY.md`
   * Defines the live Windows claim limit and routes the package-owned
-    `windows_live_acceptance_v1` collector.
+    `windows_live_acceptance_v2` collector and the bounded offline
+    `windows_live_acceptance_verification_v1` consistency verifier.
   * Source code, schema, or a blocked example does not replace a passing
     receipt from a current physical ATM10 session.
 

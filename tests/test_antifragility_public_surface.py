@@ -24,7 +24,7 @@ def test_antifragility_examples_validate_against_schemas() -> None:
             "examples/adaptation_delta.retrieval_only_fallback.example.json",
         ),
         (
-            "schemas/windows_live_acceptance_v1.json",
+            "schemas/windows_live_acceptance_v2.json",
             "examples/windows_live_acceptance.blocked.example.json",
         ),
     ]

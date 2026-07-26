@@ -67,12 +67,14 @@
     {
       "id": "PB-006",
       "name": "windows_session_and_capture_evidence",
-      "contract": "Windows acceptance can identify an ATM10 session, prefer DXcam capture, and artifact the selected source and degraded fallback.",
+      "contract": "Windows acceptance can identify an ATM10 session, prefer DXcam capture, record explicit degraded no-audio posture, and artifact the selected source, hashes, traces, and degraded fallbacks.",
       "evidence": [
         "src/atm10_agent/agent_core/atm10_session_probe.py",
         "src/atm10_agent/perception/windows_capture.py",
+        "src/atm10_agent/windows_acceptance.py",
         "tests/test_atm10_session_probe_adapters.py",
-        "tests/test_windows_capture.py"
+        "tests/test_windows_capture.py",
+        "tests/test_windows_live_acceptance.py"
       ]
     },
     {
@@ -124,10 +126,11 @@
     {
       "id": "PB-011",
       "name": "powershell_product_edge",
-      "contract": "The supported Windows 11 lane remains launchable and verifiable from PowerShell 7 as separate acceptance evidence.",
+      "contract": "The supported Windows 11 lane remains launchable from PowerShell 7 and its complete artifact bundle is verifiable without widening the physical-session claim.",
       "evidence": [
         "docs/WINDOWS_PRODUCT_EDGE_BOUNDARY.md",
-        "tests/test_windows_product_edge_contract.py"
+        "tests/test_windows_product_edge_contract.py",
+        "tests/test_windows_live_acceptance.py"
       ]
     },
     {

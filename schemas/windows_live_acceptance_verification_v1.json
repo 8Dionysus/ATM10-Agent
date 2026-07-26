@@ -1,0 +1,101 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://atm10.local/schemas/windows_live_acceptance_verification_v1.json",
+  "title": "atm10_windows_live_acceptance_verification_v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "status",
+    "receipt",
+    "expected_source_revision",
+    "observed_source_revision",
+    "max_age_hours",
+    "degraded",
+    "checks",
+    "warnings",
+    "errors",
+    "claim_limit"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "atm10_windows_live_acceptance_verification_v1"
+    },
+    "status": {
+      "enum": ["pass", "fail"]
+    },
+    "receipt": {
+      "type": "string",
+      "minLength": 1
+    },
+    "expected_source_revision": {
+      "type": "string"
+    },
+    "observed_source_revision": {
+      "type": ["string", "null"]
+    },
+    "max_age_hours": {
+      "type": "number",
+      "exclusiveMinimum": 0
+    },
+    "degraded": {
+      "type": ["boolean", "null"]
+    },
+    "checks": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "receipt_schema",
+        "status_pass",
+        "source_revision_matches",
+        "receipt_fresh",
+        "windows_11",
+        "powershell_7",
+        "producer_checks_pass",
+        "session_consistent",
+        "audio_posture_explicit",
+        "degradation_honest",
+        "capture_consistent",
+        "screenshot_integrity",
+        "turn_consistent",
+        "turn_json_integrity",
+        "append_only_trace_integrity",
+        "dry_run_fence",
+        "errors_empty",
+        "mutable_state_separate"
+      ],
+      "properties": {
+        "receipt_schema": {"type": "boolean"},
+        "status_pass": {"type": "boolean"},
+        "source_revision_matches": {"type": "boolean"},
+        "receipt_fresh": {"type": "boolean"},
+        "windows_11": {"type": "boolean"},
+        "powershell_7": {"type": "boolean"},
+        "producer_checks_pass": {"type": "boolean"},
+        "session_consistent": {"type": "boolean"},
+        "audio_posture_explicit": {"type": "boolean"},
+        "degradation_honest": {"type": "boolean"},
+        "capture_consistent": {"type": "boolean"},
+        "screenshot_integrity": {"type": "boolean"},
+        "turn_consistent": {"type": "boolean"},
+        "turn_json_integrity": {"type": "boolean"},
+        "append_only_trace_integrity": {"type": "boolean"},
+        "dry_run_fence": {"type": "boolean"},
+        "errors_empty": {"type": "boolean"},
+        "mutable_state_separate": {"type": "boolean"}
+      }
+    },
+    "warnings": {
+      "type": "array",
+      "items": {"type": "string", "minLength": 1}
+    },
+    "errors": {
+      "type": "array",
+      "items": {"type": "string", "minLength": 1}
+    },
+    "claim_limit": {
+      "type": "string",
+      "minLength": 1
+    }
+  }
+}

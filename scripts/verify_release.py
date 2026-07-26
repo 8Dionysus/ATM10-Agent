@@ -124,6 +124,8 @@ def inspect_sdist(sdist_path: Path) -> dict[str, Any]:
     required = {
         "pylock.toml",
         "pyproject.toml",
+        "schemas/windows_live_acceptance_v2.json",
+        "schemas/windows_live_acceptance_verification_v1.json",
         "src/atm10_agent/app.py",
         "src/atm10_agent/cli.py",
     }
@@ -200,6 +202,17 @@ def smoke_installed_wheel(wheel_path: Path) -> dict[str, Any]:
             )
         )
         commands.append(_run_checked([str(atm10_path), "doctor"], cwd=work_dir, env=env))
+        commands.append(
+            _run_checked(
+                [
+                    str(atm10_path),
+                    "verify-windows-acceptance",
+                    "--help",
+                ],
+                cwd=work_dir,
+                env=env,
+            )
+        )
         commands.append(
             _run_checked(
                 [

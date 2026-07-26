@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
+import pytest
 from jsonschema import Draft202012Validator
 
 import atm10_agent.windows_acceptance as acceptance
@@ -16,7 +17,15 @@ REVISION = "a" * 40
 
 def _schema() -> dict[str, object]:
     return json.loads(
-        Path("schemas/windows_live_acceptance_v1.json").read_text(encoding="utf-8")
+        Path("schemas/windows_live_acceptance_v2.json").read_text(encoding="utf-8")
+    )
+
+
+def _verification_schema() -> dict[str, object]:
+    return json.loads(
+        Path("schemas/windows_live_acceptance_verification_v1.json").read_text(
+            encoding="utf-8"
+        )
     )
 
 
@@ -38,6 +47,15 @@ def test_non_windows_run_is_explicitly_blocked(
     assert not any(payload["checks"].values())
     assert receipt_path.is_file()
     Draft202012Validator(_schema()).validate(payload)
+
+
+def test_offline_verifier_rejects_invalid_freshness_window(tmp_path: Path) -> None:
+    with pytest.raises(ValueError, match="positive finite"):
+        acceptance.verify_windows_live_acceptance(
+            receipt_path=tmp_path / "windows_live_acceptance.json",
+            expected_revision=REVISION,
+            max_age_hours=float("nan"),
+        )
 
 
 def test_cli_non_windows_run_returns_nonzero_with_receipt(
@@ -66,6 +84,7 @@ def test_cli_non_windows_run_returns_nonzero_with_receipt(
 def test_live_receipt_correlates_capture_turn_trace_and_dry_run(
     tmp_path: Path,
     monkeypatch,
+    capsys,
 ) -> None:
     monkeypatch.setattr(acceptance.sys, "platform", "win32")
     monkeypatch.setattr(acceptance, "_windows_build", lambda: 26100)
@@ -104,7 +123,7 @@ def test_live_receipt_correlates_capture_turn_trace_and_dry_run(
     )
 
     def _capture(*, output_path: Path, **kwargs):
-        output_path.write_bytes(b"fake-png")
+        output_path.write_bytes(b"\x89PNG\r\n\x1a\nfake-png")
         return {
             "capture_mode": "region",
             "capture_backend": "dxcam_dxgi",
@@ -151,14 +170,71 @@ def test_live_receipt_correlates_capture_turn_trace_and_dry_run(
     )
 
     assert payload["status"] == "pass"
-    assert payload["degraded"] is False
+    assert payload["degraded"] is True
     assert all(payload["checks"].values())
     assert payload["source_revision"] == REVISION
+    assert payload["audio"] == {
+        "mode": "degraded_no_audio",
+        "status": "degraded",
+        "push_to_talk_exercised": False,
+        "reason": "audio_input_not_exercised",
+    }
+    assert payload["warnings"] == ["audio_input_not_exercised"]
     assert payload["capture"]["capture_backend"] == "dxcam_dxgi"
     assert payload["capture"]["screenshot_sha256"]
     assert payload["turn"]["action"]["executed"] is False
     assert receipt_path.is_file()
     Draft202012Validator(_schema()).validate(payload)
+
+    verification = acceptance.verify_windows_live_acceptance(
+        receipt_path=receipt_path,
+        expected_revision=REVISION,
+        now=FIXED_NOW,
+    )
+    assert verification["status"] == "pass"
+    assert all(verification["checks"].values())
+    Draft202012Validator(_verification_schema()).validate(verification)
+
+    exit_code = main(
+        [
+            "verify-windows-acceptance",
+            str(receipt_path),
+            "--source-revision",
+            REVISION,
+            "--max-age-hours",
+            "87600",
+        ]
+    )
+    cli_verification = json.loads(capsys.readouterr().out)
+    assert exit_code == 0
+    assert cli_verification["status"] == "pass"
+
+    wrong_revision = acceptance.verify_windows_live_acceptance(
+        receipt_path=receipt_path,
+        expected_revision="b" * 40,
+        now=FIXED_NOW,
+    )
+    assert wrong_revision["checks"]["source_revision_matches"] is False
+
+    stale = acceptance.verify_windows_live_acceptance(
+        receipt_path=receipt_path,
+        expected_revision=REVISION,
+        max_age_hours=24,
+        now=FIXED_NOW + timedelta(hours=25),
+    )
+    assert stale["checks"]["receipt_fresh"] is False
+
+    screenshot_record = payload["artifacts"]["screenshot"]
+    screenshot_path = receipt_path.parent / screenshot_record["path"]
+    screenshot_path.write_bytes(b"\x89PNG\r\n\x1a\ntampered")
+    tampered = acceptance.verify_windows_live_acceptance(
+        receipt_path=receipt_path,
+        expected_revision=REVISION,
+        now=FIXED_NOW,
+    )
+    assert tampered["status"] == "fail"
+    assert tampered["checks"]["screenshot_integrity"] is False
+    assert "verification_check_failed:screenshot_integrity" in tampered["errors"]
 
 
 def test_pillow_fallback_is_pass_with_explicit_degradation(
@@ -193,7 +269,7 @@ def test_pillow_fallback_is_pass_with_explicit_degradation(
     )
 
     def _capture(*, output_path: Path, **kwargs):
-        output_path.write_bytes(b"fallback")
+        output_path.write_bytes(b"\x89PNG\r\n\x1a\nfallback")
         return {
             "capture_backend": "pillow_imagegrab_desktop",
             "width": 800,
@@ -240,5 +316,8 @@ def test_pillow_fallback_is_pass_with_explicit_degradation(
 
     assert payload["status"] == "pass"
     assert payload["degraded"] is True
-    assert payload["warnings"] == ["dxcam_failed_pillow_fallback_used"]
+    assert payload["warnings"] == [
+        "audio_input_not_exercised",
+        "dxcam_failed_pillow_fallback_used",
+    ]
     Draft202012Validator(_schema()).validate(payload)

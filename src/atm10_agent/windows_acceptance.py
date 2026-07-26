@@ -4,10 +4,11 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import subprocess
 import sys
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Mapping
 
@@ -22,7 +23,10 @@ from atm10_agent.perception.windows_capture import capture_screen_image
 from atm10_agent.trace import write_json
 
 
-WINDOWS_LIVE_ACCEPTANCE_SCHEMA = "atm10_windows_live_acceptance_v1"
+WINDOWS_LIVE_ACCEPTANCE_SCHEMA = "atm10_windows_live_acceptance_v2"
+WINDOWS_LIVE_ACCEPTANCE_VERIFICATION_SCHEMA = (
+    "atm10_windows_live_acceptance_verification_v1"
+)
 REQUIRED_CHECKS = (
     "windows_11",
     "powershell_7",
@@ -33,6 +37,7 @@ REQUIRED_CHECKS = (
     "capture_intersects_window",
     "capture_backend_identified",
     "screenshot_written",
+    "audio_posture_explicit",
     "live_image_consumed",
     "cited_response_present",
     "companion_trace_written",
@@ -40,6 +45,27 @@ REQUIRED_CHECKS = (
     "dry_run_true",
     "input_not_executed",
 )
+VERIFICATION_CHECKS = (
+    "receipt_schema",
+    "status_pass",
+    "source_revision_matches",
+    "receipt_fresh",
+    "windows_11",
+    "powershell_7",
+    "producer_checks_pass",
+    "session_consistent",
+    "audio_posture_explicit",
+    "degradation_honest",
+    "capture_consistent",
+    "screenshot_integrity",
+    "turn_consistent",
+    "turn_json_integrity",
+    "append_only_trace_integrity",
+    "dry_run_fence",
+    "errors_empty",
+    "mutable_state_separate",
+)
+_PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
 
 
 def _utc_now(now: datetime | None = None) -> datetime:
@@ -70,9 +96,16 @@ def _sha256(path: Path) -> str:
 def _relative(path: str | Path, evidence_dir: Path) -> str:
     resolved = Path(path).resolve()
     try:
-        return str(resolved.relative_to(evidence_dir.resolve()))
-    except ValueError:
-        return resolved.name
+        return resolved.relative_to(evidence_dir.resolve()).as_posix()
+    except ValueError as exc:
+        raise ValueError(f"artifact_outside_evidence_dir:{resolved.name}") from exc
+
+
+def _artifact(path: Path, evidence_dir: Path) -> dict[str, str]:
+    return {
+        "path": _relative(path, evidence_dir),
+        "sha256": _sha256(path),
+    }
 
 
 def _resolve_source_revision(repo_root: Path, explicit: str | None) -> str | None:
@@ -243,6 +276,7 @@ def run_windows_live_acceptance(
         "errors": [],
         "session": None,
         "capture": None,
+        "audio": None,
         "turn": None,
         "artifacts": {
             "receipt": "windows_live_acceptance.json",
@@ -275,6 +309,16 @@ def run_windows_live_acceptance(
         payload["source_revision"] = revision
         checks["source_revision_pinned"] = revision is not None
 
+        payload["audio"] = {
+            "mode": "degraded_no_audio",
+            "status": "degraded",
+            "push_to_talk_exercised": False,
+            "reason": "audio_input_not_exercised",
+        }
+        checks["audio_posture_explicit"] = True
+        payload["degraded"] = True
+        payload["warnings"].append("audio_input_not_exercised")
+
         _settle_for_window(max(float(settle_seconds), 0.0))
         candidate = find_best_atm10_window(platform_name="win32")
         checks["atm10_window_found"] = candidate is not None
@@ -305,7 +349,8 @@ def run_windows_live_acceptance(
         )
         capture_payload = dict(capture)
         capture_payload["screenshot_path"] = "screenshot.png"
-        capture_payload["screenshot_sha256"] = _sha256(screenshot_path)
+        screenshot_artifact = _artifact(screenshot_path, evidence_dir)
+        capture_payload["screenshot_sha256"] = screenshot_artifact["sha256"]
         payload["capture"] = capture_payload
         capture_backend = str(capture.get("capture_backend", ""))
         checks["capture_backend_identified"] = (
@@ -317,7 +362,7 @@ def run_windows_live_acceptance(
             and int(capture.get("width", 0)) > 0
             and int(capture.get("height", 0)) > 0
         )
-        payload["artifacts"]["screenshot"] = "screenshot.png"
+        payload["artifacts"]["screenshot"] = screenshot_artifact
         if capture.get("backend_errors"):
             payload["degraded"] = True
             payload["warnings"].append("dxcam_failed_pillow_fallback_used")
@@ -375,10 +420,10 @@ def run_windows_live_acceptance(
             },
         }
         payload["artifacts"]["turn_json"] = (
-            _relative(turn_json, evidence_dir) if turn_json is not None else None
+            _artifact(turn_json, evidence_dir) if turn_json is not None else None
         )
         payload["artifacts"]["append_only_trace"] = (
-            _relative(append_only_trace, evidence_dir)
+            _artifact(append_only_trace, evidence_dir)
             if append_only_trace is not None
             else None
         )
@@ -394,3 +439,302 @@ def run_windows_live_acceptance(
     else:
         payload["status"] = "pass"
     return _write_receipt(evidence_dir=evidence_dir, payload=payload)
+
+
+def _empty_verification(
+    *,
+    receipt_path: Path,
+    expected_revision: str,
+    max_age_hours: float,
+) -> dict[str, Any]:
+    return {
+        "schema_version": WINDOWS_LIVE_ACCEPTANCE_VERIFICATION_SCHEMA,
+        "status": "fail",
+        "receipt": str(receipt_path),
+        "expected_source_revision": expected_revision,
+        "observed_source_revision": None,
+        "max_age_hours": max_age_hours,
+        "degraded": None,
+        "checks": {name: False for name in VERIFICATION_CHECKS},
+        "warnings": [],
+        "errors": [],
+        "claim_limit": (
+            "Offline consistency and artifact-integrity verification of one "
+            "ATM10-produced receipt; it does not independently attest that the "
+            "operator presented a physical Windows session."
+        ),
+    }
+
+
+def _safe_artifact_path(
+    *,
+    receipt_path: Path,
+    record: object,
+) -> tuple[Path | None, str | None]:
+    if not isinstance(record, Mapping):
+        return None, None
+    relative = record.get("path")
+    digest = record.get("sha256")
+    if (
+        not isinstance(relative, str)
+        or not relative
+        or "\\" in relative
+        or ":" in relative
+    ):
+        return None, None
+    if (
+        not isinstance(digest, str)
+        or len(digest) != 64
+        or any(char not in "0123456789abcdef" for char in digest)
+    ):
+        return None, None
+    candidate = Path(relative)
+    if candidate.is_absolute() or ".." in candidate.parts:
+        return None, None
+    evidence_dir = receipt_path.parent.resolve()
+    resolved = (evidence_dir / candidate).resolve()
+    try:
+        resolved.relative_to(evidence_dir)
+    except ValueError:
+        return None, None
+    return resolved, digest
+
+
+def _timestamp_is_fresh(
+    value: object,
+    *,
+    now: datetime,
+    max_age_hours: float,
+) -> bool:
+    if not isinstance(value, str) or max_age_hours <= 0:
+        return False
+    try:
+        observed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return False
+    if observed.tzinfo is None:
+        return False
+    age = now.astimezone(timezone.utc) - observed.astimezone(timezone.utc)
+    return -timedelta(minutes=5) <= age <= timedelta(hours=max_age_hours)
+
+
+def _artifact_integrity(
+    *,
+    receipt_path: Path,
+    record: object,
+    png: bool = False,
+) -> tuple[bool, Path | None]:
+    path, expected_digest = _safe_artifact_path(
+        receipt_path=receipt_path,
+        record=record,
+    )
+    if path is None or expected_digest is None or not path.is_file():
+        return False, path
+    try:
+        if _sha256(path) != expected_digest:
+            return False, path
+        if png:
+            with path.open("rb") as handle:
+                if handle.read(len(_PNG_SIGNATURE)) != _PNG_SIGNATURE:
+                    return False, path
+    except OSError:
+        return False, path
+    return True, path
+
+
+def verify_windows_live_acceptance(
+    *,
+    receipt_path: Path,
+    expected_revision: str,
+    max_age_hours: float = 24.0,
+    now: datetime | None = None,
+) -> dict[str, Any]:
+    """Verify a transferred live receipt and its local artifact bundle.
+
+    This verifier recomputes semantic and integrity checks instead of trusting
+    the producer's boolean check map. It deliberately makes no stronger
+    hardware-attestation claim than the receipt can support.
+    """
+
+    expected = str(expected_revision).strip().lower()
+    max_age = float(max_age_hours)
+    if not math.isfinite(max_age) or max_age <= 0:
+        raise ValueError("max_age_hours must be a positive finite number")
+    result = _empty_verification(
+        receipt_path=receipt_path,
+        expected_revision=expected,
+        max_age_hours=max_age,
+    )
+    checks = result["checks"]
+    try:
+        payload = json.loads(receipt_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        result["errors"].append(f"receipt_unreadable:{type(exc).__name__}")
+        return result
+    if not isinstance(payload, Mapping):
+        result["errors"].append("receipt_not_object")
+        return result
+
+    result["observed_source_revision"] = payload.get("source_revision")
+    result["degraded"] = payload.get("degraded")
+    receipt_warnings = payload.get("warnings")
+    if isinstance(receipt_warnings, list):
+        result["warnings"] = [
+            item for item in receipt_warnings if isinstance(item, str)
+        ]
+
+    artifacts = payload.get("artifacts")
+    artifacts = artifacts if isinstance(artifacts, Mapping) else {}
+    checks["receipt_schema"] = (
+        payload.get("schema_version") == WINDOWS_LIVE_ACCEPTANCE_SCHEMA
+        and receipt_path.name == "windows_live_acceptance.json"
+        and artifacts.get("receipt") == receipt_path.name
+    )
+    checks["status_pass"] = payload.get("status") == "pass"
+    checks["source_revision_matches"] = (
+        len(expected) == 40
+        and all(char in "0123456789abcdef" for char in expected)
+        and payload.get("source_revision") == expected
+    )
+    checks["receipt_fresh"] = _timestamp_is_fresh(
+        payload.get("timestamp_utc"),
+        now=_utc_now(now),
+        max_age_hours=max_age,
+    )
+
+    platform = payload.get("platform")
+    platform = platform if isinstance(platform, Mapping) else {}
+    windows_build = platform.get("windows_build")
+    checks["windows_11"] = (
+        platform.get("sys_platform") == "win32"
+        and isinstance(windows_build, int)
+        and not isinstance(windows_build, bool)
+        and windows_build >= 22000
+    )
+    powershell = platform.get("powershell")
+    powershell = powershell if isinstance(powershell, Mapping) else {}
+    powershell_major = powershell.get("major")
+    checks["powershell_7"] = (
+        powershell.get("command") == "pwsh"
+        and isinstance(powershell_major, int)
+        and not isinstance(powershell_major, bool)
+        and powershell_major >= 7
+        and powershell.get("returncode") == 0
+    )
+
+    producer_checks = payload.get("checks")
+    checks["producer_checks_pass"] = (
+        isinstance(producer_checks, Mapping)
+        and set(producer_checks) == set(REQUIRED_CHECKS)
+        and all(producer_checks.get(name) is True for name in REQUIRED_CHECKS)
+    )
+
+    session = payload.get("session")
+    session = session if isinstance(session, Mapping) else {}
+    checks["session_consistent"] = (
+        session.get("window_found") is True
+        and session.get("foreground") is True
+        and session.get("atm10_probable") is True
+        and session.get("capture_intersects_window") is True
+    )
+
+    audio = payload.get("audio")
+    audio = audio if isinstance(audio, Mapping) else {}
+    checks["audio_posture_explicit"] = (
+        audio.get("mode") == "degraded_no_audio"
+        and audio.get("status") == "degraded"
+        and audio.get("push_to_talk_exercised") is False
+        and audio.get("reason") == "audio_input_not_exercised"
+    )
+    screenshot_ok, screenshot_path = _artifact_integrity(
+        receipt_path=receipt_path,
+        record=artifacts.get("screenshot"),
+        png=True,
+    )
+    capture = payload.get("capture")
+    capture = capture if isinstance(capture, Mapping) else {}
+    capture_backend = capture.get("capture_backend")
+    screenshot_record = artifacts.get("screenshot")
+    screenshot_record = (
+        screenshot_record if isinstance(screenshot_record, Mapping) else {}
+    )
+    width = capture.get("width")
+    height = capture.get("height")
+    checks["capture_consistent"] = (
+        isinstance(capture_backend, str)
+        and (
+            capture_backend.startswith("dxcam_")
+            or capture_backend.startswith("pillow_imagegrab_")
+        )
+        and isinstance(width, int)
+        and not isinstance(width, bool)
+        and width > 0
+        and isinstance(height, int)
+        and not isinstance(height, bool)
+        and height > 0
+        and capture.get("screenshot_path") == screenshot_record.get("path")
+        and capture.get("screenshot_sha256") == screenshot_record.get("sha256")
+    )
+    expected_warnings = {"audio_input_not_exercised"}
+    if isinstance(capture_backend, str) and capture_backend.startswith(
+        "pillow_imagegrab_"
+    ):
+        expected_warnings.add("dxcam_failed_pillow_fallback_used")
+    checks["degradation_honest"] = (
+        payload.get("degraded") is True
+        and set(result["warnings"]) == expected_warnings
+    )
+    checks["screenshot_integrity"] = screenshot_ok and screenshot_path is not None
+
+    turn = payload.get("turn")
+    turn = turn if isinstance(turn, Mapping) else {}
+    turn_id = turn.get("turn_id")
+    action = turn.get("action")
+    action = action if isinstance(action, Mapping) else {}
+    checks["turn_consistent"] = (
+        isinstance(turn_id, str)
+        and bool(turn_id)
+        and turn.get("status") == "ok"
+        and turn.get("perception_source") == "provided_image"
+        and isinstance(turn.get("citations_count"), int)
+        and not isinstance(turn.get("citations_count"), bool)
+        and turn.get("citations_count") > 0
+        and action.get("trace_id") == turn_id
+        and isinstance(action.get("intent_id"), str)
+        and bool(action.get("intent_id"))
+    )
+
+    turn_json_ok, turn_json_path = _artifact_integrity(
+        receipt_path=receipt_path,
+        record=artifacts.get("turn_json"),
+    )
+    checks["turn_json_integrity"] = (
+        turn_json_ok
+        and isinstance(turn_id, str)
+        and turn_json_path is not None
+        and _turn_trace_matches(turn_json_path, turn_id)
+    )
+    append_ok, append_path = _artifact_integrity(
+        receipt_path=receipt_path,
+        record=artifacts.get("append_only_trace"),
+    )
+    checks["append_only_trace_integrity"] = (
+        append_ok
+        and isinstance(turn_id, str)
+        and append_path is not None
+        and _append_trace_contains(append_path, turn_id)
+    )
+    checks["dry_run_fence"] = (
+        action.get("dry_run") is True and action.get("executed") is False
+    )
+    checks["errors_empty"] = payload.get("errors") == []
+    checks["mutable_state_separate"] = payload.get("mutable_state_separate") is True
+
+    failed = [name for name in VERIFICATION_CHECKS if checks.get(name) is not True]
+    if failed:
+        result["errors"] = [
+            f"verification_check_failed:{name}" for name in failed
+        ]
+    else:
+        result["status"] = "pass"
+    return result

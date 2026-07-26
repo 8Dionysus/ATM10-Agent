@@ -95,7 +95,8 @@ behavioral regressions reviewable.
   removed, and repository validation is local.
 - Waves 3-5 introduced `pyproject.toml`, the single
   `src/atm10_agent/` namespace, `CompanionApp`, and `atm10
-  doctor|run|replay|eval|windows-acceptance`. The package now owns
+  doctor|run|replay|eval|windows-acceptance|verify-windows-acceptance`. The
+  package now owns
   deterministic intent planning, action normalization, the no-input dry-run
   fence, trace correlation, the executable companion-core eval, and a typed
   live Windows evidence collector.

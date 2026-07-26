@@ -1,6 +1,6 @@
 # ATM10-Agent manifest
 
-Current as of: 2026-07-25
+Current as of: 2026-07-26
 
 ## Product
 
@@ -15,7 +15,8 @@ package, `atm10_agent`, owns:
 6. append-only trace and deterministic replay.
 
 The composition root is `atm10_agent.app.CompanionApp`. The supported command
-surface is `atm10 doctor|run|replay|eval|windows-acceptance`.
+surface is
+`atm10 doctor|run|replay|eval|windows-acceptance|verify-windows-acceptance`.
 
 ## Active capabilities
 
@@ -32,7 +33,8 @@ surface is `atm10 doctor|run|replay|eval|windows-acceptance`.
 - Windows ATM10 session discovery plus package-owned DXcam-first capture with
   Pillow fallback evidence;
 - owner-typed live Windows receipt collection with source revision, OS/shell,
-  session, screenshot, turn trace, and dry-run correlation checks;
+  session, screenshot, explicit degraded no-audio posture, hashed turn
+  artifacts, dry-run correlation checks, and bounded offline verification;
 - executable seven-case `companion-core` product eval;
 - Windows package tests/smoke and portable installed-package Linux smoke.
 
