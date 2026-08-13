@@ -3,9 +3,13 @@ name: Portable Core Linux
 on:
   push:
     branches:
-      - "**"
+      - main
   pull_request:
   workflow_dispatch:
+
+concurrency:
+  group: portable-core-linux-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: read

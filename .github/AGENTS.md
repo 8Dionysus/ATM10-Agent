@@ -17,6 +17,13 @@ checkouts, external owner actions, shared validators, or hidden host state. If
 that check is added, renamed, or its meaning changes, update the root route, PR
 expectations, and this file in the same change.
 
+Run active candidate workflows once on `pull_request` and again on a `main`
+push for post-merge proof. Do not also run the same workflow on every branch
+push: that duplicates the same SHA without adding evidence. Give each active
+PR workflow bounded concurrency keyed by PR number or ref so a newer exact
+candidate cancels only the superseded run in the same lane. Keep workflow jobs,
+check names, test selections, and failure semantics unchanged.
+
 When workflow or repository-policy files change, report:
 
 - GitHub surface touched

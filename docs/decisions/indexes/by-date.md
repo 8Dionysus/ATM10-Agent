@@ -14,3 +14,7 @@
 
 - [ATM10-D-0003 - Autonomous Modular Monolith](../ATM10-D-0003-autonomous-modular-monolith.md) (`docs/decisions/ATM10-D-0003-autonomous-modular-monolith.md`)
 - [ATM10-D-0004 - Local Provider Routing and Reviewed Promotion](../ATM10-D-0004-local-provider-routing-and-reviewed-promotion.md) (`docs/decisions/ATM10-D-0004-local-provider-routing-and-reviewed-promotion.md`)
+
+## 2026-08-13
+
+- [ATM10-D-0005 - Run One PR Proof per Exact Candidate](../ATM10-D-0005-run-one-pr-proof-per-exact-candidate.md) (`docs/decisions/ATM10-D-0005-run-one-pr-proof-per-exact-candidate.md`)
