@@ -1,6 +1,6 @@
 # ATM10-Agent product-edge posture
 
-Current as of: 2026-07-25
+Current as of: 2026-08-13
 
 ## Product edge
 
@@ -24,6 +24,12 @@ service is required.
 | Live Windows acceptance | `atm10 windows-acceptance` local receipt plus `atm10 verify-windows-acceptance` artifact verification | current ATM10 session, DXcam/Pillow source, explicit degraded no-audio posture, trace, artifact hashes, and dry-run fence on Windows 11 + PowerShell 7; neither a source-owned collector nor an offline consistency pass is evidence until collection passes on the real edge |
 
 A support claim may not exceed the evidence tier that actually ran.
+
+The three active candidate workflows run once for each pull-request candidate
+and again after merge on `main`. A newer SHA in the same PR/ref cancels its
+superseded run. This scheduling rule changes neither the test tier nor its
+claim: Windows package regression, repository boundary, and portable core all
+remain required PR and post-merge evidence.
 
 ## Provider posture
 

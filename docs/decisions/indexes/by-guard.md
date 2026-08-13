@@ -20,6 +20,10 @@
 
 - [ATM10-D-0003 - Autonomous Modular Monolith](../ATM10-D-0003-autonomous-modular-monolith.md) (`docs/decisions/ATM10-D-0003-autonomous-modular-monolith.md`)
 
+## exact candidate
+
+- [ATM10-D-0005 - Run One PR Proof per Exact Candidate](../ATM10-D-0005-run-one-pr-proof-per-exact-candidate.md) (`docs/decisions/ATM10-D-0005-run-one-pr-proof-per-exact-candidate.md`)
+
 ## explicit review
 
 - [ATM10-D-0004 - Local Provider Routing and Reviewed Promotion](../ATM10-D-0004-local-provider-routing-and-reviewed-promotion.md) (`docs/decisions/ATM10-D-0004-local-provider-routing-and-reviewed-promotion.md`)
@@ -37,6 +41,10 @@
 - [ATM10-D-0001 - Public Decision Rationale Lane](../ATM10-D-0001-public-decision-rationale-lane.md) (`docs/decisions/ATM10-D-0001-public-decision-rationale-lane.md`)
 - [ATM10-D-0002 - OS Skill Profile Boundary](../ATM10-D-0002-os-skill-profile-boundary.md) (`docs/decisions/ATM10-D-0002-os-skill-profile-boundary.md`)
 
+## post-merge proof
+
+- [ATM10-D-0005 - Run One PR Proof per Exact Candidate](../ATM10-D-0005-run-one-pr-proof-per-exact-candidate.md) (`docs/decisions/ATM10-D-0005-run-one-pr-proof-per-exact-candidate.md`)
+
 ## provenance
 
 - [ATM10-D-0003 - Autonomous Modular Monolith](../ATM10-D-0003-autonomous-modular-monolith.md) (`docs/decisions/ATM10-D-0003-autonomous-modular-monolith.md`)
@@ -46,6 +54,14 @@
 
 - [ATM10-D-0001 - Public Decision Rationale Lane](../ATM10-D-0001-public-decision-rationale-lane.md) (`docs/decisions/ATM10-D-0001-public-decision-rationale-lane.md`)
 
+## required checks
+
+- [ATM10-D-0005 - Run One PR Proof per Exact Candidate](../ATM10-D-0005-run-one-pr-proof-per-exact-candidate.md) (`docs/decisions/ATM10-D-0005-run-one-pr-proof-per-exact-candidate.md`)
+
 ## rollback
 
 - [ATM10-D-0004 - Local Provider Routing and Reviewed Promotion](../ATM10-D-0004-local-provider-routing-and-reviewed-promotion.md) (`docs/decisions/ATM10-D-0004-local-provider-routing-and-reviewed-promotion.md`)
+
+## superseded-run cancellation
+
+- [ATM10-D-0005 - Run One PR Proof per Exact Candidate](../ATM10-D-0005-run-one-pr-proof-per-exact-candidate.md) (`docs/decisions/ATM10-D-0005-run-one-pr-proof-per-exact-candidate.md`)

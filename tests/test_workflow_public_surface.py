@@ -49,6 +49,28 @@ def test_windows_workflow_proves_package_tests_and_installed_smoke() -> None:
     assert "atm10 eval" in text
 
 
+def test_candidate_workflows_run_once_per_pr_and_again_on_main() -> None:
+    workflows = {
+        "portable-core-linux.yml": "portable-core-linux",
+        "pytest.yml": "windows-package",
+        "repo-validation.yml": "repo-validation",
+    }
+
+    for name, concurrency_group in workflows.items():
+        text = _read_text(name)
+        assert re.search(
+            r"^on:\n  push:\n    branches:\n      - main\n  pull_request:\s*$",
+            text,
+            flags=re.MULTILINE,
+        ), name
+        assert (
+            f"group: {concurrency_group}-"
+            "${{ github.event.pull_request.number || github.ref }}"
+        ) in text
+        assert "cancel-in-progress: true" in text
+        assert '- "**"' not in text
+
+
 def test_kag_and_security_artifacts_remain_path_allowlisted() -> None:
     kag_text = _read_text("kag-neo4j-guardrail-nightly.yml")
     security_text = _read_text("security-nightly.yml")

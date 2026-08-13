@@ -6,6 +6,10 @@ on:
       - main
   pull_request:
 
+concurrency:
+  group: repo-validation-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
 
