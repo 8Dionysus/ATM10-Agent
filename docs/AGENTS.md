@@ -1,6 +1,6 @@
 # AGENTS.md
 
-Local guidance for `docs/` in `ATM10-Agent`. Read the root `AGENTS.md` first.
+Local delta beneath root `AGENTS.md` for `docs/` in `ATM10-Agent`.
 This directory owns operator-facing public docs for the local companion surface.
 
 ## Scope

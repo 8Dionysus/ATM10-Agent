@@ -2,7 +2,7 @@
 
 Local guidance for `src/atm10_agent/agent_core/` in `ATM10-Agent`.
 
-Read the root `AGENTS.md` first. This file only adds local rules for the shared runtime core.
+This is the local delta beneath root `AGENTS.md` for the shared runtime core.
 
 ## Scope
 

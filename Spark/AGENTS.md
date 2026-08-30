@@ -4,7 +4,7 @@
 
 This file only governs work started from `Spark/`.
 
-The root `AGENTS.md` remains authoritative for repository identity, ownership boundaries, reading order, and validation commands. This local file only narrows how GPT-5.3-Codex-Spark should behave when used as the fast-loop lane.
+The root `AGENTS.md` remains authoritative for repository identity, ownership boundaries, route choice, and validation commands. This local file only narrows how GPT-5.3-Codex-Spark should behave when used as the fast-loop lane.
 
 If `SWARM.md` exists in this directory, treat it as queue / swarm context. This `AGENTS.md` is the operating policy for Spark work.
 

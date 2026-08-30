@@ -176,6 +176,10 @@ def validate(
         if not _has_agents_heading(text):
             issues.append(f"{rel_path}: missing AGENTS heading")
         normalized = _normalize(text)
+        if "read the root `agents.md` first." in normalized:
+            issues.append(
+                f"{rel_path}: repeats the inherited root-read instruction instead of a local delta"
+            )
         for snippet in snippets:
             if _normalize(snippet) not in normalized:
                 issues.append(f"{rel_path}: missing required snippet {snippet!r}")

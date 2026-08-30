@@ -2,7 +2,7 @@
 
 Local guidance for `src/atm10_agent/kag/` in `ATM10-Agent`.
 
-Read the root `AGENTS.md` first. This file only adds local rules for KAG and graph backends.
+This is the local delta beneath root `AGENTS.md` for KAG and graph backends.
 
 ## Scope
 

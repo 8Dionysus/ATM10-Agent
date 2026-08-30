@@ -2,7 +2,8 @@
 
 Local guidance for `tests/` in `ATM10-Agent`.
 
-Read the root `AGENTS.md` first. This file only adds local rules for regression and public-surface checks.
+This is the local delta beneath root `AGENTS.md` for regression and
+public-surface checks.
 
 ## Scope
 

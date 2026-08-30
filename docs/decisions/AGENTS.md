@@ -1,6 +1,6 @@
 # AGENTS.md
 
-Local guidance for `docs/decisions/` in `ATM10-Agent`. Read the root `AGENTS.md` first.
+Local delta beneath root `AGENTS.md` for `docs/decisions/` in `ATM10-Agent`.
 
 This directory owns durable public decision rationale for the local companion surface.
 Use `<repo-root>` as the public placeholder for repository-local commands.

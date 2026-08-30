@@ -1,6 +1,6 @@
 # AGENTS.md
 
-Local guidance for `schemas/` in `ATM10-Agent`. Read the root `AGENTS.md` first.
+Local delta beneath root `AGENTS.md` for `schemas/` in `ATM10-Agent`.
 This directory owns antifragility contracts for the companion project.
 
 ## Scope

@@ -2,8 +2,8 @@
 
 Local guidance for `scripts/` in `ATM10-Agent`.
 
-Read the root `AGENTS.md` first. This file only adds local rules for the
-transitional maintainer-tool shell.
+This is the local delta beneath root `AGENTS.md` for the transitional
+maintainer-tool shell.
 
 ## Scope
 

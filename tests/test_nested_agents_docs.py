@@ -75,7 +75,9 @@ def test_nested_agents_docs_exist() -> None:
 def test_nested_agents_docs_remain_public_safe() -> None:
     for path in NESTED_AGENTS:
         text = path.read_text(encoding="utf-8")
-        assert "Read the root `AGENTS.md` first." in text
+        normalized = text.lower()
+        assert "root `agents.md`" in normalized
+        assert "read the root `agents.md` first." not in normalized
         assert "<repo-root>" in text
         for literal in DISALLOWED_LITERALS:
             assert literal not in text, f"disallowed public literal {literal!r} found in {path}"

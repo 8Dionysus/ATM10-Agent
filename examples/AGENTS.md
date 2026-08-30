@@ -1,6 +1,6 @@
 # AGENTS.md
 
-Local guidance for `examples/` in `ATM10-Agent`. Read the root `AGENTS.md` first.
+Local delta beneath root `AGENTS.md` for `examples/` in `ATM10-Agent`.
 This directory carries sanitized contract examples for antifragility surfaces.
 
 ## Scope

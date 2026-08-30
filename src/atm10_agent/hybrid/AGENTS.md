@@ -2,7 +2,7 @@
 
 Local guidance for `src/atm10_agent/hybrid/` in `ATM10-Agent`.
 
-Read the root `AGENTS.md` first. This file only adds local rules for hybrid planner behavior.
+This is the local delta beneath root `AGENTS.md` for hybrid planner behavior.
 
 ## Scope
 
