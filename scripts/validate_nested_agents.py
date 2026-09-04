@@ -10,6 +10,7 @@ from __future__ import annotations
 import argparse
 from dataclasses import dataclass
 from pathlib import Path
+import re
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 REPOSITORY_NAME = 'ATM10-Agent'
@@ -18,8 +19,7 @@ REQUIRED_AGENTS_DOCS: dict[str, tuple[str, ...]] = {
     'scripts/AGENTS.md': (
         'transitional maintainer-tool shell',
         'dry-run or report-only behavior as the default',
-        'python -m scripts.phase_a_smoke',
-        'python -m scripts.generate_decision_indexes --check',
+        'VALIDATION.md',
     ),
     '.github/AGENTS.md': (
         "repository's GitHub platform surface",
@@ -31,49 +31,49 @@ REQUIRED_AGENTS_DOCS: dict[str, tuple[str, ...]] = {
         'Spark lane',
         'fast-loop lane',
         'dry-run-by-default posture',
-        'python -m pytest',
+        'VALIDATION.md',
     ),
     'src/AGENTS.md': (
         'Nearest-file precedence',
         'src/atm10_agent/agent_core/AGENTS.md',
         'Keep module imports cheap',
-        'python -m pytest',
+        'VALIDATION.md',
     ),
     'src/atm10_agent/agent_core/AGENTS.md': (
         'shared runtime and policy surface',
         'Never silently turn a dry-run or safe-action path into real input behavior',
         'Service wrappers and runtime probes must degrade cleanly',
-        'python -m pytest tests/test_service_sla.py',
+        'VALIDATION.md',
     ),
     'src/atm10_agent/rag/AGENTS.md': (
         'document and evaluation schema',
         'Do not bake maintainer-local filesystem assumptions',
-        'tests/test_rag_doc_contract.py',
+        'VALIDATION.md',
     ),
     'src/atm10_agent/kag/AGENTS.md': (
         'file baseline as the easiest local default',
         'Neo4j remains additive',
         'NEO4J_PASSWORD',
-        'tests/test_kag_neo4j_backend.py',
+        'VALIDATION.md',
     ),
     'evals/AGENTS.md': (
         'companion eval lane',
         'ATM10-owned verdicts',
         'deterministic cases',
-        'validate_local_evals.py',
+        'VALIDATION.md',
     ),
     'src/atm10_agent/hybrid/AGENTS.md': (
         'dependency-free in-memory retrieval plus file KAG path',
         'Qdrant and Neo4j are explicit optional backend choices',
         'explicit fallback behavior on KAG degradation',
-        'tests/test_hybrid_query_demo.py',
+        'VALIDATION.md',
     ),
     'docs/AGENTS.md': (
         'operator-facing public docs',
         'docs/SOURCE_OF_TRUTH.md',
         'durable decision rationale',
         'dry-run by default',
-        'tests/test_public_repo_hardening.py',
+        'VALIDATION.md',
     ),
     'docs/decisions/AGENTS.md': (
         'durable public decision rationale',
@@ -82,8 +82,7 @@ REQUIRED_AGENTS_DOCS: dict[str, tuple[str, ...]] = {
         'Operator surfaces',
         'generated indexes',
         'Keep ignored `docs/DECISIONS.md` local-only',
-        'python -m scripts.generate_decision_indexes --check',
-        'python -m scripts.validate_decision_records',
+        'VALIDATION.md',
     ),
     'schemas/AGENTS.md': (
         'antifragility contracts',
@@ -94,18 +93,22 @@ REQUIRED_AGENTS_DOCS: dict[str, tuple[str, ...]] = {
         'sanitized contract examples',
         'match the schemas',
         'no secrets',
-        'python -m pytest',
+        'VALIDATION.md',
     ),
     'tests/AGENTS.md': (
         'regression and public-surface checks',
         'fixture-first',
-        'python -m pytest',
-        'tests/test_public_repo_hardening.py',
+        'VALIDATION.md',
     ),
 }
 ADVISORY_AGENT_DIRS: tuple[str, ...] = ()
 HEADING_PREFIXES = ("# AGENTS.md", "# AGENTS")
 IGNORED_DIRS = {".git", ".venv", "__pycache__", ".pytest_cache", ".mypy_cache"}
+EXECUTABLE_INLINE_RE = re.compile(
+    r"`(?:python3?(?:\s+-m)?\s+|pytest(?:\s|`)|uv\s+run\s+|bash\s+|sh\s+|"
+    r"make(?:\s|`)|npm\s+|pnpm\s+|cargo\s+|go\s+|docker\s+|podman\s+)",
+    re.IGNORECASE,
+)
 
 
 @dataclass(frozen=True)
@@ -179,6 +182,10 @@ def validate(
         if "read the root `agents.md` first." in normalized:
             issues.append(
                 f"{rel_path}: repeats the inherited root-read instruction instead of a local delta"
+            )
+        if EXECUTABLE_INLINE_RE.search(text):
+            issues.append(
+                f"{rel_path}: executable procedure belongs in VALIDATION.md, not AGENTS.md"
             )
         for snippet in snippets:
             if _normalize(snippet) not in normalized:

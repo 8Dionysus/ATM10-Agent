@@ -24,18 +24,8 @@ public-surface checks.
 - Prefer precise contract tests over broad snapshot dumps.
 - Add or extend tests for new scripts, new source modules, new artifact schemas, and new nested `AGENTS.md` guidance files.
 
-## Validate
+## Validation
 
-The default gate is:
-
-```powershell
-cd <repo-root>
-.\.venv\Scripts\Activate.ps1
-python -m pytest
-```
-
-For doc and public-surface changes, also run the nearest hardening subset:
-
-```powershell
-python -m pytest tests/test_public_repo_hardening.py tests/test_workflow_public_surface.py tests/test_nested_agents_docs.py
-```
+Use the full-suite route in [`../VALIDATION.md`](../VALIDATION.md) on demand.
+For doc and public-surface changes, add its `Public surface and hardening`
+route.

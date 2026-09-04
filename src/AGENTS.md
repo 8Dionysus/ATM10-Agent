@@ -40,10 +40,7 @@ When a deeper file exists, follow that deeper file for work inside that subtree.
 
 At minimum:
 
-```powershell
-cd <repo-root>
-.\.venv\Scripts\Activate.ps1
-python -m pytest
-```
+Use this directory's `VALIDATION.md` on demand and widen to the repository
+full-suite route when required.
 
 If behavior changes cross the package boundary, run the nearest smoke or contract path from `scripts/` too.

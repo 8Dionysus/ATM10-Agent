@@ -26,10 +26,8 @@ topology, or status changes.
 
 ## Validation
 
-```powershell
-cd <repo-root>
-python scripts/validate_local_evals.py
-```
+Run `VALIDATION.md` in this directory on demand, including
+`validate_local_evals.py`.
 
 ## Closeout
 

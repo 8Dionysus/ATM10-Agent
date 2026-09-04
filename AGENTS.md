@@ -95,15 +95,11 @@ If GitHub status or merge permissions cannot be observed, stop the landing route
 
 Minimum validation after code changes:
 
-```powershell
-cd <repo>
-.\.venv\Scripts\Activate.ps1
-python -m pip install -e ".[dev]"
-python -m pytest
-```
+Run the repository setup and full-suite route in `VALIDATION.md` on demand.
 
 If a runnable entrypoint changes, run the nearest smoke path or add targeted tests. Operational examples remain in `docs/RUNBOOK.md`.
-If durable decision rationale changes, run `python -m scripts.generate_decision_indexes --check`, `python -m scripts.validate_decision_records`, and the owning targeted tests.
+If durable decision rationale changes, use the on-demand route in
+`VALIDATION.md#decision-records-and-indexes`.
 
 ## Report
 

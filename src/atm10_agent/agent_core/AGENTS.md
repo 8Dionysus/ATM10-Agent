@@ -31,12 +31,7 @@ This directory includes the shared runtime and policy surface used by multiple e
   logic, update the matching tests and any affected focused tools in the same
   change.
 
-## Validate
+## Validation
 
-Run targeted core coverage before or alongside full pytest:
-
-```powershell
-cd <repo-root>
-.\.venv\Scripts\Activate.ps1
-python -m pytest tests/test_service_sla.py tests/test_grounded_reply_openvino.py tests/test_tts_runtime.py tests/test_vlm_provider.py
-```
+Use this directory's [`VALIDATION.md`](VALIDATION.md) for targeted core
+coverage, then widen through the repository root validation map when required.

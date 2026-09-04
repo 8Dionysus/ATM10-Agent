@@ -26,8 +26,5 @@ This directory currently centers on `planner.py`, the merge and orchestration la
 
 Run the nearest hybrid coverage:
 
-```powershell
-cd <repo-root>
-.\.venv\Scripts\Activate.ps1
-python -m pytest tests/test_hybrid_query_demo.py tests/test_companion_app.py tests/test_companion_eval.py
-```
+Run `VALIDATION.md` in this directory on demand, including
+`tests/test_hybrid_query_demo.py`.

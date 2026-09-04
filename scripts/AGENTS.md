@@ -41,19 +41,8 @@ Representative surfaces include:
 - If decision-index tooling changes, update `docs/decisions/AGENTS.md`, regenerate indexes, and run the decision validator.
 - Avoid hidden machine mutation, destructive host actions, or workstation-specific assumptions.
 
-## Validate
+## Validation
 
-At minimum, run full pytest plus the nearest smoke or contract path for the edited surface.
-
-Useful commands:
-
-```powershell
-cd <repo-root>
-.\.venv\Scripts\Activate.ps1
-python -m pytest
-python -m scripts.phase_a_smoke --vlm-provider stub --runs-dir runs\smoke-phase-a
-python -m scripts.retrieve_demo --in tests/fixtures/retrieval_docs_sample.jsonl --query "mekanism steel" --topk 3 --candidate-k 10 --reranker none --runs-dir runs\smoke-retrieve
-atm10 eval --suite companion-core --runs-dir runs\eval --state-dir .atm10-state\eval --reports-dir eval-results
-python -m scripts.generate_decision_indexes --check
-python -m scripts.validate_decision_records
-```
+Use this directory's [`VALIDATION.md`](VALIDATION.md) for the nearest smoke or
+contract route. Use the repository root validation map for the full suite and
+decision-index lane.
