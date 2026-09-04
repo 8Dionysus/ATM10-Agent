@@ -1,6 +1,6 @@
 # AGENTS.md
 
-Local guidance for `examples/` in `ATM10-Agent`. Read the root `AGENTS.md` first.
+Local delta beneath root `AGENTS.md` for `examples/` in `ATM10-Agent`.
 This directory carries sanitized contract examples for antifragility surfaces.
 
 ## Scope
@@ -21,7 +21,5 @@ They should help validation and docs stay grounded without leaking maintainer-lo
 
 Common gates:
 
-```powershell
-python -m pytest tests/test_antifragility_public_surface.py
-python -m pytest
-```
+Run the public-surface route in `../VALIDATION.md#public-surface-and-hardening`
+on demand through the repository `VALIDATION.md`.

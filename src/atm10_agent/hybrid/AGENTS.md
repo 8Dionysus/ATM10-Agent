@@ -2,7 +2,7 @@
 
 Local guidance for `src/atm10_agent/hybrid/` in `ATM10-Agent`.
 
-Read the root `AGENTS.md` first. This file only adds local rules for hybrid planner behavior.
+This is the local delta beneath root `AGENTS.md` for hybrid planner behavior.
 
 ## Scope
 
@@ -26,8 +26,5 @@ This directory currently centers on `planner.py`, the merge and orchestration la
 
 Run the nearest hybrid coverage:
 
-```powershell
-cd <repo-root>
-.\.venv\Scripts\Activate.ps1
-python -m pytest tests/test_hybrid_query_demo.py tests/test_companion_app.py tests/test_companion_eval.py
-```
+Run `VALIDATION.md` in this directory on demand, including
+`tests/test_hybrid_query_demo.py`.

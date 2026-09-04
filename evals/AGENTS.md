@@ -6,13 +6,14 @@ This card applies to `ATM10-Agent/evals/` and every file below it.
 
 ## Role
 
-This companion eval lane owns deterministic ATM10 cases, suite membership,
+This companion eval lane owns deterministic cases for ATM10, suite membership,
 ATM10-owned verdicts, reports, and source refs.
 
-## Read before editing
+## Route
 
-Read the root `AGENTS.md`, then this card, `README.md`, `manifest.json`, and the
-nearest intake, deterministic cases, suites, or reports surface you will touch.
+Root `AGENTS.md` supplies repository boundaries. Start with `manifest.json`
+and the nearest surface; open `README.md` only for public route,
+topology, or status changes.
 
 ## Boundaries
 
@@ -25,10 +26,8 @@ nearest intake, deterministic cases, suites, or reports surface you will touch.
 
 ## Validation
 
-```powershell
-cd <repo-root>
-python scripts/validate_local_evals.py
-```
+Run `VALIDATION.md` in this directory on demand, including
+`validate_local_evals.py`.
 
 ## Closeout
 

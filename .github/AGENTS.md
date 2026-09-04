@@ -4,7 +4,7 @@
 
 `.github/` is this repository's GitHub platform surface: workflows, PR templates, issue templates, CODEOWNERS, and repository metadata.
 
-Read the root `AGENTS.md` first. Root `AGENTS.md` owns repository identity, owner boundaries, the branch/PR/CI/merge route, and the shortest local validation path. This file owns only the GitHub-native files under `.github/`.
+Root `AGENTS.md` owns repository identity, owner boundaries, the branch/PR/CI/merge route, and the shortest local validation path. This file owns only the GitHub-native files under `.github/`.
 
 Do not encode sibling-repo doctrine, private workspace assumptions, or hidden release behavior here. Do not add secrets, private environment assumptions, or workflow steps that mutate sibling repositories without explicit owner routing. Keep GitHub automation public-safe, deterministic, and weaker than source-owned repository docs. Do not make CI green by weakening the guardrail that should catch drift.
 

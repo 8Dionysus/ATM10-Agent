@@ -65,6 +65,44 @@ class ValidateNestedAgentsTests(unittest.TestCase):
             result = validator.validate(repo_root)
             self.assertTrue(any(first_rel in issue and "missing required snippet" in issue for issue in result.issues))
 
+    def test_repeated_root_read_instruction_fails(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo_root = Path(tmp)
+            _write_minimal_required_tree(repo_root)
+            first_rel = next(iter(validator.REQUIRED_AGENTS_DOCS))
+            path = repo_root / first_rel
+            path.write_text(
+                path.read_text(encoding="utf-8")
+                + "Read the root `AGENTS.md` first.\n",
+                encoding="utf-8",
+            )
+            result = validator.validate(repo_root)
+            self.assertTrue(
+                any(
+                    first_rel in issue and "inherited root-read instruction" in issue
+                    for issue in result.issues
+                )
+            )
+
+    def test_inline_executable_procedure_fails(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo_root = Path(tmp)
+            _write_minimal_required_tree(repo_root)
+            first_rel = next(iter(validator.REQUIRED_AGENTS_DOCS))
+            path = repo_root / first_rel
+            path.write_text(
+                path.read_text(encoding="utf-8")
+                + "Run `python -m pytest` before closeout.\n",
+                encoding="utf-8",
+            )
+            result = validator.validate(repo_root)
+            self.assertTrue(
+                any(
+                    first_rel in issue and "belongs in VALIDATION.md" in issue
+                    for issue in result.issues
+                )
+            )
+
     def test_advisory_can_become_strict(self) -> None:
         if not validator.ADVISORY_AGENT_DIRS:
             self.skipTest("repository has no advisory AGENTS.md candidates")

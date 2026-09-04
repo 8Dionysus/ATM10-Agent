@@ -34,17 +34,19 @@ sibling repository, `.aoa` route, shared validator, or shared runtime is part
 of the ATM10 clone/build/test/run/release contract. A future ATM10-specific
 callable bundle must be source-owned here and optional to the product runtime.
 
-## Start here
+## Conditional routes
 
-1. `README.md`
-2. `MANIFEST.md`
-3. `ROADMAP.md`
-4. `docs/RUNBOOK.md`
-5. `docs/SOURCE_OF_TRUTH.md`
-6. `docs/autonomy/README.md` for architecture, dependency, or migration work
-7. scripts, modules, tests, schemas, docs, or examples you will touch
-8. `docs/decisions/README.md` when durable route, boundary, validator, operator, host-profile, or public-surface rationale is in scope
-9. `docs/AGENTS_ROOT_REFERENCE.md` for preserved full root branches
+Start with the nearest nested `AGENTS.md` and touched source; open only the
+matching route:
+
+- public overview: `README.md`
+- current claims: `MANIFEST.md`
+- direction/definition of done: `ROADMAP.md`
+- commands: `docs/RUNBOOK.md`
+- document authority: `docs/SOURCE_OF_TRUTH.md`
+- architecture/dependencies/migration: `docs/autonomy/README.md`
+- durable rationale: `docs/decisions/README.md`
+- former root details, if needed: `docs/AGENTS_ROOT_REFERENCE.md`
 
 
 ## AGENTS stack law
@@ -93,15 +95,11 @@ If GitHub status or merge permissions cannot be observed, stop the landing route
 
 Minimum validation after code changes:
 
-```powershell
-cd <repo>
-.\.venv\Scripts\Activate.ps1
-python -m pip install -e ".[dev]"
-python -m pytest
-```
+Run the repository setup and full-suite route in `VALIDATION.md` on demand.
 
 If a runnable entrypoint changes, run the nearest smoke path or add targeted tests. Operational examples remain in `docs/RUNBOOK.md`.
-If durable decision rationale changes, run `python -m scripts.generate_decision_indexes --check`, `python -m scripts.validate_decision_records`, and the owning targeted tests.
+If durable decision rationale changes, use the on-demand route in
+`VALIDATION.md#decision-records-and-indexes`.
 
 ## Report
 

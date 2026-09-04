@@ -4,7 +4,7 @@
 
 This file only governs work started from `Spark/`.
 
-The root `AGENTS.md` remains authoritative for repository identity, ownership boundaries, reading order, and validation commands. This local file only narrows how GPT-5.3-Codex-Spark should behave when used as the fast-loop lane.
+The root `AGENTS.md` remains authoritative for repository identity, ownership boundaries, and route choice. Executable procedures live in the repository `VALIDATION.md`; this local file only narrows how GPT-5.3-Codex-Spark should behave when used as the fast-loop lane.
 
 If `SWARM.md` exists in this directory, treat it as queue / swarm context. This `AGENTS.md` is the operating policy for Spark work.
 
@@ -41,7 +41,8 @@ A Spark task is done here when:
 - dry-run-by-default posture is preserved
 - Windows 11 + PowerShell 7 operability is preserved
 - public docs remain sanitized
-- minimum validation ran: `python -m pytest`, plus the nearest smoke path for touched runnable entrypoints
+- the applicable repository `VALIDATION.md` route ran, including the nearest
+  smoke path for touched runnable entrypoints
 - remaining risk is reported honestly
 
 ## Local note

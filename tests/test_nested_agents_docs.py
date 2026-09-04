@@ -50,8 +50,7 @@ REQUIRED_MARKERS = {
     ],
     Path("tests/AGENTS.md"): [
         "tests/fixtures/",
-        "python -m pytest",
-        "test_nested_agents_docs.py",
+        "VALIDATION.md",
     ],
     Path("scripts/AGENTS.md"): [
         "phase_a_smoke.py",
@@ -62,7 +61,7 @@ REQUIRED_MARKERS = {
         "ATM10-D-####",
         "Companion layers",
         "Operator surfaces",
-        "python -m scripts.generate_decision_indexes --check",
+        "VALIDATION.md",
     ],
 }
 
@@ -75,8 +74,9 @@ def test_nested_agents_docs_exist() -> None:
 def test_nested_agents_docs_remain_public_safe() -> None:
     for path in NESTED_AGENTS:
         text = path.read_text(encoding="utf-8")
-        assert "Read the root `AGENTS.md` first." in text
-        assert "<repo-root>" in text
+        normalized = text.lower()
+        assert "root `agents.md`" in normalized
+        assert "read the root `agents.md` first." not in normalized
         for literal in DISALLOWED_LITERALS:
             assert literal not in text, f"disallowed public literal {literal!r} found in {path}"
 

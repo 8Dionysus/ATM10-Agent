@@ -2,7 +2,8 @@
 
 Local guidance for `src/atm10_agent/rag/` in `ATM10-Agent`.
 
-Read the root `AGENTS.md` first. This file only adds local rules for retrieval and document-contract code.
+This is the local delta beneath root `AGENTS.md` for retrieval and
+document-contract code.
 
 ## Scope
 
@@ -31,8 +32,5 @@ This directory currently centers on:
 
 Run the nearest retrieval and document-contract tests:
 
-```powershell
-cd <repo-root>
-.\.venv\Scripts\Activate.ps1
-python -m pytest tests/test_rag_doc_contract.py tests/test_ftbquests_ingest.py tests/test_retrieval_profiles.py tests/test_retrieval_demo.py tests/test_retrieve_demo_script.py tests/test_eval_retrieval.py
-```
+Run `VALIDATION.md` in this directory on demand, including
+`tests/test_rag_doc_contract.py`.

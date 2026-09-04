@@ -1,6 +1,6 @@
 # AGENTS.md
 
-Local guidance for `docs/decisions/` in `ATM10-Agent`. Read the root `AGENTS.md` first.
+Local delta beneath root `AGENTS.md` for `docs/decisions/` in `ATM10-Agent`.
 
 This directory owns durable public decision rationale for the local companion surface.
 Use `<repo-root>` as the public placeholder for repository-local commands.
@@ -44,14 +44,7 @@ Use `Operator surfaces` for product surfaces such as `gateway`, `streamlit`, `pi
 - If the current public surface changes, update the owning canonical docs and tests in the same change.
 - Keep ignored `docs/DECISIONS.md` local-only; public durable decisions belong here.
 
-## Validate
+## Validation
 
-For decision-lane changes, run:
-
-```powershell
-cd <repo-root>
-python -m scripts.generate_decision_indexes
-python -m scripts.generate_decision_indexes --check
-python -m scripts.validate_decision_records
-python -m pytest tests/test_decision_indexes.py tests/test_nested_agents_docs.py tests/test_validate_nested_agents.py
-```
+Use the decision-record and index route in the repository
+[`VALIDATION.md`](../../VALIDATION.md#decision-records-and-indexes).

@@ -2,7 +2,7 @@
 
 Local guidance for `src/atm10_agent/kag/` in `ATM10-Agent`.
 
-Read the root `AGENTS.md` first. This file only adds local rules for KAG and graph backends.
+This is the local delta beneath root `AGENTS.md` for KAG and graph backends.
 
 ## Scope
 
@@ -28,8 +28,5 @@ This directory currently owns:
 
 Run the nearest KAG and Neo4j coverage:
 
-```powershell
-cd <repo-root>
-.\.venv\Scripts\Activate.ps1
-python -m pytest tests/test_kag_neo4j_backend.py tests/test_kag_build_baseline.py tests/test_kag_query_demo.py tests/test_kag_query_neo4j.py tests/test_kag_sync_neo4j.py tests/test_eval_kag_file.py tests/test_eval_kag_neo4j.py
-```
+Run `VALIDATION.md` in this directory on demand, including
+`tests/test_kag_neo4j_backend.py`.

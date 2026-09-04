@@ -1,6 +1,6 @@
 # AGENTS.md
 
-Local guidance for `docs/` in `ATM10-Agent`. Read the root `AGENTS.md` first.
+Local delta beneath root `AGENTS.md` for `docs/` in `ATM10-Agent`.
 This directory owns operator-facing public docs for the local companion surface.
 
 ## Scope
@@ -20,13 +20,9 @@ They must stay aligned with `MANIFEST.md`, `ROADMAP.md`, `docs/RUNBOOK.md`, and 
 
 For public docs and runbook changes, use the nearest hardening checks:
 
-```powershell
-python -m pytest tests/test_public_repo_hardening.py tests/test_build_runbook_link.py
-```
+Run `VALIDATION.md` in this directory on demand, including
+`tests/test_public_repo_hardening.py`.
 
 For decision-rationale changes, also run:
 
-```powershell
-python -m scripts.generate_decision_indexes --check
-python -m scripts.validate_decision_records
-```
+Run the decision route in `decisions/VALIDATION.md` on demand.

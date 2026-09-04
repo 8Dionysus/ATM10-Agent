@@ -1,6 +1,6 @@
 # AGENTS.md
 
-Local guidance for `schemas/` in `ATM10-Agent`. Read the root `AGENTS.md` first.
+Local delta beneath root `AGENTS.md` for `schemas/` in `ATM10-Agent`.
 This directory owns antifragility contracts for the companion project.
 
 ## Scope
@@ -21,7 +21,4 @@ They do not define federation-wide proof, role, checkpoint, or self-agent doctri
 
 Use targeted contract checks, then broader pytest if needed:
 
-```powershell
-python -m pytest tests/test_antifragility_public_surface.py
-python -m pytest
-```
+Run the public-surface route in `../VALIDATION.md#public-surface-and-hardening` on demand.
