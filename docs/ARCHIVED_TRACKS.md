@@ -3,6 +3,7 @@
 This document is the public home for archived, recoverable, and historical command references.
 Active runnable commands stay in `docs/RUNBOOK.md`.
 Host-profile and model-stack posture stays in `docs/QWEN3_MODEL_STACK.md`.
+Historical commands that name retired standalone services are retained as source-history examples, not runnable rollback entrypoints in the current checkout.
 
 ## 1) Qwen3-ASR-0.6B OpenVINO self-conversion
 
@@ -33,7 +34,7 @@ python -m scripts.export_qwen3_custom_openvino --preset qwen3-asr-0.6b --execute
 python scripts/asr_demo.py --allow-archived-qwen-asr --audio-in "<path-to-sample.wav>"
 python scripts/asr_demo.py --allow-archived-qwen-asr --record-seconds 5
 
-# Archived runtime rollback
+# Historical standalone-service invocation (service retired)
 python scripts/voice_runtime_service.py --host 127.0.0.1 --port 8765 --asr-backend qwen_asr --allow-archived-qwen-asr --asr-model Qwen/Qwen3-ASR-0.6B
 
 # Optional archived backend compare
@@ -83,7 +84,7 @@ Reason:
 
 Current policy:
 
-* Operational TTS uses the active `tts_runtime_service` path.
+* The former standalone `tts_runtime_service` is retired. Current optional voice uses the in-process package providers described in [`docs/QWEN3_MODEL_STACK.md`](QWEN3_MODEL_STACK.md); the default package remains text-complete.
 * Historical `Qwen3-TTS` artifacts under `runs/*qwen3-tts*` remain local-only references, not a public repo contract.
 
 Re-open criteria:
