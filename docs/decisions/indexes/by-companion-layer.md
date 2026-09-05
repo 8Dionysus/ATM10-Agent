@@ -6,6 +6,10 @@
 
 - [ATM10-D-0003 - Autonomous Modular Monolith](../ATM10-D-0003-autonomous-modular-monolith.md) (`docs/decisions/ATM10-D-0003-autonomous-modular-monolith.md`)
 
+## agent-lane
+
+- [ATM10-D-0006 - ATM10-D-0006 Spark And Legacy Scaffolding Retirement](../ATM10-D-0006-spark-and-legacy-scaffolding-retirement.md) (`docs/decisions/ATM10-D-0006-spark-and-legacy-scaffolding-retirement.md`)
+
 ## core
 
 - [ATM10-D-0003 - Autonomous Modular Monolith](../ATM10-D-0003-autonomous-modular-monolith.md) (`docs/decisions/ATM10-D-0003-autonomous-modular-monolith.md`)
@@ -16,6 +20,7 @@
 - [ATM10-D-0003 - Autonomous Modular Monolith](../ATM10-D-0003-autonomous-modular-monolith.md) (`docs/decisions/ATM10-D-0003-autonomous-modular-monolith.md`)
 - [ATM10-D-0004 - Local Provider Routing and Reviewed Promotion](../ATM10-D-0004-local-provider-routing-and-reviewed-promotion.md) (`docs/decisions/ATM10-D-0004-local-provider-routing-and-reviewed-promotion.md`)
 - [ATM10-D-0005 - Run One PR Proof per Exact Candidate](../ATM10-D-0005-run-one-pr-proof-per-exact-candidate.md) (`docs/decisions/ATM10-D-0005-run-one-pr-proof-per-exact-candidate.md`)
+- [ATM10-D-0006 - ATM10-D-0006 Spark And Legacy Scaffolding Retirement](../ATM10-D-0006-spark-and-legacy-scaffolding-retirement.md) (`docs/decisions/ATM10-D-0006-spark-and-legacy-scaffolding-retirement.md`)
 
 ## KAG
 
@@ -30,6 +35,7 @@
 
 - [ATM10-D-0001 - Public Decision Rationale Lane](../ATM10-D-0001-public-decision-rationale-lane.md) (`docs/decisions/ATM10-D-0001-public-decision-rationale-lane.md`)
 - [ATM10-D-0004 - Local Provider Routing and Reviewed Promotion](../ATM10-D-0004-local-provider-routing-and-reviewed-promotion.md) (`docs/decisions/ATM10-D-0004-local-provider-routing-and-reviewed-promotion.md`)
+- [ATM10-D-0006 - ATM10-D-0006 Spark And Legacy Scaffolding Retirement](../ATM10-D-0006-spark-and-legacy-scaffolding-retirement.md) (`docs/decisions/ATM10-D-0006-spark-and-legacy-scaffolding-retirement.md`)
 
 ## src
 
@@ -42,6 +48,7 @@
 - [ATM10-D-0003 - Autonomous Modular Monolith](../ATM10-D-0003-autonomous-modular-monolith.md) (`docs/decisions/ATM10-D-0003-autonomous-modular-monolith.md`)
 - [ATM10-D-0004 - Local Provider Routing and Reviewed Promotion](../ATM10-D-0004-local-provider-routing-and-reviewed-promotion.md) (`docs/decisions/ATM10-D-0004-local-provider-routing-and-reviewed-promotion.md`)
 - [ATM10-D-0005 - Run One PR Proof per Exact Candidate](../ATM10-D-0005-run-one-pr-proof-per-exact-candidate.md) (`docs/decisions/ATM10-D-0005-run-one-pr-proof-per-exact-candidate.md`)
+- [ATM10-D-0006 - ATM10-D-0006 Spark And Legacy Scaffolding Retirement](../ATM10-D-0006-spark-and-legacy-scaffolding-retirement.md) (`docs/decisions/ATM10-D-0006-spark-and-legacy-scaffolding-retirement.md`)
 
 ## workflows
 

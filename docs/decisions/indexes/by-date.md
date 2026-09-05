@@ -18,3 +18,7 @@
 ## 2026-08-13
 
 - [ATM10-D-0005 - Run One PR Proof per Exact Candidate](../ATM10-D-0005-run-one-pr-proof-per-exact-candidate.md) (`docs/decisions/ATM10-D-0005-run-one-pr-proof-per-exact-candidate.md`)
+
+## 2026-09-04
+
+- [ATM10-D-0006 - ATM10-D-0006 Spark And Legacy Scaffolding Retirement](../ATM10-D-0006-spark-and-legacy-scaffolding-retirement.md) (`docs/decisions/ATM10-D-0006-spark-and-legacy-scaffolding-retirement.md`)

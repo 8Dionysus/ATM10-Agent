@@ -22,6 +22,7 @@
 
 - [ATM10-D-0001 - Public Decision Rationale Lane](../ATM10-D-0001-public-decision-rationale-lane.md) (`docs/decisions/ATM10-D-0001-public-decision-rationale-lane.md`)
 - [ATM10-D-0002 - OS Skill Profile Boundary](../ATM10-D-0002-os-skill-profile-boundary.md) (`docs/decisions/ATM10-D-0002-os-skill-profile-boundary.md`)
+- [ATM10-D-0006 - ATM10-D-0006 Spark And Legacy Scaffolding Retirement](../ATM10-D-0006-spark-and-legacy-scaffolding-retirement.md) (`docs/decisions/ATM10-D-0006-spark-and-legacy-scaffolding-retirement.md`)
 
 ## optional UI
 

@@ -27,12 +27,6 @@ REQUIRED_AGENTS_DOCS: dict[str, tuple[str, ...]] = {
         'public-safe',
         'workflow YAML',
     ),
-    'Spark/AGENTS.md': (
-        'Spark lane',
-        'fast-loop lane',
-        'dry-run-by-default posture',
-        'VALIDATION.md',
-    ),
     'src/AGENTS.md': (
         'Nearest-file precedence',
         'src/atm10_agent/agent_core/AGENTS.md',
